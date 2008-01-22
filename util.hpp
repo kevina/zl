@@ -1,6 +1,8 @@
 #ifndef UTIL__HPP
 #define UTIL__HPP
 
+#include <assert.h>
+
 #include "gc.hpp"
 #include "vector.hpp"
 #include "parm_string.hpp"
