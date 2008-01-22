@@ -75,6 +75,7 @@ struct CaptureType {
   bool is_implicit() const {return type == Implicit;}
   bool is_none()     const {return type == None;}
   bool is_single()   const {return type == Explicit || type == Implicit;}
+  bool is_multi()    const {return type == ExplicitMulti;}
   void set_to_explicit(bool single = true) {type = single ? Explicit : ExplicitMulti;}
   void set_to_implicit()              {type = Implicit;}
   void set_to_none()                  {type = None;}
@@ -143,7 +144,7 @@ public:
       r = &lookup[str];
       r->end = FAIL; // to avoid infinite recursion
       r->end = prod->match(str, &r->parts, r->errors);
-      assert(r->end == FAIL || r->parts.size() == 1);
+      //assert(r->end == FAIL || r->parts.size() == 1);
     } else {
       r = &i->second;
     }

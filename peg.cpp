@@ -41,6 +41,11 @@ public:
       //return prod->match(str, parts, errs);
       const char * r = prod->match(str, parts, errs);
       return r;
+    } else if (prod->capture_type.is_multi()) {
+      printf("BEFORE::: "); parts->print(); printf("\n");
+      const char * r = prod->match(str, parts, errs);
+      printf("AFTER::: "); parts->print(); printf("\n");
+      return r;
     } else { // type is None
       const char * s = prod->match(str, 0, errs);
       if (!s) return FAIL;
@@ -58,7 +63,7 @@ public:
   }
   void verify() {
     // FIXME: Make error message
-    assert(prod->capture_type.is_none() || prod->capture_type.is_single());
+    //assert(prod->capture_type.is_none() || prod->capture_type.is_single());
     prod->verify();
   }
   Capture(const Capture & o, Prod * p = 0)
