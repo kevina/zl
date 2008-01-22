@@ -236,8 +236,9 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
                                    ExpandEnviron & env) 
 {
   Parts::const_iterator begin = i;
-  const Parse * cur = *i;
+  const Parse * cur;
   while (i != end) {
+    cur = *i;
     if (cur->name == "id") {
       const Parse * p = cur->arg(0);
       bool any = 
@@ -250,13 +251,10 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
         try_type_name(p, env);
       if (!any) break;
       ++i;
-      cur = *i;
     } else if (try_typeof(cur, env)) {
       ++i;
-      cur = *i;
     } else if (try_struct_union(cur, env)) {
       ++i;
-      cur = *i;
     } else {
       break;
     }
@@ -484,8 +482,8 @@ const Parse * DeclWorking::make_function_type(const Parse * ret,
     DeclWorking w(type_scope);
     const Parse * id = NULL;
     bool r = w.parse_first_part(i, end, env);
-    w.make_inner_type(*i);
     if (!r) throw error(*i, "Expected type.");
+    w.make_inner_type(parms);
     const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
     Parse * p = new Parse();
     assert(t);

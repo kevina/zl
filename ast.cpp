@@ -1000,6 +1000,7 @@ namespace AST {
 
     ret_type = env.frame->return_type = parse_type(env.types, p->arg(2), env);
 
+    body = 0;
     if (p->num_args() > 3) {
       body = dynamic_cast<Block *>(parse_stmt(p->arg(3), env));
       assert(body); // FiXME
