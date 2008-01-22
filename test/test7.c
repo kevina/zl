@@ -38,7 +38,7 @@ int main() {
     stmts(x,y);
   else 
     times2(y);
-  int z = ({int x = 0; x;});
+  int z;
   z = double_(5);
   z = square_(2+3);
   double_(square_(y));
