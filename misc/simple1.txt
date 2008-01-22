@@ -1,0 +1,11 @@
+{
+  var i;
+  i = 0;
+  if (i == 0) print 123; 
+  do {
+    print i;
+    i = i + 1;
+  } while (i != 10);
+  break;
+  ;
+}

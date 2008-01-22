@@ -1,0 +1,90 @@
+TOP = <top> SPACING {STMT}+;
+
+STMT : "statement" = 
+      <lcstmt> {CASE_LABEL} ":" {STMT}
+    / <lstmt> {TAGGED_LABEL} ":" {STMT}
+    / <if>    "if" "(" {EXP} ")" {STMT} ("else" {STMT})?
+    / <switch> "switch" "(" {EXP} ")" {STMT}
+    / <while> "while" "(" {EXP} ")" {STMT}
+    / <loop>  "loop" {STMT}
+    / <do>    "do" {STMT} "while" "(" {EXP} ")" ";"
+    / <for>   "for" "(" {EXP} ";" {EXP} ";" {EXP} ")" {STMT}
+    / <var>   "var" {ID} ":" {TYPE} ";"    
+    / <%> {"struct"/"union"} {ID} "{" {STMT}+ "}" ";"
+    / <talias> "typedef" {ID} ":" {TYPE} ";"
+    / <break> "break" ";"
+    / <continue> "continue" ";"
+    / <goto>  "goto" {LABEL} ";"
+    / <return> "return" {EXP} ";"
+    / <print> "print" {EXP} ";"
+#    /          {MAP}
+    / <fun>    "fun" {ID} "(" {<parms> ({ID} ("," {ID})*)? } ")" {BLOCK}
+    / <noop>   ";"
+    /          {BLOCK}
+    / <eblock> "(" "{" {STMT}* "}" ")"
+    / <stmt>   {EXP} ";"
+   ;
+
+BLOCK = <block> "{" {STMT}* "}";
+
+EXP = <exp> {TOKEN}*;
+
+TOKEN =  {PARAN} / {BRACK} / <string> {STRING} / <id> {ID} / LITERAL / <sym> {SYM};
+
+LITERAL = <literal> {NUM};
+
+GROUP = BRACE / PARAN / BRACK;
+
+BRACE = <{}> "{" {TOKEN}* "}";
+PARAN = <()> "(" {TOKEN}* ")";
+BRACK = <[]> "[" {TOKEN}* "]";
+
+ID : "identifier" =
+    {[\a]+[\a_\d]*} SPACING;
+
+TYPE : "type" = 
+      <type .pointer> (<type> {ID} / "(" {TYPE} ")") "*"
+    / <type .array>   (<type> {ID} / "(" {TYPE} ")") "[" (<literal> {NUM}) "]"
+    / <const> (<type> {ID} / "(" {TYPE} ")") "const"
+    / <type> {ID};
+
+LABEL : "label" =
+    {[.]?[\a]+[\a_]*} SPACING;
+
+TAGGED_LABEL : "label" = 
+      <label> {[\a]+[\a_]* } SPACING
+    / <local> {[.][\a]+[\a_]*} SPACING;
+
+CASE_LABEL =
+      <case> "case" {EXP}
+    / <default> "default";
+
+NUM : "number" = 
+    {[\d]+('.'[\d]+)?} SPACING;
+
+STRING = 
+     '"' ('\\'_/[^"]) '"' SPACING
+   / '\'' ('\\'_/[^']) '\'' SPACING;
+
+SYM : "symbol" = 
+    {[\y+^,;]+/','} SPACING;
+
+"[\a_][\a\d_]*" = {_self} ![\a\d_] SPACING;
+"[;,]" = {_self} SPACING;
+"[\y]+" : "operator" = {_self} ![\y] SPACING;
+"_" = {_self} SPACING;
+
+SPACING : "spacing" =
+   [\s]* COMMENT?
+   ;
+
+COMMENT = 
+    '//' [^\n]* [\n] SPACING
+  / '/*' _* . '*/' SPACING;
+
+MAP = <<map>> "map" {ID} "(" {<<mparms>> {ID} ("," {ID})*}  ")" "=" {<<repl>> STMT};
+
+#DECLARATION =
+#  <declaration> # I really rant to use a regex here!
+#  (<pre> {"typedef" / "auto"} {ID}+ "/")
+#  (<var> {"*"}? 

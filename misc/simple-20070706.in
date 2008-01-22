@@ -1,0 +1,64 @@
+TOP = SPACING {STMT};
+
+STMT : "statement" = 
+     <if>    "if" "(" {EXP} ")" {STMT} ("else" {STMT})?
+    / <while> "while" "(" {EXP} ")" {STMT}
+    / <loop>  "loop" {STMT}
+    / <do>    "do" {STMT} "while" "(" {EXP} ")" ";"
+    / <block> "{" {STMT}* "}"
+    / <var>   "var" {ID} ";"
+    / <break> "break" ";"
+    / <print> "print" {EXP} ";"
+#    /          {MAP}
+    / <assign> (<id> {ID}) "=" {EXP} ";"
+    /          {EXP} ";"
+    / <noop>   ";"
+   ;
+
+EXP : "expression" = RELATIONAL_EXP;
+
+RELATIONAL_EXP : "expression" = 
+    <eq> {ADDITIVE_EXP} "==" {ADDITIVE_EXP}
+  / <ne> {ADDITIVE_EXP} "!=" {ADDITIVE_EXP}
+  / <le> {ADDITIVE_EXP} "<=" {ADDITIVE_EXP}
+  / <ge> {ADDITIVE_EXP} ">=" {ADDITIVE_EXP}
+  / <lt> {ADDITIVE_EXP} "<"  {ADDITIVE_EXP}
+  / <gt> {ADDITIVE_EXP} ">"  {ADDITIVE_EXP}
+  /      ADDITIVE_EXP
+  ;
+
+ADDITIVE_EXP : "expression" =
+     <plus> {UNARY_EXP} "+" {ADDITIVE_EXP}
+   / UNARY_EXP
+   ;
+
+UNARY_EXP : "expression" =
+     <not> "!" {UNARY_EXP}
+   / <neg> "-" {UNARY_EXP}
+#   / <<mid>>   {ID}
+   / <id>      {ID}
+   / <literal> {NUM}
+   / "(" {EXP} ")"
+   ;
+
+COMMENT = 
+    '//' [^\n] '\n' SPACING
+  / '/*' _* . '*/' SPACING;
+
+ID : "identifier" =
+    {[\a]+[\a_]*} SPACING;
+
+NUM : "number" = 
+    {[\d][\d.]*} SPACING;
+
+"[\a_][\a\d_]*" = {_self} ![\a\d_] SPACING;
+"[;,]" = {_self} SPACING;
+"[\y]+" : "operator" = {_self} ![\y] SPACING;
+"_" = {_self} SPACING;
+
+SPACING : "spacing" =
+    COMMENT
+   / [\s]*;
+
+MAP = <<map>> "map" {ID} "(" {<<mparms>> {ID} ("," {ID})*}  ")" "=" {<<repl>> STMT};
+

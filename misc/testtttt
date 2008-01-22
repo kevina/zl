@@ -1,0 +1,32 @@
+map make_macro (name, op) {
+  map name (x) {
+    x op x;
+  }
+}
+
+STEP 1
+  make_macro
+  (name, op)
+  "map name (x) {x op x;}" {name, op}
+
+CALl make_macro(dbl, *)
+  dbl
+  (x)
+  "x op x;" {name => dbl, op => *} {x}
+
+CALL dbl(2)
+  2 * 2
+
+
+---------------------------------------
+
+
+
+map dbldbl (x) {
+  dbl(dbl(x));
+}
+
+dbldbl(3);
+
+"dbl(x)" * "dbl(x)" {x => 3}
+

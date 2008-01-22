@@ -1,0 +1,13 @@
+fun f(x) {return x + 10;}
+fun g() {return 30;}
+var x;
+x = 10;
+print x + 20;
+print g();
+print f(10+20);
+print 20;
+fun g(i) {
+  var a;
+  a = f(20);
+  return i + a;
+}

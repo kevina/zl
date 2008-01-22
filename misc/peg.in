@@ -1,0 +1,14 @@
+
+*
++
+?
+
+&
+!
+
+*, (repeat with seperator)
++,
+
+_ (ex: (TOKEN)* _ ';'
+       (TOKEN)* _ ';'?)
+

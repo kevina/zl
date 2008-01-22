@@ -1,0 +1,55 @@
+(smap while (TEST BODY)
+     (loop (block 
+             (lstmt (local ".continue")
+               (if TEST (noop) (break)))
+             BODY)))
+
+(smap do (BODY TEST)
+     (loop (block 
+             BODY
+             (lstmt (local ".continue")
+               (if TEST (noop) (break))))))
+
+(smap for (INIT TEST POST BODY)
+      (block 
+               INIT
+               (loop (block
+                 (if TEST (noop) (break))
+                 BODY
+                 (lstmt (local ".continue")
+                   POST)))))
+
+(smap continue ()
+       (goto (id ".continue")))
+
+#(smap "()" (...)
+#    (exp ...))
+
+#(smap "{}" (...)
+#    (block ...))
+
+(smap or (x y)
+    (eif x (literal 1) y))
+
+(smap and (x y)
+    (eif x y (literal 0)))
+
+(smap ? (test (":" if_true if_false))
+    (eif test if_true if_false))
+
+(smap -> (exp id)
+    (member (deref exp) id))
+
+(smap ".[]" (x y)
+    (deref (plus x y)))
+
+(smap preinc (x)
+    (plus_eq x (literal 1)))
+
+(smap predec (x)
+    (minus_eq x (literal 1)))
+
+#(smap postinc (x)
+#    (block (stmt (id int) (id `x) (sym =) (id x))
+#           (stmt (sym ++) (id x))
+#           (stmt (id `x))))
