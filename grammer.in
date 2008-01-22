@@ -1,6 +1,10 @@
 
 TOP = <top> SPACING {STMT}+;
 
+#
+# C Statement
+#
+
 STMT : "statement" = 
       <<mid>> {MID} ";"
     / <lcstmt> {CASE_LABEL} ":" {STMT}
@@ -21,51 +25,60 @@ STMT : "statement" =
     / <stmt>   {TOKEN}* ({BRACE} / ";")
    ;
 
-BLOCK = <block> "{" {STMT}* "}";
-EBLOCK = <eblock> "(" "{" {STMT}* "}" ")";
+CASE_LABEL =
+      <case> "case" {<exp> {CASE_EXP}}
+    / <default> "default";
 
-EXP = <<mid>> {MID} / <exp> {TOKEN}+;
-PARAN_EXP = {EBLOCK} / "(" {EXP} ")";
+CASE_EXP = &":" / {TOKEN} CASE_EXP ;
+
+TAGGED_LABEL : "label" = 
+      <label> {ID} SPACING
+    / <local> [.] {ID} SPACING;
+
+MAP =
+  <map> "map" {ID} "(" {<> ({ID} ",")* {ID}?} ")" {BRACE} ;
+
+#
+# C Token
+#
 
 TOKEN = <<mid>> {MID} / 
-#         {STRUCT_UNION} / {TYPEOF} / {EBLOCK} / {PARAN} / {BRACK} / <string> {STRING} 
          {STRUCT_UNION} / {TYPEOF} / {PARAN} / {BRACK} / <string> {STRING} 
          / <id> {ID} / <literal> {NUM} / <sym> {SYM};
-
-RAW_TOKEN = <string> {STRING} / {BRACE} / {PARAN} / {BRACK} / {ID} / {NUM} / {SYM} / ";";
 
 STRUCT_UNION = <%> {"struct"/"union"} {ID/} {<{...}> "{" {STMT}* "}" }?;
 
 TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 
-GROUP = BRACE / PARAN / BRACK;
+#
+# Misc
+#
+
+EXP = <<mid>> {MID} / <exp> {TOKEN}+;
+
+BLOCK = <block> "{" {STMT}* "}";
+
+EBLOCK = <eblock> "(" "{" {STMT}* "}" ")";
+
+#
+# Raw Tokens
+#
 
 BRACE = <{}> "{" {RAW_TOKEN*} "}";
 PARAN = <()> "(" {RAW_TOKEN*} ")";
 BRACK = <[]> "[" {RAW_TOKEN*} "]";
 
-SPLIT_TOKEN = !"," RAW_TOKEN;
-SPLIT = <(,)> ({<parm> {SPLIT_TOKEN*}} ("," {<parm> {SPLIT_TOKEN*}})+/{<parm> {SPLIT_TOKEN+}}/);
+RAW_TOKEN = <string> {STRING} / {BRACE} / {PARAN} / {BRACK} / {ID} / {NUM} / {SYM} / ";";
 
-TOKENS = <(...)> {TOKEN}*;
-
-STMTS = <slist> {STMT}*;
+#
+# Lex Like Tokens
+#
 
 ID : "identifier" =
      <<mid>> {MID} / {[`]*[\a_]+[\a_\d]*} SPACING;
 
 MID : "macro identifier" = 
      {[\a_]+[\a_\d]*} SPACING;
-
-TAGGED_LABEL : "label" = 
-      <label> {ID} SPACING
-    / <local> [.] {ID} SPACING;
-
-CASE_LABEL =
-      <case> "case" {<exp> {CASE_EXP}}
-    / <default> "default";
-
-CASE_EXP = &":" / {TOKEN} CASE_EXP ;
 
 NUM : "number" = 
     {[\d]+('.'[\d]+)?} SPACING;
@@ -77,11 +90,6 @@ STRING =
 SYM : "symbol" = 
     {[\y+^,;`]+/','} SPACING;
 
-"[\a_][\a\d_]*" = {_self} ![\a\d_] SPACING;
-"[;,]" = {_self} SPACING;
-"[\y]+" : "operator" = {_self} ![\y] SPACING;
-"_" = {_self} SPACING;
-
 SPACING : "spacing" =
    [\s]* COMMENT?
    ;
@@ -90,9 +98,29 @@ COMMENT =
     '//' [^\n]* [\n] SPACING
   / '/*' _* . '*/' SPACING;
 
-MAP =
-  <map> "map" {ID} "(" {<> ({ID} ",")* {ID}?} ")" {BRACE} ;
+#
+# Special tokens
+#
+
+"[\a_][\a\d_]*" = {_self} ![\a\d_] SPACING;
+"[;,]" = {_self} SPACING;
+"[\y]+" : "operator" = {_self} ![\y] SPACING;
+"_" = {_self} SPACING;
+
+#
+# Productions used by macro expander
+#
+
+PARAN_EXP = {EBLOCK} / "(" {EXP} ")";
+
+TOKENS = <(...)> {TOKEN}*;
+
+STMTS = <slist> {STMT}*;
+
+SPLIT_TOKEN = !"," RAW_TOKEN;
+SPLIT = <(,)> ({<parm> {SPLIT_TOKEN*}} ("," {<parm> {SPLIT_TOKEN*}})+/{<parm> {SPLIT_TOKEN+}}/);
 
 PARM : "macro paramater" = {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
 
 EOF = SPACING !_ ;
+
