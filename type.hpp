@@ -30,8 +30,9 @@ namespace AST {
 
   struct TypeCategory {
     String name;
-    TypeCategory * parent;
-    TypeCategory(String n, TypeCategory * p) : name(n), parent(p) {}
+    TypeCategory * parent0;
+    TypeCategory * parent1;
+    TypeCategory(String n, TypeCategory * p0, TypeCategory * p1 = 0) : name(n), parent0(p0), parent1(p1) {}
   };
 
   extern TypeCategory * const ANY_C;
@@ -45,6 +46,7 @@ namespace AST {
   extern TypeCategory * const ARRAY_C;
   extern TypeCategory * const FUN_C;
   extern TypeCategory * const UNKNOWN_C;
+  extern TypeCategory * const ZERO_C;
 
   struct TypeParm : public gc {
     enum What {NONE, TYPE, INT, TUPLE, EXP};
@@ -160,8 +162,10 @@ namespace AST {
 
   static inline bool category_in(const TypeCategory * x, const TypeCategory * y) {
     if (x == y) return true;
-    if (x->parent == 0) return false;
-    return category_in(x->parent, y);
+    if (x->parent0 == 0) return false;
+    if (category_in(x->parent0, y)) return true;
+    if (x->parent1 == 0) return false;
+    return category_in(x->parent1, y);
   }
 
   class TypeInst : public gc_cleanup {
@@ -305,6 +309,7 @@ namespace AST {
   class ZeroT : public ParmTypeInst {
   public:
     ZeroT(const Type * st) : ParmTypeInst(st), of(st) {
+      category = ZERO_C;
       if (of->is(INT_C)) is_null = true;
       printf("@@@ZERO T@@@ %p %d\n", this, is_null);
     }
@@ -525,6 +530,7 @@ namespace AST {
       assert(p.size() == 2);
       assert(p[0].what == TypeParm::TYPE);
       assert(p[1].what == TypeParm::INT);
+      //assert(p[1].what == TypeParm::EXP);
       return new Array(p[0].as_type, p[1].as_int);
     }
     unsigned required_parms() const {return 2;}
@@ -532,6 +538,7 @@ namespace AST {
       switch (i) {
       case 0: return TypeParm::TYPE;
       case 1: return TypeParm::INT;
+      //case 1: return TypeParm::EXP;
       default: return TypeParm::NONE;
       }
     }
@@ -666,6 +673,8 @@ namespace AST {
 
   TypeRelation * new_c_type_relation();
   void create_c_types(TypeSymbolTable * types);
+
+  extern Type * VOID_T; // FIXME: Hack
 
 }
 

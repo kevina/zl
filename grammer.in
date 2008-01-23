@@ -84,8 +84,8 @@ NUM : "number" =
     {[\d]+('.'[\d]+)?} SPACING;
 
 STRING = 
-     '"' ('\\'_/[^"]) '"' SPACING
-   / '\'' ('\\'_/[^']) '\'' SPACING;
+     '"' ('\\'_/[^"]+) '"' SPACING
+   / '\'' ('\\'_/[^']+) '\'' SPACING;
 
 SYM : "symbol" = 
     {[\y+^,;`]+/','} SPACING;
@@ -112,6 +112,8 @@ COMMENT =
 #
 
 PARAN_EXP = {EBLOCK} / "(" {EXP} ")";
+
+ARRAY_SIZE = {EXP} EOF / <literal 0>;
 
 TOKENS = <(...)> {TOKEN}*;
 

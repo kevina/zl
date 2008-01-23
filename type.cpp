@@ -15,6 +15,7 @@ namespace AST {
   static TypeCategory ARRAY_C_OBJ("array", POINTER_C); // FIXME: Is this right?
   static TypeCategory FUN_C_OBJ("function", ANY_C); // FIXME: Is this right?
   static TypeCategory UNKNOWN_C_OBJ("?", ANY_C);
+  static TypeCategory ZERO_C_OBJ("zero", INT_C, POINTER_C);
 
   TypeCategory * const ANY_C = &ANY_C_OBJ;
   TypeCategory * const SCALAR_C = &SCALAR_C_OBJ;
@@ -27,6 +28,9 @@ namespace AST {
   TypeCategory * const ARRAY_C = &ARRAY_C_OBJ;
   TypeCategory * const FUN_C = &FUN_C_OBJ;
   TypeCategory * const UNKNOWN_C = &UNKNOWN_C_OBJ;
+  TypeCategory * const ZERO_C = &ZERO_C_OBJ;
+
+  Type * VOID_T = 0;
 
   const char * type_name(const Type * t) {
     return typeid(*t).name();
@@ -253,7 +257,7 @@ namespace AST {
         break;
       }
       case TypeParm::EXP: {
-        AST * exp = parse_exp(p->arg(0), env);
+        AST * exp = parse_exp(p0, env);
         parms.push_back(TypeParm(exp));
         break;
       }
@@ -418,7 +422,8 @@ namespace AST {
 
     add_simple_type(types, "char", new_signed_int(sizeof(char)));
 
-    add_simple_type(types, "void", new Void());
+    VOID_T = new Void();
+    add_simple_type(types, "void", static_cast<SimpleTypeInst *>(VOID_T));
 
     add_simple_type(types, "float", new Float(Float::SINGLE));
     add_simple_type(types, "double", new Float(Float::DOUBLE));

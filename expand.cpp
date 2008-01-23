@@ -107,11 +107,11 @@ struct Map {
     const Parse * res;
     if (repl->name == "{}") {
       res = reparse("STMTS", repl->arg(0), rparms);
+      if (res->num_args() == 1)
+	res = res->arg(0);
     } else {
       res = replace(repl, rparms);
     }
-    if (res->num_args() == 1)
-      res = res->arg(0);
     res->str_ = p->str();
     printf(">>>EXPANDED %s\n", ~name);
     res->print();

@@ -52,6 +52,20 @@ namespace AST {
     }
   };
 
+  struct Empty : public AST {
+    Empty() : AST("empty") {}
+    AST * parse_self(const Parse * p, ParseEnviron & env) {
+      parse_ = p;
+      assert_num_args(0);
+      type = env.void_type();
+      return this;
+    }
+    void eval(ExecEnviron &) {}
+    void compile(CompileWriter & f, CompileEnviron &) {
+      // do absolutely nothing
+    }
+  };
+
   struct Terminal : public AST {
     Terminal(const Parse * p) : AST(p->name, p) {}
     AST * parse_self(const Parse * p, ParseEnviron & env) {abort();}
@@ -517,7 +531,7 @@ namespace AST {
   };
 
   void check_type(AST * exp, TypeCategory * cat) {
-    if (!exp->type->is(cat))
+    if (!exp->type->is(cat)) 
       throw error(exp->parse_, "Expected %s type", ~cat->name);
   }
 
@@ -666,7 +680,8 @@ namespace AST {
       return p->subtype;
     if (const Array   * p = dynamic_cast<const Array *>(t))
       return p->subtype;
-    abort();
+    return VOID_T;
+    //abort();
   }
 
   enum PointerBinOp {P_MINUS, P_COMP};
@@ -1373,6 +1388,7 @@ namespace AST {
     if (p->name == "member")  return (new MemberAccess)->parse_self(p, env);
     if (p->name == "call")    return (new Call)->parse_self(p, env);
     if (p->name == "eblock")  return (new EBlock)->parse_self(p, env);
+    if (p->name == "empty")   return (new Empty)->parse_self(p, env);
     if (strcmp(p->name + p->name.size()-3, "_eq") == 0) {
       // This is a bit of a hack to handle op_eq cases (ie += -=, etc)
       StringBuf buf(p->name, p->name.size()-3);

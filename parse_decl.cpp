@@ -532,7 +532,7 @@ const Parse * DeclWorking::try_arrays(Parts::const_iterator & i,
 {
   Vector<const Parse *> stack;
   while (i != end && (*i)->is_a("[]")) {
-    stack.push_back((*i));
+    stack.push_back(reparse("ARRAY_SIZE", (*i)->arg(0)));
     ++i;
   }
   Vector<const Parse *>::const_reverse_iterator j = stack.rbegin();
