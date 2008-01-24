@@ -49,7 +49,7 @@ namespace AST {
   extern TypeCategory * const ZERO_C;
 
   struct TypeParm : public gc {
-    enum What {NONE, TYPE, INT, TUPLE, EXP};
+    enum What {NONE, TYPE, INT, TUPLE, EXP, DOTS};
     What what;
     union {
       const Type * as_type;
@@ -64,6 +64,9 @@ namespace AST {
     explicit TypeParm(int i, String n = String()) : what(INT), as_int(i), name(n) {}
     explicit TypeParm(AST * exp, String n = String()) : what(EXP), as_exp(exp), name(n) {}
     void to_string(StringBuf & buf) const;
+    static TypeParm dots() {return TypeParm(DOTS);}
+  private:
+    explicit TypeParm(What w) : what(w) {}
   };
 
   struct TypeSymbolTable : public SymbolTable<const TypeSymbol *> {
@@ -98,6 +101,8 @@ namespace AST {
       return lhs.as_int == rhs.as_int;
     case TypeParm::EXP:
       return lhs.as_exp == rhs.as_exp;
+    case TypeParm::DOTS:
+      return true;
     }
     abort(); // this should't happen
   }
@@ -350,8 +355,17 @@ namespace AST {
     };
     typedef Vector<Parm> Parms;
     Parms parms;
-    virtual unsigned num_parms() const {return parms.size();}
-    virtual TypeParm parm(unsigned i) const {return TypeParm(parms[i].type, parms[i].name);}
+    int vararg;
+    Tuple() : vararg() {}
+    virtual unsigned num_parms() const {return parms.size() + vararg;}
+    virtual TypeParm parm(unsigned i) const {
+      if (i < parms.size())
+	return TypeParm(parms[i].type, parms[i].name);
+      else if (vararg)
+	return TypeParm::dots();
+      else
+	abort();
+    }
   };
 
   class TupleSymbol : public ParmTypeSymbol {
@@ -361,8 +375,13 @@ namespace AST {
     virtual ParmTypeInst * inst_p(Vector<TypeParm> & p) const {
       Tuple * r = new Tuple();
       for (int i = 0; i != p.size(); ++i) {
-        assert(p[i].what == TypeParm::TYPE);
-        r->parms.push_back(Tuple::Parm(p[i].as_type, p[i].name));
+	if (p[i].what == TypeParm::DOTS) {
+	  r->vararg = true;
+	  break;
+	} else {
+	  assert(p[i].what == TypeParm::TYPE);
+	  r->parms.push_back(Tuple::Parm(p[i].as_type, p[i].name));
+	}
       }
       return r;
     }

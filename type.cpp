@@ -65,6 +65,9 @@ namespace AST {
     case EXP:
       buf.printf("<EXP>");
       break;
+    case DOTS:
+      buf.printf("...");
+      break;
     }
   }
 
@@ -141,6 +144,9 @@ namespace AST {
         ++i;
         if (i == t->parms.size()) break;
         buf << ", ";
+      }
+      if (t->vararg) {
+	buf << ", ...";
       }
       buf << ")";
     } else if (const Pointer * t = dynamic_cast<const Pointer *>(type)) {
@@ -224,15 +230,19 @@ namespace AST {
     for (int i = 0; i != sz; ++i) {
       const Parse * p0 = p->arg(i);
       String n;
-      if (name == ".tuple" && !p0->part(0)->simple()) /* HACK! */ {
-        if (p0->num_parts() > 1)
-          n = p0->part(1)->name;
-        p0 = p0->part(0);
+      if (name == ".tuple" && !p0->part(0)->simple()) { // HACK!
+	if (p0->num_parts() > 1)
+	  n = p0->part(1)->name;
+	p0 = p0->part(0);
       }
       switch(t->parm(i)) {
       case TypeParm::TYPE: {
-        Type * t0 = parse_type(types, p0, env);
-        parms.push_back(TypeParm(t0, n));
+	if (p0->name == "...") {
+	  parms.push_back(TypeParm::dots());
+	} else {
+	  Type * t0 = parse_type(types, p0, env);
+	  parms.push_back(TypeParm(t0, n));
+	}
         break;
       }
       case TypeParm::INT: {
@@ -263,6 +273,9 @@ namespace AST {
       }
       case TypeParm::NONE: {
         throw error(p0, "Two Many Type Paramaters");
+      }
+      case TypeParm::DOTS: {
+	abort(); // special case, should not happen
       }}
     }
     printf(">>INST %s\n", ~name);

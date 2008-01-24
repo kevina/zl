@@ -1137,11 +1137,16 @@ namespace AST {
         throw error (lhs->parse_, "Expected function type");
       type = ftype->ret;
       printf(">>RET>%s\n", ~ftype->ret->to_string());
-      if (parms.size() != ftype->parms->parms.size()) 
+      if (!ftype->parms->vararg && parms.size() != ftype->parms->parms.size()) 
         throw error(parse_->arg(1), 
                     "Wrong number of parameters, expected %u but got %u",
                     ftype->parms->parms.size(), parms.size());
-      for (int i = 0; i != num_parms; ++i) {
+      else if (ftype->parms->vararg && parms.size() < ftype->parms->parms.size())
+	throw error(parse_->arg(1),
+		    "Not enough parameters, expected at least %u but got %u",
+		    ftype->parms->parms.size(), parms.size());
+      const int typed_parms = ftype->parms->parms.size();
+      for (int i = 0; i != typed_parms; ++i) {
         resolve_to(env, parms[i], ftype->parms->parms[i].type);
       }
       return this;

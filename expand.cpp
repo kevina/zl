@@ -250,7 +250,7 @@ const Parse * ESTMT = new Parse("estmt");
 
 const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
   String name = p->name;
-  printf("\n>>%s//\n", ~name);
+  printf("\n>expand>%s//\n", ~name);
   p->print();
   printf("\n////\n");
   if (p->simple()) {
@@ -460,10 +460,14 @@ const Parse * expand_fun_parms(const Parse * parse, ExpandEnviron & env) {
   Parse * res = new Parse(parse->part(0));
   for (unsigned i = 0; i != parse->num_args(); ++i) {
     const Parse * p = parse->arg(i);
-    Parse * r = new Parse(expand_type(p->part(0), env));
-    if (p->num_parts() == 2) 
-      r->add_part(p->part(1));
-    res->add_part(r);
+    if (p->name != "...") {
+      Parse * r = new Parse(expand_type(p->part(0), env));
+      if (p->num_parts() == 2) 
+	r->add_part(p->part(1));
+      res->add_part(r);
+    } else {
+      res->add_part(p);
+    }
   }
   return res;
 }

@@ -151,6 +151,7 @@ struct DeclWorking {
   }
   bool try_struct_union(const Parse * p, ExpandEnviron &);
   const Parse * parse_struct_union_body(const Parse * p, ExpandEnviron &);
+  bool dots;
   Parse * inner_type;
   void make_inner_type(const Parse * orig);
   const Parse * try_pointers(Parts::const_iterator & i, 
@@ -179,7 +180,7 @@ ParseDecl * parse_decl_ = new ParseDeclImpl();
 DeclWorking::DeclWorking(Parts & p)
   : type_scope(p), storage_class(NULL), what(VAR),
     sign(NO_SIGN), size(NO_SIZE), base_type(NO_BT),
-    inline_(NULL), inner_type(NULL) {}
+    inline_(NULL), dots(false), inner_type(NULL) {}
 
 //
 // The real code....
@@ -236,9 +237,13 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
                                    ExpandEnviron & env) 
 {
   Parts::const_iterator begin = i;
-  const Parse * cur;
-  while (i != end) {
-    cur = *i;
+  if (i != end && (*i)->is_a("sym", "...")) {
+    printf("DOTS!!\n");
+    dots = true;
+    inner_type = new Parse("...", (*i)->str());
+    ++i;
+  } else while (i != end) {
+    const Parse * cur = *i;
     if (cur->name == "id") {
       const Parse * p = cur->arg(0);
       bool any = 
@@ -482,16 +487,20 @@ const Parse * DeclWorking::make_function_type(const Parse * ret,
     DeclWorking w(type_scope);
     const Parse * id = NULL;
     bool r = w.parse_first_part(i, end, env);
-    if (!r) throw error(*i, "Expected type.");
-    w.make_inner_type(parms);
-    const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
-    Parse * p = new Parse();
-    assert(t);
-    p->add_part(t);
-    if (id)
-      p->add_part(id);
-    ps->add_part(p);
-    //ps->add_part(t);
+    if (!r) throw error(*i, "Expected type or \"...\".");
+    if (w.dots) {
+      ps->add_part(w.inner_type); // FIXME: Preserve source info..
+    } else {
+      w.make_inner_type(parms);
+      const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
+      Parse * p = new Parse();
+      assert(t);
+      p->add_part(t);
+      if (id)
+	p->add_part(id);
+      ps->add_part(p);
+      //ps->add_part(t);
+    } 
     if (i == end) break;
     if (!(*i)->is_a("sym", ",")) throw error(*i, "Expected \",\".");
     ++i;
@@ -588,4 +597,3 @@ const Parse * DeclWorking::make_function(const Parse * id, const Parse * t, cons
     abort();
   }
 }
-
