@@ -31,6 +31,8 @@ SourceFile * file = 0;
 
 int main()
 {
+  assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
+  assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
   parse_exp_->init();
   file = new_source_file("grammer.in");
   try {
