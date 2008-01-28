@@ -173,7 +173,7 @@ namespace AST {
       declaration("", *t->parms, lbuf);
       declaration(lbuf.freeze(), *t->ret, buf);
     } else if (type->num_parms() == 0) {
-      if (const StructUnionT * t = dynamic_cast<const StructUnionT *>(type)) {
+      if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
         buf << t->what << " ";
       }
       buf << type->type_symbol->name << qualifiers;
@@ -196,12 +196,11 @@ namespace AST {
     : SimpleTypeInst(a->type), of_ast(a), of(a->type) {type_symbol = of->type_symbol;}
 
   Type * parse_type(TypeSymbolTable * types, const Parse * p, ParseEnviron & env) {
-    static QualifiedTypeSymbol * qualified_type_symbol = new QualifiedTypeSymbol;
     unsigned sz = p->num_args();
     const NameSpace * ns = DEFAULT_NS;
     String name = p->name;
     String full_name = name;
-    if (name == "struct" || name == "union") {
+    if (name == "struct" || name == "union" || name == "enum") {
       assert(sz == 1);
       // FIXME: Add check for wrong type of tag
       ns = TAG_NS;
@@ -246,16 +245,7 @@ namespace AST {
         break;
       }
       case TypeParm::INT: {
-        // need to convert ids or exps to integers
-        // for now require a literal
-        if (p0->name != "literal")
-          throw error(p0, "Expected Interger Literal.");
-        const char * s = p0->arg(0)->name.c_str();
-        char * e = (char *)s;
-        int value = strtol(s, &e, 10);
-        if (s == e) 
-          throw error(p0->arg(0), "Expected Integer");
-        parms.push_back(TypeParm(value));
+        parms.push_back(TypeParm(ct_value(p0, env)));
         break;
       }
       case TypeParm::TUPLE: {
@@ -288,12 +278,12 @@ namespace AST {
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(qualifiers));
       q_parms.push_back(TypeParm(inst_type));
-      return qualified_type_symbol->inst(q_parms);
+      return types->lookup(".qualified")->inst(q_parms);
     } else {
       return inst_type;
     }
- }
-    
+  }
+  
   FunctionPtr * FunctionPtrSymbol::inst(TypeSymbolTable * types, Fun * f) const {
     Vector<TypeParm> p;
     p.clear();
@@ -317,10 +307,12 @@ namespace AST {
 #endif
 
   const Type * TypeRelation::unify(int rule, AST * & x, AST * & y) {
-    const Type * t = unify(rule, x->type, y->type);
+    const Type * xt = x->type->unqualified;
+    const Type * yt = y->type->unqualified;
+    const Type * t = unify(rule, xt, yt);
     printf("UNIFY %d to \"\%s\"\n", x->parse_->str().source->get_pos(x->parse_->str().begin).line, ~t->to_string());
-    if (t != x->type) {printf(">>X\n"); x = new ImplicitCast(x, t);}
-    if (t != y->type) {printf(">>Y\n"); y = new ImplicitCast(y, t);}
+    if (t != xt) {printf(">>X\n"); x = new ImplicitCast(x, t);}
+    if (t != yt) {printf(">>Y\n"); y = new ImplicitCast(y, t);}
     return t;
   }
 
@@ -452,7 +444,7 @@ namespace AST {
     types->add_name(".array", new ArraySymbol);
     types->add_name(".fun", new FunctionPtrSymbol);
     types->add_name(".tuple", new TupleSymbol);
-    //types->add_name(".qualified", new QualifiedTypeSymbol);
+    types->add_name(".qualified", new QualifiedTypeSymbol);
     types->add_name(".zero", new ZeroTypeSymbol);
     types->add_name(".typeof", new TypeOfSymbol);
   }

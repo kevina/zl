@@ -398,6 +398,8 @@ namespace AST {
   //
   //
 
+  int ct_value(const Parse * p, ParseEnviron &);
+
   AST * parse_top(const Parse * p);
   AST * parse_exp(const Parse * p, ParseEnviron & env);
 

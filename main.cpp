@@ -21,7 +21,8 @@ void parse_maps() {
       s = r.end;
     }
   } catch (Error * err) {
-    puts(err->message().c_str());
+    fprintf(stderr, "%s\n", err->message().c_str());
+    exit(1);
   }
 }
 
@@ -39,7 +40,7 @@ int main()
     parse.top(file->begin(), file->end());
   } catch (Error * err) {
     err->source = file->entity();
-    puts(err->message().c_str());
+    fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
   parse_maps();
@@ -60,8 +61,7 @@ int main()
     //ast->eval(env);
   } catch (Error * err) {
     err->source = code->entity();
-    printf("::\n");
-    puts(err->message().c_str());
+    fprintf(stderr, "%s\n", err->message().c_str());
     exit(2);
   }
 #if 0

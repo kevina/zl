@@ -32,6 +32,19 @@ namespace AST {
     exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type));
   }
 
+  int ct_value(const Parse * p, ParseEnviron & env) {
+    // need to convert ids or exps to integers
+    // for now require a literal
+    if (p->name != "literal")
+      throw error(p, "Expected Interger Literal.");
+    const char * s = p->arg(0)->name.c_str();
+    char * e = (char *)s;
+    int value = strtol(s, &e, 10);
+    if (s == e) 
+      throw error(p->arg(0), "Expected Integer");
+    return value;
+  }
+
   AST * parse_top_level(const Parse * p, ParseEnviron & env);
   AST * parse_member(const Parse * p, ParseEnviron & env);
   AST * parse_stmt(const Parse * p, ParseEnviron & env);
@@ -1281,6 +1294,52 @@ namespace AST {
     Union() : StructUnion(UNION) {}
   };
 
+  struct Enum : public AST {
+    Enum() : AST("enum") {}
+    String name;
+    struct Member {
+      const Parse * parse;
+      String name;
+      int val;
+      Member(const Parse * p, String n, int v) : name(n), val(v) {}
+    };
+    Vector<Member> members;
+    AST * parse_self(const Parse * p, ParseEnviron & env) {
+      parse_ = p;
+      name = p->arg(0)->name;
+      EnumT * t0 = new EnumT;
+      t0->name = name;
+      add_simple_type(env.types, SymbolKey(TAG_NS, name), t0);
+      Vector<TypeParm> q_parms;
+      q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
+      q_parms.push_back(TypeParm(t0));
+      const Type * t = env.types->lookup(".qualified")->inst(q_parms);
+      int val = 0;
+      for (unsigned i = 0; i != p->arg(1)->num_args(); ++i) {
+        if (p->arg(1)->arg(i)->num_parts() > 1)
+          val = ct_value(p->arg(1)->arg(i)->part(1), env);
+        Member mem(p->arg(1), p->arg(1)->arg(i)->part(0)->name, val);
+        val++;
+        Symbol * sym = new Symbol(mem.name);
+        sym->type = t;
+        members.push_back(mem);
+        env.vars->root->add(mem.name, sym);
+      }
+      return this;
+    }
+    void compile(CompileWriter & f, CompileEnviron &) {
+      f << indent << name_ << " " << name << "{\n";
+      for (int i = 0; i != members.size(); ++i) {
+        f << adj_indent(2) << indent << members[i].name << " = " << members[i].val;
+        if (i == members.size())
+          f << "\n";
+        else
+          f << ",\n";
+      }
+      f << indent << "};\n";
+    }
+  };
+
   AST * parse_top(const Parse * p) {
     ParseEnviron env;
     assert(p->name == "top");
@@ -1343,6 +1402,7 @@ namespace AST {
     if (p->name == "fun" )    return (new Fun)->parse_self(p, env);
     if (p->name == "struct")  return (new Struct)->parse_self(p, env);
     if (p->name == "union")   return (new Union)->parse_self(p, env);
+    if (p->name == "enum")    return (new Enum)->parse_self(p, env);
     if (p->name == "talias")  return (new TypeAlias)->parse_self(p, env);
     if (p->name == "map")     return (new ASTList);
     if (p->name == "smap")    return (new ASTList);

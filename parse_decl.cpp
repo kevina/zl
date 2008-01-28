@@ -7,7 +7,7 @@
 
 /*
   -- declarations
-  (var ID TYPE INIT), flags: 
+  (var ID TYPE INIT) flags: 
   (talias alias TYPE)
   (fun ID PARMS RET BODY]) flags:
   (struct ID [BODY]) 
@@ -150,6 +150,7 @@ struct DeclWorking {
     }
   }
   bool try_struct_union(const Parse * p, ExpandEnviron &);
+  bool try_enum(const Parse * p, ExpandEnviron &);
   const Parse * parse_struct_union_body(const Parse * p, ExpandEnviron &);
   bool dots;
   Parse * inner_type;
@@ -260,6 +261,8 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
       ++i;
     } else if (try_struct_union(cur, env)) {
       ++i;
+    } else if (try_enum(cur, env)) {
+      ++i;
     } else {
       break;
     }
@@ -299,6 +302,7 @@ bool DeclWorking::try_struct_union(const Parse * p, ExpandEnviron & env) {
     return false;
   }
 }
+
 const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, ExpandEnviron & env)
 {
   Parse * res = new Parse();
@@ -337,6 +341,37 @@ const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, ExpandEnvir
   return res;
 }
 
+bool DeclWorking::try_enum(const Parse * p, ExpandEnviron & env) {
+  const Parse * name = NULL;
+  const Parse * body = NULL;
+  if (p->name == "enum") {
+    unsigned i = 0;
+    if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
+                                        "Expected indentifer or \"{\" after \"%s\".",
+                                        ~p->name);
+    name = p->arg(i);
+    ++i;
+    if (i == p->num_args()) goto finish;
+    if (p->arg(i)->is_a("{,}")) {
+      body = p->arg(i);
+      ++i;
+    }
+    if (i != p->num_args()) abort(); // internal error, should't happen
+  finish:
+    if (name->name.empty())
+      name = gen_sym();
+    inner_type = new Parse(p->part(0), name);
+    if (body) {
+      Parse * enum_ = new Parse(p->part(0));
+      enum_->add_part(name);
+      enum_->add_part(body);
+      type_scope.push_back(enum_);
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
 
 void DeclWorking::make_inner_type(const Parse * orig) {
   if (!inner_type) {

@@ -26,10 +26,10 @@ STMT : "statement" =
    ;
 
 CASE_LABEL =
-      <case> "case" {<exp> {CASE_EXP}}
+      <case> "case" {CASE_EXP}
     / <default> "default";
 
-CASE_EXP = &":" / {TOKEN} CASE_EXP ;
+CASE_EXP = <exp> (!":" {TOKEN})+;
 
 TAGGED_LABEL : "label" = 
       <label> {ID} SPACING
@@ -43,10 +43,16 @@ MAP =
 #
 
 TOKEN = <<mid>> {MID} / 
-         {STRUCT_UNION} / {TYPEOF} / {PARAN} / {BRACK} / <string> {STRING} 
+         {STRUCT_UNION} / {ENUM} / {TYPEOF} 
+         / {PARAN} / {BRACK} / <string> {STRING} 
          / <id> {ID} / <literal> {NUM} / <sym> {SYM};
 
 STRUCT_UNION = <%> {"struct"/"union"} {ID/} {<{...}> "{" {STMT}* "}" }?;
+
+ENUM = <enum> "enum" {ID/} 
+              {<{,}> "{" ({ENUM_MEMBER} ",")* ({ENUM_MEMBER} ","?)? "}" }?;
+ENUM_MEMBER = <> {ID} ("=" {ENUM_EXP})?;
+ENUM_EXP = <exp> (!"," {TOKEN})+;
 
 TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 
@@ -96,6 +102,7 @@ SPACING : "spacing" =
 
 COMMENT = 
     '//' [^\n]* [\n] SPACING
+  / '#' [^\n]* [\n] SPACING
   / '/*' _* . '*/' SPACING;
 
 #

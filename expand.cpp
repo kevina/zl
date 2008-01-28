@@ -158,7 +158,7 @@ const Parse * replace(const Parse * p, ReplTable * r) {
       return p;
     }
   } else if (p->name == "id" && p->arg(0)->name[0] != '`' && r->have(p->arg(0)->name)) {
-    return r->lookup(p->arg(0)->name);
+    return r->lookup(p->arg(0)->name); 
   } else if (p->name == "mid") {
     const Parse * p0 = r->lookup(p->arg(0)->name);
     if (p0) {
@@ -225,6 +225,7 @@ struct BuildIn {
 
 const Parse * expand_parms(const Parse * p, Position pos, ExpandEnviron & env);
 const Parse * expand_fun_parms(const Parse * parse, ExpandEnviron & env);
+const Parse * expand_enum_body(const Parse * parse, ExpandEnviron & env);
 const Parse * expand_call_parms(const Parse * parse, ExpandEnviron & env);
 const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env);
 const Parse * expand_type(const Parse * p, ExpandEnviron & env);
@@ -399,6 +400,13 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     res->set_flags(p);
     res->add_part(expand_parms(p->arg(1), FieldPos, env));
     return res;
+  } else if (name == "enum") {
+    assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
+    assert_num_args(p, 2);
+    Parse * res = new Parse(p->str(), p->part(0), p->arg(0));
+    res->set_flags(p);
+    res->add_part(expand_enum_body(p->arg(1), env));
+    return res;
   } else {
     printf(">OTHER>%s\n", ~name);
     return expand_parms(p, ExpPos, env);
@@ -467,6 +475,19 @@ const Parse * expand_fun_parms(const Parse * parse, ExpandEnviron & env) {
       res->add_part(r);
     } else {
       res->add_part(p);
+    }
+  }
+  return res;
+}
+
+const Parse * expand_enum_body(const Parse * parse, ExpandEnviron & env) {
+  Parse * res = new Parse(parse->part(0));
+  for (unsigned i = 0; i != parse->num_args(); ++i) {
+    const Parse * p = parse->arg(i);
+    if (p->num_parts() == 1) {
+      res->add_part(p);
+    } else {
+      res->add_part(new Parse(p->part(0), expand(p->part(1), ExpPos, env)));
     }
   }
   return res;

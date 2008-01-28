@@ -181,13 +181,14 @@ namespace AST {
     unsigned align;
     bool addressable;
     bool read_only;
+    bool ct_const; // compile time const
     bool is_null;
     TypeInst(TypeCategory * c = UNKNOWN_C, unsigned sz = NPOS, unsigned a = NPOS)
       : category(c), size(sz), align(a == NPOS ? sz : a), 
-        addressable(false), read_only(false), is_null(false) {}
+        addressable(false), read_only(false), ct_const(false), is_null(false) {}
     TypeInst(const TypeInst * p) 
       : category(p->category), size(p->size), align(p->align), 
-        addressable(p->addressable), read_only(p->read_only), is_null(p->is_null) {}
+        addressable(p->addressable), read_only(p->read_only), ct_const(p->ct_const), is_null(p->is_null) {}
     void to_string(StringBuf & buf) const {type_symbol->print_inst->to_string(*this, buf);}
     String to_string() const {StringBuf buf; to_string(buf); return buf.freeze();}
     bool is(const TypeCategory * other) const {
@@ -497,13 +498,17 @@ namespace AST {
 
   class QualifiedType : public ParmTypeInst {
   public:
-    enum {CONST = 1, VOLATILE = 2, RESTRICT = 4};
+    enum {CONST = 1, VOLATILE = 2, RESTRICT = 4, CT_CONST = 8};
     const Type * subtype;
     unsigned qualifiers; // BIT FIELD
   public:
     QualifiedType(unsigned q, const Type * t) 
       : ParmTypeInst(t->category, t->size, t->align),
-        subtype(t), qualifiers(q) {if (q & CONST) read_only = true;}
+        subtype(t), qualifiers(q) {
+      if (q & CT_CONST) q |= CONST; 
+      if (q & CONST) read_only = true;
+      if (q & CT_CONST) ct_const = true;
+    }
     unsigned num_parms() const {return 2;}
     TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(qualifiers) : TypeParm(subtype);}
     const Type * find_unqualified() const {return subtype;}
@@ -567,18 +572,28 @@ namespace AST {
   //
   //
 
+  class TaggedType : public gc {
+  public:
+    String what;
+    TaggedType(String w) : what(w) {}
+  };
+  
+  //
+  //
+  //
+
   struct Member {
     String name;
     const Type * subtype;
     Member(String n, const Type * s) : name(n), subtype(s) {}
   };
 
-  class StructUnionT : public SimpleTypeInst {
+  class StructUnionT : public TaggedType, public SimpleTypeInst {
   public:
     String what;
     String name;
     Vector<Member> members;
-    StructUnionT(String w) : what(w) {}
+    StructUnionT(String w) : TaggedType(w) {}
     struct ParseEnviron * env;
   };
 
@@ -592,6 +607,16 @@ namespace AST {
   public:
     UnionT() : StructUnionT("union") {}
     void finalize_hook() {} // FIXME: Implement
+  };
+
+  //
+  //
+  //
+
+  class EnumT : public TaggedType, public Int {
+  public:
+    String name;
+    EnumT() : TaggedType("enum"), Int(INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)) {}
   };
   
   //
