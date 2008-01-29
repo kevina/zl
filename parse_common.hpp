@@ -19,9 +19,19 @@ namespace parse_common {
   }
 
   const char * id(const char * str, const char * end, String & res);
+ 
+  const char * quote(char close, const char * str, const char * end, SubStr & str);
 
-  const char * quote(char close, const char * str, const char * end, String & val);
-  
+  void unescape(const char *, const char *, StringBuf & out, char quote = '\0');
+  static inline String unescape(const char * b, const char * e, char quote = '\0') {
+    StringBuf buf;
+    unescape(b, e, buf, quote);
+    return buf.freeze();
+  }
+  static inline String unescape(SubStr str, char quote = '\0') {
+    return unescape(str.begin, str.end, quote);
+  }
+ 
   const char * symbol(char sym, const char * str, const char * end);
     
   const char * require_symbol(char sym, const char * str, const char * end);

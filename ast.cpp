@@ -179,29 +179,89 @@ namespace AST {
     }
   };
 
-    AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
-
+  AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
   
-    AST * Literal::parse_self(const Parse * p, ParseEnviron & env) {
-      parse_ = p;
-      assert_num_args(1);
-      const char * s = p->arg(0)->name.c_str();
-      char * e = (char *)s;
-      value = strtol(s, &e, 10);
-      if (s == e) 
-        throw error(p->arg(0), "Expected Integer");
-      type = env.types->inst("int");
-      if (value == 0)
-        type = env.types->inst(".zero", type);
-      return this;
-    }
-    void Literal::eval(ExecEnviron & env) {
-      env.ret<int>(this) = value;
-    }
-    void Literal::compile(CompileWriter & f, CompileEnviron &) {
-      f << value;
-    }
+  AST * Literal::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    assert_num_args(1,2);
+    const char * s = p->arg(0)->name.c_str();
+    char * e = (char *)s;
+    value = strtol(s, &e, 0);
+    if (*e) 
+      throw error(p->arg(0), "Expected Integer");
+    type = env.types->inst(p->num_args() > 1 ? p->arg(1)->name : "int");
+    if (value == 0)
+      type = env.types->inst(".zero", type);
+    type = env.types->ct_const(type);
+    return this;
+  }
+  void Literal::eval(ExecEnviron & env) {
+    env.ret<int>(this) = value;
+  }
+  void Literal::compile(CompileWriter & f, CompileEnviron &) {
+    f.printf("%lld", value);
+    String tname = type->unqualified->to_string();
+    if (tname == "unsigned int")
+      f << "u";
+    else if (tname == "long")
+      f << "l";
+    else if (tname == "unsigned long")
+      f << "ul";
+    else if (tname == "long long")
+      f << "ll";
+    else if (tname == "unsigned long long")
+      f << "ull";
+    else if (tname != "int")
+      abort(); // unsupported type;
+  }
 
+
+  AST * FloatC::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    assert_num_args(1,2);
+    const char * s = p->arg(0)->name.c_str();
+    char * e = (char *)s;
+    value = strtold(s, &e);
+    if (*e) 
+      throw error(p->arg(0), "Expected Number");
+    type = env.types->inst(p->num_args() > 1 ? p->arg(1)->name : "double");
+    type = env.types->ct_const(type);
+    return this;
+  }
+  void FloatC::compile(CompileWriter & f, CompileEnviron &) {
+    f.printf("%Lg", value);
+    String tname = type->unqualified->to_string();
+    if (tname == "float")
+      f << "f";
+    else if (tname == "long double")
+      f << "l";
+    else if (tname != "double")
+      abort(); // unsupported type;
+  }
+
+  AST * StringC::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    assert_num_args(1,2);
+    orig = p->arg(0)->name;
+    type = env.types->inst(".pointer", env.types->ct_const(env.types->inst("char")));
+    type = env.types->ct_const(type);
+    return this;
+  }
+  void StringC::compile(CompileWriter & f, CompileEnviron &) {
+    f << orig;
+  }
+
+  AST * CharC::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    assert_num_args(1, 2);
+    orig = p->arg(0)->name;
+    type = env.types->inst("char");
+    type = env.types->ct_const(type);
+    return this;
+  }
+  void CharC::compile(CompileWriter & f, CompileEnviron &) {
+    f << orig;
+  }
 
   struct Id : public AST {
     Id() : AST("id") {}
@@ -1428,6 +1488,9 @@ namespace AST {
   AST * try_exp(const Parse * p, ParseEnviron & env) {
     if (p->name == "id")      return (new Id)->parse_self(p, env);
     if (p->name == "literal") return (new Literal)->parse_self(p, env);
+    if (p->name == "float")   return (new FloatC)->parse_self(p, env);
+    if (p->name == "char")    return (new CharC)->parse_self(p, env);
+    if (p->name == "string")  return (new StringC)->parse_self(p, env);
     if (p->name == "eif")     return (new EIf)->parse_self(p, env);
     if (p->name == "assign")  return (new Assign)->parse_self(p, env);
     if (p->name == "plus")    return (new Plus)->parse_self(p, env);

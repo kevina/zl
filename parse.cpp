@@ -228,27 +228,65 @@ namespace parse_common {
     return str;
   }
 
-  const char * quote(char close, const char * str, const char * end, String & val) {
-    StringBuf buf;
+  const char * quote(char close, const char * str, const char * end, SubStr & val) {
     const char * start = str;
     ++str;
+    val.begin = str;
     while (*str != close && str != end) {
       if (*str == '\\') {
         ++str;
-          if (str == end)
-            throw error(str, "Unexpected end of string");
+        if (str == end)
+          throw error(str, "Unexpected end of string");
       }
-      buf += *str;
       ++str;
     }
+    val.end = str;
     if (str == end)
       throw error(start, "Unterminated %c", close);
     ++str;
     str = spacing(str, end);
-    val = buf.freeze();
     return str;
   }
-  
+
+  void unescape(const char * s, const char * end, StringBuf & out, char quote) {
+    for (; s != end; ++s)
+      no_inc:
+      if (*s == '\\') {
+        ++s;
+        assert(s != end);
+        switch (*s) {
+        case 'a': out += '\a'; break;
+        case 'b': out += '\b'; break;
+        case 'f': out += '\f'; break;
+        case 'n': out += '\n'; break;
+        case 't': out += '\t'; break;
+        case 'v': out += '\v'; break;
+        case 'x': {
+          // hex 
+          ++s;
+          char * e = (char *)s;
+          unsigned val = strtol(s, &e, 16);
+          if (s == e) abort(); // FIXME: Error
+          s = e;
+          if (val > 255) abort(); // FIXME: Error message, out of range 
+          out += (char)val;
+          goto no_inc;
+       } case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': {
+          // oct
+          unsigned val = *s - '0'; ++s;
+          if (s != end && '0' <= *s && *s <= '7') {val *= 8; val += *s - '0'; ++s;}
+          if (s != end && '0' <= *s && *s <= '7') {val *= 8; val += *s - '0'; ++s;}
+          if (val > 255) abort(); // FIXME: Error message, out of range
+          out += (char)val;
+          goto no_inc;
+        } default:
+          out += *s;
+        }
+      } else if (*s != quote) {
+        out += *s;
+      }
+  }
+
   const char * symbol(char sym, const char * str, const char * end) {
     if (*str != sym) return NULL;
     ++str;

@@ -42,10 +42,29 @@ MAP =
 # C Token
 #
 
-TOKEN = <<mid>> {MID} / 
+TOKEN : "token" =  <<mid>> {MID} / 
          {STRUCT_UNION} / {ENUM} / {TYPEOF} 
-         / {PARAN} / {BRACK} / <string> {STRING} 
-         / <id> {ID} / <literal> {NUM} / <sym> {SYM};
+         / {PARAN} / {BRACK} / {CONST}
+         / <id> {ID} / <sym> {SYM};
+
+# FIXME: Add support for hex-floats
+CONST = <float> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SPACING
+        / <literal> {'0'[xX][0-9a-fA-F]+} {INT_SUFFIX} SPACING
+        / <literal> {[1-9][0-9]*} {INT_SUFFIX} SPACING
+        / <literal> {'0'[0-7]*} {INT_SUFFIX} SPACING
+        / <string> {STRING} (<char>)
+        / <string> 'L'{STRING} (<wchar_t>)
+        / <char> {CHAR} (<char>)
+        / <char> 'L'{CHAR} (<wchar_t>);
+
+INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
+           / <unsigned\ long> ([uU][lL]/[lL][uU])
+           / <"long long"> [lL][lL] 
+           / <unsigned> [uU] 
+           / <long> [lL] 
+           / <int>;
+
+FLOATING_SUFFIX = <float> [fF] / <"long double"> [lL] / <double>;
 
 STRUCT_UNION = <%> {"struct"/"union"} {ID/} {<{...}> "{" {STMT}* "}" }?;
 
@@ -74,7 +93,7 @@ BRACE = <{}> "{" {RAW_TOKEN*} "}";
 PARAN = <()> "(" {RAW_TOKEN*} ")";
 BRACK = <[]> "[" {RAW_TOKEN*} "]";
 
-RAW_TOKEN = <string> {STRING} / {BRACE} / {PARAN} / {BRACK} / {ID} / {NUM} / {SYM} / ";";
+RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 
 #
 # Lex Like Tokens
@@ -89,9 +108,9 @@ MID : "macro identifier" =
 NUM : "number" = 
     {[\d]+('.'[\d]+)?} SPACING;
 
-STRING = 
-     '"' ('\\'_/[^"]+) '"' SPACING
-   / '\'' ('\\'_/[^']+) '\'' SPACING;
+STRING = '"' ('\\'_/[^"])+ '"' SPACING;
+
+CHAR   = '\'' ('\\'_/[^'])+ '\'' SPACING;
 
 SYM : "symbol" = 
     {[\y+^,;`]+/','} SPACING;

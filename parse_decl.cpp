@@ -412,15 +412,16 @@ void DeclWorking::make_inner_type(const Parse * orig) {
     case INT:
       switch (size) {
       case NO_SIZE:
+        t = "int";
         break;
       case SHORT:     
-        t = "short "; 
+        t = "short"; 
         break;
       case LONG:
-        t = "long ";
+        t = "long";
         break;
       case LONG_LONG:
-        t = "long long ";
+        t = "long long";
         break;
       }
       switch (sign) {
@@ -431,7 +432,6 @@ void DeclWorking::make_inner_type(const Parse * orig) {
         t.prepend("unsigned ");
         break;
       }
-      t += "int";
       break;
     case FLOAT:
       if (size != NO_SIZE) ignore();

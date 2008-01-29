@@ -76,12 +76,28 @@ private:
 
 static inline const char * first_space(const char * s) 
 {
-  while (*s && *s != ' ') ++s;
+  bool in_quote = false;
+  while (*s && (in_quote || *s != ' ')) {
+    if (*s == '"') 
+      in_quote = !in_quote;
+    if (*s == '\\') {
+      ++s;
+      assert(*s);
+    }
+    ++s;
+  }
   return s;
 }
+
 static inline const char * first_non_space(const char * s)
 {
-  while (*s && *s == ' ') ++s;
+  while (*s && *s == ' ') {
+    if (*s == '\\') {
+      ++s;
+      assert(*s);
+    }
+    ++s;
+  }
   return s;
 }
 
@@ -148,13 +164,16 @@ private:
     if (!name) return;
     const char * s = ~name->name;
     const char * e = first_space(s);
-    if (s[0] != '%' && !*e) return;
+    if (s[0] != '%' && !*e) {
+      name = new Parse(parse_common::unescape(s, e, '"')); // FIXME: Add source info
+      return;
+    }
     unsigned last_used = 0; // FIXME: Misnamed
     unsigned dots = NPOS;
     unsigned i = 0;
     for (;;) {
       Parm p;
-      p.name = new Parse(String(s, e)); // FIXME: Add source info
+      p.name = new Parse(parse_common::unescape(s, e, '"')); // FIXME: Add source info
       String n = p.name->name;
       if (n == "...") {
         assert(dots == NPOS); // FIXME: Error message
@@ -563,7 +582,9 @@ namespace ParsePeg {
     if (*str == ':') {
       str = symbol(':', str, end);
       if (str == end || *str != '"') throw error(str, "'\"' expected");
-      str = quote('"', str, end, res);
+      SubStr res0;
+      str = quote('"', str, end, res0);
+      res = unescape(res0);
     }
     return str;
   }
@@ -665,17 +686,15 @@ namespace ParsePeg {
     const char * start = str;
     Vector<Prod *> prods;
     bool named_capture = false;
-    String name;
-    String special;
+    SubStr name;
+    SubStr special;
     if (*str == '<') {
       named_capture = true;
       const char * str2 = str + 1;
       if (str2 != end && *str2 == '<') {
-        printf(">?<\n"); 
         str = quote('>', str2, end, special);
         name = special;
         str = require_symbol('>', str, end);
-        printf(">?%s<\n", special.c_str()); 
       } else {
         str = quote('>', str, end, name);
       }
@@ -692,7 +711,7 @@ namespace ParsePeg {
       prod = prods[0];
     else
       prod = new Seq(start, str, prods);
-    if (special == "mid") 
+    if (String(special) == "mid") 
       return Res(new S_MId(start, str, prod));
     //else if (special == "map") 
     //  return Res(new S_Map(start, str, prod));
@@ -700,7 +719,7 @@ namespace ParsePeg {
     //  return Res(new S_MParm(start, str, prod));
     //else if (special == "repl") 
     //  return Res(new S_Repl(start, str, prod));
-    else if (special != "") 
+    else if (!special.empty()) 
       throw error(start, "Unknown special");
     if (named_capture)
       return Res(new NamedCapture(start, str, prod, name));
@@ -796,8 +815,9 @@ namespace ParsePeg {
 
   Res Parse::literal(const char * str, const char * end) {
     const char * start = str;
-    String lit;
-    str = quote('\'', str, end, lit);
+    SubStr lit0;
+    str = quote('\'', str, end, lit0);
+    String lit = unescape(lit0);
     return Res(new Literal(start, str, lit));
   }
   
@@ -853,8 +873,9 @@ namespace ParsePeg {
 
   Res Parse::token(const char * str, const char * end) {
     const char * start = str;
-    String name;
-    str = quote('"', str, end, name);
+    SubStr name0;
+    str = quote('"', str, end, name0);
+    String name = unescape(name0);
     TokenProd * p = new TokenProd(start, str, name);
     token_syms.push_back(Sym<TokenProd>(start, p));
     return Res(str, p);

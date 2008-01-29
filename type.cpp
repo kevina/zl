@@ -423,7 +423,7 @@ namespace AST {
     add_simple_type(types, "unsigned long", new_unsigned_int(sizeof(unsigned long)));
     add_simple_type(types, "unsigned long long", new_unsigned_int(sizeof(unsigned long long)));
 
-    //types->add("unsigned", types->lookup("unsigned int"));
+    types->add("unsigned", types->lookup("unsigned int"));
 
     add_simple_type(types, "char", new_signed_int(sizeof(char)));
 
@@ -448,4 +448,12 @@ namespace AST {
     types->add_name(".zero", new ZeroTypeSymbol);
     types->add_name(".typeof", new TypeOfSymbol);
   }
+
+  Type * TypeSymbolTable::ct_const(const Type * t) {
+    Vector<TypeParm> parms;
+    parms.push_back(TypeParm(QualifiedType::CT_CONST));
+    parms.push_back(TypeParm(t));
+    return inst(".qualified", parms);
+  }
+
 }

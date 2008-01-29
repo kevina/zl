@@ -172,7 +172,7 @@ const Parse * replace(const Parse * p, ReplTable * r) {
     } else {
       return p;
     }
-  } else if (p->name == "string" || p->name == "literal" || p->name == "sym") {
+  } else if (p->name == "string" || p->name == "char" || p->name == "literal" || p->name == "float" || p->name == "sym") {
     return p;
   } else if (p->name == "{}" || p->name == "()" || p->name == "[]" || p->name == "parm") {
     // raw tokens
@@ -282,7 +282,7 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     //} else {
     return p;
     //}
-  } else if (name == "sym" || name == "string" || name == "literal") { // simple tokens
+  } else if (name == "sym" || name == "string" || name == "char" || name == "literal" || name == "float") { // simple tokens
     return p;
   } else if (name == "call") { 
     assert_num_args(p, 2);

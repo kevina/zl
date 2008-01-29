@@ -387,10 +387,36 @@ namespace AST {
   struct Literal : public AST {
     Literal() : AST("literal") {}
     AST * part(unsigned i);
-    int value;
+    long long value;
     AST * parse_self(const Parse * p, ParseEnviron &);
     void resolve(ResolveEnviron & env);
     void eval(ExecEnviron & env);
+    void compile(CompileWriter & f, CompileEnviron &);
+  };
+
+  struct FloatC : public AST {
+    FloatC() : AST("float") {}
+    //AST * part(unsigned i);
+    long double value;
+    AST * parse_self(const Parse * p, ParseEnviron &);
+    void compile(CompileWriter & f, CompileEnviron &);
+  };
+
+  struct StringC : public AST {
+    StringC() : AST("string") {}
+    //AST * part(unsigned i);
+    String orig;
+    String value; // unused at the moment
+    AST * parse_self(const Parse * p, ParseEnviron &);
+    void compile(CompileWriter & f, CompileEnviron &);
+  };
+
+  struct CharC : public AST {
+    CharC() : AST("char") {}
+    //AST * part(unsigned i);
+    String orig;
+    char value; // unused at the moment
+    AST * parse_self(const Parse * p, ParseEnviron &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 

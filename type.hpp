@@ -86,6 +86,7 @@ namespace AST {
       parms.push_back(TypeParm(t));
       return inst(n, parms);
     }
+    Type * ct_const(const Type * t);
     void add_name(SymbolKey k, TypeSymbol * t);
   };
 
@@ -503,9 +504,9 @@ namespace AST {
     unsigned qualifiers; // BIT FIELD
   public:
     QualifiedType(unsigned q, const Type * t) 
-      : ParmTypeInst(t->category, t->size, t->align),
-        subtype(t), qualifiers(q) {
+      : ParmTypeInst(t->category, t->size, t->align), subtype(t) {
       if (q & CT_CONST) q |= CONST; 
+      qualifiers = q;
       if (q & CONST) read_only = true;
       if (q & CT_CONST) ct_const = true;
     }
