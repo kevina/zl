@@ -182,6 +182,8 @@ namespace AST {
   AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
   
   AST * Literal::parse_self(const Parse * p, ParseEnviron & env) {
+    // FIXME: Need to promote type as indicated in the standard if
+    //   the specified type is too small for the literal
     parse_ = p;
     assert_num_args(1,2);
     const char * s = p->arg(0)->name.c_str();
