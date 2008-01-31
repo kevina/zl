@@ -223,7 +223,8 @@ struct BuildIn {
 }
 */
 
-const Parse * expand_parms(const Parse * p, Position pos, ExpandEnviron & env);
+const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env);
+const Parse * expand_parts(const Parse * p, Position pos, ExpandEnviron & env);
 const Parse * expand_fun_parms(const Parse * parse, ExpandEnviron & env);
 const Parse * expand_enum_body(const Parse * parse, ExpandEnviron & env);
 const Parse * expand_call_parms(const Parse * parse, ExpandEnviron & env);
@@ -234,7 +235,7 @@ const Parse * expand_type(const Parse * p, ExpandEnviron & env);
 const Parse * expand_top(const Parse * p) {
   ExpandEnviron env;
   assert(p->name == "top"); // FIXME Error
-  return expand_parms(p, TopLevel, env);
+  return expand_args(p, TopLevel, env);
 }
 
 const Parse * read_macro(const Parse * p) {
@@ -311,15 +312,15 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     p = parse_exp_->parse(p);
     return expand(p, pos, env);
   } else if (name == "slist") {
-    return expand_parms(p, pos, env);
+    return expand_args(p, pos, env);
   } else if (name == "block") {
     assert_pos(p, pos, StmtPos);
     ExpandEnviron new_env = env.new_scope();
-    return expand_parms(p, StmtPos, new_env);
+    return expand_args(p, StmtPos, new_env);
   } else if (name == "eblock") {
     assert_pos(p, pos, StmtPos | ExpPos);
     ExpandEnviron new_env = env.new_scope();
-    return expand_parms(p, StmtPos, new_env);
+    return expand_args(p, StmtPos, new_env);
   } else if (name == "if") {
     assert_pos(p, pos, StmtPos);
     assert_num_args(p, 2, 3);
@@ -398,7 +399,7 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     assert_num_args(p, 2);
     Parse * res = new Parse(p->str(), p->part(0), p->arg(0));
     res->set_flags(p);
-    res->add_part(expand_parms(p->arg(1), FieldPos, env));
+    res->add_part(expand_parts(p->arg(1), FieldPos, env));
     return res;
   } else if (name == "enum") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
@@ -407,9 +408,12 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     res->set_flags(p);
     res->add_part(expand_enum_body(p->arg(1), env));
     return res;
+  } else if (name == "typeof") {
+    // FIXME NOW
+    return new Parse(new Parse("literal"), new Parse("4"));
   } else {
     printf(">OTHER>%s\n", ~name);
-    return expand_parms(p, ExpPos, env);
+    return expand_args(p, ExpPos, env);
   }
 }
 
@@ -446,7 +450,7 @@ void assert_num_args(const Parse * p, unsigned min, unsigned max) {
     throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->name);
 }
 
-const Parse * expand_parms(const Parse * p, Position pos, ExpandEnviron & env) {
+const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env) {
   static unsigned num = 0;
   unsigned n = num++;
   printf(">>> %d EXPAND PARMS\n", n);
@@ -456,7 +460,27 @@ const Parse * expand_parms(const Parse * p, Position pos, ExpandEnviron & env) {
   Parse * res = new Parse(p->str(), p->part(0));
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_args(); ++i) {
+    printf("e?? %d\n", i);
     res->add_part(expand(p->arg(i), pos, env));
+  }
+  printf("*** %d EXPAND PARMS\n", n);
+  res->print();
+  printf("\n---\n");
+  return res;
+}
+
+const Parse * expand_parts(const Parse * p, Position pos, ExpandEnviron & env) {
+  static unsigned num = 0;
+  unsigned n = num++;
+  printf(">>> %d EXPAND PARMS\n", n);
+  p->print();
+  printf("\n<<<\n");
+  
+  Parse * res = new Parse(p->str());
+  res->set_flags(p);
+  for (unsigned i = 0; i != p->num_parts(); ++i) {
+    printf("e?? %d\n", i);
+    res->add_part(expand(p->part(i), pos, env));
   }
   printf("*** %d EXPAND PARMS\n", n);
   res->print();
@@ -495,7 +519,7 @@ const Parse * expand_enum_body(const Parse * parse, ExpandEnviron & env) {
 
 const Parse * expand_call_parms(const Parse * p, ExpandEnviron & env) {
   if (p->name == "list")
-    return expand_parms(p, ExpPos, env);
+    return expand_args(p, ExpPos, env);
   assert(p->name == "(,)");
   static unsigned num = 0;
   unsigned n = num++;
