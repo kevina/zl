@@ -3,7 +3,7 @@ typedef struct X X;
 
 int main() {
   struct X * x;
-  int i = x->x;
+  //int i = x->x;
 }
 
 struct X {
