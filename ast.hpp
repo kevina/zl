@@ -310,14 +310,21 @@ namespace AST {
   //
   //
 
-  struct ImplicitCast : public AST {
-    ImplicitCast(AST * e, const Type * t) 
-      : AST("<cast>", 0), exp(e) {type = t;}
-    AST * part(unsigned i) {abort();}
+  struct Cast : public AST {
+    Cast(String s) : AST(s) {}
     AST * exp;
-    AST * parse_self(const Parse * p, ParseEnviron & env0) {abort();}
-    void eval(ExecEnviron &) {abort();}
     void compile(CompileWriter&, CompileEnviron&);
+  };
+
+  struct ImplicitCast : public Cast {
+    ImplicitCast(AST * e, const Type * t) 
+      : Cast("<cast>") {exp = e; type = t;}
+    AST * parse_self(const Parse * p, ParseEnviron & env0) {abort();}
+  };
+
+  struct ExplicitCast : public Cast {
+    ExplicitCast() : Cast("cast") {}
+    AST * parse_self(const Parse * p, ParseEnviron & env0);
   };
 
   //
@@ -367,7 +374,7 @@ namespace AST {
     }
   };
 
-  struct Fun : public Declaration {
+ struct Fun : public Declaration {
     Fun() : Declaration("fun") {}
     AST * part(unsigned i);
     String name;

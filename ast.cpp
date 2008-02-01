@@ -1053,9 +1053,17 @@ namespace AST {
     }
   };
 
-  void ImplicitCast::compile(CompileWriter & f, CompileEnviron & env) {
+  void Cast::compile(CompileWriter & f, CompileEnviron & env) {
     f << "((" << type->to_string() << ")" << "(" << exp << "))";
   };
+
+  AST * ExplicitCast::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    assert_num_args(2);
+    type = parse_type(env.types, p->arg(0), env);
+    exp = parse_exp(p->arg(1), env);
+    return this;
+  }
   
   AST * Fun::part(unsigned i) {
     if (i == 0) {
@@ -1543,6 +1551,7 @@ namespace AST {
     if (p->name == "call")    return (new Call)->parse_self(p, env);
     if (p->name == "eblock")  return (new EBlock)->parse_self(p, env);
     if (p->name == "sizeof")  return (new SizeOf)->parse_self(p, env);
+    if (p->name == "cast")    return (new ExplicitCast)->parse_self(p, env);
     if (p->name == "empty")   return (new Empty)->parse_self(p, env);
     if (strcmp(p->name + p->name.size()-3, "_eq") == 0) {
       // This is a bit of a hack to handle op_eq cases (ie += -=, etc)

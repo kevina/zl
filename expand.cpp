@@ -250,6 +250,27 @@ const Parse * ESTMT = new Parse("estmt");
 //   "exp" "stmt" "estmt" and TOKENS
 // FIXME: need to add check
 
+const Parse * handle_paran(const Parse * p, ExpandEnviron & env) {
+  try {
+    const Parse * exp = reparse("PARAN_EXP", p);
+    const Parse * type = parse_decl_->parse_type(exp, env);
+    if (type) return new Parse(p->str(), new Parse("(type)"), type);
+    else return new Parse(p->str(), new Parse("(())"), exp);
+  } catch (...) {
+    return new Parse(p->str(), new Parse("(())"), p);
+  }
+}
+
+const Parse * parse_exp(const Parse * p, ExpandEnviron & env) {
+  Parse * tmp = new Parse("exp");
+  for (unsigned i = 0; i != p->num_args(); ++i) {
+    const Parse * t = p->arg(i);
+    if (t->name == "()") t = handle_paran(t, env);
+    tmp->add_part(t);
+  }
+  return parse_exp_->parse(tmp);
+}
+
 const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
   String name = p->name;
   printf("\n>expand>%s//\n", ~name);
@@ -266,7 +287,11 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     printf("RAW PARAN\n");
     p->print();
     printf("\n--------\n");
-    return expand(reparse("PARAN_EXP", p), pos, env);
+    return expand(handle_paran(p, env), pos, env);
+  } else if (name == "(())") {
+    const Parse * inner = p->arg(0);
+    assert(inner->name != "()");
+    return expand(inner, pos, env);
   } else if (name == "[]") {
     printf("RAW BRACK\n");
     p->print();
@@ -288,9 +313,9 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
   } else if (name == "call") { 
     assert_num_args(p, 2);
     const Parse * n = expand(p->arg(0), OtherPos, env);
-    // the parameters are just a list of tokens at this point,
-    // we need to turn them into a proper list
-    const Parse * a = reparse("SPLIT", p->arg(1)->arg(0));
+    // The parms might already be parsed as something else,
+    // thus we need to reparse it as a PARAN_LIST
+    const Parse * a = reparse("PARAN_LIST", p->arg(1));
     if (n->name == "id" && maps.exists(n->arg(0)->name) && !env.symbols->exists(n->arg(0)->name)) { // function macros
       //  (call (id fun) (list parm1 parm2 ...))?
       p = maps.lookup(n->arg(0)->name)->expand(a, pos, env);
@@ -305,11 +330,11 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
     const Parse * res = parse_decl_->parse_decl(p, env);
     if (!res)
-      res = parse_exp_->parse(p);
+      res = parse_exp(p, env);
     return expand(res, pos, env);
   } else if (name == "exp") {
     assert_pos(p, pos, ExpPos);
-    p = parse_exp_->parse(p);
+    p = parse_exp(p, env);
     return expand(p, pos, env);
   } else if (name == "slist") {
     return expand_args(p, pos, env);
@@ -420,6 +445,16 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
       res = new Parse(p->part(0), new Parse(new Parse("typeof"), res));
     }
     return res;
+  } else if (name == "cast") {
+    assert_pos(p, pos, ExpPos);
+    assert_num_args(p, 2);
+    const Parse * type = p->arg(0);
+    const Parse * exp  = p->arg(1);
+    if (type->name == "(type)") type = type->arg(0);
+    type = expand_type(type, env);
+    exp = expand(exp, ExpPos, env);
+    return new Parse(new Parse("cast"), type, exp);
+    return p;
   } else {
     printf(">OTHER>%s\n", ~name);
     return expand_args(p, ExpPos, env);

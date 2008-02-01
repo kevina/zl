@@ -58,7 +58,7 @@ CONST = <float> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX
         / <char> 'L'{CHAR} (<wchar_t>);
 
 INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
-           / <unsigned\ long> ([uU][lL]/[lL][uU])
+           / <"unsigned long"> ([uU][lL]/[lL][uU])
            / <"long long"> [lL][lL] 
            / <unsigned> [uU] 
            / <long> [lL] 
@@ -155,7 +155,8 @@ TOKENS = <(...)> {TOKEN}*;
 STMTS = <slist> {STMT}*;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
-SPLIT = <(,)> ({<parm> {SPLIT_TOKEN*}} ("," {<parm> {SPLIT_TOKEN*}})+/{<parm> {SPLIT_TOKEN+}}/);
+SPLIT = <(,)> ({<parm> {SPLIT_TOKEN*}} ("," {<parm> {SPLIT_TOKEN*}})+/{<parm> {SPLIT_TOKEN+}}/) ;
+PARAN_LIST = "(" {SPLIT} ")";
 
 PARM : "macro paramater" = {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
 
