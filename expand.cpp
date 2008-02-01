@@ -255,9 +255,12 @@ const Parse * handle_paran(const Parse * p, ExpandEnviron & env) {
     const Parse * exp = reparse("PARAN_EXP", p);
     const Parse * type = parse_decl_->parse_type(exp, env);
     if (type) return new Parse(p->str(), new Parse("(type)"), type);
-    else return new Parse(p->str(), new Parse("(())"), exp);
+    // Since the raw string might need to be reparsed we can't use an
+    // exp here.  Unfortunately this will likely mean duplicate work.
+    // Avoiding that will take more thought
+    else return p;
   } catch (...) {
-    return new Parse(p->str(), new Parse("(())"), p);
+    return p;
   }
 }
 
@@ -287,11 +290,7 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     printf("RAW PARAN\n");
     p->print();
     printf("\n--------\n");
-    return expand(handle_paran(p, env), pos, env);
-  } else if (name == "(())") {
-    const Parse * inner = p->arg(0);
-    assert(inner->name != "()");
-    return expand(inner, pos, env);
+    return expand(reparse("PARAN_EXP", p), pos, env);
   } else if (name == "[]") {
     printf("RAW BRACK\n");
     p->print();
@@ -314,8 +313,9 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     assert_num_args(p, 2);
     const Parse * n = expand(p->arg(0), OtherPos, env);
     // The parms might already be parsed as something else,
-    // thus we need to reparse it as a PARAN_LIST
-    const Parse * a = reparse("PARAN_LIST", p->arg(1));
+    // the parameters are just a list of tokens at this point,
+    // we need to turn them into a proper list
+    const Parse * a = reparse("SPLIT", p->arg(1)->arg(0));
     if (n->name == "id" && maps.exists(n->arg(0)->name) && !env.symbols->exists(n->arg(0)->name)) { // function macros
       //  (call (id fun) (list parm1 parm2 ...))?
       p = maps.lookup(n->arg(0)->name)->expand(a, pos, env);
