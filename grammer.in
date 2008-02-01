@@ -75,7 +75,7 @@ ENUM_EXP = <exp> (!"," {TOKEN})+;
 
 TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 
-SIZEOF = <sizeof> "sizeof" "(" {TOKEN}+ ")";
+SIZEOF = <sizeof> "sizeof" "(" {TOKENS} ")";
 
 #
 # Misc

@@ -303,7 +303,7 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     }
   } else if (name == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
-    const Parse * res = parse_decl_->parse(p, env);
+    const Parse * res = parse_decl_->parse_decl(p, env);
     if (!res)
       res = parse_exp_->parse(p);
     return expand(res, pos, env);
@@ -408,9 +408,18 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     res->set_flags(p);
     res->add_part(expand_enum_body(p->arg(1), env));
     return res;
-  } else if (name == "typeof") {
-    // FIXME NOW
-    return new Parse(new Parse("literal"), new Parse("4"));
+  } else if (name == "sizeof") {
+    assert_pos(p, pos, ExpPos);
+    const Parse * res = parse_decl_->parse_type(p->arg(0), env);
+    if (res) {
+      res = expand_type(res, env);
+      res = new Parse(p->part(0), res);
+    } else {
+      res = parse_exp_->parse(p->arg(0));
+      res = expand(res, pos, env);
+      res = new Parse(p->part(0), new Parse(new Parse("typeof"), res));
+    }
+    return res;
   } else {
     printf(">OTHER>%s\n", ~name);
     return expand_args(p, ExpPos, env);

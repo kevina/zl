@@ -1409,6 +1409,23 @@ namespace AST {
     }
   };
 
+  struct SizeOf : public AST {
+    SizeOf() : AST("sizeof") {}
+    const Type * sizeof_type;
+    AST * parse_self(const Parse * p, ParseEnviron & env) {
+      parse_ = p;
+      assert_num_args(1);
+      type = env.types->ct_const(env.types->inst("unsigned"));
+      sizeof_type = parse_type(env.types, p->arg(0), env);
+      return this;
+    }
+    void compile(CompileWriter & f, CompileEnviron &) {
+      StringBuf buf;
+      c_print_inst->declaration("", *sizeof_type, buf);
+      f << "sizeof(" << buf.freeze() << ")";
+    }
+  };
+
   AST * parse_top(const Parse * p) {
     ParseEnviron env;
     assert(p->name == "top");
@@ -1525,6 +1542,7 @@ namespace AST {
     if (p->name == "member")  return (new MemberAccess)->parse_self(p, env);
     if (p->name == "call")    return (new Call)->parse_self(p, env);
     if (p->name == "eblock")  return (new EBlock)->parse_self(p, env);
+    if (p->name == "sizeof")  return (new SizeOf)->parse_self(p, env);
     if (p->name == "empty")   return (new Empty)->parse_self(p, env);
     if (strcmp(p->name + p->name.size()-3, "_eq") == 0) {
       // This is a bit of a hack to handle op_eq cases (ie += -=, etc)

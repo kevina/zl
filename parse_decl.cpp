@@ -170,7 +170,8 @@ struct DeclWorking {
 class ParseDeclImpl : public ParseDecl {
 public:
   ParseDeclImpl() {}
-  const Parse * parse(const Parse * p, ExpandEnviron &);
+  const Parse * parse_decl(const Parse * p, ExpandEnviron &);
+  const Parse * parse_type(const Parse * p, ExpandEnviron &);
   
   void init() {}
   ~ParseDeclImpl() {}
@@ -187,7 +188,7 @@ DeclWorking::DeclWorking(Parts & p)
 // The real code....
 //
 
-const Parse * ParseDeclImpl::parse(const Parse * p, struct ExpandEnviron & env)
+const Parse * ParseDeclImpl::parse_decl(const Parse * p, struct ExpandEnviron & env)
 {
   Parse * res = new Parse(new Parse("slist"));
 
@@ -231,6 +232,21 @@ const Parse * ParseDeclImpl::parse(const Parse * p, struct ExpandEnviron & env)
     
   }
   return res;
+}
+
+const Parse * ParseDeclImpl::parse_type(const Parse * p, struct ExpandEnviron & env) {
+  Parts dummy;
+  Parts::const_iterator i = p->args_begin();
+  Parts::const_iterator end = p->args_end();
+  DeclWorking w(dummy);
+  const Parse * id = NULL;
+  bool r = w.parse_first_part(i, end, env);
+  if (!r) return NULL;
+  w.make_inner_type(p);
+  const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
+  if (i != end || id) return NULL;
+  assert(dummy.empty()); // FIXME: Error Message
+  return t;
 }
 
 bool DeclWorking::parse_first_part(Parts::const_iterator & i, 

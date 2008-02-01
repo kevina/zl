@@ -7,7 +7,8 @@ struct ExpandEnviron;
 
 class ParseDecl {
 public:
-  virtual const Parse * parse(const Parse * p, ExpandEnviron &) = 0;
+  virtual const Parse * parse_decl(const Parse * p, ExpandEnviron &) = 0;
+  virtual const Parse * parse_type(const Parse * p, ExpandEnviron &) = 0;
   virtual void init() = 0;
   virtual ~ParseDecl() {}
 };
