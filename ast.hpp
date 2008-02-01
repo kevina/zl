@@ -270,7 +270,7 @@ namespace AST {
 
   static inline 
   CompileWriter & operator<< (CompileWriter & o, AST * v) {
-    printf("COMPILE %s\n", ~v->name());
+    //printf("COMPILE %s\n", ~v->name());
     CompileEnviron dummy;
     v->compile(o, dummy);
     return o;

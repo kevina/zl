@@ -47,8 +47,9 @@ struct Map {
   const Parse * parms;
   const Parse * repl;
   Map * parse_self(const Parse * p) {
-    printf("PARSING MAP %s\n", ~p->arg(0)->name);
-    p->print();
+    //printf("PARSING MAP %s\n", ~p->arg(0)->name);
+    //p->print();
+    //printf("\n");
     entity = SourceEntity(p);
     parse = p;
     assert_num_args(p, 3);
@@ -80,7 +81,7 @@ struct Map {
     return res;
   }
   const Parse * expand(const Parse * p, Position, ExpandEnviron &, unsigned shift = 0) const {
-    printf(">>EXPAND MAP %s\n", ~name);
+    //printf(">>EXPAND MAP %s\n", ~name);
     ReplTable * rparms = new ReplTable;
     int i = 0;
     for (; i != parms->num_parts(); ++i) {
@@ -101,9 +102,9 @@ struct Map {
       }
       rparms->insert(parms->part(i)->name, p->arg(i + shift));
     }
-    printf(">>TO EXPAND %s\n", ~name);
-    repl->print();
-    printf("\n");
+    //printf(">>TO EXPAND %s\n", ~name);
+    //repl->print();
+    //printf("\n");
     const Parse * res;
     if (repl->name == "{}") {
       res = reparse("STMTS", repl->arg(0), rparms);
@@ -113,9 +114,9 @@ struct Map {
       res = replace(repl, rparms);
     }
     res->str_ = p->str();
-    printf(">>>EXPANDED %s\n", ~name);
-    res->print();
-    printf("\n");
+    //printf(">>>EXPANDED %s\n", ~name);
+    //res->print();
+    //printf("\n");
     return res;
   }
 };
@@ -123,21 +124,21 @@ struct Map {
 const Parse * reparse(String what, const Parse * p, ReplTable * r) {
   Replacements * repls = combine_repl(p->repl, r);
   const Parse * res = parse_str(what, p->str(), repls);
-  printf("PARSED STRING\n");
-  res->print();
-  if (repls) repls->print();
-  printf("\n");
+  //printf("PARSED STRING\n");
+  //res->print();
+  //if (repls) repls->print();
+  //printf("\n");
   if (repls) {
     for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
          i != e; ++i) 
     {
-      printf("REPLACE %i\n", i - repls->begin());
-      res->print();
-      printf("\n");
+      //printf("REPLACE %i\n", i - repls->begin());
+      //res->print();
+      //printf("\n");
       res = replace(res, *i);
-      printf("replace %i\n", i - repls->begin());
-      res->print();
-      printf("\n");
+      //printf("replace %i\n", i - repls->begin());
+      //res->print();
+      //printf("\n");
     }
   }
   return res;
@@ -276,25 +277,16 @@ const Parse * parse_exp(const Parse * p, ExpandEnviron & env) {
 
 const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
   String name = p->name;
-  printf("\n>expand>%s//\n", ~name);
-  p->print();
-  printf("\n////\n");
+  //printf("\n>expand>%s//\n", ~name);
+  //p->print();
+  //printf("\n////\n");
   if (p->simple()) {
     abort(); // FIXME: Error Message
   } else if (name == "{}") {
-    printf("RAW BRACE\n");
-    p->print();
-    printf("\n--------\n");
     return expand(reparse("BLOCK", p), pos, env);
   } else if (name == "()") {
-    printf("RAW PARAN\n");
-    p->print();
-    printf("\n--------\n");
     return expand(reparse("PARAN_EXP", p), pos, env);
   } else if (name == "[]") {
-    printf("RAW BRACK\n");
-    p->print();
-    printf("\n--------\n");
     return expand(reparse("EXP", p->arg(0)), pos, env);
   } else if (syntax_maps.exists(name)) { // syntax macros
     p = syntax_maps.lookup(p->name)->expand(p, pos, env);
@@ -442,7 +434,7 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     } else {
       res = parse_exp_->parse(p->arg(0));
       res = expand(res, pos, env);
-      res = new Parse(p->part(0), new Parse(new Parse("typeof"), res));
+      res = new Parse(p->part(0), new Parse(new Parse(".typeof"), res));
     }
     return res;
   } else if (name == "cast") {
@@ -456,7 +448,6 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     return new Parse(new Parse("cast"), type, exp);
     return p;
   } else {
-    printf(">OTHER>%s\n", ~name);
     return expand_args(p, ExpPos, env);
   }
 }
@@ -495,40 +486,20 @@ void assert_num_args(const Parse * p, unsigned min, unsigned max) {
 }
 
 const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env) {
-  static unsigned num = 0;
-  unsigned n = num++;
-  printf(">>> %d EXPAND PARMS\n", n);
-  p->print();
-  printf("\n<<<\n");
-  
   Parse * res = new Parse(p->str(), p->part(0));
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_args(); ++i) {
-    printf("e?? %d\n", i);
     res->add_part(expand(p->arg(i), pos, env));
   }
-  printf("*** %d EXPAND PARMS\n", n);
-  res->print();
-  printf("\n---\n");
   return res;
 }
 
 const Parse * expand_parts(const Parse * p, Position pos, ExpandEnviron & env) {
-  static unsigned num = 0;
-  unsigned n = num++;
-  printf(">>> %d EXPAND PARMS\n", n);
-  p->print();
-  printf("\n<<<\n");
-  
   Parse * res = new Parse(p->str());
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_parts(); ++i) {
-    printf("e?? %d\n", i);
     res->add_part(expand(p->part(i), pos, env));
   }
-  printf("*** %d EXPAND PARMS\n", n);
-  res->print();
-  printf("\n---\n");
   return res;
 }
 
@@ -565,23 +536,13 @@ const Parse * expand_call_parms(const Parse * p, ExpandEnviron & env) {
   if (p->name == "list")
     return expand_args(p, ExpPos, env);
   assert(p->name == "(,)");
-  static unsigned num = 0;
-  unsigned n = num++;
-  printf(">>> %d EXPAND CALL PARMS\n", n);
-  p->print();
-  printf("\n<<<\n");
   
   Parse * res = new Parse(p->str(), new Parse("list"));
   res->set_flags(p);
-  printf(">>NUM ARGS %d\n", p->num_args());
   for (unsigned i = 0; i != p->num_args(); ++i) {
-    p->arg(i)->print();
     const Parse * q = reparse("EXP", p->arg(i));
     res->add_part(expand(q, ExpPos, env));
   }
-  printf("\n*** %d EXPAND CALL PARMS\n", n);
-  res->print();
-  printf("\n---\n");
   return res;
 }
 

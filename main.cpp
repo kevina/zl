@@ -14,9 +14,6 @@ void parse_maps() {
   try {
     while (s != code->end()) {
       parse_parse::Res r = parse_parse::parse(SourceStr(code->entity(), s, code->end()));
-      printf(">>%.*s<<\n", r.end-s, s);
-      r.parse->print();
-      printf("\n");
       read_macro(r.parse);
       s = r.end;
     }
@@ -48,9 +45,9 @@ int main()
   try {
     const Parse * to_expand = parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
     const Parse * expanded = expand_top(to_expand);
-    printf("\n*************** EXPANDED *********************\n");
-    expanded->print();
-    printf("\n");
+    //printf("\n*************** EXPANDED *********************\n");
+    //expanded->print();
+    //printf("\n");
     //exit(0);
     AST::AST * ast = AST::parse_top(expanded);
     AST::CompileEnviron cenv;
@@ -64,6 +61,7 @@ int main()
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(2);
   }
+  //sleep(600);
 #if 0
   SourceFile code;
   code->read(STDIN_FILENO);

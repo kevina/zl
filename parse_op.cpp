@@ -181,7 +181,6 @@ public:
     Op::Types prev = 0;
     for (int i = 0; i != sz; ++i) {
       const Parse * pop = p->arg(i); // parsed op
-      printf("$$%d %s\n", i, ~p->arg(i)->name);
       Op::Types cur = ops.lookup_types(pop);
       if (prev == 0 || prev & (Op::Prefix | Op::Bin)) {
         cur &= (Op::Prefix | Op::Other);
@@ -214,7 +213,6 @@ public:
     if (val_s.size() > 1)
       throw error(val_s[val_s.size()-2], "Extra operand(s).");
     assert(val_s.size() == 1);
-    val_s.front()->print();
     return val_s.front();
   }
 
@@ -271,15 +269,12 @@ public:
                     op->symbol.c_str());
       const Parse * p1 = val_s.back(); val_s.pop_back();
       if (op->type == Op::Prefix) {
-        printf(">PREFIX>> %.*s\n",  opi.parse->str().end - opi.parse->str().begin, opi.parse->str().begin);
         parse->str_ = opi.parse->str();
         if (p1->str().source == parse->str_.source)
           parse->str_.end   = p1->str().end;
         if (op->capture_op_itself())
           parse->add_part(opi.parse);
         parse->add_part(p1);
-        parse->print();
-        printf("\n>prefix>> %.*s\n",  parse->str().end - parse->str().begin, parse->str().begin);
       } else if (op->type == Op::Postfix) {
         parse->str_ = opi.parse->str();
         if (p1->str().source == parse->str_.source)

@@ -119,7 +119,6 @@ struct DeclWorking {
     if (p->name == "const" || p->name == "restrict" || p->name == "volatile") 
       qualifiers.insert(p);
     else return false;
-    qualifiers.print();
     return true;
   }
   bool try_qualifier(const Parse * p) {return try_qualifier(p, qualifiers);}
@@ -255,7 +254,6 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
 {
   Parts::const_iterator begin = i;
   if (i != end && (*i)->is_a("sym", "...")) {
-    printf("DOTS!!\n");
     dots = true;
     inner_type = new Parse("...", (*i)->str());
     ++i;
@@ -506,9 +504,6 @@ const Parse * DeclWorking::parse_outer_type_info(const Parse * & id,
   if (i == end) {
     // do nothing
   } else if ((*i)->is_a("()")) {
-    printf("***************************\n");
-    (*i)->print();
-    printf("\n");
     t = make_function_type(t, reparse("TOKENS", (*i)->arg(0)), env);
     ++i;
   } else {

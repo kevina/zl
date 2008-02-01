@@ -42,9 +42,7 @@ public:
       const char * r = prod->match(str, parts, errs);
       return r;
     } else if (prod->capture_type.is_multi()) {
-      printf("BEFORE::: "); parts->print(); printf("\n");
       const char * r = prod->match(str, parts, errs);
-      printf("AFTER::: "); parts->print(); printf("\n");
       return r;
     } else { // type is None
       const char * s = prod->match(str, 0, errs);
@@ -477,7 +475,6 @@ public:
     const char * r = prod->match(str, &prts, errs);
     if (r == FAIL) return r;
     assert(prts.size() == 1);
-    printf("\nq?MID? %s\n", ~prts[0]->arg(0)->name);
     if (mids && mids->anywhere(prts[0]->arg(0)->name) > 0) {
       Parse * p = new Parse(prts[0]->str(), prts[0]->part(0), prts[0]->arg(0), new Parse(in_named_prod));
       if (res) res->append(p);
@@ -554,21 +551,21 @@ private:
 #endif
 
 const Parse * parse_str(String what, SourceStr str, const Replacements * repls) {
-  printf("PARSE STR as %s\n", ~what);
+  //printf("PARSE STR as %s\n", ~what);
   mids = repls;
   Prod * p = parse.named_prods[what];
   parse.clear_cache();
   Parts dummy;
   ParseErrors errors;
-  const char * s = str.begin;
+  //const char * s = str.begin;
   const char * e = p->match(str, &dummy, errors);
   mids = 0;
   //assert(s != e);
-  printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
+  //printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
   if (e == str.end) {
-    printf(">>%.*s<<\n", e-s, s);
-    dummy.print();
-    printf("\n");
+    //printf(">>%.*s<<\n", e-s, s);
+    //dummy.print();
+    //printf("\n");
   } else {
     printf("FAIL\n");
     throw errors.to_error(str.source->file_, file);

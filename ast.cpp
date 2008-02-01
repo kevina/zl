@@ -547,7 +547,6 @@ namespace AST {
              i = labels->symbols.begin(), e = labels->symbols.end();
            i != e; ++i)
       {
-        //printf("*!*!* %u\n", f.label_map.size());
         String n;
         int j = 0;
         StringBuf new_name;
@@ -555,7 +554,6 @@ namespace AST {
           new_name.printf("%s__%d", ~i->first.second+1 /*FIXME: Hack*/, j++);
           n = new_name.freeze();
         } while (f.label_names.have(n));
-        printf("*!*!* %s = %s\n", ~i->first.second, ~n);
         f.label_names.insert(n);
         i->second = n;
       }
@@ -619,7 +617,6 @@ namespace AST {
     String op;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
-      printf("UNOP: %u\n", p->num_args());
       assert_num_args(1);
       exp = parse_exp(p->arg(0), env);
       resolve(env);
@@ -668,14 +665,7 @@ namespace AST {
   struct AddrOf : public UnOp {
     AddrOf() : UnOp("addrof", "&") {}
     void resolve(ResolveEnviron & env) {
-      printf(">>ADDROF>");
-      exp->parse_->print();
-      printf("\n");
       if (!exp->lvalue) {
-        printf(">>ADDROF ERR>");
-        exp->parse_->print();
-        printf("\n");
-        printf(">>...... ERR>%.*s\n", exp->parse_->str().end - exp->parse_->str().begin, exp->parse_->str().begin);
         throw error(exp->parse_, "Can not be used as lvalue");
       }
       // FIXME: add check for register qualifier
@@ -941,7 +931,6 @@ namespace AST {
     String op;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
-      printf("POST INC DEC: %u\n", p->num_args());
       assert_num_args(1);
       exp = parse_exp(p->arg(0), env);
       type = exp->type;
@@ -982,20 +971,12 @@ namespace AST {
 
   struct SList : public ASTList {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
-      printf("***SLIST %p***\n", this);
       //parse_ = p;
       if (p->num_args() > 0) {
         for (int i = 0; i < p->num_args(); ++i) {
-          printf(">>%d ::", i);
-          p->arg(i)->print();
-          printf("<<\n");
           add_ast_nodes(stmts, parse_stmt_decl(p->arg(i), env));
         }
       }
-      printf(">>%d<<\n", stmts.size());
-      //printf("TOP FINAL FORM: ");
-      //print();
-      //printf("\n");
       return this;
     }
   };
@@ -1008,21 +989,14 @@ namespace AST {
     TypeSymbolTable * types;
     VarSymbolTable * vars;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
-      printf("***TOP PARSE %p***\n", this);
       parse_ = p;
       if (p->num_args() > 0) {
         for (int i = 0; i < p->num_args(); ++i) {
-          printf(">>%d ::", i);
-          p->arg(i)->print();
-          printf("<<\n");
           add_ast_nodes(stmts, parse_top_level(p->arg(i), env));
         }
       } else {
         stmts.push_back(new NoOp());
       }
-      printf(">>%d<<\n", stmts.size());
-      //printf("TOP FINAL FORM: ");
-      //print();
       types = env.types;
       vars = env.vars;
       type = env.void_type();
@@ -1222,7 +1196,6 @@ namespace AST {
       if (!ftype)
         throw error (lhs->parse_, "Expected function type");
       type = ftype->ret;
-      printf(">>RET>%s\n", ~ftype->ret->to_string());
       if (!ftype->parms->vararg && parms.size() != ftype->parms->parms.size()) 
         throw error(parse_->arg(1), 
                     "Wrong number of parameters, expected %u but got %u",
@@ -1354,7 +1327,6 @@ namespace AST {
     void compile(CompileWriter & f, CompileEnviron &) {
       f << indent << name_ << " " << name << "{\n";
       for (int i = 0; i != body->members.size(); ++i) {
-        printf(">>%i %p\n", i, body->members[i]);
         f << adj_indent(2) << body->members[i];
       }
       f << indent << "};\n";
@@ -1565,68 +1537,5 @@ namespace AST {
     }
     return 0;
   }
-
-#if 0
-  AST * parse(const Parse * p, ParseEnviron & env) {
-    AST * res;
-    if      (p->name == "top")     res = (new Top)->parse_self(p, env);
-    else if (p->name == "estmt")   res = (new EStmt)->parse_self(p, env);
-    else if (p->name == "goto")    res = (new Goto)->parse_self(p, env);
-    else if (p->name == "lstmt")   res = (new LStmt)->parse_self(p, env);
-    else if (p->name == "lcstmt")  res = (new LCStmt)->parse_self(p, env);
-    else if (p->name == "id")      res = (new Id)->parse_self(p, env);
-    else if (p->name == "literal") res = (new Literal)->parse_self(p, env);
-    else if (p->name == "if")      res = (new If)->parse_self(p, env);
-    else if (p->name == "eif")     res = (new EIf)->parse_self(p, env);
-    else if (p->name == "eif")     res = (new If)->parse_self(p, env);
-    else if (p->name == "loop")    res = (new Loop)->parse_self(p, env);
-    else if (p->name == "switch")  res = (new Switch)->parse_self(p, env);
-    else if (p->name == "break")   res = (new Break)->parse_self(p, env);
-    else if (p->name == "var")     res = (new Var)->parse_self(p, env);
-    else if (p->name == "block")   res = (new Block)->parse_self(p, env);
-    else if (p->name == "assign")  res = (new Assign)->parse_self(p, env);
-    else if (p->name == "print")   res = (new Print)->parse_self(p, env);
-    else if (p->name == "noop")    res = (new NoOp)->parse_self(p, env);
-    else if (p->name == "plus")    res = (new Plus)->parse_self(p, env);
-    else if (p->name == "minus")   res = (new Minus)->parse_self(p, env);
-    else if (p->name == "times")   res = (new Times)->parse_self(p, env);
-    else if (p->name == "div")     res = (new Div)->parse_self(p, env);
-    else if (p->name == "mod")     res = (new Mod)->parse_self(p, env);
-    else if (p->name == "bor")     res = (new BOr)->parse_self(p, env);
-    else if (p->name == "xor")     res = (new XOr)->parse_self(p, env);
-    else if (p->name == "band")    res = (new BAnd)->parse_self(p, env);
-    else if (p->name == "neg")     res = (new Neg)->parse_self(p, env);
-    else if (p->name == "eq")      res = (new Eq)->parse_self(p, env);
-    else if (p->name == "ne")      res = (new Ne)->parse_self(p, env);
-    else if (p->name == "lt")      res = (new Lt)->parse_self(p, env);
-    else if (p->name == "qt")      res = (new Gt)->parse_self(p, env);
-    else if (p->name == "le")      res = (new Le)->parse_self(p, env);
-    else if (p->name == "ge")      res = (new Ge)->parse_self(p, env);
-    else if (p->name == "not")     res = (new Not)->parse_self(p, env);
-    else if (p->name == "addrof")  res = (new AddrOf)->parse_self(p, env);
-    else if (p->name == "deref")   res = (new DeRef)->parse_self(p, env);
-    else if (p->name == "member")  res = (new MemberAccess)->parse_self(p, env);
-    else if (p->name == "fun" )    res = (new Fun)->parse_self(p, env);
-    else if (p->name == "return")  res = (new Return)->parse_self(p, env);
-    else if (p->name == "call")    res = (new Call)->parse_self(p, env);
-    else if (p->name == "struct")  res = (new Struct)->parse_self(p, env);
-    else if (p->name == "union")   res = (new Union)->parse_self(p, env);
-    else if (p->name == "talias")  res = (new TypeAlias)->parse_self(p, env);
-    else if (p->name == "map")     res = 0;
-    else if (p->name == "smap")    res = 0;
-    else if (p->name == "slist")   res = (new SList)->parse_self(p, env);
-    else if (strcmp(p->name + p->name.size()-3, "_eq") == 0) {
-      // This is a bit of a hack to handle op_eq cases (ie += -=, etc)
-      StringBuf buf(p->name, p->name.size()-3);
-      AST * ast = parse(new Parse(new Parse(buf.freeze()), p->arg(0), p->arg(1)), env);
-      BinOp * binop = dynamic_cast<BinOp *>(ast);
-      StringBuf op;
-      op << binop->op << "=";
-      return new CompoundAssign(p->name, op.freeze(), binop);
-    }
-    else throw error (p, "Unknown Primitive: %s", ~p->name);
-    return res;
-  }
-#endif
 }
 

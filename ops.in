@@ -1,6 +1,6 @@
 (ops
-  (none (exp _ (category "(())")))
-  (left (postfix call (category "(())"))
+  (none (exp _ (category "()")))
+  (left (postfix call (category "()"))
         (postfix ".[]" (category "[]"))
         (postfix postinc (sym ++)) (postfix postdec (sym --)))
   (left (bin member (sym .)) (bin -> (sym ->)))

@@ -316,7 +316,6 @@ namespace AST {
     ZeroT(const Type * st) : ParmTypeInst(st), of(st) {
       category = ZERO_C;
       if (of->is(INT_C)) is_null = true;
-      printf("@@@ZERO T@@@ %p %d\n", this, is_null);
     }
     const Type * of;
     unsigned size() const {return of->size();}

@@ -54,11 +54,10 @@ Error * error(const char * pos, const char * fmt, ...) {
 }
 
 void Parse::set_src_from_parts() const {
-  printf("SET SRC FROM PARTS\n");
+  //printf("SET SRC FROM PARTS\n");
   SourceStr s;
   for (unsigned i = 0; i != d->parts.size(); ++i) {
     SourceStr other = d->parts[i]->str();
-    printf(">%d> %p %.*s\n", i, other.source, other.end - other.begin, other.begin);
     if (!s.source) {
       s = other;
     } else if (s.source == other.source) {
@@ -79,8 +78,6 @@ void Parse::set_src_from_parts() const {
   } else {
     str_ = d->parts[0]->str();
   }
-  print();
-  printf("\n>%.*s<\n", str_.end - str_.begin, str_.begin);
 }
 
 

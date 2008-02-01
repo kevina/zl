@@ -212,7 +212,7 @@ namespace AST {
       full_name = buf.freeze();
       --sz;
     }
-    if (name == "typeof") {
+    if (name == ".typeof") {
       AST * ast = parse_exp(p->arg(0), env);
       Type * t = new TypeOf(ast);
       t->finalize();
@@ -282,7 +282,6 @@ namespace AST {
 	abort(); // special case, should not happen
       }}
     }
-    printf(">>INST %s\n", ~name);
     Type * inst_type = t->inst(parms);
     unsigned qualifiers = 0;
     if (p->flag("const"))    qualifiers |= QualifiedType::CONST;
@@ -324,9 +323,9 @@ namespace AST {
     const Type * xt = x->type->unqualified;
     const Type * yt = y->type->unqualified;
     const Type * t = unify(rule, xt, yt);
-    printf("UNIFY %d to \"\%s\"\n", x->parse_->str().source->get_pos(x->parse_->str().begin).line, ~t->to_string());
-    if (t != xt) {printf(">>X\n"); x = new ImplicitCast(x, t);}
-    if (t != yt) {printf(">>Y\n"); y = new ImplicitCast(y, t);}
+    //printf("UNIFY %d to \"\%s\"\n", x->parse_->str().source->get_pos(x->parse_->str().begin).line, ~t->to_string());
+    if (t != xt) {x = new ImplicitCast(x, t);}
+    if (t != yt) {y = new ImplicitCast(y, t);}
     return t;
   }
 
