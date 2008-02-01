@@ -466,6 +466,8 @@ namespace AST {
       parse_flags(p);
       Symbol * s = new Symbol(name);
       s->type = var_type = parse_type(env.types, p->arg(1), env);
+      if (storage_class != EXTERN && var_type->size() == NPOS) 
+        throw error(p->arg(0), "Size not known");
       env.vars->add(name, s);
       if (p->num_args() > 2) {
         init = parse_exp(p->arg(2), env);
@@ -727,8 +729,9 @@ namespace AST {
       id = p->arg(1)->arg(0)->name;
       const StructUnionT * t = dynamic_cast<const StructUnionT *>(exp->type->unqualified);
       if (!t) throw error(p->arg(0), "Expected struct or union type");
+      if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
       if (!t->env->vars->exists(id))
-        throw error(p->arg(0), "\"%s\" is not a member of \"%s\"", 
+        throw error(p->arg(1), "\"%s\" is not a member of \"%s\"", 
                     ~id, ~t->to_string());
       type = t->env->vars->lookup(id)->type;
       lvalue = true;
@@ -1322,19 +1325,21 @@ namespace AST {
         body = new Body(what);
         body->parse_self(p->arg(1), env);
       }
-      StructUnionT * s = what == STRUCT 
-	? static_cast<StructUnionT *>(new StructT()) 
-	: static_cast<StructUnionT *>(new UnionT()); 
+      const Type * t0 = env.types->inst(SymbolKey(TAG_NS,name));
+      StructUnionT * s;
+      if (t0) s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
+      else if (what == STRUCT) s = new StructT(name);
+      else                     s = new UnionT(name);
+      s->defined = true;
       for (unsigned i = 0; i != body->members.size(); ++i) {
-        printf(">RESOLVE FIELD>%d\n", i);
 	Var * v = dynamic_cast<Var *>(body->members[i]);
 	assert(v);
-        printf(">>%p %s %p %p\n", v, ~v->name, v->type, v->var_type);
 	s->members.push_back(Member(v->name,v->var_type));
       }
       //StringBuf type_name;
       //type_name << "struct " << name_;
       s->env = &env;
+      s->finalize();
       add_simple_type(env0.types, SymbolKey(TAG_NS, name), s);
       return this; 
     }
@@ -1369,8 +1374,9 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       name = p->arg(0)->name;
-      EnumT * t0 = new EnumT;
-      t0->name = name;
+      EnumT * t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
+                      (env.types->inst(SymbolKey(TAG_NS,name)))));
+      if (!t0) t0 = new EnumT(name);
       add_simple_type(env.types, SymbolKey(TAG_NS, name), t0);
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
@@ -1387,6 +1393,7 @@ namespace AST {
         members.push_back(mem);
         env.vars->root->add(mem.name, sym);
       }
+      t0->finalize();
       return this;
     }
     void compile(CompileWriter & f, CompileEnviron &) {

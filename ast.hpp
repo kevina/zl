@@ -213,7 +213,7 @@ namespace AST {
   };
 
   static inline void copy_val(void * lhs, const void * rhs, const Type * t) {
-    memcpy(lhs, rhs, t->size);
+    memcpy(lhs, rhs, t->size());
   }
 
 

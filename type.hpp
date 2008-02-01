@@ -76,12 +76,12 @@ namespace AST {
       if (!Base::exists(k)) return 0;
       return Base::lookup(k);
     }
-    Type * inst(String n, Vector<TypeParm> &);
-    Type * inst(String n) {
+    Type * inst(SymbolKey n, Vector<TypeParm> &);
+    Type * inst(SymbolKey n) {
       Vector<TypeParm> dummy;
       return inst(n, dummy);
     }
-    Type * inst(String n, const Type * t) {
+    Type * inst(SymbolKey n, const Type * t) {
       Vector<TypeParm> parms;
       parms.push_back(TypeParm(t));
       return inst(n, parms);
@@ -178,17 +178,17 @@ namespace AST {
   public:
     TypeCategory * category;
     const TypeSymbol * type_symbol;
-    unsigned size;
-    unsigned align;
+    virtual unsigned size() const = 0;
+    virtual unsigned align() const = 0;
     bool addressable;
     bool read_only;
     bool ct_const; // compile time const
     bool is_null;
-    TypeInst(TypeCategory * c = UNKNOWN_C, unsigned sz = NPOS, unsigned a = NPOS)
-      : category(c), size(sz), align(a == NPOS ? sz : a), 
+    TypeInst(TypeCategory * c = UNKNOWN_C)
+      : category(c), 
         addressable(false), read_only(false), ct_const(false), is_null(false) {}
     TypeInst(const TypeInst * p) 
-      : category(p->category), size(p->size), align(p->align), 
+      : category(p->category), 
         addressable(p->addressable), read_only(p->read_only), ct_const(p->ct_const), is_null(p->is_null) {}
     void to_string(StringBuf & buf) const {type_symbol->print_inst->to_string(*this, buf);}
     String to_string() const {StringBuf buf; to_string(buf); return buf.freeze();}
@@ -225,8 +225,7 @@ namespace AST {
 
   class SimpleTypeInst : public TypeInst {
   public:
-    SimpleTypeInst(TypeCategory * c = UNKNOWN_C, unsigned sz = NPOS, unsigned a = NPOS) 
-      : TypeInst(c, sz, a) {}
+    SimpleTypeInst(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {}
     SimpleTypeInst(const Type * p) : TypeInst(p) {}
     unsigned num_parms() const {return 0;}
     TypeParm parm(unsigned i) const {abort();}
@@ -258,8 +257,7 @@ namespace AST {
 
   class ParmTypeInst /* Parametrized Type Instance */ : public TypeInst {
   public:
-    ParmTypeInst(TypeCategory * c = UNKNOWN_C, unsigned sz = NPOS, unsigned a = NPOS) 
-      : TypeInst(c, sz, a) {}
+    ParmTypeInst(TypeCategory * c = UNKNOWN_C) : TypeInst(c) {}
     ParmTypeInst(const Type * p) : TypeInst(p) {}
     virtual unsigned num_parms() const = 0;
     virtual TypeParm parm(unsigned i) const = 0;
@@ -321,6 +319,8 @@ namespace AST {
       printf("@@@ZERO T@@@ %p %d\n", this, is_null);
     }
     const Type * of;
+    unsigned size() const {return of->size();}
+    unsigned align() const {return of->align();}
     unsigned num_parms() const {return 1;}
     TypeParm parm(unsigned) const {return TypeParm(of);}
   protected:
@@ -368,6 +368,8 @@ namespace AST {
       else
 	abort();
     }
+    unsigned size() const {return 0;}
+    unsigned align() const {return 0;}
   };
 
   class TupleSymbol : public ParmTypeSymbol {
@@ -402,7 +404,9 @@ namespace AST {
 
   class Void : public SimpleTypeInst {
   public:
-    Void() : SimpleTypeInst(0, 1) {}
+    Void() {}
+    unsigned size() const {return 0;}
+    unsigned align() const {return 1;}
   };
 
   //
@@ -423,7 +427,8 @@ namespace AST {
     enum Overflow {UNDEFINED, MODULE, SATURATED, EXCEPTION};
     enum Signed {UNSIGNED = 0, SIGNED = 1};
     Int(int64_t mn, uint64_t mx, Overflow o, unsigned sz)
-      : SimpleTypeInst(INT_C, sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o) {}
+      : SimpleTypeInst(INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o) {}
+    unsigned size_;
     int64_t  min;
     uint64_t max;
     Signed   signed_;
@@ -433,6 +438,8 @@ namespace AST {
     //  if (min < 0) return ceill(log2l(max)/8);
     //  else return ceill((max(log2l(llabs(min)), log2l(max)) + 1)/8);
     //}
+    unsigned size() const {return size_;}
+    unsigned align() const {return size_;}
   };
   
   static inline Int * new_signed_int(unsigned sz) {
@@ -448,7 +455,10 @@ namespace AST {
   class Float : public SimpleTypeInst {
   public:
     enum Precision {SINGLE, DOUBLE, LONG} precision;
-    Float(Precision p) : SimpleTypeInst(FLOAT_C, p == SINGLE ? 4 : DOUBLE ? 8 : 16) {}
+    unsigned size_;
+    unsigned size() const {return size_;}
+    unsigned align() const {return size_;}
+    Float(Precision p) : SimpleTypeInst(FLOAT_C),  size_(p == SINGLE ? 4 : DOUBLE ? 8 : 16) {}
   };
 
   //
@@ -463,15 +473,16 @@ namespace AST {
 
   class PointerLike : public ParmTypeInst {
   public:
-    PointerLike(TypeCategory * c, const Type * st, 
-                unsigned sz = NPOS, unsigned a = NPOS)
-      : ParmTypeInst(c, sz, a), subtype(st) {}
+    PointerLike(TypeCategory * c, const Type * st)
+      : ParmTypeInst(c), subtype(st) {}
     const Type * subtype;
+    unsigned size() const {return POINTER_SIZE;}
+    unsigned align() const {return POINTER_SIZE;}
   };
 
   class Pointer : public PointerLike {
   public:
-    Pointer(const Type * t) : PointerLike(POINTER_C, t, POINTER_SIZE) {}
+    Pointer(const Type * t) : PointerLike(POINTER_C, t) {}
     unsigned num_parms() const {return 1;}
     TypeParm parm(unsigned) const {return TypeParm(subtype);}
   };
@@ -504,7 +515,7 @@ namespace AST {
     unsigned qualifiers; // BIT FIELD
   public:
     QualifiedType(unsigned q, const Type * t) 
-      : ParmTypeInst(t->category, t->size, t->align), subtype(t) {
+      : ParmTypeInst(t->category), subtype(t) {
       if (q & CT_CONST) q |= CONST; 
       qualifiers = q;
       if (q & CONST) read_only = true;
@@ -513,6 +524,8 @@ namespace AST {
     unsigned num_parms() const {return 2;}
     TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(qualifiers) : TypeParm(subtype);}
     const Type * find_unqualified() const {return subtype;}
+    unsigned size() const {return subtype->size();}
+    unsigned align() const {return subtype->align();}
   };
 
   class QualifiedTypeSymbol : public ParmTypeSymbol {
@@ -543,8 +556,9 @@ namespace AST {
   
   class Array : public PointerLike {
   public:
-    Array(const Type * t, unsigned sz) : PointerLike(ARRAY_C, t, t->size * sz, t->align), length(sz) {}
+    Array(const Type * t, unsigned sz) : PointerLike(ARRAY_C, t), length(sz) {}
     unsigned length;
+    unsigned size() const {return subtype->size() * length;}
     unsigned num_parms() const {return 2;}
     TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(subtype) : TypeParm(length);}
   };
@@ -576,7 +590,8 @@ namespace AST {
   class TaggedType : public gc {
   public:
     String what;
-    TaggedType(String w) : what(w) {}
+    bool defined;
+    TaggedType(String w) : what(w), defined(false) {}
   };
   
   //
@@ -594,20 +609,22 @@ namespace AST {
     String what;
     String name;
     Vector<Member> members;
-    StructUnionT(String w) : TaggedType(w) {}
+    StructUnionT(String w, String n) : TaggedType(w), name(n) {}
     struct ParseEnviron * env;
+    unsigned size() const {return defined ? 0 : NPOS;}
+    unsigned align() const {return defined ? 0 : NPOS;}
   };
 
   class StructT : public StructUnionT {
   public:
-    StructT() : StructUnionT("struct") {}
-    void finalize_hook() {} // FIXME: Implement
+    StructT(String n) : StructUnionT("struct", n) {}
+    void finalize_hook() {} 
   };
 
   class UnionT : public StructUnionT {
   public:
-    UnionT() : StructUnionT("union") {}
-    void finalize_hook() {} // FIXME: Implement
+    UnionT(String n) : StructUnionT("union", n) {}
+    void finalize_hook() {} 
   };
 
   //
@@ -617,7 +634,10 @@ namespace AST {
   class EnumT : public TaggedType, public Int {
   public:
     String name;
-    EnumT() : TaggedType("enum"), Int(INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)) {}
+    EnumT(String n) : TaggedType("enum"), Int(INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), name(n) {}
+    void finalize_hook() {} 
+    unsigned size() const {return defined ? 0 : NPOS;}
+    unsigned align() const {return defined ? 0 : NPOS;}
   };
   
   //
@@ -628,6 +648,8 @@ namespace AST {
   public:
     AliasT(const Type * st) : SimpleTypeInst(st), of(st) {}
     const Type * of;
+    unsigned size() const {return of->size();}
+    unsigned align() const {return of->align();}
   protected:
     const Type * find_root() {
       return of->root; 
@@ -653,6 +675,8 @@ namespace AST {
     inline TypeOf(AST * a);
     AST * of_ast;
     const Type * of;
+    unsigned size() const {return of->size();}
+    unsigned align() const {return of->align();}
   protected:
     const Type * find_root() {
       return of->root; 
@@ -692,6 +716,8 @@ namespace AST {
 //       buf += " -> ";
 //       ret->to_string_(buf);
 //     }
+    unsigned size() const {return 0;}
+    unsigned align() const {return 0;}
   };
 
   class FunctionPtrSymbol : public ParmTypeSymbol {

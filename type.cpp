@@ -36,7 +36,7 @@ namespace AST {
     return typeid(*t).name();
   }
 
-  Type * TypeSymbolTable::inst(String n, Vector<TypeParm> & p) {
+  Type * TypeSymbolTable::inst(SymbolKey n, Vector<TypeParm> & p) {
     if (!exists(n)) return 0;
     const TypeSymbol * s = lookup(n);
     return s->inst(p);
@@ -200,7 +200,9 @@ namespace AST {
     const NameSpace * ns = DEFAULT_NS;
     String name = p->name;
     String full_name = name;
+    String tag;
     if (name == "struct" || name == "union" || name == "enum") {
+      tag = name;
       assert(sz == 1);
       // FIXME: Add check for wrong type of tag
       ns = TAG_NS;
@@ -217,8 +219,20 @@ namespace AST {
       return t;
     }
     const TypeSymbol * t = types->lookup(SymbolKey(ns,name));
-    if (!t)
-      throw error(p, "Unknown type: %s", ~full_name);
+    if (!t) {
+      if (tag.empty()) {
+        throw error(p, "Unknown type: %s", ~full_name);
+      } else {
+        SimpleTypeInst * ti;
+        if (tag == "struct")     ti = new StructT(name);
+        else if (tag == "union") ti = new UnionT(name);
+        else if (tag == "enum")  ti = new EnumT(name);
+        else abort();
+        add_simple_type(types, SymbolKey(TAG_NS, name), ti);
+        t = types->lookup(SymbolKey(TAG_NS,name));
+        assert(t);
+      }
+    }
     if (t->required_parms() == 0 && sz != 0 && name != ".tuple" /* HACK! */)
       throw error(p, "Type \"%s\" is not a paramatized type.", ~full_name);
     if (t->required_parms() > sz) 
