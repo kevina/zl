@@ -472,8 +472,8 @@ const Parse * DeclWorking::parse_outer_type_info(const Parse * & id,
                                                  bool id_required) 
 {
   assert(t);
-  if (i == end) return t;
   t = try_pointers(i, end, t);
+  if (i == end) return t;
 
   const Parse * outer = NULL;
   
