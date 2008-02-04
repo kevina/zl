@@ -186,10 +186,12 @@ namespace AST {
     bool is_null;
     TypeInst(TypeCategory * c = UNKNOWN_C)
       : category(c), 
-        addressable(false), read_only(false), ct_const(false), is_null(false) {}
+        addressable(false), read_only(false), ct_const(false), is_null(false)
+      , exact_type() {}
     TypeInst(const TypeInst * p) 
       : category(p->category), 
-        addressable(p->addressable), read_only(p->read_only), ct_const(p->ct_const), is_null(p->is_null) {}
+        addressable(p->addressable), read_only(p->read_only), ct_const(p->ct_const), is_null(p->is_null)
+      , exact_type() {}
     void to_string(StringBuf & buf) const {type_symbol->print_inst->to_string(*this, buf);}
     String to_string() const {StringBuf buf; to_string(buf); return buf.freeze();}
     bool is(const TypeCategory * other) const {
@@ -197,9 +199,16 @@ namespace AST {
     }
     const TypeInst * root; // for typedef, the root type, recursively resolved
     const TypeInst * unqualified; // unqualified version of root, _not_ recursively resolved
-    void finalize() // should be called just before it added
-                            // to the type symbol cache (or whatever)
-      {finalize_hook(); root = find_root(); unqualified = root->find_unqualified();}
+    const TypeInst * exact_type;
+    void finalize() // should be called just before it added to the
+                    // type symbol cache (or whatever)
+    {
+      finalize_hook(); 
+      root = find_root(); 
+      unqualified = root->find_unqualified(); 
+      if (!exact_type) exact_type = unqualified->exact_type;
+      if (!exact_type) exact_type = this; 
+    }
     virtual unsigned num_parms() const = 0;
     virtual TypeParm parm(unsigned i) const = 0;
     virtual ~TypeInst() {}
@@ -427,6 +436,9 @@ namespace AST {
     enum Signed {UNSIGNED = 0, SIGNED = 1};
     Int(int64_t mn, uint64_t mx, Overflow o, unsigned sz)
       : SimpleTypeInst(INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o) {}
+    Int(const Int * t) 
+      : SimpleTypeInst(INT_C), size_(t->size_), min(t->min), max(t->max), signed_(t->signed_), overflow(t->overflow) {exact_type = t;}
+    const Int * exact_type_;
     unsigned size_;
     int64_t  min;
     uint64_t max;
@@ -441,14 +453,21 @@ namespace AST {
     unsigned align() const {return size_;}
   };
   
-  static inline Int * new_signed_int(unsigned sz) {
+  static Int signed_int(unsigned sz) {
     uint64_t sz0 = sz;
-    return new Int(-(1<<(sz0*8-1)), (1<<(sz0*8-1))-1, Int::UNDEFINED, sz);
+    return Int(-(1<<(sz0*8-1)), (1<<(sz0*8-1))-1, Int::UNDEFINED, sz);
+  }
+  static Int unsigned_int(unsigned sz) {
+    uint64_t sz0 = sz;
+    return Int(0, (1<<(sz0*8))-1, Int::MODULE, sz);
+  }
+
+  static inline Int * new_signed_int(unsigned sz) {
+    return new Int(signed_int(sz));
   }
   
   static inline Int * new_unsigned_int(unsigned sz) {
-    uint64_t sz0 = sz;
-    return new Int(0, (1<<(sz0*8))-1, Int::MODULE, sz);
+    return new Int(unsigned_int(sz));
   }
 
   class Float : public SimpleTypeInst {

@@ -1,5 +1,7 @@
 #include <assert.h>
 
+#include <functional>
+
 #include "ast.hpp"
 
 #include "parse.hpp"
@@ -12,6 +14,9 @@
 //   unless the type is void
 
 namespace AST {
+
+  typedef int target_bool;
+  typedef int target_int;
 
   const NameSpace * DEFAULT_NS = new NameSpace(".default");
   const NameSpace * TAG_NS = new NameSpace(".tag");
@@ -27,22 +32,60 @@ namespace AST {
     printf(")");
   }
 
-  template <typename T>
-  void resolve_to(ResolveEnviron & env, T * & exp, const Type * type) {
-    exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type));
+  struct CT_Value_Map {
+    String type;
+    CT_Value_Base * ct_value;
+  };
+
+  template <template <typename> class W> 
+  const CT_Value_Base * int_op_ct_value(const Type * t) {
+    static CT_Value_Map map[] = {
+      {".uint8", new W<uint8_t>},
+      {".uint16", new W<uint16_t>},
+      {".uint32", new W<uint32_t>},
+      {".uint64", new W<uint64_t>},
+      {".int8", new W<int8_t>},
+      {".int16", new W<int16_t>},
+      {".int32", new W<int32_t>},
+      {".int64", new W<int64_t>}      
+    };
+    static CT_Value_Map * map_end = map + sizeof(map)/sizeof(CT_Value_Map);
+    String n = t->exact_type->to_string();
+    for (const CT_Value_Map * i = map; i != map_end; ++i) {
+      if (i->type == n) return i->ct_value;
+    }
+    return NULL;
   }
 
-  int ct_value(const Parse * p, ParseEnviron & env) {
-    // need to convert ids or exps to integers
-    // for now require a literal
-    if (p->name != "literal")
-      throw error(p, "Expected Interger Literal.");
-    const char * s = p->arg(0)->name.c_str();
-    char * e = (char *)s;
-    int value = strtol(s, &e, 10);
-    if (s == e) 
-      throw error(p->arg(0), "Expected Integer");
-    return value;
+  template <template <typename> class W, template <typename> class F>
+  struct OCTV_Proxy {
+    template <typename T>
+    struct Type : public W<F<T> > {};
+  };
+ 
+  template <template <typename> class W> 
+  const CT_Value_Base * op_ct_value(const Type * t) {
+    static CT_Value_Map map[] = {
+      {"float", new W<float>},
+      {"double", new W<double>},
+      {"long double", new W<long double>},
+    };
+    static CT_Value_Map * map_end = map + sizeof(map)/sizeof(CT_Value_Map);
+    String n = t->exact_type->to_string();
+    for (const CT_Value_Map * i = map; i != map_end; ++i) {
+      if (i->type == n) return i->ct_value;
+    }
+    return int_op_ct_value<W>(t);
+  }
+
+  template <template <typename> class W, template <typename> class F> 
+  inline const CT_Value_Base * int_op_ct_value(const Type * t) {
+    return int_op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
+  }
+
+  template <template <typename> class W, template <typename> class F> 
+  inline const CT_Value_Base * op_ct_value(const Type * t) {
+    return op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
   AST * parse_top_level(const Parse * p, ParseEnviron & env);
@@ -181,27 +224,21 @@ namespace AST {
 
   AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
   
+  CT_Value_Base * new_literal_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env);
+
   AST * Literal::parse_self(const Parse * p, ParseEnviron & env) {
-    // FIXME: Need to promote type as indicated in the standard if
-    //   the specified type is too small for the literal
     parse_ = p;
     assert_num_args(1,2);
-    const char * s = p->arg(0)->name.c_str();
-    char * e = (char *)s;
-    value = strtol(s, &e, 0);
-    if (*e) 
-      throw error(p->arg(0), "Expected Integer");
     type = env.types->inst(p->num_args() > 1 ? p->arg(1)->name : "int");
-    if (value == 0)
-      type = env.types->inst(".zero", type);
-    type = env.types->ct_const(type);
+    ct_value_ = new_literal_ct_value(p->arg(0), type, env);
     return this;
   }
-  void Literal::eval(ExecEnviron & env) {
-    env.ret<int>(this) = value;
-  }
+  //void Literal::eval(ExecEnviron & env) {
+    //env.ret<int>(this) = value;
+  //}
   void Literal::compile(CompileWriter & f, CompileEnviron &) {
-    f.printf("%lld", value);
+    ct_value_->to_string(this, f);
+    //f.printf("%lld", value);
     String tname = type->unqualified->to_string();
     if (tname == "unsigned int")
       f << "u";
@@ -216,22 +253,68 @@ namespace AST {
     else if (tname != "int")
       abort(); // unsupported type;
   }
+  
+  template <typename T>
+  struct Literal_Value : public CT_Value<T> {
+    T v;
+    Literal_Value(T v0) : v(v0) {}
+    T value(const AST *) const {return v;}
+  };
 
+  CT_Value_Base * new_literal_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env) {
+    const Int * it = dynamic_cast<const Int *>(t->unqualified);
+    // FIXME: Need to promote type as indicated in the standard if
+    //   the specified type is too small for the literal
+    // FIXME: Do I need to make into ct_const type
+    if (it->min == 0) {
+      const char * s = vp->name.c_str();
+      char * e = (char *)s;
+      unsigned long long value = strtoull(s, &e, 0);
+      if (*e) throw error(vp, "Expected Integer");
+      if (value == 0) t = env.types->inst(".zero", t);
+      String n = it->exact_type->to_string();
+      if (n == ".uint8")
+        return new Literal_Value<uint8_t>(value);
+      else if (n == ".uint16")
+        return new Literal_Value<uint16_t>(value);
+      else if (n == ".uint32")
+        return new Literal_Value<uint32_t>(value);
+      else if (n == ".uint64")
+        return new Literal_Value<uint64_t>(value);
+      else
+        abort();
+    } else {
+      const char * s = vp->name.c_str();
+      char * e = (char *)s;
+      long long value = strtoll(s, &e, 0);
+      if (*e) throw error(vp, "Expected Integer");
+      if (value == 0) t = env.types->inst(".zero", t);
+      String n = it->exact_type->to_string();
+      if (n == ".int8")
+        return new Literal_Value<int8_t>(value);
+      else if (n == ".int16")
+        return new Literal_Value<int16_t>(value);
+      else if (n == ".int32")
+        return new Literal_Value<int32_t>(value);
+      else if (n == ".int64")
+        return new Literal_Value<int64_t>(value);
+      else
+        abort();
+    }
+  }
+
+  CT_Value_Base * new_float_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env);
 
   AST * FloatC::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(1,2);
-    const char * s = p->arg(0)->name.c_str();
-    char * e = (char *)s;
-    value = strtold(s, &e);
-    if (*e) 
-      throw error(p->arg(0), "Expected Number");
     type = env.types->inst(p->num_args() > 1 ? p->arg(1)->name : "double");
-    type = env.types->ct_const(type);
+    ct_value_ = new_float_ct_value(p->arg(0), type, env);
     return this;
   }
+
   void FloatC::compile(CompileWriter & f, CompileEnviron &) {
-    f.printf("%Lg", value);
+    ct_value_->to_string(this, f);
     String tname = type->unqualified->to_string();
     if (tname == "float")
       f << "f";
@@ -239,6 +322,23 @@ namespace AST {
       f << "l";
     else if (tname != "double")
       abort(); // unsupported type;
+  }
+
+  CT_Value_Base * new_float_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env) {
+    // FIXME: Do I need to make into ct_const type
+    String n = t->exact_type->to_string();
+    const char * s = vp->name.c_str();
+    char * e = (char *)s;
+    long double value = strtold(s, &e);
+    if (*e) throw error(vp, "Expected Number");
+    if (n == "float")
+      return new Literal_Value<float>(value);
+    else if (n == "double")
+      return new Literal_Value<double>(value);
+    else if (n == "long double")
+      return new Literal_Value<long double>(value);
+    else
+      abort();
   }
 
   AST * StringC::parse_self(const Parse * p, ParseEnviron & env) {
@@ -277,6 +377,8 @@ namespace AST {
       if (!env.vars->exists(name))
         throw error(parse_->arg(0), "Unknown Identifier: %s", name.c_str());
       sym = env.vars->lookup(name);
+      if (sym->ct_value)
+        ct_value_ = sym->ct_value;
       type = sym->type;
       lvalue = true;
       return this;
@@ -293,11 +395,11 @@ namespace AST {
     //  addr = *sym;
     //}
     void eval(ExecEnviron & env) {
-      if (sym->value) { // compile time constant
-        copy_val(env.ret(this), sym->value, type);
-      } else {
-        copy_val(env.ret(this), env.var(*sym), type);
-      }
+      //if (sym->value) { // compile time constant
+      //  copy_val(env.ret(this), sym->value, type);
+      //} else {
+      //  copy_val(env.ret(this), env.var(*sym), type);
+      // }
     }
     void compile(CompileWriter & f, CompileEnviron &) {
       f << name;
@@ -351,17 +453,7 @@ namespace AST {
     AST * exp;
     AST * if_true;
     AST * if_false;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
-      parse_ = p;
-      assert_num_args(3);
-      exp = parse_exp(p->arg(0), env);
-      resolve_to(env, exp, env.bool_type());
-      if_true = parse_exp(p->arg(1), env);
-      if_false = parse_exp(p->arg(2), env);
-      resolve_to(env, if_false, if_true->type);
-      type = if_true->type;
-      return this;
-    }
+    AST * parse_self(const Parse * p, ParseEnviron & env);
     //void resolve(ResolveEnviron & env) {
     //  resolve_to(env, exp, env.bool_type());
     //  env.frame->pop_tmp(exp->type);
@@ -380,6 +472,30 @@ namespace AST {
       f << "(" << exp << " ? " << if_true << " : " << if_false << ")";
     }
   };
+
+  template <typename T> 
+  struct EIf_CT_Value : public CT_Value<T> {
+    T value(const AST * a) const {
+      const EIf * eif = dynamic_cast<const EIf *>(a);
+      if (eif->exp->ct_value<target_bool>())
+        return eif->if_true->ct_value<T>();
+      else
+        return eif->if_false->ct_value<T>();
+    }
+  };
+
+  AST * EIf::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    assert_num_args(3);
+    exp = parse_exp(p->arg(0), env);
+    resolve_to(env, exp, env.bool_type());
+    if_true = parse_exp(p->arg(1), env);
+    if_false = parse_exp(p->arg(2), env);
+    resolve_to(env, if_false, if_true->type);
+    type = if_true->type;
+    ct_value_ = op_ct_value<EIf_CT_Value>(type);
+    return this;
+  }
 
   struct Switch : public AST {
     Switch() : AST("switch") {}
@@ -620,9 +736,11 @@ namespace AST {
       assert_num_args(1);
       exp = parse_exp(p->arg(0), env);
       resolve(env);
+      make_ct_value(env);
       return this;
     }
     virtual void resolve(ParseEnviron & env) = 0;
+    virtual void make_ct_value(ParseEnviron & env) {}
     void compile(CompileWriter & f, CompileEnviron & env) {
       f << "(" << op << " " << exp << ")";
     }
@@ -633,6 +751,15 @@ namespace AST {
       abort();
     return exp->type;
   }
+
+  template <typename F> 
+  struct UnOp_CT_Value : public CT_Value<typename F::result_type> {
+    typename F::result_type value(const AST * a) const {
+      const UnOp * b = dynamic_cast<const UnOp *>(a);
+      typename F::argument_type x = b->exp->ct_value<typename F::argument_type>();
+      return F()(x);
+    }
+  };
 
   struct SimpleUnOp : public UnOp {
     SimpleUnOp(String name, String op0, TypeCategory * c) 
@@ -645,14 +772,27 @@ namespace AST {
 
   struct UPlus : public SimpleUnOp {
     UPlus() : SimpleUnOp("uplus", "+", NUMERIC_C) {}
+    void make_ct_value(ResolveEnviron &) {
+      ct_value_ = exp->ct_value_;
+    }
   };
 
   struct Neg : public SimpleUnOp {
     Neg() : SimpleUnOp("neg", "-", NUMERIC_C) {}
+    void make_ct_value(ResolveEnviron &) {
+      ct_value_ = op_ct_value<UnOp_CT_Value, std::negate>(type);
+    }
   };
 
   struct Compliment : public SimpleUnOp {
-    Compliment() : SimpleUnOp("compliment", "-", INT_C) {}
+    Compliment() : SimpleUnOp("compliment", "~", INT_C) {}
+    template <typename T>
+    struct F : public std::unary_function<T,T> {
+      T operator()(T x) {return ~x;}
+    };
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = int_op_ct_value<UnOp_CT_Value, F>(type);
+    }
   };
 
   struct Not : public UnOp {
@@ -698,9 +838,11 @@ namespace AST {
       lhs = parse_exp(p->arg(0), env);
       rhs = parse_exp(p->arg(1), env);
       resolve(env);
+      make_ct_value(env);
       return this;
     }
     virtual void resolve(ParseEnviron & env) = 0;
+    virtual void make_ct_value(ParseEnviron & env) {}
     void compile(CompileWriter & f, CompileEnviron & env) {
       f << "(" << lhs << " " << op << " " << rhs << ")";
     }
@@ -743,6 +885,26 @@ namespace AST {
     return t;
   }
 
+  template <typename F> 
+  struct BinOp_CT_Value : public CT_Value<typename F::result_type> {
+    typename F::result_type value(const AST * a) const {
+      const BinOp * b = dynamic_cast<const BinOp *>(a);
+      typename F::first_argument_type x = b->lhs->ct_value<typename F::first_argument_type>();
+      typename F::second_argument_type y = b->rhs->ct_value<typename F::second_argument_type>();
+      return F()(x, y);
+    }
+  };
+
+  template <typename F> 
+  struct Comp_CT_Value : public CT_Value<target_bool> {
+    int value(const AST * a) const {
+      const BinOp * b = dynamic_cast<const BinOp *>(a);
+      typename F::first_argument_type x = b->lhs->ct_value<typename F::first_argument_type>();
+      typename F::second_argument_type y = b->rhs->ct_value<typename F::second_argument_type>();
+      return F()(x, y);
+    }
+  };
+  
   const Type * p_subtype(const Type * t) {
     if (const Pointer * p = dynamic_cast<const Pointer *>(t))
       return p->subtype;
@@ -833,6 +995,10 @@ namespace AST {
     void resolve(ResolveEnviron & env) {
       type = resolve_additive(env, lhs, rhs);
     }
+    void make_ct_value(ParseEnviron & env) {
+      if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
+        ct_value_ = op_ct_value<BinOp_CT_Value, std::plus>(type);
+    }
   };
 
   struct Minus : public BinOp {
@@ -849,30 +1015,64 @@ namespace AST {
           throw;
       }
     }
+    void make_ct_value(ParseEnviron & env) {
+      if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
+        ct_value_ = op_ct_value<BinOp_CT_Value, std::minus>(type);
+    }
   };
 
   struct Times : public SimpleBinOp {
     Times() : SimpleBinOp("times", "*", NUMERIC_C) {}
+    void make_ct_value() {
+      ct_value_ = op_ct_value<BinOp_CT_Value, std::multiplies>(type);
+    }
   };
 
   struct Div : public SimpleBinOp {
     Div() : SimpleBinOp("div", "/", NUMERIC_C) {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = op_ct_value<BinOp_CT_Value, std::divides>(type);
+    }
   };
 
   struct Mod : public SimpleBinOp {
     Mod() : SimpleBinOp("mid", "%", INT_C) {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = int_op_ct_value<BinOp_CT_Value, std::modulus>(type);
+    }
   };
 
   struct BAnd : public SimpleBinOp { 
     BAnd() : SimpleBinOp("band", "&", INT_C) {}
+    template <typename T>
+    struct F : public std::binary_function<T,T,T> {
+      T operator()(T x, T y) {return x & y;}
+    };
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
+    }
   };
 
   struct BOr : public SimpleBinOp {
     BOr() : SimpleBinOp("bor", "|", INT_C) {}
+    template <typename T>
+    struct F : public std::binary_function<T,T,T> {
+      T operator()(T x, T y) {return x | y;}
+    };
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
+    }
   };
 
   struct XOr : public SimpleBinOp {
     XOr() : SimpleBinOp("xor", "^", INT_C) {}
+    template <typename T>
+    struct F : public std::binary_function<T,T,T> {
+      T operator()(T x, T y) {return x ^ y;}
+    };
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
+    }
   };
 
   struct BShift {
@@ -896,32 +1096,45 @@ namespace AST {
   };
 
   struct Eq : public CompOp {
-  void resolve_pointer_pre(ResolveEnviron & env, AST *& lhs, AST *& rhs) {
-    check_type(lhs, POINTER_C);
-    check_type(rhs, POINTER_C);
-  }
-
     Eq() : CompOp("eq", "==") {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = op_ct_value<Comp_CT_Value, std::equal_to>(type);
+    }
   };
 
   struct Ne : public CompOp {
     Ne() : CompOp("ne", "!=") {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = op_ct_value<Comp_CT_Value, std::not_equal_to>(type);
+    }
   };
 
   struct Lt : public CompOp {
     Lt() : CompOp("lt", "<") {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = op_ct_value<Comp_CT_Value, std::less>(type);
+    }
   };
 
   struct Gt : public CompOp {
     Gt() : CompOp("gt", ">") {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = op_ct_value<Comp_CT_Value, std::greater>(type);
+    }
   };
 
   struct Le : public CompOp {
     Le() : CompOp("le", "<=") {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = op_ct_value<Comp_CT_Value, std::less_equal>(type);
+    }
   };
 
   struct Ge : public CompOp {
     Ge() : CompOp("ge", ">=") {}
+    void make_ct_value(ParseEnviron & env) {
+      ct_value_ = op_ct_value<Comp_CT_Value, std::greater_equal>(type);
+    }
   };
 
   struct PostIncDec : public AST {
@@ -1027,6 +1240,87 @@ namespace AST {
     }
   };
 
+  template <typename From, typename To>
+  struct Cast_CT_Value : public CT_Value<To> {
+    To value(const AST * t) const {
+      const Cast * c = dynamic_cast<const Cast *>(t);
+      return static_cast<To>(c->exp->ct_value<From>());
+    }
+  };
+
+  struct Cast_CT_Value_Inner_Map {
+    String to;
+    const CT_Value_Base * cast;
+  };
+
+  template <typename From>
+  struct Cast_CT_Value_Group {
+    static Cast_CT_Value_Inner_Map map[];
+    static Cast_CT_Value_Inner_Map * map_end;
+  };
+
+  template <typename From>
+  Cast_CT_Value_Inner_Map Cast_CT_Value_Group<From>::map[] = {
+    {".uint8", new Cast_CT_Value<From, uint8_t>},
+    {".uint16", new Cast_CT_Value<From, uint16_t>},
+    {".uint32", new Cast_CT_Value<From, uint32_t>},
+    {".uint64", new Cast_CT_Value<From, uint64_t>},
+    {".int8", new Cast_CT_Value<From, int8_t>},
+    {".int16", new Cast_CT_Value<From, int16_t>},
+    {".int32", new Cast_CT_Value<From, int32_t>},
+    {".int64", new Cast_CT_Value<From, int64_t>},
+    {"float", new Cast_CT_Value<From, float>},
+    {"double", new Cast_CT_Value<From, double>},
+    {"long double", new Cast_CT_Value<From, long double>},
+  };
+  template <typename From>
+  Cast_CT_Value_Inner_Map * Cast_CT_Value_Group<From>::map_end = 
+    map + sizeof(Cast_CT_Value_Group<From>::map)/sizeof(Cast_CT_Value_Inner_Map);
+
+  struct Cast_CT_Value_Map {
+    String from;
+    Cast_CT_Value_Inner_Map * map;
+    Cast_CT_Value_Inner_Map * map_end;
+    Cast_CT_Value_Map(String f, Cast_CT_Value_Inner_Map * m, Cast_CT_Value_Inner_Map * e)
+      : from(f), map(m), map_end(e) {}
+  };
+
+  template <typename T>
+  static inline Cast_CT_Value_Map make_cast_ct_value_map(String n) {
+    return Cast_CT_Value_Map(n, Cast_CT_Value_Group<T>::map, Cast_CT_Value_Group<T>::map_end);
+  }
+
+  Cast_CT_Value_Map cast_ct_value_map[] = {
+    make_cast_ct_value_map<uint8_t>(".uint8"), 
+    make_cast_ct_value_map<uint16_t>(".uint16"), 
+    make_cast_ct_value_map<uint32_t>(".uint32"), 
+    make_cast_ct_value_map<uint64_t>(".uint64"), 
+    make_cast_ct_value_map<int8_t>(".int8"), 
+    make_cast_ct_value_map<int16_t>(".int16"), 
+    make_cast_ct_value_map<int32_t>(".int32"), 
+    make_cast_ct_value_map<int64_t>(".int64"), 
+    make_cast_ct_value_map<float>("float"),
+    make_cast_ct_value_map<double>("double"),
+    make_cast_ct_value_map<long double>("long double"),
+  };
+  Cast_CT_Value_Map * cast_ct_value_map_end = 
+    cast_ct_value_map + sizeof(cast_ct_value_map)/sizeof(Cast_CT_Value_Map);
+
+  const CT_Value_Base * cast_ct_value(const Type * f, const Type * t) {
+    String from = f->exact_type->to_string();
+    String to   = t->exact_type->to_string();
+    for (const Cast_CT_Value_Map * i = cast_ct_value_map; i != cast_ct_value_map_end; ++i) {
+      if (i->from == from) {
+        for (const Cast_CT_Value_Inner_Map * j = i->map; j != i->map_end; ++j) {
+          if (j->to == to)
+            return j->cast;
+        }
+        return NULL;
+      }
+    }
+    return NULL;
+  }
+
   void Cast::compile(CompileWriter & f, CompileEnviron & env) {
     f << "((" << type->to_string() << ")" << "(" << exp << "))";
   };
@@ -1084,7 +1378,7 @@ namespace AST {
     type = ret_type;
 
     sym->type = env.function_sym()->inst(env.types, this);
-    sym->value = this;
+    //sym->value = this;
 
     return this;
   }
@@ -1347,8 +1641,8 @@ namespace AST {
     struct Member {
       const Parse * parse;
       String name;
-      int val;
-      Member(const Parse * p, String n, int v) : name(n), val(v) {}
+      Literal_Value<target_int> ct_value;
+      Member(const Parse * p, String n, int v) : name(n), ct_value(v) {}
     };
     Vector<Member> members;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
@@ -1357,20 +1651,26 @@ namespace AST {
       EnumT * t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
                       (env.types->inst(SymbolKey(TAG_NS,name)))));
       if (!t0) t0 = new EnumT(name);
+      t0->exact_type = env.types->inst("int")->exact_type;
       add_simple_type(env.types, SymbolKey(TAG_NS, name), t0);
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
       q_parms.push_back(TypeParm(t0));
       const Type * t = env.types->lookup(".qualified")->inst(q_parms);
       int val = 0;
+      members.reserve(p->arg(1)->num_args());
       for (unsigned i = 0; i != p->arg(1)->num_args(); ++i) {
-        if (p->arg(1)->arg(i)->num_parts() > 1)
-          val = ct_value(p->arg(1)->arg(i)->part(1), env);
+        if (p->arg(1)->arg(i)->num_parts() > 1) {
+          AST * e = parse_exp(p->arg(1)->arg(i)->part(1), env);
+          resolve_to(env, e, env.types->inst("int"));
+          val = e->ct_value<target_int>();
+        }
         Member mem(p->arg(1), p->arg(1)->arg(i)->part(0)->name, val);
         val++;
         Symbol * sym = new Symbol(mem.name);
         sym->type = t;
         members.push_back(mem);
+        sym->ct_value = &members.back().ct_value;
         env.vars->root->add(mem.name, sym);
       }
       t0->finalize();
@@ -1379,7 +1679,7 @@ namespace AST {
     void compile(CompileWriter & f, CompileEnviron &) {
       f << indent << name_ << " " << name << "{\n";
       for (int i = 0; i != members.size(); ++i) {
-        f << adj_indent(2) << indent << members[i].name << " = " << members[i].val;
+        f << adj_indent(2) << indent << members[i].name << " = " << members[i].ct_value.v;
         if (i == members.size())
           f << "\n";
         else
@@ -1537,5 +1837,69 @@ namespace AST {
     }
     return 0;
   }
+
+  template <>
+  void CT_Value<uint8_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%llu", (unsigned long long)value(a));
+  }
+
+  template <>
+  void CT_Value<uint16_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%llu", (unsigned long long)value(a));
+  }
+
+  template <>
+  void CT_Value<uint32_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%llu", (unsigned long long)value(a));
+  }
+
+  template <>
+  void CT_Value<uint64_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%llu", (unsigned long long)value(a));
+  }
+
+  template <>
+  void CT_Value<int8_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%lld", (long long)value(a));
+  }
+
+  template <>
+  void CT_Value<int16_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%lld", (long long)value(a));
+  }
+
+  template <>
+  void CT_Value<int32_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%lld", (long long)value(a));
+  }
+
+  template <>
+  void CT_Value<int64_t>::to_string(const AST * a, OStream & o) const {
+    o.printf("%lld", (long long)value(a));
+  }
+
+  template <>
+  void CT_Value<float>::to_string(const AST * a, OStream & o) const {
+    o.printf("%f", value(a));
+  }
+
+  template <>
+  void CT_Value<double>::to_string(const AST * a, OStream & o) const {
+    o.printf("%f", value(a));
+  }
+
+  template <>
+  void CT_Value<long double>::to_string(const AST * a, OStream & o) const {
+    o.printf("%Lf", value(a));
+  }
+
+  //template <>
+  //void CT_Value<bool>::to_string(const AST * a, OStream & o) const {
+  //  if (value(a))
+  //    o << '1';
+  //  else
+  //    o << '0';
+  //}
+
 }
 

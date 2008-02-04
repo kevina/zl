@@ -259,7 +259,9 @@ namespace AST {
         break;
       }
       case TypeParm::INT: {
-        parms.push_back(TypeParm(ct_value(p0, env)));
+        AST * exp = parse_exp(p0, env);
+        resolve_to(env, exp, types->inst("int"));
+        parms.push_back(TypeParm(exp->ct_value<int>()));
         break;
       }
       case TypeParm::TUPLE: {
@@ -418,27 +420,38 @@ namespace AST {
     return new C_TypeRelation();
   }
 
+  void add_c_int(TypeSymbolTable * types, String n);
+
   void create_c_types(TypeSymbolTable * types) {
-    add_simple_type(types, "signed char", new_signed_int(sizeof(signed char)));
-    add_simple_type(types, "short", new_signed_int(sizeof(short)));
-    add_simple_type(types, "int", new_signed_int(sizeof(int)));
-    add_simple_type(types, "long", new_signed_int(sizeof(long)));
-    add_simple_type(types, "long long", new_signed_int(sizeof(long long)));
+    add_simple_type(types, ".int8", new_signed_int(1));
+    add_simple_type(types, ".uint8", new_unsigned_int(1));
+    add_simple_type(types, ".int16", new_signed_int(2));
+    add_simple_type(types, ".uint16", new_unsigned_int(2));
+    add_simple_type(types, ".int32", new_signed_int(4));
+    add_simple_type(types, ".uint32", new_unsigned_int(4));
+    add_simple_type(types, ".int64", new_signed_int(8));
+    add_simple_type(types, ".uint64", new_unsigned_int(8));
+
+    add_c_int(types, "signed char");
+    add_c_int(types, "short");
+    add_c_int(types, "int");
+    add_c_int(types, "long");
+    add_c_int(types, "long long");
 
     //types->add("signed short", types->lookup("short"));
     //types->add("signed int", types->lookup("int"));
     //types->add("signed long", types->lookup("long"));
     //types->add("signed long long", types->lookup("long long"));
 
-    add_simple_type(types, "unsigned char", new_unsigned_int(sizeof(unsigned char)));
-    add_simple_type(types, "unsigned short", new_unsigned_int(sizeof(unsigned short)));
-    add_simple_type(types, "unsigned int", new_unsigned_int(sizeof(unsigned int)));
-    add_simple_type(types, "unsigned long", new_unsigned_int(sizeof(unsigned long)));
-    add_simple_type(types, "unsigned long long", new_unsigned_int(sizeof(unsigned long long)));
+    add_c_int(types, "unsigned char");
+    add_c_int(types, "unsigned short");
+    add_c_int(types, "unsigned int");
+    add_c_int(types, "unsigned long");
+    add_c_int(types, "unsigned long long");
 
     types->add("unsigned", types->lookup("unsigned int"));
 
-    add_simple_type(types, "char", new_signed_int(sizeof(char)));
+    add_c_int(types, "char");
 
     VOID_T = new Void();
     add_simple_type(types, "void", static_cast<SimpleTypeInst *>(VOID_T));
@@ -448,7 +461,6 @@ namespace AST {
     add_simple_type(types, "long double", new Float(Float::LONG));
 
     add_simple_type(types, "<bool>", new AliasT(types->inst("int")));
-
 
     types->add("<void>", types->lookup("void"));
 
@@ -470,3 +482,39 @@ namespace AST {
   }
 
 }
+
+namespace AST {
+
+  struct IntMap {
+    String c_type;
+    String exact_type;
+  };
+
+  const IntMap int_map[] = {
+    {"char", ".int8"},
+    {"signed char", ".int8"},
+    {"unsigned char", ".uint8"},
+    {"short", ".int16"},
+    {"unsigned short", ".uint16"},
+    {"int", ".int32"},
+    {"unsigned int", ".uint32"},
+    {"long", ".int32"},
+    {"unsigned long", ".uint32"},
+    {"long long", ".int64"},
+    {"unsigned long long", ".uint64"}
+  };
+  const IntMap * int_map_end = int_map + sizeof(int_map)/sizeof(IntMap);
+  
+  String c_type_to_exact(String t) {
+    for (const IntMap * i = int_map; i != int_map_end; ++i) {
+      if (i->c_type == t) return i->exact_type;
+    }
+    abort();
+  }
+  
+  void add_c_int(TypeSymbolTable * types, String n) {
+    add_simple_type(types, n, new Int(static_cast<const Int *>(types->inst(c_type_to_exact(n)))));
+  }
+
+}
+

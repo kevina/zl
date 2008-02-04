@@ -37,7 +37,7 @@ Error * error(SourceStr str, const char * fmt, ...) {
 }
 
 Error * error(const Parse * p, const char * fmt, ...) {
-  SourceStr str = p->str();
+  SourceStr str = p ? p->str() : SourceStr();
   va_list ap;
   va_start(ap, fmt);
   Error * res = verror(str.source, str.begin, fmt, ap);

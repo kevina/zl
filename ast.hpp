@@ -23,8 +23,8 @@ namespace AST {
     String name;
     SourceStr str;
     const Type * type;
-    void * value; // for compile time constants
-    Symbol(String n) : name(n) {}
+    const struct CT_Value_Base * ct_value;
+    Symbol(String n) : name(n), ct_value() {}
   };
 
   typedef SymbolTable<const Parse *> ParmsSymbolTable;
@@ -220,6 +220,17 @@ namespace AST {
   struct BreakException {};
   struct ReturnException {};
 
+  
+  struct CT_Value_Base : public gc {
+    virtual void to_string(const AST *, OStream &) const = 0;
+    virtual ~CT_Value_Base() {}
+  };
+
+  template <typename T> struct CT_Value : public CT_Value_Base {
+    void to_string(const AST *, OStream & o) const;
+    virtual T value(const AST *) const = 0;
+  };
+
   struct AST : public gc_cleanup {
     String name_;
     String name() {return name_;}
@@ -229,7 +240,7 @@ namespace AST {
     bool lvalue;
     unsigned return_offset; // for rhs values: NPOS if not LHS
     VarLoc addr;            // for lhs values
-    AST(String n, const Parse * p = 0) : name_(n), parse_(p), type(), lvalue(false), return_offset(NPOS), addr() {}
+    AST(String n, const Parse * p = 0) : name_(n), parse_(p), type(), lvalue(false), return_offset(NPOS), addr(), ct_value_(0) {}
     void assert_num_args(int p) {
       if (parse_->num_args() != p) 
         //abort();
@@ -245,9 +256,19 @@ namespace AST {
     virtual void prep_eval(PrepEvalEnviron &) {abort();}
     virtual void eval(ExecEnviron &) {abort();}
     virtual void compile(CompileWriter &, CompileEnviron &) = 0;
+    
     virtual ~AST() {}
     void print();
+
+    const CT_Value_Base * ct_value_;
+    template <typename T> 
+    T ct_value() const {
+      if (!ct_value_) throw error(parse_, "\"%s\" Can not be used in constant-expression", ~name_);
+      return dynamic_cast<const CT_Value<T> *>(ct_value_)->value(this);
+    }
   };
+
+  struct OtherType {};
 
   template <typename T>
   T & ExecEnviron::ret(const AST * exp) {
@@ -310,6 +331,8 @@ namespace AST {
   //
   //
 
+  const CT_Value_Base * cast_ct_value(const Type * f, const Type * t);
+
   struct Cast : public AST {
     Cast(String s) : AST(s) {}
     AST * exp;
@@ -318,7 +341,7 @@ namespace AST {
 
   struct ImplicitCast : public Cast {
     ImplicitCast(AST * e, const Type * t) 
-      : Cast("<cast>") {exp = e; type = t;}
+      : Cast("<cast>") {exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
     AST * parse_self(const Parse * p, ParseEnviron & env0) {abort();}
   };
 
@@ -394,17 +417,17 @@ namespace AST {
   struct Literal : public AST {
     Literal() : AST("literal") {}
     AST * part(unsigned i);
-    long long value;
+    //long long value;
     AST * parse_self(const Parse * p, ParseEnviron &);
     void resolve(ResolveEnviron & env);
-    void eval(ExecEnviron & env);
+    //void eval(ExecEnviron & env);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
   struct FloatC : public AST {
     FloatC() : AST("float") {}
     //AST * part(unsigned i);
-    long double value;
+    //long double value;
     AST * parse_self(const Parse * p, ParseEnviron &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
@@ -431,7 +454,12 @@ namespace AST {
   //
   //
 
-  int ct_value(const Parse * p, ParseEnviron &);
+  template <typename T>
+  void resolve_to(ResolveEnviron & env, T * & exp, const Type * type) {
+    exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type));
+  }
+
+  //int ct_value(const Parse * p, ParseEnviron &);
 
   AST * parse_top(const Parse * p);
   AST * parse_exp(const Parse * p, ParseEnviron & env);
