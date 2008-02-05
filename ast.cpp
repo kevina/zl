@@ -1605,7 +1605,6 @@ namespace AST {
       if (t0) s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
       else if (what == STRUCT) s = new StructT(name);
       else                     s = new UnionT(name);
-      s->defined = true;
       for (unsigned i = 0; i != body->members.size(); ++i) {
 	Var * v = dynamic_cast<Var *>(body->members[i]);
 	assert(v);
@@ -1700,9 +1699,7 @@ namespace AST {
       return this;
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      StringBuf buf;
-      c_print_inst->declaration("", *sizeof_type, buf);
-      f << "sizeof(" << buf.freeze() << ")";
+      f << "sizeof(" << sizeof_type->size() << ")";
     }
   };
 

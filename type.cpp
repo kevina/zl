@@ -481,6 +481,33 @@ namespace AST {
     return inst(".qualified", parms);
   }
 
+  void StructT::finalize_hook() {
+    size_ = 0;
+    align_ = 0;
+    for (unsigned i = 0; i != members.size(); ++i) {
+      const Type * t = members[i].subtype;
+      if (t->align() > align_) align_ = t->align();
+      unsigned align_offset = size_ % t->align();
+      if (align_offset != 0) size_ += t->align() - align_offset;
+      size_ += t->size();
+    }
+    defined = true;
+  }
+
+  void UnionT::finalize_hook() {
+    size_ = 0;
+    align_ = 0;
+    for (unsigned i = 0; i != members.size(); ++i) {
+      const Type * t = members[i].subtype;
+      if (t->align() > align_) align_ = t->align();
+      if (t->size() > size_) size_ = t->size();
+    }
+    defined = true;
+  }
+
+  void EnumT::finalize_hook() {
+    defined = true;
+  }
 }
 
 namespace AST {

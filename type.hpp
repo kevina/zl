@@ -627,22 +627,25 @@ namespace AST {
     String what;
     String name;
     Vector<Member> members;
-    StructUnionT(String w, String n) : TaggedType(w), name(n) {}
+    unsigned size_;
+    unsigned align_;
+    StructUnionT(String w, String n) 
+      : TaggedType(w), name(n), size_(NPOS), align_(NPOS) {}
     struct ParseEnviron * env;
-    unsigned size() const {return defined ? 0 : NPOS;}
-    unsigned align() const {return defined ? 0 : NPOS;}
+    unsigned size() const {return size_;}
+    unsigned align() const {return align_;}
   };
 
   class StructT : public StructUnionT {
   public:
     StructT(String n) : StructUnionT("struct", n) {}
-    void finalize_hook() {} 
+    void finalize_hook();
   };
 
   class UnionT : public StructUnionT {
   public:
     UnionT(String n) : StructUnionT("union", n) {}
-    void finalize_hook() {} 
+    void finalize_hook();
   };
 
   //
@@ -653,9 +656,9 @@ namespace AST {
   public:
     String name;
     EnumT(String n) : TaggedType("enum"), Int(INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), name(n) {}
-    void finalize_hook() {} 
-    unsigned size() const {return defined ? 0 : NPOS;}
-    unsigned align() const {return defined ? 0 : NPOS;}
+    void finalize_hook();
+    unsigned size() const {return defined ? exact_type->size() : NPOS;}
+    unsigned align() const {return defined ? exact_type->align() : NPOS;}
   };
   
   //
