@@ -464,6 +464,9 @@ namespace AST {
 
     types->add("<void>", types->lookup("void"));
 
+    types->add(".size", types->lookup("unsigned long"));
+    types->add(".ptrdiff", types->lookup("long"));
+
     types->add_name(".pointer", new PointerSymbol);
     //types->add_name("<const>", new ConstSymbol);
     types->add_name(".array", new ArraySymbol);

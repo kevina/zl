@@ -55,6 +55,7 @@ struct SourceStr : public SubStr {
   }
   void adj(const SourceStr & other) {
     if (!source && other.source) source = other.source;
+    if (source != other.source) return;
     if (!begin || begin > other.begin) begin = other.begin;
     if (!end || end < other.end) end = other.end;
   }

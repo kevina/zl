@@ -43,7 +43,7 @@ MAP =
 #
 
 TOKEN : "token" =  <<mid>> {MID} / 
-         {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SIZEOF}
+         {STRUCT_UNION} / {ENUM} / {TYPEOF}
          / {PARAN} / {BRACK} / {CONST}
          / <id> {ID} / <sym> {SYM};
 
@@ -74,8 +74,6 @@ ENUM_MEMBER = <> {ID} ("=" {ENUM_EXP})?;
 ENUM_EXP = <exp> (!"," {TOKEN})+;
 
 TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
-
-SIZEOF = <sizeof> "sizeof" "(" {TOKENS} ")";
 
 #
 # Misc

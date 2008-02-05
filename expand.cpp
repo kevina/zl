@@ -272,7 +272,8 @@ const Parse * parse_exp(const Parse * p, ExpandEnviron & env) {
     if (t->name == "()") t = handle_paran(t, env);
     tmp->add_part(t);
   }
-  return parse_exp_->parse(tmp);
+  const Parse * res = parse_exp_->parse(tmp);
+  return res;
 }
 
 const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
@@ -427,16 +428,14 @@ const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
     return res;
   } else if (name == "sizeof") {
     assert_pos(p, pos, ExpPos);
-    const Parse * res = parse_decl_->parse_type(p->arg(0), env);
-    if (res) {
-      res = expand_type(res, env);
-      res = new Parse(p->part(0), res);
+    assert_num_args(p, 1);
+    if (p->arg(0)->name == "(type)") {
+      const Parse * type = expand_type(p->arg(0)->arg(0), env);
+      return new Parse(p->part(0), type);
     } else {
-      res = parse_exp_->parse(p->arg(0));
-      res = expand(res, pos, env);
-      res = new Parse(p->part(0), new Parse(new Parse(".typeof"), res));
+      const Parse * exp = expand(p->arg(0), ExpPos, env);
+      return new Parse(p->part(0), new Parse(new Parse(".typeof"), exp));
     }
-    return res;
   } else if (name == "cast") {
     assert_pos(p, pos, ExpPos);
     assert_num_args(p, 2);

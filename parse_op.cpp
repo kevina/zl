@@ -40,15 +40,25 @@ template <> struct hash<OpKey> {
     }
 };
 
-struct Op : public OpKey {
-  enum Type {Other = 1, Prefix = 2, Bin = 4, Postfix = 8} type;
+struct MatchOp : public OpKey {
+  bool capture_op_itself() const {return symbol.empty();}
+  void parse_match_op(const Parse * p) {
+    if (p->name == "category") {
+      category = p->arg(0)->name;
+    } else {
+      category = p->name;
+      symbol = p->arg(0)->name;
+    }
+  }
+};
+
+struct OpCommon : public MatchOp {
+  enum Type {Other = 1, Prefix = 2, Bin = 4, Postfix = 8, Special = 16} type;
   typedef int Types;
-  int level;
-  Assoc assoc;
   String name;
   const Parse * parse;
   bool capture_op_itself() const {return symbol.empty();}
-  void parse_self(const Parse * p) {
+  virtual void parse_self(const Parse * p) {
     if (p->name == "bin")
       type = Bin;
     else if (p->name == "prefix")
@@ -57,23 +67,70 @@ struct Op : public OpKey {
       type = Postfix;
     else if (p->name == "exp")
       type = Other;
+    else if (p->name == "special")
+      type = Special;
     else
       abort();
     parse = p->arg(0);
     name = parse->name;
-    if (p->arg(1)->name == "category") {
-      category = p->arg(1)->arg(0)->name;
-    } else {
-      category = p->arg(1)->name;
-      symbol = p->arg(1)->arg(0)->name;
+    parse_match_op(p->arg(1));
+  }
+  virtual ~OpCommon() {}
+};
+
+struct Op : public OpCommon {
+  int level;
+  Assoc assoc;
+};
+
+struct SpecialOp : public OpCommon {
+  Vector<MatchOp> rest;
+  virtual void parse_self(const Parse * p) {
+    OpCommon::parse_self(p);
+    assert(type == Special);
+    rest.resize(p->num_args() - 2);
+    for (unsigned i = 2; i < p->num_args(); ++i) {
+      rest[i-2].parse_match_op(p->arg(i));
     }
+  }
+  const Parse * match(Parts::const_iterator & i0, Parts::const_iterator end) const {
+    Parts::const_iterator i = i0;
+    const Parse * fp = *i;
+    ++i;
+    Parts working;
+    Vector<MatchOp>::const_iterator j = rest.begin(), e = rest.end();
+    for (; j != e && i != end; ++j, ++i) {
+      if (j->category == (*i)->name) {
+        if (j->symbol.empty()) {
+          working.push_back(*i);
+        } else if (j->symbol != (*i)->arg(0)->name) {
+          return NULL;
+        }
+      } else {
+        return NULL;
+      }
+    }
+    if (j != e) return NULL;
+    --i; // backup on
+    SourceStr str = fp->str();
+    str.adj((*i)->str());
+    Parse * res = new Parse(str, new Parse(name));
+    res->add_parts(working.begin(), working.end());
+    i0 = i;
+    return res;
   }
 };
 
-struct Group {
-  Assoc assoc;
-  Vector<Op> ops;
+struct Ops : public gc_cleanup {
+  typedef hash_multimap<OpKey, OpCommon *> Lookup;
+  Lookup lookup_;
   void parse_self(const Parse * p) {
+    for (int i = 0; i != p->num_args(); ++i) {
+      parse_group(p->arg(i), i);
+    }
+  }
+  void parse_group(const Parse * p, unsigned level) {
+    Assoc assoc;
     if (p->name == "none")
       assoc = None;
     else if (p->name == "left")
@@ -84,26 +141,17 @@ struct Group {
       assoc = List;
     else
       abort();
-    ops.resize(p->num_args());
     for (int i = 0; i != p->num_args(); ++i) {
-      ops[i].parse_self(p->arg(i));
-    }
-  }
-};
-
-struct Ops : public gc_cleanup {
-  typedef hash_multimap<OpKey, Op *> Lookup;
-  Lookup lookup_;
-  Vector<Group> groups;
-  void parse_self(const Parse * p) {
-    groups.resize(p->num_args());
-    for (int i = 0; i != p->num_args(); ++i) {
-      groups[i].parse_self(p->arg(i));
-      Vector<Op> & ops = groups[i].ops;
-      for (int j = 0; j != ops.size(); ++j) {
-        ops[j].level = i;
-        ops[j].assoc = groups[i].assoc;
-        pair<Lookup::iterator,bool> res = lookup_.insert(pair<OpKey,Op *>(ops[j],&ops[j]));
+      if (p->arg(i)->name == "special") {
+        SpecialOp * op = new SpecialOp;
+        op->parse_self(p->arg(i));
+        lookup_.insert(pair<OpKey,OpCommon *>(*op,op));      
+      } else {
+        Op * op = new Op;
+        op->parse_self(p->arg(i));
+        op->level = level;
+        op->assoc = assoc;
+        lookup_.insert(pair<OpKey,OpCommon *>(*op,op));      
       }
     }
   }
@@ -136,7 +184,7 @@ struct Ops : public gc_cleanup {
       = lookup_.equal_range(k);
     for( ; is.first != is.second; ++is.first)
       if (is.first->second->type == type)
-        return is.first->second;
+        return static_cast<const Op *>(is.first->second);
     return 0;
   }
 
@@ -149,6 +197,28 @@ struct Ops : public gc_cleanup {
     if (op == 0)
       op = &generic;
     return op;
+  }
+
+  const Parse * i_try_special(const OpKey & k, Parts::const_iterator & i, Parts::const_iterator e) {
+    pair<Lookup::const_iterator,Lookup::const_iterator> is
+      = lookup_.equal_range(k);
+     for( ; is.first != is.second; ++is.first) {
+       if (is.first->second->type == Op::Special) {
+         const SpecialOp * op = static_cast<const SpecialOp *>(is.first->second);
+         const Parse * res = op->match(i, e);
+         if (res) return res;
+       }
+     }
+     return NULL;
+  }
+  
+  const Parse * try_special(const Parse * p, Parts::const_iterator & i, Parts::const_iterator e) {
+    const Parse * res = NULL;
+    if (p->num_args() > 0)
+      res = i_try_special(OpKey(p->name, p->arg(0)->name), i, e);
+    if (res == 0)
+      res = i_try_special(OpKey(p->name), i, e);
+    return res;
   }
 };
 
@@ -177,11 +247,20 @@ public:
   const Parse * parse(const Parse * p) {
     opr_s.clear();
     val_s.clear();
-    unsigned sz = p->num_args();
     Op::Types prev = 0;
-    for (int i = 0; i != sz; ++i) {
-      const Parse * pop = p->arg(i); // parsed op
+    for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i) {
+      const Parse * pop = *i; // parsed op
       Op::Types cur = ops.lookup_types(pop);
+      if (cur & Op::Special) {
+        const Parse * res = ops.try_special(pop, i, e);
+        if (res) {
+          pop = res;
+          cur = ops.lookup_types(pop);
+        } else {
+          cur &= ~Op::Special;
+        }
+      } 
+      assert(!(cur & Op::Special));
       if (prev == 0 || prev & (Op::Prefix | Op::Bin)) {
         cur &= (Op::Prefix | Op::Other);
         if (cur == 0) 
@@ -190,7 +269,18 @@ public:
         cur &= (Op::Bin | Op::Postfix);
         if (cur == 0)
           throw error(pop, "Expected a binary or postfix operator.");
-      } 
+      }
+      //if (cur == (Op::Prefix | Op::Other)) {
+      //  if (i + 1 == sz || (ops.lookup_types(p->arg(i+1)) & (Op::Postfix | Op::Bin))) {
+      //    cur &= (Op::Postfix | Op::Other);
+      //    if (cur == 0)
+      //      throw error(pop, "Expected an operand or a postfix operator.");
+      //  } else {
+      //    cur &= (Op::Bin | Op::Prefix);
+      //    if (cur == 0)
+      //      throw error(pop, "Expected an binary or prefix operator.");
+      //  }
+      //}
       const Op * op = ops.lookup(pop, cur);
       if (op->type == Op::Other) {
         val_s.push_back(pop);
@@ -214,17 +304,6 @@ public:
       throw error(val_s[val_s.size()-2], "Extra operand(s).");
     assert(val_s.size() == 1);
     return val_s.front();
-  }
-
-  const Parse * parse_list(const Parse * p) {
-    String list_group = ops.groups.back().ops.front().name;
-    if (p->num_args() == 0) return new Parse(list_group);
-    const Parse * res = parse(p);
-    if (list_group == res->name) {
-      return res;
-    } else {
-      return new Parse(new Parse(list_group), res);
-    }
   }
 
   void reduce() {

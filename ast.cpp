@@ -17,6 +17,8 @@ namespace AST {
 
   typedef int target_bool;
   typedef int target_int;
+  typedef size_t target_size_t;
+  typedef ptrdiff_t target_ptrdiff_t;
 
   const NameSpace * DEFAULT_NS = new NameSpace(".default");
   const NameSpace * TAG_NS = new NameSpace(".tag");
@@ -1691,17 +1693,27 @@ namespace AST {
   struct SizeOf : public AST {
     SizeOf() : AST("sizeof") {}
     const Type * sizeof_type;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
-      parse_ = p;
-      assert_num_args(1);
-      type = env.types->ct_const(env.types->inst("unsigned"));
-      sizeof_type = parse_type(env.types, p->arg(0), env);
-      return this;
-    }
+    AST * parse_self(const Parse * p, ParseEnviron & env);
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << "sizeof(" << sizeof_type->size() << ")";
+      f << sizeof_type->size();
     }
   };
+  
+  struct SizeOf_CT_Value : public CT_Value<target_size_t> {
+    target_size_t value(const AST * a) const {
+      const SizeOf * so = dynamic_cast<const SizeOf *>(a);
+      return so->sizeof_type->size();
+    }
+  } size_of_ct_value;
+
+  AST * SizeOf::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    assert_num_args(1);
+    type = env.types->ct_const(env.types->inst(".size"));
+    sizeof_type = parse_type(env.types, p->arg(0), env);
+    ct_value_ = &size_of_ct_value;
+    return this;
+  }
 
   AST * parse_top(const Parse * p) {
     ParseEnviron env;
