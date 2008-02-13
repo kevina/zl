@@ -228,7 +228,7 @@ namespace ParsePeg {
     Res char_class(const char * str, const char * end);
     Res identifier(const char * str, const char * end);
 
-    void resolve_token_symbol(TokenProd * p, const char * p);
+    void resolve_token_symbol(TokenProd *, const char *);
   };
 
 }

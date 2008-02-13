@@ -1,9 +1,12 @@
 #ifndef PARSE__HPP
 #define PARSE__HPP
 
+#include <stdio.h>
+
 #include "gc.hpp"
 #include "util.hpp"
 #include "string_buf.hpp" // FIXME: elim dep
+#include "entity.hpp"
 
 // common structure used for parse results
 
@@ -44,7 +47,7 @@ struct SourceStr : public SubStr {
   SourceStr(const SourceEntity * f, String s) 
     : SubStr(s), source(f) {}
   operator const char * & () {return begin;}
-  operator const char * const () const {return begin;}
+  operator const char * () const {return begin;}
   void clear() {
     SubStr::clear();
     source = 0;
@@ -134,85 +137,112 @@ struct Flags : public gc {
 
 struct Replacements;
 
+
 struct Parse : public gc {
   struct D : public gc_cleanup {
     Parts parts;
     Flags flags;
   };
-  String name;
+  static D * const AS_ENTITY;
+  String what_;
+  String what() const {return what_;}
+  operator String () const {assert(simple() || part(0)->simple()); return what_;}
+  const char * operator ~ () const {return ~operator String();}
+  String string_if_simple() const {return simple() ? what() : String();}
   mutable SourceStr str_;
   const SourceStr & str() const {if (d && str_.empty()) set_src_from_parts(); return str_;}
   D * d;
-  Replacements * repl;
+  const Replacements * repl;
+  Entity * entity_;
+  Entity * entity() const {return entity_;}
 
-  Parse() : d(), repl(0) {}
-  explicit Parse(String n) : name(n), d(), repl() {}
+  Parse(const Parse & other) 
+    : what_(other.what_), str_(other.str_), d(other.d ? new D(*d) : 0), repl(other.repl), entity_(other.entity_)
+  {}
+  Parse & operator= (const Parse & other) {
+    what_ = other.what_;
+    str_ = other.str_;
+    d = other.d ? new D(*other.d) : 0;
+    repl = other.repl;
+    entity_ = other.entity_;
+    return *this;
+  }
+
+  Parse() : d(), repl(0), entity_() {}
+  explicit Parse(String n) : what_(n), d(), repl(), entity_() {}
   Parse(String n, const SourceStr & s) 
-    : name(n), str_(s), d(), repl(0) {}
+    : what_(n), str_(s), d(), repl(), entity_() {}
   Parse(String n, const SourceStr & s, const char * e)
-    : name(n), str_(s.source, s.begin, e), d(), repl() {}
+    : what_(n), str_(s.source, s.begin, e), d(), repl(), entity_() {}
   Parse(String n, const SourceStr & s, const char * b, const char * e)
-    : name(n), str_(s.source, b, e), d(), repl() {}
+    : what_(n), str_(s.source, b, e), d(), repl(), entity_() {}
   Parse(const SourceStr & s) 
-    : str_(s), d(), repl(0) {}
+    : str_(s), d(), repl(0), entity_() {}
 
-  Parse(const SourceStr & s, const Parse * p) : str_(s), repl(0) {
+  Parse(const SourceStr & s, const Parse * p) : str_(s), repl(), entity_() {
     d = new D; 
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p);
   }
-  explicit Parse(const Parse * p) : repl(0) {
+  explicit Parse(const Parse * p) : repl(), entity_() {
     d = new D; 
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p);
   }
-  Parse(const Parse * p, const Parse * x) : repl(0) {
+  Parse(const Parse * p, const Parse * x) : repl(0), entity_() {
     d = new D;
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
   }
-  Parse(const Parse * p, const Parse * x, const Parse * y) : repl(0) {
+  Parse(const Parse * p, const Parse * x, const Parse * y) : repl(0), entity_() {
     d = new D;
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
     d->parts.push_back(y);
   }
-  Parse(const Parse * p, const Parse * x, const Parse * y, const Parse * z) : repl(0) {
+  Parse(const Parse * p, const Parse * x, const Parse * y, const Parse * z) : repl(0), entity_() {
     d = new D;
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
     d->parts.push_back(y);
     d->parts.push_back(z);
   }
-  Parse(const SourceStr & s, const Parse * p, const Parse * x) : str_(s), repl(0) {
+  Parse(const SourceStr & s, const Parse * p, const Parse * x) : str_(s), repl(0), entity_() {
     d = new D;
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
   }
-  Parse(const SourceStr & s, const Parse * p, const Parse * x, const Parse * y) : str_(s), repl(0)  {
+  Parse(const SourceStr & s, const Parse * p, const Parse * x, const Parse * y) : str_(s), repl(0), entity_()  {
     d = new D;
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
     d->parts.push_back(y);
   }
-  Parse(const SourceStr & s, const Parse * p, const Parse * x, const Parse * y, const Parse * z) : str_(s), repl(0)  {
+  Parse(const SourceStr & s, const Parse * p, const Parse * x, const Parse * y, const Parse * z) : str_(s), repl(0), entity_()  {
     d = new D;
-    if (p->simple()) name = p->name;
+    what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
     d->parts.push_back(y);
     d->parts.push_back(z);
   }
+  Parse(const Entity * e) : what_("<entity>"), str_(), d(), repl(), entity_(const_cast<Entity*>(e)) 
+    {}
 
-  bool simple() const {return !d;}
-  bool leaf() const {return !d;}
+  bool simple() const {return !d && !entity_;}
   void make_branch() {
-    if (name.defined()) {
+    if (entity_) {
+      const Parse * p = new Parse(*this);
+      d = new D;
+      d->parts.push_back(p);
+      what_ = String();
+      entity_ = NULL;
+    } else if (what_.defined()) {
       const Parse * p = new Parse(*this);
       d = new D;
       d->parts.push_back(p);
@@ -222,7 +252,7 @@ struct Parse : public gc {
   }
 
   unsigned num_parts() const {
-    if (!d && name.defined()) return 1;
+    if (!d && what_.defined()) return 1;
     if (!d) return 0;
     else return d->parts.size();
   }
@@ -236,6 +266,12 @@ struct Parse : public gc {
   const Parse * arg(unsigned i) const {
     return d->parts[i+1];
   }
+  const Parse * & part(unsigned i) {
+    return d->parts[i];
+  }
+  const Parse * & arg(unsigned i) {
+    return d->parts[i+1];
+  }
   Parts::const_iterator args_begin() const {return d->parts.begin() + 1;}
   Parts::const_iterator args_end()   const {return d->parts.end();}
   const Parse * flag(String n) const {
@@ -245,18 +281,18 @@ struct Parse : public gc {
 
   void add_part(const Parse * p) {
     if (!d) make_branch();
-    if (!name.defined() && p->simple()) name = p->name;
+    if (d->parts.empty()) what_ = p->string_if_simple();
     d->parts.push_back(p);
   }
   void add_args(const Parse * other) {
     if (!d) make_branch();
-    assert(name.defined());
+    assert(what_.defined());
     d->parts.insert(d->parts.end(), other->args_begin(), other->args_end());
   }
   void add_parts(Parts::const_iterator i, Parts::const_iterator end) {
     if (i == end) return;
     if (!d) make_branch();
-    if (!name.defined() && (*i)->simple()) name = (*i)->name;
+    if (d->parts.empty()) what_ = (*i)->string_if_simple();
     d->parts.insert(d->parts.end(), i, end);
   }
   void add_parts(const Parts & p) {
@@ -280,22 +316,30 @@ struct Parse : public gc {
   void set_src_from_parts() const; // const is a lie
 
   void print() const;
-  bool is_a(String n) const {return name == n;}
-  bool is_a(String n, String p) const {return name == n && num_args() > 0 && arg(0)->name == p;}
+  bool is_a(String n) const {return what_ == n;}
+  bool is_a(String n, String p) const {return what_ == n && num_args() > 0 && arg(0)->is_a(p);}
+
+  virtual ~Parse() {}
 };
+
+static inline bool operator==(const Parse & p, const char * str) {
+  //printf("%s %d == %s\n", ~p.what(), p.simple(), str);
+  if (!p.simple() && !p.part(0)->simple()) return false;
+  return (String)p == str;
+}
 
 inline SourceEntity::SourceEntity(const Parse * e)
   : file_(e->str().source->file_), expansion_(e) {}
 
 inline const Parse * Flags::lookup(String d) {
   for (iterator i = begin(); i != end(); ++i) 
-    if ((*i)->name == d) return *i;
+    if ((*i)->what() == d) return *i;
   return NULL;
 }
 
 inline bool Flags::insert(const Parse * p) {
-  assert(p->name.defined());
-  if (have(p->name)) return false;
+  assert(p->what().defined());
+  if (have(p->what())) return false;
   data.push_back(p);
   return true;
 }

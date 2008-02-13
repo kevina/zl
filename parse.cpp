@@ -6,6 +6,7 @@
 #include "string_buf.hpp"
 #include "asc_ctype.hpp"
 #include "expand.hpp"     // FIXME: elim dep
+#include "asc_ctype.hpp"
 
 using namespace parse_common;
 
@@ -127,13 +128,15 @@ String escape(String n) {
 }
 
 void Parse::print() const {
-  if (simple()) {
-    if (!name.defined()) 
+  if (!d) { 
+    if (entity_)
+      printf("(%s)", ~escape(what_));
+    else if (!what_.defined()) 
       printf("()");
-    else if (name.empty()) 
+    else if (what_.empty()) 
       printf("\"\"");
     else
-      printf("%s", ~escape(name));
+      printf("%s", ~escape(what_));
   } else {
     printf("(");
     d->parts.print();
@@ -149,7 +152,7 @@ static const char * s_id(SourceStr str, String & res) {
   bool in_quote = false;
   StringBuf buf;
   while (!str.empty()) {
-    if ((isspace(*str) || *str == ')' || *str == '#') && !in_quote) break;
+    if ((asc_isspace(*str) || *str == ')' || *str == '#') && !in_quote) break;
     if (*str == '"') {
       have_quotes = true;
       in_quote = !in_quote;
@@ -196,7 +199,7 @@ namespace parse_parse {
       } else {
         Parse * r = new Parse();
         r->str_.begin = str;
-        str = s_id(str, r->name);
+        str = s_id(str, r->what_);
         r->str_.end = str;
         res->add_part(r);
       }
@@ -214,9 +217,9 @@ namespace parse_common {
 
   const char * id(const char * str, const char * end, String & res) {
     const char * start = str;
-    if (str != end && (isalpha(*str) || *str == '_'))
+    if (str != end && (asc_isalpha(*str) || *str == '_'))
       ++str;
-    while (str != end && (isalpha(*str) || isdigit(*str) || *str == '_'))
+    while (str != end && (asc_isalpha(*str) || asc_isdigit(*str) || *str == '_'))
         ++str;
     if (str == start) 
       throw error(str, "identifer expected");
@@ -300,3 +303,9 @@ namespace parse_common {
 }
 
 
+static inline Parse::D * make_as_entity() {
+  Parse::D * d = new Parse::D;
+  d->parts.push_back(new Parse("<entity>"));
+  return d;
+}
+Parse::D * const Parse::AS_ENTITY = make_as_entity();

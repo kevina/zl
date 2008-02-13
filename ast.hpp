@@ -4,12 +4,13 @@
 #include "fstream.hpp"
 #include "symbol_table.hpp"
 #include "type.hpp"
+#include "expand.hpp"
 
 #include <map>
 
 #undef NPOS
 
-namespace AST {
+namespace ast {
 
   struct AST;
   enum Scope {STATIC, STACK};
@@ -73,7 +74,8 @@ namespace AST {
 #endif
   };
 
-  struct ParseEnviron : public gc {
+  enum SymbolType {NoSym, VarSym, TypeSym};
+  struct Environ : public gc {
     LabelSymbolTable * labels;
     TypeRelation * type_relation;
     TypeSymbolTable * types;
@@ -81,9 +83,19 @@ namespace AST {
     Frame * frame;
     Type * void_type() {return types->inst("<void>");}
     Type * bool_type() {return types->inst("<bool>");}
+    template <typename T>
+    bool symbol_exists(const T & s) {
+      return vars->exists(s) || types->exists(s);
+    }
+    template <typename T>
+    SymbolType lookup_symbol(const T & s) {
+      if (vars->exists(s)) return VarSym;
+      if (types->exists(s)) return TypeSym;
+      return NoSym;
+    }
     const FunctionPtrSymbol * function_sym() 
       {return static_cast<const FunctionPtrSymbol *>(types->lookup(".fun"));}
-    ParseEnviron() {
+    Environ() {
       type_relation = new_c_type_relation(); // FIXME HACK
       types = new TypeSymbolTable;
       create_c_types(types); // FIXME Another HACK
@@ -91,14 +103,14 @@ namespace AST {
       frame = new Frame();
       labels = 0;
     }
-    ParseEnviron new_scope() {
-      ParseEnviron env = *this;
+    Environ new_scope() {
+      Environ env = *this;
       env.types = new TypeSymbolTable(env.types);
       env.vars  = new VarSymbolTable(env.vars);
       return env;
     }
-    ParseEnviron new_frame() {
-      ParseEnviron env = *this;
+    Environ new_frame() {
+      Environ env = *this;
       env.types = new TypeSymbolTable(env.types);
       env.vars  = new VarSymbolTable(env.vars);
       env.frame = new Frame();
@@ -106,8 +118,8 @@ namespace AST {
     }
   };
 
-  typedef ParseEnviron ResolveEnviron;
-
+  typedef Environ ResolveEnviron;
+  typedef Environ ParseEnviron;
 
 #if 0
   struct Scope {
@@ -231,24 +243,24 @@ namespace AST {
     virtual T value(const AST *) const = 0;
   };
 
-  struct AST : public gc_cleanup {
-    String name_;
-    String name() {return name_;}
+  struct AST : public Entity {
+    String what_;
+    String what() const {return what_;}
     virtual AST * part(unsigned i) {return 0;}
     const Parse * parse_;
     const Type * type;
     bool lvalue;
     unsigned return_offset; // for rhs values: NPOS if not LHS
     VarLoc addr;            // for lhs values
-    AST(String n, const Parse * p = 0) : name_(n), parse_(p), type(), lvalue(false), return_offset(NPOS), addr(), ct_value_(0) {}
+    AST(String n, const Parse * p = 0) : what_(n), parse_(p), type(), lvalue(false), return_offset(NPOS), addr(), ct_value_(0) {}
     void assert_num_args(int p) {
       if (parse_->num_args() != p) 
         //abort();
-        throw error(parse_, "%s: Wrong Number of Arguments", ~name_);
+        throw error(parse_, "%s: Wrong Number of Arguments", ~what_);
     };
     void assert_num_args(int min, int max) {
       if (parse_->num_args() < min || parse_->num_args() > max) 
-        throw error(0, parse_->str(), "%s: Wrong Number of Arguments", ~name_);
+        throw error(0, parse_->str(), "%s: Wrong Number of Arguments", ~what_);
     };
     virtual AST * parse_self(const Parse * p, ParseEnviron &) = 0;
       // ^^ returns itself, to allow chaining ie 
@@ -258,12 +270,12 @@ namespace AST {
     virtual void compile(CompileWriter &, CompileEnviron &) = 0;
     
     virtual ~AST() {}
-    void print();
+    //void print(OStream & o) const;
 
     const CT_Value_Base * ct_value_;
     template <typename T> 
     T ct_value() const {
-      if (!ct_value_) throw error(parse_, "\"%s\" Can not be used in constant-expression", ~name_);
+      if (!ct_value_) throw error(parse_, "\"%s\" Can not be used in constant-expression", ~what_);
       return dynamic_cast<const CT_Value<T> *>(ct_value_)->value(this);
     }
   };
@@ -362,6 +374,19 @@ namespace AST {
     Parm(String n, const Parse * t) : name(n), type(), type_parse(t) {}
   };
   */
+
+  struct Top : public AST {
+    Top() : AST("top") {}
+    AST * part(unsigned i) {return stmts[i];}
+    Vector<AST *> stmts;
+    unsigned frame_size;
+    TypeSymbolTable * types;
+    VarSymbolTable * vars;
+    AST * parse_self(const Parse * p, ParseEnviron & env);
+    //void resolve(ResolveEnviron & env);
+    void eval(ExecEnviron & env);
+    void compile(CompileWriter & f, CompileEnviron & env);
+  };
  
   struct Block;
 
@@ -399,7 +424,7 @@ namespace AST {
 
  struct Fun : public Declaration {
     Fun() : Declaration("fun") {}
-    AST * part(unsigned i);
+    //AST * part(unsigned i);
     String name;
     Symbol * sym;
     const Tuple * parms;
@@ -416,7 +441,7 @@ namespace AST {
 
   struct Literal : public AST {
     Literal() : AST("literal") {}
-    AST * part(unsigned i);
+    //AST * part(unsigned i);
     //long long value;
     AST * parse_self(const Parse * p, ParseEnviron &);
     void resolve(ResolveEnviron & env);
@@ -450,6 +475,20 @@ namespace AST {
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
+  struct Empty : public AST {
+    Empty() : AST("empty") {}
+    AST * parse_self(const Parse * p, ParseEnviron & env) {
+      parse_ = p;
+      assert_num_args(0);
+      type = env.void_type();
+      return this;
+    }
+    void eval(ExecEnviron &) {}
+    void compile(CompileWriter & f, CompileEnviron &) {
+      // do absolutely nothing
+    }
+  };
+
   //
   //
   //
@@ -462,6 +501,11 @@ namespace AST {
   //int ct_value(const Parse * p, ParseEnviron &);
 
   AST * parse_top(const Parse * p);
+
+  AST * parse_top_level(const Parse * p, ParseEnviron & env);
+  AST * parse_member(const Parse * p, ParseEnviron & env);
+  AST * parse_stmt(const Parse * p, ParseEnviron & env);
+  AST * parse_stmt_decl(const Parse * p, ParseEnviron & env);
   AST * parse_exp(const Parse * p, ParseEnviron & env);
 
 }

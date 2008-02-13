@@ -2,6 +2,7 @@
 #include "parse_decl.hpp"
 #include "string_buf.hpp"
 #include "expand.hpp"
+#include "ast.hpp"
 
 // the ";" is just noise at this point and is NOT expected to be included
 
@@ -56,10 +57,10 @@ struct DeclWorking {
   enum What {VAR, TYPEDEF} what;
 
   bool try_storage_class(const Parse * p) {
-    if (p->name == "typedef") {
+    if (*p == "typedef") {
       what = TYPEDEF;
-    } else if (p->name == "extern" || p->name == "static" ||
-               p->name == "auto"   || p->name == "register") {
+    } else if (*p == "extern" || *p == "static" ||
+               *p == "auto"  || *p == "register") {
       what = VAR;
     } else {
       return false;
@@ -72,8 +73,8 @@ struct DeclWorking {
   SourceStr inner_type_str;
   enum Sign {NO_SIGN, UNSIGNED, SIGNED} sign;
   bool try_sign(const Parse * p) {
-    if      (p->name == "unsigned") set_sign(UNSIGNED);
-    else if (p->name == "signed")   set_sign(SIGNED);
+    if      (*p == "unsigned") set_sign(UNSIGNED);
+    else if (*p == "signed")   set_sign(SIGNED);
     else return false;
     inner_type_str.adj(p->str());
     return true;
@@ -84,10 +85,10 @@ struct DeclWorking {
   }
   enum Size {NO_SIZE, SHORT, LONG, LONG_LONG} size;
   bool try_size(const Parse * p) {
-    if (p->name == "short") {
+    if (*p == "short") {
       if (size != NO_SIZE) ignore();
       size = SHORT;
-    } else if (p->name == "long") {
+    } else if (*p == "long") {
       if      (size == NO_SIZE) size = LONG; 
       else if (size == LONG)    size = LONG_LONG;
       else ignore();
@@ -99,11 +100,11 @@ struct DeclWorking {
   }
   enum BaseType {NO_BT, VOID, CHAR, INT, FLOAT, DOUBLE} base_type;
   bool try_base_type(const Parse * p) {
-    if      (p->name == "void")      set_base_type(VOID);
-    else if (p->name == "char")      set_base_type(CHAR);
-    else if (p->name == "int")       set_base_type(INT);
-    else if (p->name == "float")     set_base_type(FLOAT);
-    else if (p->name == "double")    set_base_type(DOUBLE);
+    if      (*p == "void")      set_base_type(VOID);
+    else if (*p == "char")      set_base_type(CHAR);
+    else if (*p == "int")       set_base_type(INT);
+    else if (*p == "float")     set_base_type(FLOAT);
+    else if (*p == "double")    set_base_type(DOUBLE);
     else return false;
     inner_type_str.adj(p->str());
     return true;
@@ -116,7 +117,7 @@ struct DeclWorking {
 
   Flags qualifiers;
   bool try_qualifier(const Parse * p, Flags & qualifiers) {
-    if (p->name == "const" || p->name == "restrict" || p->name == "volatile") 
+    if (*p == "const" || *p == "restrict" || *p == "volatile") 
       qualifiers.insert(p);
     else return false;
     return true;
@@ -125,14 +126,14 @@ struct DeclWorking {
 
   const Parse * inline_;
   bool try_function_specifier(const Parse * p) {
-    if (p->name == "inline") inline_ = p;
+    if (*p == "inline") inline_ = p;
     else return false;
     return true;
   }
   String type_name;
   bool try_type_name(const Parse * p, ExpandEnviron & env) {
-    String name = p->name;
-    if (env.symbols->exists(name) && env.symbols->lookup(name) == TypeSym) {
+    String name = p->what_;
+    if (env.lookup_symbol(name) == ast::TypeSym) {
       if (base_type) ignore();
       type_name = name;
       return true;
@@ -141,7 +142,7 @@ struct DeclWorking {
     }
   }
   bool try_typeof(const Parse * p, ExpandEnviron &) {
-    if (p->name == ".typeof") {
+    if (*p == ".typeof") {
       inner_type = new Parse(p->part(0), p->arg(0));
       return true;
     } else {
@@ -187,7 +188,7 @@ DeclWorking::DeclWorking(Parts & p)
 // The real code....
 //
 
-const Parse * ParseDeclImpl::parse_decl(const Parse * p, struct ExpandEnviron & env)
+const Parse * ParseDeclImpl::parse_decl(const Parse * p, ExpandEnviron & env)
 {
   Parse * res = new Parse(new Parse("slist"));
 
@@ -233,7 +234,7 @@ const Parse * ParseDeclImpl::parse_decl(const Parse * p, struct ExpandEnviron & 
   return res;
 }
 
-const Parse * ParseDeclImpl::parse_type(const Parse * p, struct ExpandEnviron & env) {
+const Parse * ParseDeclImpl::parse_type(const Parse * p, ExpandEnviron & env) {
   Parts dummy;
   Parts::const_iterator i = p->args_begin();
   Parts::const_iterator end = p->args_end();
@@ -259,7 +260,7 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
     ++i;
   } else while (i != end) {
     const Parse * cur = *i;
-    if (cur->name == "id") {
+    if (cur->is_a("id")) {
       const Parse * p = cur->arg(0);
       bool any = 
         try_storage_class(p) ||
@@ -288,11 +289,11 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
 bool DeclWorking::try_struct_union(const Parse * p, ExpandEnviron & env) {
   const Parse * name = NULL;
   const Parse * body = NULL;
-  if (p->name == "struct" || p->name == "union") {
+  if (p->is_a("struct") || p->is_a("union")) {
     unsigned i = 0;
     if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
                                         "Expected indentifer or \"{\" after \"%s\".",
-                                        ~p->name);
+                                        ~p->what());
     name = p->arg(i);
     ++i;
     if (i == p->num_args()) goto finish;
@@ -302,7 +303,7 @@ bool DeclWorking::try_struct_union(const Parse * p, ExpandEnviron & env) {
     }
     if (i != p->num_args()) abort(); // internal error, should't happen
   finish:
-    if (name->name.empty())
+    if (name->what().empty())
       name = gen_sym();
     inner_type = new Parse(p->part(0), name);
     if (body) {
@@ -358,11 +359,11 @@ const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, ExpandEnvir
 bool DeclWorking::try_enum(const Parse * p, ExpandEnviron & env) {
   const Parse * name = NULL;
   const Parse * body = NULL;
-  if (p->name == "enum") {
+  if (p->is_a("enum")) {
     unsigned i = 0;
     if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
                                         "Expected indentifer or \"{\" after \"%s\".",
-                                        ~p->name);
+                                        ~p->what());
     name = p->arg(i);
     ++i;
     if (i == p->num_args()) goto finish;
@@ -372,7 +373,7 @@ bool DeclWorking::try_enum(const Parse * p, ExpandEnviron & env) {
     }
     if (i != p->num_args()) abort(); // internal error, should't happen
   finish:
-    if (name->name.empty())
+    if (name->what().empty())
       name = gen_sym();
     inner_type = new Parse(p->part(0), name);
     if (body) {

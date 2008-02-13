@@ -4,13 +4,14 @@
 #include <typeinfo>
 #include <stdint.h>
 
+#include "entity.hpp"
 #include "util.hpp"
 #include "symbol_table.hpp"
 #include "string_buf.hpp"
 
 struct Parse;
 
-namespace AST {
+namespace ast {
 
   // NOTE: In order to avoid expensive comparasions between types each
   // type object must only be allocated once, this way an cheap pointer
@@ -20,6 +21,7 @@ namespace AST {
   class TypeInst;
   typedef TypeInst Type;
   class Tuple;
+  struct Environ;
 
   struct AST;
 
@@ -153,10 +155,11 @@ namespace AST {
 
   class TypeInst;
   
-  class TypeSymbol : public gc_cleanup {
+  class TypeSymbol : public Entity {
   public:
     Parse * parse;
     String name;
+    String what() const {return name;}
     const PrintInst * print_inst;
     TypeSymbol() : parse(), print_inst(c_print_inst) {}
     virtual Type * inst(Vector<TypeParm> & d) const = 0;
@@ -174,8 +177,9 @@ namespace AST {
     return category_in(x->parent1, y);
   }
 
-  class TypeInst : public gc_cleanup {
+  class TypeInst : public Entity {
   public:
+    String what() const {return type_symbol->name;} 
     TypeCategory * category;
     const TypeSymbol * type_symbol;
     virtual unsigned size() const = 0;
@@ -403,8 +407,7 @@ namespace AST {
   //
   //
 
-  struct ParseEnviron;
-  Type * parse_type(TypeSymbolTable * types, const Parse * p, ParseEnviron & env);
+  Type * parse_type(const Parse * p, Environ & env);
 
   //
   //
@@ -631,7 +634,7 @@ namespace AST {
     unsigned align_;
     StructUnionT(String w, String n) 
       : TaggedType(w), name(n), size_(NPOS), align_(NPOS) {}
-    struct ParseEnviron * env;
+    Environ * env;
     unsigned size() const {return size_;}
     unsigned align() const {return align_;}
   };

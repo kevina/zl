@@ -38,7 +38,7 @@ public:
     }
     return *this;
   }
-  const bool operator[] (unsigned char c) const {return d[c];}
+  bool operator[] (unsigned char c) const {return d[c];}
 };
 
 static inline bool operator==(const CharSet & x, const CharSet & y) 

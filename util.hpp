@@ -2,6 +2,7 @@
 #define UTIL__HPP
 
 #include <assert.h>
+#include <stdlib.h>
 
 #include "gc.hpp"
 #include "vector.hpp"
@@ -48,8 +49,8 @@ public:
   const char * data() const {return d->str;}
   const char * pbegin() const {return d->str;}
   const char * pend()   const {return d->str + d->size;}
-  const char operator[] (unsigned sz) const {return d->str[sz];}
-  const char operator[] (int sz)      const {return d->str[sz];}
+  char operator[] (unsigned sz) const {return d->str[sz];}
+  char operator[] (int sz)      const {return d->str[sz];}
   operator const char * () const {return d->str;}
   const char * c_str() const {return d->str;}
   const char * operator~() const {return d->str;}
@@ -70,7 +71,7 @@ struct SubStr {
   void assign(const char * b, const char * e) {begin = b; end = e;}
   bool empty() const {return begin == end;}
   unsigned size() const {return end - begin;}
-  operator const char * const () const {return begin;}
+  operator const char * () {return begin;}
   SubStr & operator=(const char * s) {begin = s; return *this;}
 };
 

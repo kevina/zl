@@ -23,9 +23,7 @@
 //   (struct ID [BODY])
 //   (union ID [BODY])
 
-using namespace AST;
-
-enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4, StmtPos = 8, ExpPos = 16};
+using namespace ast;
 
 void assert_pos(const Parse * p, Position have, unsigned need);
 void assert_num_args(const Parse * p, unsigned num);
@@ -53,14 +51,14 @@ struct Map {
     entity = SourceEntity(p);
     parse = p;
     assert_num_args(p, 3);
-    name = p->arg(0)->name;
+    name = *p->arg(0);
     parms = p->arg(1);
     repl = p->arg(2);
     repl = change_src(repl->str(), repl);
     return this;
   }
   const Parse * change_src(SourceStr outer_str, const Parse * orig) {
-    Parse * res = new Parse(orig->name, orig->str_);
+    Parse * res = new Parse(orig->what(), orig->str());
     res->repl = orig->repl;
     SourceStr orig_str = orig->str();
     if (orig_str.source == outer_str.source && 
@@ -85,14 +83,14 @@ struct Map {
     ReplTable * rparms = new ReplTable;
     int i = 0;
     for (; i != parms->num_parts(); ++i) {
-      if (parms->part(i)->num_args() > 0) {
+      const Parse * mp = parms->part(i);
+      if (mp->num_args() > 0) {
         const Parse * sp = p->arg(i + shift);
-        assert(parms->part(i)->name == sp->name);
-        const Parse * mp = parms->part(i);
+        assert(mp->what() == sp->what());
         for (int j = 0; j != mp->num_args(); ++j) {
-          rparms->insert(mp->arg(j)->name, sp->arg(j));
+          rparms->insert(*mp->arg(j), sp->arg(j));
         }
-      } else if (parms->part(i)->name == "...") {
+      } else if (mp->is_a("...")) {
         Parse * p2 = new Parse(new Parse("..."));
         for (; i != p->num_args(); ++i) {
           p2->add_part(p->arg(i + shift));
@@ -100,13 +98,13 @@ struct Map {
         rparms->insert("...", p2);
         break;
       }
-      rparms->insert(parms->part(i)->name, p->arg(i + shift));
+      rparms->insert(mp->what(), p->arg(i + shift));
     }
     //printf(">>TO EXPAND %s\n", ~name);
     //repl->print();
     //printf("\n");
     const Parse * res;
-    if (repl->name == "{}") {
+    if (repl->is_a("{}")) {
       res = reparse("STMTS", repl->arg(0), rparms);
       if (res->num_args() == 1)
 	res = res->arg(0);
@@ -122,7 +120,7 @@ struct Map {
 };
 
 const Parse * reparse(String what, const Parse * p, ReplTable * r) {
-  Replacements * repls = combine_repl(p->repl, r);
+  const Replacements * repls = combine_repl(p->repl, r);
   const Parse * res = parse_str(what, p->str(), repls);
   //printf("PARSED STRING\n");
   //res->print();
@@ -146,25 +144,26 @@ const Parse * reparse(String what, const Parse * p, ReplTable * r) {
 
 const Parse * replace(const Parse * p, ReplTable * r) {
   if (p->simple()) {
-    if (p->name.size() > 2 && p->name[0] == '`' && p->name[1] == '`') {
+    String s = *p;
+    if (s.size() > 2 && s[0] == '`' && s[1] == '`') {
       // strip one `
-      return new Parse(~p->name + 1, p->str_, p->str_.begin + 1, p->str_.end);
-    } else if (p->name.size() > 1 && p->name[0] == '`') {
-      if (!r->have(p->name))
-        r->insert(p->name, new Parse(gen_sym(), p->str_));
-      return r->lookup(p->name);
-    } else if (r->have(p->name)) {
-      return r->lookup(p->name);
+      return new Parse(~s + 1, p->str_, p->str_.begin + 1, p->str_.end);
+    } else if (s.size() > 1 && s[0] == '`') {
+      if (!r->have(s))
+        r->insert(s, new Parse(gen_sym(), p->str_));
+      return r->lookup(s);
+    } else if (r->have(s)) {
+      return r->lookup(s);
     } else {
       return p;
     }
-  } else if (p->name == "id" && p->arg(0)->name[0] != '`' && r->have(p->arg(0)->name)) {
-    return r->lookup(p->arg(0)->name); 
-  } else if (p->name == "mid") {
-    const Parse * p0 = r->lookup(p->arg(0)->name);
+  } else if (p->is_a("id") && ((String)*p->arg(0))[0] != '`' && r->have(*p->arg(0))) {
+    return r->lookup(*p->arg(0)); 
+  } else if (p->is_a("mid")) {
+    const Parse * p0 = r->lookup(*p->arg(0));
     if (p0) {
-      if (p0->name == "parm") {
-        String what = p->arg(1)->name;
+      if (p0->is_a("parm")) {
+        String what = *p->arg(1);
         if (what == "TOKEN" || what == "EXP" || what == "STMT")
           what = "PARM";
         p0 = reparse(what, p0->arg(0));
@@ -173,9 +172,9 @@ const Parse * replace(const Parse * p, ReplTable * r) {
     } else {
       return p;
     }
-  } else if (p->name == "string" || p->name == "char" || p->name == "literal" || p->name == "float" || p->name == "sym") {
+  } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
     return p;
-  } else if (p->name == "{}" || p->name == "()" || p->name == "[]" || p->name == "parm") {
+  } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("parm")) {
     // raw tokens
     assert(p->num_args() == 1);
     assert(p->arg(0)->simple());
@@ -190,7 +189,7 @@ const Parse * replace(const Parse * p, ReplTable * r) {
     Parse * res = new Parse(p->str());
     for (unsigned i = 0; i != p->num_parts(); ++i) {
       const Parse * q = replace(p->part(i), r);
-      if (q->name == "...") {
+      if (q->is_a("...")) {
         for (unsigned j = 0; j != q->num_args(); ++j)
           res->add_part(q->arg(j));
       } else {
@@ -224,24 +223,17 @@ struct BuildIn {
 }
 */
 
-const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env);
-const Parse * expand_parts(const Parse * p, Position pos, ExpandEnviron & env);
-const Parse * expand_fun_parms(const Parse * parse, ExpandEnviron & env);
-const Parse * expand_enum_body(const Parse * parse, ExpandEnviron & env);
 const Parse * expand_call_parms(const Parse * parse, ExpandEnviron & env);
-const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env);
-const Parse * expand_type(const Parse * p, ExpandEnviron & env);
 
-
-const Parse * expand_top(const Parse * p) {
+AST * expand_top(const Parse * p) {
   ExpandEnviron env;
-  assert(p->name == "top"); // FIXME Error
-  return expand_args(p, TopLevel, env);
+  assert(p->is_a("top")); // FIXME Error
+  return (new Top())->parse_self(p, env);
 }
 
-const Parse * read_macro(const Parse * p) {
+void read_macro(const Parse * p) {
   ExpandEnviron env;
-  return expand(p, TopLevel, env);
+  expand(p, TopLevel, env);
 }
 
 const Parse * ID = new Parse("id");
@@ -265,205 +257,100 @@ const Parse * handle_paran(const Parse * p, ExpandEnviron & env) {
   }
 }
 
-const Parse * parse_exp(const Parse * p, ExpandEnviron & env) {
+const Parse * e_parse_exp(const Parse * p, ExpandEnviron & env) {
   Parse * tmp = new Parse("exp");
   for (unsigned i = 0; i != p->num_args(); ++i) {
     const Parse * t = p->arg(i);
-    if (t->name == "()") t = handle_paran(t, env);
+    if (t->is_a("()")) t = handle_paran(t, env);
     tmp->add_part(t);
   }
   const Parse * res = parse_exp_->parse(tmp);
   return res;
 }
 
-const Parse * expand(const Parse * p, Position pos, ExpandEnviron & env) {
-  String name = p->name;
-  //printf("\n>expand>%s//\n", ~name);
+AST * expand(const Parse * p, Position pos, ExpandEnviron & env) {
+  if (p->entity()) {
+    AST * ast = dynamic_cast<AST *>(p->entity());
+    assert(ast); // FIXME Error message
+    return ast;
+  }
+  String what = p->what();
+  //printf("\n>expand>%s//\n", ~what);
   //p->print();
   //printf("\n////\n");
   if (p->simple()) {
     abort(); // FIXME: Error Message
-  } else if (name == "{}") {
+  } else if (what == "{}") {
     return expand(reparse("BLOCK", p), pos, env);
-  } else if (name == "()") {
+  } else if (what == "()") {
     return expand(reparse("PARAN_EXP", p), pos, env);
-  } else if (name == "[]") {
+  } else if (what == "[]") {
     return expand(reparse("EXP", p->arg(0)), pos, env);
-  } else if (syntax_maps.exists(name)) { // syntax macros
-    p = syntax_maps.lookup(p->name)->expand(p, pos, env);
+  } else if (syntax_maps.exists(what)) { // syntax macros
+    p = syntax_maps.lookup(what)->expand(p, pos, env);
     return expand(p, pos, env);
-  } else if (name == "id") {
-    //name = p->arg(0)->name;
-    //if (maps.exists(name) && !env.symbols->exists(name)) { // identifier macros
-    //  p = maps.lookup(name)->expand(p, pos, env);
-    //  return expand(p, pos, env);
-    //} else {
-    return p;
-    //}
-  } else if (name == "sym" || name == "string" || name == "char" || name == "literal" || name == "float") { // simple tokens
-    return p;
-  } else if (name == "call") { 
+  } else if (what == "call") { 
     assert_num_args(p, 2);
-    const Parse * n = expand(p->arg(0), OtherPos, env);
+    const Parse * n = p->arg(0); // FIXME: Need to "partly expand"
     // The parms might already be parsed as something else,
     // the parameters are just a list of tokens at this point,
     // we need to turn them into a proper list
     const Parse * a = reparse("SPLIT", p->arg(1)->arg(0));
-    if (n->name == "id" && maps.exists(n->arg(0)->name) && !env.symbols->exists(n->arg(0)->name)) { // function macros
+    if (n && n->is_a("id") && maps.exists(*n->arg(0)) && !env.symbol_exists(*n->arg(0))) { // function macros
       //  (call (id fun) (list parm1 parm2 ...))?
-      p = maps.lookup(n->arg(0)->name)->expand(a, pos, env);
+      p = maps.lookup(*n->arg(0))->expand(a, pos, env);
       return expand(p, pos, env);
     } else {
       Parse * res = new Parse(p->str(), p->part(0));
-      res->add_part(n);
+      res->add_part(p->arg(0));
       res->add_part(expand_call_parms(a, env));
-      return res;
+      return parse_exp(res, env);
     }
-  } else if (name == "stmt") {
-    assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
-    const Parse * res = parse_decl_->parse_decl(p, env);
-    if (!res)
-      res = parse_exp(p, env);
-    return expand(res, pos, env);
-  } else if (name == "exp") {
-    assert_pos(p, pos, ExpPos);
-    p = parse_exp(p, env);
-    return expand(p, pos, env);
-  } else if (name == "slist") {
-    return expand_args(p, pos, env);
-  } else if (name == "block") {
-    assert_pos(p, pos, StmtPos);
-    ExpandEnviron new_env = env.new_scope();
-    return expand_args(p, StmtPos, new_env);
-  } else if (name == "eblock") {
-    assert_pos(p, pos, StmtPos | ExpPos);
-    ExpandEnviron new_env = env.new_scope();
-    return expand_args(p, StmtPos, new_env);
-  } else if (name == "if") {
-    assert_pos(p, pos, StmtPos);
-    assert_num_args(p, 2, 3);
-    Parse * res = new Parse(p->str(), p->part(0));
-    res->add_part(expand(p->arg(0), ExpPos, env));
-    res->add_part(expand(p->arg(1), StmtPos, env));
-    if (p->num_args() == 3) 
-      res->add_part(expand(p->arg(2), StmtPos, env));
-    return res;
-  } else if (name == "switch") {
-    assert_pos(p, pos, StmtPos);
-    assert_num_args(p, 2);
-    Parse * res = new Parse(p->str(), p->part(0));
-    res->add_part(expand(p->arg(0), ExpPos, env));
-    res->add_part(expand(p->arg(1), StmtPos, env));
-    return res;
-  } else if (name == "loop") {
-    assert_pos(p, pos, StmtPos);
-    assert_num_args(p, 1);
-    return new Parse(p->str(), p->part(0), expand(p->arg(0), StmtPos, env));
-  } else if (name == "smap" || name == "map") {
+  } else if (what == "smap" || what == "map") {
     assert_pos(p, pos, TopLevel);
     Map * m = new Map;
     m->parse_self(p);
-    if (name == "smap") 
+    if (what == "smap") 
       syntax_maps.add(m->name, m);
     else
       maps.add(m->name, m);
-    return p;
-  } else if (name == "lcstmt" || name == "lstmt") {
-    assert_pos(p, pos, StmtPos);
-    assert_num_args(p, 2, 2);
-    Parse * res = new Parse(p->str(), p->part(0));
-    res->add_part(expand(p->arg(0), OtherPos, env));
-    res->add_part(expand(p->arg(1), StmtPos, env));
-    return res;
-  } else if (name == "label" || name == "local") {
-    return p; // don't expand label name
-  } else if (name == "var") {
-    assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
-    assert_num_args(p, 2, 3);
-    env.symbols->add(p->arg(0)->name, VarSym);
-    Parse * res = new Parse(p->str(), p->part(0), p->arg(0));
-    res->set_flags(p);
-    res->add_part(expand_type(p->arg(1), env));
-    if (p->num_args() > 2)
-      res->add_part(expand(p->arg(2), ExpPos, env));
-    return res;
-  } else if (name == "talias") {
-    assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
-    assert_num_args(p, 2);
-    env.symbols->root->add(p->arg(0)->name, TypeSym);
-    return new Parse(p->str(), p->part(0), p->arg(0), expand_type(p->arg(1), env));
-  } else if (name == "fun") {
-    assert_pos(p, pos, TopLevel);
-    assert_num_args(p, 3, 4);
-    env.symbols->root->add(p->arg(0)->name, VarSym);
-    const Parse * parms = expand_fun_parms(p->arg(1), env);
-    const Parse * ret = expand_type(p->arg(2), env);
-    const Parse * body = 0;
-    if (p->num_args() > 3) {
-      ExpandEnviron new_env = env.new_scope();
-      for (unsigned i = 0; i != parms->num_args(); ++i) {
-        const Parse * parm = parms->arg(i);
-        if (parm->num_parts() == 2) 
-          new_env.symbols->add(parm->part(1)->name, VarSym);
-      }
-      body = expand(p->arg(3), StmtPos, new_env);
-    }
-    Parse * res = new Parse(p->part(0), p->arg(0), parms, ret);
-    res->set_flags(p);
-    if (body) res->add_part(body);
-    return res;
-  } else if (name == "struct" || name == "union") { 
-    assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
-    assert_num_args(p, 2);
-    Parse * res = new Parse(p->str(), p->part(0), p->arg(0));
-    res->set_flags(p);
-    res->add_part(expand_parts(p->arg(1), FieldPos, env));
-    return res;
-  } else if (name == "enum") {
-    assert_pos(p, pos, TopLevel|FieldPos|StmtPos);
-    assert_num_args(p, 2);
-    Parse * res = new Parse(p->str(), p->part(0), p->arg(0));
-    res->set_flags(p);
-    res->add_part(expand_enum_body(p->arg(1), env));
-    return res;
-  } else if (name == "sizeof") {
+    return new Empty();
+  } else if (what == "stmt") {
+    assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
+    const Parse * res = parse_decl_->parse_decl(p, env);
+    if (!res)
+      res = e_parse_exp(p, env);
+    return expand(res, pos, env);
+  } else if (what == "exp") {
     assert_pos(p, pos, ExpPos);
-    assert_num_args(p, 1);
-    if (p->arg(0)->name == "(type)") {
-      const Parse * type = expand_type(p->arg(0)->arg(0), env);
-      return new Parse(p->part(0), type);
-    } else {
-      const Parse * exp = expand(p->arg(0), ExpPos, env);
-      return new Parse(p->part(0), new Parse(new Parse(".typeof"), exp));
-    }
-  } else if (name == "cast") {
-    assert_pos(p, pos, ExpPos);
-    assert_num_args(p, 2);
-    const Parse * type = p->arg(0);
-    const Parse * exp  = p->arg(1);
-    if (type->name == "(type)") type = type->arg(0);
-    type = expand_type(type, env);
-    exp = expand(exp, ExpPos, env);
-    return new Parse(new Parse("cast"), type, exp);
-    return p;
+    p = e_parse_exp(p, env);
+    return expand(p, pos, env);
   } else {
-    return expand_args(p, ExpPos, env);
+    // we should have a primitive
+    switch (pos) {
+    case TopLevel:
+      return parse_top_level(p, env);
+    case FieldPos:
+      return parse_member(p, env);
+    case StmtDeclPos:
+      return parse_stmt_decl(p, env);
+    case StmtPos:
+      return parse_stmt(p, env);
+    case ExpPos:
+      return parse_exp(p, env);
+    default:
+      abort();
+    }
   }
 }
 
-const Parse * expand_type(const Parse * p, ExpandEnviron & env) {
-  if (p->name == ".typeof") {
-    return new Parse(p->str(), p->part(0), expand(p->arg(0), ExpPos, env));
-  } else if (p->name == ".array") {
-    return new Parse(p->str(), p->part(0), expand_type(p->arg(0), env), expand(p->arg(1), ExpPos, env));
-  } else {
-    Parse * res = new Parse(p->str(), p->part(0));
-    res->set_flags(p);
-    for (unsigned i = 0; i != p->num_args(); ++i) {
-      res->add_part(expand_type(p->arg(i), env));
-    }
-    return res;
+Type * expand_type(const Parse * p, ExpandEnviron & env) {
+  if (p->entity()) {
+    Type * type = dynamic_cast<Type *>(p->entity());
+    assert(type);
+    return type;
   }
+  return parse_type(p, env);
 }
 
 void assert_pos(const Parse * p, Position have, unsigned need) {
@@ -474,39 +361,34 @@ void assert_pos(const Parse * p, Position have, unsigned need) {
 
 void assert_num_args(const Parse * p, unsigned num) {
   if (p->num_args() != num)
-    throw error(p, "Expected %d arguments but got %d for \"%s\"", num, p->num_args(), ~p->name);
+    throw error(p, "Expected %d arguments but got %d for \"%s\"", num, p->num_args(), ~p->what());
 }
 
 void assert_num_args(const Parse * p, unsigned min, unsigned max) {
   if (p->num_args() < min)
-    throw error(p, "Expected at least %d arguments but got %d for \"%s\"", min, p->num_args(), ~p->name);
+    throw error(p, "Expected at least %d arguments but got %d for \"%s\"", min, p->num_args(), ~p->what());
   if (p->num_args() > max)
-    throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->name);
+    throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->what());
 }
 
-const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env) {
-  Parse * res = new Parse(p->str(), p->part(0));
+const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env, Parse * res) {
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_args(); ++i) {
-    res->add_part(expand(p->arg(i), pos, env));
+    // FIXME need to partly expand it first
+    if (p->arg(i)->is_a("list")) {
+      expand_args(p->arg(i), pos, env, res);
+    } else {
+      res->add_part(new Parse(expand(p->arg(i), pos, env))); // FIXME: maybe partial expand only?
+    }
   }
   return res;
 }
 
-const Parse * expand_parts(const Parse * p, Position pos, ExpandEnviron & env) {
-  Parse * res = new Parse(p->str());
-  res->set_flags(p);
-  for (unsigned i = 0; i != p->num_parts(); ++i) {
-    res->add_part(expand(p->part(i), pos, env));
-  }
-  return res;
-}
-
-const Parse * expand_fun_parms(const Parse * parse, ExpandEnviron & env) {
+Tuple * expand_fun_parms(const Parse * parse, ExpandEnviron & env) {
   Parse * res = new Parse(parse->part(0));
   for (unsigned i = 0; i != parse->num_args(); ++i) {
     const Parse * p = parse->arg(i);
-    if (p->name != "...") {
+    if (!p->is_a("...")) {
       Parse * r = new Parse(expand_type(p->part(0), env));
       if (p->num_parts() == 2) 
 	r->add_part(p->part(1));
@@ -515,32 +397,22 @@ const Parse * expand_fun_parms(const Parse * parse, ExpandEnviron & env) {
       res->add_part(p);
     }
   }
-  return res;
-}
-
-const Parse * expand_enum_body(const Parse * parse, ExpandEnviron & env) {
-  Parse * res = new Parse(parse->part(0));
-  for (unsigned i = 0; i != parse->num_args(); ++i) {
-    const Parse * p = parse->arg(i);
-    if (p->num_parts() == 1) {
-      res->add_part(p);
-    } else {
-      res->add_part(new Parse(p->part(0), expand(p->part(1), ExpPos, env)));
-    }
-  }
-  return res;
+  Type * type = expand_type(res, env);
+  Tuple * tuple = dynamic_cast<Tuple *>(type);
+  assert(tuple); // FIXME: Error Message?
+  return tuple;
 }
 
 const Parse * expand_call_parms(const Parse * p, ExpandEnviron & env) {
-  if (p->name == "list")
-    return expand_args(p, ExpPos, env);
-  assert(p->name == "(,)");
+  if (p->is_a("list"))
+    return expand_args(p, ExpPos, env, new Parse(p->str(), p->part(0)));
+  assert(p->is_a("(,)"));
   
   Parse * res = new Parse(p->str(), new Parse("list"));
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_args(); ++i) {
     const Parse * q = reparse("EXP", p->arg(i));
-    res->add_part(expand(q, ExpPos, env));
+    res->add_part(new Parse(expand(q, ExpPos, env)));
   }
   return res;
 }

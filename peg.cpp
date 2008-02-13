@@ -160,7 +160,7 @@ public:
 private:
   void parse_name() {
     if (!name) return;
-    const char * s = ~name->name;
+    const char * s = ~*name;
     const char * e = first_space(s);
     if (s[0] != '%' && !*e) {
       name = new Parse(parse_common::unescape(s, e, '"')); // FIXME: Add source info
@@ -172,7 +172,7 @@ private:
     for (;;) {
       Parm p;
       p.name = new Parse(parse_common::unescape(s, e, '"')); // FIXME: Add source info
-      String n = p.name->name;
+      String n = ~*p.name;
       if (n == "...") {
         assert(dots == NPOS); // FIXME: Error message
         dots = i;
@@ -475,7 +475,7 @@ public:
     const char * r = prod->match(str, &prts, errs);
     if (r == FAIL) return r;
     assert(prts.size() == 1);
-    if (mids && mids->anywhere(prts[0]->arg(0)->name) > 0) {
+    if (mids && mids->anywhere(*prts[0]->arg(0)) > 0) {
       Parse * p = new Parse(prts[0]->str(), prts[0]->part(0), prts[0]->arg(0), new Parse(in_named_prod));
       if (res) res->append(p);
       return r;
@@ -567,7 +567,7 @@ const Parse * parse_str(String what, SourceStr str, const Replacements * repls) 
     //dummy.print();
     //printf("\n");
   } else {
-    printf("FAIL\n");
+    //printf("FAIL\n");
     throw errors.to_error(str.source->file_, file);
   }
   return dummy[0];

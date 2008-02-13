@@ -2,7 +2,7 @@
 #include "parse.hpp"
 #include "ast.hpp"
 
-namespace AST {
+namespace ast {
 
   static TypeCategory ANY_C_OBJ("any", 0);
   static TypeCategory SCALAR_C_OBJ("scalar", ANY_C);
@@ -195,10 +195,11 @@ namespace AST {
   inline TypeOf::TypeOf(AST * a) 
     : SimpleTypeInst(a->type), of_ast(a), of(a->type) {type_symbol = of->type_symbol;}
 
-  Type * parse_type(TypeSymbolTable * types, const Parse * p, ParseEnviron & env) {
+  Type * parse_type(const Parse * p, Environ & env) {
+    TypeSymbolTable * types = env.types;
     unsigned sz = p->num_args();
     const NameSpace * ns = DEFAULT_NS;
-    String name = p->name;
+    String name = p->what();
     String full_name = name;
     String tag;
     if (name == "struct" || name == "union" || name == "enum") {
@@ -206,14 +207,14 @@ namespace AST {
       assert(sz == 1);
       // FIXME: Add check for wrong type of tag
       ns = TAG_NS;
-      name = p->arg(0)->name;
+      name = *p->arg(0);
       StringBuf buf;
-      buf << p->name << " " << p->arg(0)->name;
+      buf << p->what() << " " << p->arg(0)->what();
       full_name = buf.freeze();
       --sz;
     }
     if (name == ".typeof") {
-      AST * ast = parse_exp(p->arg(0), env);
+      AST * ast = expand_exp(p->arg(0), env);
       Type * t = new TypeOf(ast);
       t->finalize();
       return t;
@@ -245,27 +246,27 @@ namespace AST {
       String n;
       if (name == ".tuple" && !p0->part(0)->simple()) { // HACK!
 	if (p0->num_parts() > 1)
-	  n = p0->part(1)->name;
+	  n = *p0->part(1);
 	p0 = p0->part(0);
       }
       switch(t->parm(i)) {
       case TypeParm::TYPE: {
-	if (p0->name == "...") {
+	if (*p0 == "...") {
 	  parms.push_back(TypeParm::dots());
 	} else {
-	  Type * t0 = parse_type(types, p0, env);
+	  Type * t0 = expand_type(p0, env);
 	  parms.push_back(TypeParm(t0, n));
 	}
         break;
       }
       case TypeParm::INT: {
-        AST * exp = parse_exp(p0, env);
+        AST * exp = expand_exp(p0, env);
         resolve_to(env, exp, types->inst("int"));
         parms.push_back(TypeParm(exp->ct_value<int>()));
         break;
       }
       case TypeParm::TUPLE: {
-        Type * t0 = parse_type(types, p0, env);
+        Type * t0 = expand_type(p0, env);
         Tuple * tt = dynamic_cast<Tuple *>(t0);
         if (!tt)
           throw error(p0, "Expected Tuple Type");
@@ -273,7 +274,7 @@ namespace AST {
         break;
       }
       case TypeParm::EXP: {
-        AST * exp = parse_exp(p0, env);
+        AST * exp = expand_exp(p0, env);
         parms.push_back(TypeParm(exp));
         break;
       }
@@ -513,7 +514,7 @@ namespace AST {
   }
 }
 
-namespace AST {
+namespace ast {
 
   struct IntMap {
     String c_type;

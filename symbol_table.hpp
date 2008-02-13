@@ -4,7 +4,9 @@
 #include <utility>
 #include "hash.hpp"
 
-namespace AST {
+struct Parse;
+
+namespace ast {
 
   struct NameSpace {
     String name;
@@ -19,8 +21,13 @@ namespace AST {
     SymbolKey() : Base() {}
     SymbolKey(String n) : Base(DEFAULT_NS, n) {}
     SymbolKey(const char * n) : Base(DEFAULT_NS, n) {}
+    inline SymbolKey(const Parse & p); 
     SymbolKey(const NameSpace * ns, String n) : Base(ns, n) {}
   };
+
+#ifdef PARSE__HPP
+  inline SymbolKey::SymbolKey(const Parse & p) : Base(DEFAULT_NS, p) {}
+#endif
 
   template <typename V>
   class SymbolTable : public gc_cleanup
@@ -77,8 +84,8 @@ namespace AST {
 
 }
 
-template <> struct hash<AST::SymbolKey>   {
-  unsigned long operator()(const AST::SymbolKey & k) const {
+template <> struct hash<ast::SymbolKey>   {
+  unsigned long operator()(const ast::SymbolKey & k) const {
     return ((unsigned long)k.first) ^ hash<String>()(k.second);
   }
 };

@@ -1,13 +1,15 @@
 #ifndef PARSE_COMMON__HPP
 #define PARSE_COMMON__HPP
 
+#include "asc_ctype.hpp"
+
 // defined in parse.cpp
 
 namespace parse_common {
 
   static inline const char * spacing(const char * str, const char * end) {
     while (str != end) {
-      if (isspace(*str)) ++str;
+      if (asc_isspace(*str)) ++str;
       else if (*str == '#') {++str; while (str != end && *str != '\n') ++str;}
       else break;
     }
@@ -20,7 +22,7 @@ namespace parse_common {
 
   const char * id(const char * str, const char * end, String & res);
  
-  const char * quote(char close, const char * str, const char * end, SubStr & str);
+  const char * quote(char close, const char * str, const char * end, SubStr &);
 
   void unescape(const char *, const char *, StringBuf & out, char quote = '\0');
   static inline String unescape(const char * b, const char * e, char quote = '\0') {

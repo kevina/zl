@@ -43,11 +43,11 @@ template <> struct hash<OpKey> {
 struct MatchOp : public OpKey {
   bool capture_op_itself() const {return symbol.empty();}
   void parse_match_op(const Parse * p) {
-    if (p->name == "category") {
-      category = p->arg(0)->name;
+    if (p->is_a("category")) {
+      category = *p->arg(0);
     } else {
-      category = p->name;
-      symbol = p->arg(0)->name;
+      category = p->what();
+      symbol = *p->arg(0);
     }
   }
 };
@@ -59,20 +59,20 @@ struct OpCommon : public MatchOp {
   const Parse * parse;
   bool capture_op_itself() const {return symbol.empty();}
   virtual void parse_self(const Parse * p) {
-    if (p->name == "bin")
+    if (p->is_a("bin"))
       type = Bin;
-    else if (p->name == "prefix")
+    else if (p->is_a("prefix"))
       type = Prefix;
-    else if (p->name == "postfix")
+    else if (p->is_a("postfix"))
       type = Postfix;
-    else if (p->name == "exp")
+    else if (p->is_a("exp"))
       type = Other;
-    else if (p->name == "special")
+    else if (p->is_a("special"))
       type = Special;
     else
       abort();
-    parse = p->arg(0);
-    name = parse->name;
+    parse = p->arg(0);           ;
+    name = parse->what();
     parse_match_op(p->arg(1));
   }
   virtual ~OpCommon() {}
@@ -100,10 +100,11 @@ struct SpecialOp : public OpCommon {
     Parts working;
     Vector<MatchOp>::const_iterator j = rest.begin(), e = rest.end();
     for (; j != e && i != end; ++j, ++i) {
-      if (j->category == (*i)->name) {
+      const Parse * p = *i;
+      if (p->is_a(j->category)) {
         if (j->symbol.empty()) {
-          working.push_back(*i);
-        } else if (j->symbol != (*i)->arg(0)->name) {
+          working.push_back(p);
+        } else if (*p->arg(0) == ~j->symbol) {
           return NULL;
         }
       } else {
@@ -131,18 +132,18 @@ struct Ops : public gc_cleanup {
   }
   void parse_group(const Parse * p, unsigned level) {
     Assoc assoc;
-    if (p->name == "none")
+    if (p->is_a("none"))
       assoc = None;
-    else if (p->name == "left")
+    else if (p->is_a("left"))
       assoc = Left;
-    else if (p->name == "right")
+    else if (p->is_a("right"))
       assoc = Right;
-    else if (p->name == "list")
+    else if (p->is_a("list"))
       assoc = List;
     else
       abort();
     for (int i = 0; i != p->num_args(); ++i) {
-      if (p->arg(i)->name == "special") {
+      if (p->arg(i)->is_a("special")) {
         SpecialOp * op = new SpecialOp;
         op->parse_self(p->arg(i));
         lookup_.insert(pair<OpKey,OpCommon *>(*op,op));      
@@ -167,9 +168,9 @@ struct Ops : public gc_cleanup {
   Op::Types lookup_types(const Parse * p) const {
     Op::Types res = 0;
     if (p->num_args() > 0)
-      res = i_lookup_types(res, OpKey(p->name, p->arg(0)->name), p);
+      res = i_lookup_types(res, OpKey(p->what(), p->arg(0)->what()), p);
     if (res == 0)
-      res = i_lookup_types(res, OpKey(p->name), p);
+      res = i_lookup_types(res, OpKey(p->what()), p);
     if (res == 0) 
       res = Op::Other;
     return res;
@@ -191,9 +192,9 @@ struct Ops : public gc_cleanup {
   const Op * lookup(const Parse * p, int type) const {
     const Op * op = 0;
     if (p->num_args() > 0)
-      op = i_lookup(OpKey(p->name, p->arg(0)->name), type, p);
+      op = i_lookup(OpKey(p->what(), p->arg(0)->what()), type, p);
     if (op == 0)
-      op = i_lookup(OpKey(p->name), type, p);
+      op = i_lookup(OpKey(p->what()), type, p);
     if (op == 0)
       op = &generic;
     return op;
@@ -215,9 +216,9 @@ struct Ops : public gc_cleanup {
   const Parse * try_special(const Parse * p, Parts::const_iterator & i, Parts::const_iterator e) {
     const Parse * res = NULL;
     if (p->num_args() > 0)
-      res = i_try_special(OpKey(p->name, p->arg(0)->name), i, e);
+      res = i_try_special(OpKey(p->what(), p->arg(0)->what()), i, e);
     if (res == 0)
-      res = i_try_special(OpKey(p->name), i, e);
+      res = i_try_special(OpKey(p->what()), i, e);
     return res;
   }
 };

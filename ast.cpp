@@ -7,13 +7,14 @@
 #include "parse.hpp"
 #include "parse_op.hpp"
 #include "parse_decl.hpp"
+#include "expand.hpp"
 
 #include "hash-t.hpp"
 
 // each AST node pushes the result on the top of the stack
 //   unless the type is void
 
-namespace AST {
+namespace ast {
 
   typedef int target_bool;
   typedef int target_int;
@@ -26,13 +27,15 @@ namespace AST {
   template <typename T>
   void add_ast_nodes(T & container, AST * node);
 
+#if 0
   void AST::print() {
-    printf(" (%s", name_.c_str());
+    printf(" (%s", what().c_str());
     for (int i = 0; i != parse_->num_args(); ++i) {
       part(i)->print();
     }
     printf(")");
   }
+#endif
 
   struct CT_Value_Map {
     String type;
@@ -90,11 +93,9 @@ namespace AST {
     return op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
-  AST * parse_top_level(const Parse * p, ParseEnviron & env);
-  AST * parse_member(const Parse * p, ParseEnviron & env);
-  AST * parse_stmt(const Parse * p, ParseEnviron & env);
-  AST * parse_stmt_decl(const Parse * p, ParseEnviron & env);
-  AST * parse_exp(const Parse * p, ParseEnviron & env);
+  const Type * expand_type(TypeSymbolTable * types, const Parse * p, ParseEnviron & env) {
+    return expand_type(p, env);
+  }
 
   struct NoOp : public AST {
     NoOp() : AST("noop") {}
@@ -110,22 +111,8 @@ namespace AST {
     }
   };
 
-  struct Empty : public AST {
-    Empty() : AST("empty") {}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
-      parse_ = p;
-      assert_num_args(0);
-      type = env.void_type();
-      return this;
-    }
-    void eval(ExecEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
-      // do absolutely nothing
-    }
-  };
-
   struct Terminal : public AST {
-    Terminal(const Parse * p) : AST(p->name, p) {}
+    Terminal(const Parse * p) : AST(p->what(), p) {}
     AST * parse_self(const Parse * p, ParseEnviron & env) {abort();}
     void eval(ExecEnviron & env) {abort();}
     void compile(CompileWriter & f, CompileEnviron &) {abort();}
@@ -134,13 +121,14 @@ namespace AST {
   struct Generic : public AST {
     Vector<AST *> parts;
     Generic(const Parse * p) 
-      : AST(p->name, p) {
+      : AST(p->what(), p) {
       for (int i = 0; i != p->num_args(); ++i)
-        parts.push_back(new Terminal(p->arg(i)));
+        abort();
+        //parts.push_back(new Terminal(p->arg(i)));
     }
     Generic(const Parse * p, const Vector<AST *> & pts) 
-      : AST(p->name, p), parts(pts) {}
-    AST * part(unsigned i) {return parts[i];}
+      : AST(p->what(), p), parts(pts) {}
+    //AST * part(unsigned i) {return parts[i];}
     AST * parse_self(const Parse*, ParseEnviron&) {abort();}
     void eval(ExecEnviron & env) {abort();}
     void compile(CompileWriter & f, CompileEnviron &) {abort();}
@@ -154,14 +142,15 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2);
-      label = p->arg(0)->arg(0)->name;
-      if (p->arg(0)->name == "local") {
+      const Parse * arg0 = p->arg(0);
+      label = *arg0->arg(0);
+      if (arg0->is_a("local")) {
         env.labels->add(label, label);
         local = true;
       } else {
         env.labels->root->add(label, label);
       }
-      stmt = parse_stmt(p->arg(1), env);
+      stmt = expand_stmt(p->arg(1), env);
       type = stmt->type;
       return this;
     }
@@ -181,11 +170,11 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2);
-      if (p->arg(0)->name == "case") {
-        exp = parse_exp(p->arg(0)->arg(0), env);
+      if (p->arg(0)->is_a("case")) {
+        exp = expand_exp(p->arg(0)->arg(0), env);
       } else /* default */ {
       }
-      stmt = parse_stmt(p->arg(1), env);
+      stmt = expand_stmt(p->arg(1), env);
       type = stmt->type;
       return this;
     }
@@ -208,8 +197,8 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      assert(p->arg(0)->name == "id");
-      label = p->arg(0)->arg(0)->name;
+      assert(p->arg(0)->is_a("id"));
+      label = *p->arg(0)->arg(0);
       return this;
     }
     // FIXME, move into compile ...
@@ -224,14 +213,14 @@ namespace AST {
     }
   };
 
-  AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
+  //AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
   
   CT_Value_Base * new_literal_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env);
 
   AST * Literal::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(1,2);
-    type = env.types->inst(p->num_args() > 1 ? p->arg(1)->name : "int");
+    type = env.types->inst(p->num_args() > 1 ? *p->arg(1) : String("int"));
     ct_value_ = new_literal_ct_value(p->arg(0), type, env);
     return this;
   }
@@ -269,7 +258,7 @@ namespace AST {
     //   the specified type is too small for the literal
     // FIXME: Do I need to make into ct_const type
     if (it->min == 0) {
-      const char * s = vp->name.c_str();
+      const char * s = ~*vp;
       char * e = (char *)s;
       unsigned long long value = strtoull(s, &e, 0);
       if (*e) throw error(vp, "Expected Integer");
@@ -286,7 +275,7 @@ namespace AST {
       else
         abort();
     } else {
-      const char * s = vp->name.c_str();
+      const char * s = ~*vp;
       char * e = (char *)s;
       long long value = strtoll(s, &e, 0);
       if (*e) throw error(vp, "Expected Integer");
@@ -310,7 +299,7 @@ namespace AST {
   AST * FloatC::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(1,2);
-    type = env.types->inst(p->num_args() > 1 ? p->arg(1)->name : "double");
+    type = env.types->inst(p->num_args() > 1 ? *p->arg(1) : String("double"));
     ct_value_ = new_float_ct_value(p->arg(0), type, env);
     return this;
   }
@@ -329,7 +318,7 @@ namespace AST {
   CT_Value_Base * new_float_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env) {
     // FIXME: Do I need to make into ct_const type
     String n = t->exact_type->to_string();
-    const char * s = vp->name.c_str();
+    const char * s = ~*vp;
     char * e = (char *)s;
     long double value = strtold(s, &e);
     if (*e) throw error(vp, "Expected Number");
@@ -346,7 +335,7 @@ namespace AST {
   AST * StringC::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(1,2);
-    orig = p->arg(0)->name;
+    orig = *p->arg(0);
     type = env.types->inst(".pointer", env.types->ct_const(env.types->inst("char")));
     type = env.types->ct_const(type);
     return this;
@@ -358,7 +347,7 @@ namespace AST {
   AST * CharC::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(1, 2);
-    orig = p->arg(0)->name;
+    orig = *p->arg(0);
     type = env.types->inst("char");
     type = env.types->ct_const(type);
     return this;
@@ -369,13 +358,13 @@ namespace AST {
 
   struct Id : public AST {
     Id() : AST("id") {}
-    AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
+    //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     String name;
     Symbol * sym;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      name = p->arg(0)->name;
+      name = *p->arg(0);
       if (!env.vars->exists(name))
         throw error(parse_->arg(0), "Unknown Identifier: %s", name.c_str());
       sym = env.vars->lookup(name);
@@ -410,18 +399,18 @@ namespace AST {
 
   struct If : public AST {
     If() : AST("if") {}
-    AST * part(unsigned i) 
-      {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
+    //AST * part(unsigned i) 
+    //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
     AST * exp;
     AST * if_true;
     AST * if_false;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2,3);
-      exp = parse_exp(p->arg(0), env);
-      if_true = parse_stmt(p->arg(1), env);
+      exp = expand_exp(p->arg(0), env);
+      if_true = expand_stmt(p->arg(1), env);
       if (p->num_args() == 3) {
-        if_false = parse_stmt(p->arg(2), env);
+        if_false = expand_stmt(p->arg(2), env);
       } else {
         if_false = new NoOp;
       }
@@ -450,8 +439,8 @@ namespace AST {
 
   struct EIf : public AST {
     EIf() : AST("eif") {}
-    AST * part(unsigned i) 
-      {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
+    //AST * part(unsigned i) 
+    //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
     AST * exp;
     AST * if_true;
     AST * if_false;
@@ -489,10 +478,10 @@ namespace AST {
   AST * EIf::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(3);
-    exp = parse_exp(p->arg(0), env);
+    exp = expand_exp(p->arg(0), env);
     resolve_to(env, exp, env.bool_type());
-    if_true = parse_exp(p->arg(1), env);
-    if_false = parse_exp(p->arg(2), env);
+    if_true = expand_exp(p->arg(1), env);
+    if_false = expand_exp(p->arg(2), env);
     resolve_to(env, if_false, if_true->type);
     type = if_true->type;
     ct_value_ = op_ct_value<EIf_CT_Value>(type);
@@ -503,13 +492,13 @@ namespace AST {
     Switch() : AST("switch") {}
     AST * exp;
     AST * body;
-    AST * part(unsigned i) {return i == 0 ? exp : i == 1 ? body : 0;}
+    //AST * part(unsigned i) {return i == 0 ? exp : i == 1 ? body : 0;}
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2);
-      exp = parse_exp(p->arg(0), env);
+      exp = expand_exp(p->arg(0), env);
       resolve_to(env, exp, env.bool_type());  
-      body = parse_stmt(p->arg(1), env);
+      body = expand_stmt(p->arg(1), env);
       type = env.void_type();
       return this;
     }
@@ -527,13 +516,13 @@ namespace AST {
 
   struct Loop : public AST {
     Loop() : AST("loop") {}
-    AST * part(unsigned i) 
-      {return body;}
+    //AST * part(unsigned i) 
+    //  {return body;}
     AST * body;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      body = parse_stmt(p->arg(0), env);
+      body = expand_stmt(p->arg(0), env);
       type = env.void_type();
       return this;
     }
@@ -573,22 +562,22 @@ namespace AST {
 
   struct Var : public Declaration {
     Var() : Declaration("var"), init() {}
-    AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
+    //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     String name;
-    Type * var_type;
+    const Type * var_type;
     AST * init;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2,3);
-      name = p->arg(0)->name;
+      name = *p->arg(0);
       parse_flags(p);
       Symbol * s = new Symbol(name);
-      s->type = var_type = parse_type(env.types, p->arg(1), env);
+      s->type = var_type = expand_type(env.types, p->arg(1), env);
       if (storage_class != EXTERN && var_type->size() == NPOS) 
         throw error(p->arg(0), "Size not known");
       env.vars->add(name, s);
       if (p->num_args() > 2) {
-        init = parse_exp(p->arg(2), env);
+        init = expand_exp(p->arg(2), env);
         resolve_to(env, init, var_type);
       }
       return this;
@@ -610,12 +599,12 @@ namespace AST {
   struct EStmt : public AST {
     EStmt() : AST("estmt") {}
     EStmt(AST * e) : AST("estmt"), exp(e) {type = exp->type;}
-    AST * part(unsigned i) {return exp;}
+    //AST * part(unsigned i) {return exp;}
     AST * exp;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      exp = parse_exp(p->arg(0), env);
+      exp = expand_exp(p->arg(0), env);
       type = exp->type;
       return this;
     }
@@ -634,7 +623,7 @@ namespace AST {
     LabelSymbolTable * labels;
     TypeSymbolTable * types;
     VarSymbolTable * vars;
-    AST * part(unsigned i) {return stmts[i];}
+    //AST * part(unsigned i) {return stmts[i];}
     Vector<AST *> stmts;
     AST * parse_self(const Parse * p, ParseEnviron & env0) {
       parse_ = p;
@@ -644,7 +633,7 @@ namespace AST {
       vars  = env.vars;
       if (p->num_args() > 0) {
         for (int i = 0; i < p->num_args(); ++i) {
-          add_ast_nodes(stmts, parse_stmt_decl(p->arg(i), env));
+          add_ast_nodes(stmts, expand_stmt_decl(p->arg(i), env));
         }
       } else {
         stmts.push_back(new NoOp);
@@ -701,12 +690,12 @@ namespace AST {
 
   struct Print : public AST {
     Print() : AST("print") {}
-    AST * part(unsigned i) {return exp;}
+    //AST * part(unsigned i) {return exp;}
     AST * exp;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      exp = parse_exp(p->arg(0), env);
+      exp = expand_exp(p->arg(0), env);
       resolve_to(env, exp, env.types->inst("int"));
       type = env.void_type();
       return this;
@@ -730,13 +719,13 @@ namespace AST {
 
   struct UnOp : public AST {
     UnOp(String name, String op0) : AST(name), op(op0) {}
-    AST * part(unsigned i) {return exp;}
+    //AST * part(unsigned i) {return exp;}
     AST * exp;
     String op;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      exp = parse_exp(p->arg(0), env);
+      exp = expand_exp(p->arg(0), env);
       resolve(env);
       make_ct_value(env);
       return this;
@@ -830,15 +819,15 @@ namespace AST {
 
   struct BinOp : public AST {
     BinOp(String name, String op0) : AST(name), op(op0) {}
-    AST * part(unsigned i) {return i == 0 ? lhs : rhs;}
+    //AST * part(unsigned i) {return i == 0 ? lhs : rhs;}
     AST * lhs;
     AST * rhs;
     String op;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2);
-      lhs = parse_exp(p->arg(0), env);
-      rhs = parse_exp(p->arg(1), env);
+      lhs = expand_exp(p->arg(0), env);
+      rhs = expand_exp(p->arg(1), env);
       resolve(env);
       make_ct_value(env);
       return this;
@@ -858,9 +847,9 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2);
-      exp = parse_exp(p->arg(0), env);
-      if (p->arg(1)->name != "id") throw error(p->arg(1), "Expected identifier");
-      id = p->arg(1)->arg(0)->name;
+      exp = expand_exp(p->arg(0), env);
+      if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected identifier");
+      id = *p->arg(1)->arg(0);
       const StructUnionT * t = dynamic_cast<const StructUnionT *>(exp->type->unqualified);
       if (!t) throw error(p->arg(0), "Expected struct or union type");
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
@@ -1147,7 +1136,7 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      exp = parse_exp(p->arg(0), env);
+      exp = expand_exp(p->arg(0), env);
       type = exp->type;
       return this;
     }
@@ -1189,34 +1178,27 @@ namespace AST {
       //parse_ = p;
       if (p->num_args() > 0) {
         for (int i = 0; i < p->num_args(); ++i) {
-          add_ast_nodes(stmts, parse_stmt_decl(p->arg(i), env));
+          add_ast_nodes(stmts, expand_stmt_decl(p->arg(i), env));
         }
       }
       return this;
     }
   };
 
-  struct Top : public AST {
-    Top() : AST("top") {}
-    AST * part(unsigned i) {return stmts[i];}
-    Vector<AST *> stmts;
-    unsigned frame_size;
-    TypeSymbolTable * types;
-    VarSymbolTable * vars;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
-      parse_ = p;
-      if (p->num_args() > 0) {
-        for (int i = 0; i < p->num_args(); ++i) {
-          add_ast_nodes(stmts, parse_top_level(p->arg(i), env));
-        }
-      } else {
-        stmts.push_back(new NoOp());
+  AST * Top::parse_self(const Parse * p, ParseEnviron & env) {
+    parse_ = p;
+    if (p->num_args() > 0) {
+      for (int i = 0; i < p->num_args(); ++i) {
+        add_ast_nodes(stmts, expand_top_level(p->arg(i), env));
       }
-      types = env.types;
-      vars = env.vars;
-      type = env.void_type();
-      return this;
+    } else {
+      stmts.push_back(new NoOp());
     }
+    types = env.types;
+    vars = env.vars;
+    type = env.void_type();
+    return this;
+  }
     //void resolve(ResolveEnviron & env) {
     //  printf("***TOP RESOLVE %p***\n", this);
     //  types = env.types;
@@ -1228,19 +1210,18 @@ namespace AST {
     //  }
     //  frame_size = env.frame->max_frame_size;
     //}
-    void eval(ExecEnviron & env) {
-      for (int i = 0; i != stmts.size(); ++i) {
-        stmts[i]->eval(env);
-      }
+  void Top::eval(ExecEnviron & env) {
+    for (int i = 0; i != stmts.size(); ++i) {
+      stmts[i]->eval(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
-      f << "static inline void noop() {}\n";
-      f << "\n";
-      for (int i = 0; i != stmts.size(); ++i) {
-        stmts[i]->compile(f, env);
-      }
+  }
+  void Top::compile(CompileWriter & f, CompileEnviron & env) {
+    f << "static inline void noop() {}\n";
+    f << "\n";
+    for (int i = 0; i != stmts.size(); ++i) {
+      stmts[i]->compile(f, env);
     }
-  };
+  }
 
   template <typename From, typename To>
   struct Cast_CT_Value : public CT_Value<To> {
@@ -1330,11 +1311,15 @@ namespace AST {
   AST * ExplicitCast::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(2);
-    type = parse_type(env.types, p->arg(0), env);
-    exp = parse_exp(p->arg(1), env);
+    const Parse * t = p->arg(0);
+    if (t->is_a("(type)"))
+      t = t->arg(0);
+    type = expand_type(env.types, t, env);
+    exp = expand_exp(p->arg(1), env);
     return this;
   }
   
+#if 0
   AST * Fun::part(unsigned i) {
     if (i == 0) {
       return new Terminal(parse_->arg(0));
@@ -1344,11 +1329,12 @@ namespace AST {
       return body;
     }
   }
+#endif
 
   AST * Fun::parse_self(const Parse * p, ParseEnviron & env0) {
     parse_ = p;
     assert_num_args(3,4);
-    name = p->arg(0)->name;
+    name = *p->arg(0);
 
     parse_flags(p);
 
@@ -1358,28 +1344,27 @@ namespace AST {
     ParseEnviron env = env0.new_frame();
     labels = env.labels = new LabelSymbolTable();
 
-    parms = dynamic_cast<const Tuple *>(parse_type(env.types, p->arg(1), env));
-    assert(parms); // FIXME: Error message
-    for (Tuple::Parms::const_iterator i = parms->parms.begin(), e = parms->parms.end();
-         i != e; ++i)
-    {
-      String name = i->name;
-      Symbol * sym = new Symbol(name);
-      sym->type = i->type;
-      env.vars->add(name, sym);
-    }
+    parms = expand_fun_parms(p->arg(1), env);
 
-    ret_type = env.frame->return_type = parse_type(env.types, p->arg(2), env);
+    ret_type = env.frame->return_type = expand_type(env.types, p->arg(2), env);
+    type = ret_type;
+    sym->type = env.function_sym()->inst(env.types, this);
 
     body = 0;
     if (p->num_args() > 3) {
-      body = dynamic_cast<Block *>(parse_stmt(p->arg(3), env));
+      for (Tuple::Parms::const_iterator i = parms->parms.begin(), e = parms->parms.end();
+           i != e; ++i)
+      {
+        String n = i->name;
+        Symbol * sym = new Symbol(n);
+        sym->type = i->type;
+        env.vars->add(n, sym);
+      }
+
+      body = dynamic_cast<Block *>(expand_stmt(p->arg(3), env));
       assert(body); // FiXME
     }
 
-    type = ret_type;
-
-    sym->type = env.function_sym()->inst(env.types, this);
     //sym->value = this;
 
     return this;
@@ -1394,16 +1379,16 @@ namespace AST {
     
 //     ResolveEnviron env = env0.new_frame();
 //     env.labels = labels;
-//     parms = dynamic_cast<const Tuple *>(parse_type(env.types, parms_parse));
+//     parms = dynamic_cast<const Tuple *>(expand_type(env.types, parms_parse));
 //     assert(parms); // FIXME: Move check up to parse
-//     ret_type = parse_type(env.types, ret_type_parse);
+//     ret_type = expand_type(env.types, ret_type_parse);
 //     env.frame->return_type = ret_type;
 //     env.frame->alloc_var(ret_type);
     
 // //     int num_parms = parms.size();
 // //     for (int i = 0; i != num_parms; ++i) {
 // //       String name = parms[i].name;
-// //       parms[i].type = parse_type(env.types, parms[i].type_parse);
+// //       parms[i].type = expand_type(env.types, parms[i].type_parse);
 // //       Symbol * sym = new Symbol(name);
 // //       sym->type = parms[i].type;
 // //       env.vars->add(name, sym);
@@ -1450,7 +1435,7 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(1);
-      what = parse_exp(p->arg(0), env);
+      what = expand_exp(p->arg(0), env);
       resolve_to(env, what, env.frame->return_type);
       type = env.void_type();
       return this;
@@ -1472,17 +1457,17 @@ namespace AST {
 
   struct Call : public AST {
     Call() : AST("call") {} 
-    AST * part(unsigned i) {return i == 0 ? lhs : new Generic(parse_->arg(1), parms);}
+    //AST * part(unsigned i) {return i == 0 ? lhs : new Generic(parse_->arg(1), parms);}
     AST * lhs;
     Vector<AST *> parms;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2);
-      lhs = parse_exp(p->arg(0), env);
+      lhs = expand_exp(p->arg(0), env);
       p = p->arg(1);
       const int num_parms = p->num_args();
       for (int i = 0; i != num_parms; ++i) {
-        parms.push_back(parse_exp(p->arg(i), env));
+        parms.push_back(expand_exp(p->arg(i), env));
       }
       const FunctionPtr * ftype = dynamic_cast<const FunctionPtr *>(lhs->type);
       if (!ftype) {
@@ -1560,8 +1545,8 @@ namespace AST {
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
       assert_num_args(2);
-      name = p->arg(0)->name;
-      type = parse_type(env.types, p->arg(1), env);
+      name = *p->arg(0);
+      type = expand_type(env.types, p->arg(1), env);
       add_simple_type(env.types, name, new AliasT(type));
       return this;
     }
@@ -1575,37 +1560,37 @@ namespace AST {
   };
 
   struct StructUnion : public AST {
-    enum What {STRUCT, UNION} what;
+    enum Which {STRUCT, UNION} which;
     struct Body : public AST {
-      Body(What w) : AST(w == STRUCT ? "struct_body" : "union_body") {}
+      Body(Which w) : AST(w == STRUCT ? "struct_body" : "union_body") {}
       AST * part(unsigned i) {return members[i];}
       Vector<AST *> members;
       AST * parse_self(const Parse * p, ParseEnviron & env) {
         for (int i = 0; i != p->num_parts(); ++i) {
-          add_ast_nodes(members, parse_member(p->part(i), env));
+          add_ast_nodes(members, expand_member(p->part(i), env));
         }
         return this;
       }
       void compile(CompileWriter &, CompileEnviron &) {abort();}
     };
-    StructUnion(What w) : AST(w == STRUCT ? "struct" : "union"), what(w)  {}
+    StructUnion(Which w) : AST(w == STRUCT ? "struct" : "union"), which(w)  {}
     AST * part(unsigned i) {return 0; /* FIXME */}
     String name;
     Body * body;
     ResolveEnviron env;
     AST * parse_self(const Parse * p, ParseEnviron & env0) {
       parse_ = p;
-      assert(p->name == name_);
-      name = p->arg(0)->name;
+      assert(p->is_a(what()));
+      name = *p->arg(0);
       env = env0.new_scope();
       if (p->num_args() > 1) {
-        body = new Body(what);
+        body = new Body(which);
         body->parse_self(p->arg(1), env);
       }
       const Type * t0 = env.types->inst(SymbolKey(TAG_NS,name));
       StructUnionT * s;
       if (t0) s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
-      else if (what == STRUCT) s = new StructT(name);
+      else if (which == STRUCT) s = new StructT(name);
       else                     s = new UnionT(name);
       for (unsigned i = 0; i != body->members.size(); ++i) {
 	Var * v = dynamic_cast<Var *>(body->members[i]);
@@ -1613,14 +1598,14 @@ namespace AST {
 	s->members.push_back(Member(v->name,v->var_type));
       }
       //StringBuf type_name;
-      //type_name << "struct " << name_;
+      //type_name << "struct " << what();
       s->env = &env;
       s->finalize();
       add_simple_type(env0.types, SymbolKey(TAG_NS, name), s);
       return this; 
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << indent << name_ << " " << name << "{\n";
+      f << indent << what() << " " << name << "{\n";
       for (int i = 0; i != body->members.size(); ++i) {
         f << adj_indent(2) << body->members[i];
       }
@@ -1648,7 +1633,7 @@ namespace AST {
     Vector<Member> members;
     AST * parse_self(const Parse * p, ParseEnviron & env) {
       parse_ = p;
-      name = p->arg(0)->name;
+      name = *p->arg(0);
       EnumT * t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
                       (env.types->inst(SymbolKey(TAG_NS,name)))));
       if (!t0) t0 = new EnumT(name);
@@ -1659,14 +1644,16 @@ namespace AST {
       q_parms.push_back(TypeParm(t0));
       const Type * t = env.types->lookup(".qualified")->inst(q_parms);
       int val = 0;
-      members.reserve(p->arg(1)->num_args());
-      for (unsigned i = 0; i != p->arg(1)->num_args(); ++i) {
-        if (p->arg(1)->arg(i)->num_parts() > 1) {
-          AST * e = parse_exp(p->arg(1)->arg(i)->part(1), env);
+      const Parse * arg1 = p->arg(1);
+      members.reserve(arg1->num_args());
+      for (unsigned i = 0; i != arg1->num_args(); ++i) {
+        const Parse * arg = arg1->arg(i);
+        if (arg->num_parts() > 1) {
+          AST * e = expand_exp(arg->part(1), env);
           resolve_to(env, e, env.types->inst("int"));
           val = e->ct_value<target_int>();
         }
-        Member mem(p->arg(1), p->arg(1)->arg(i)->part(0)->name, val);
+        Member mem(arg1, *arg->part(0), val);
         val++;
         Symbol * sym = new Symbol(mem.name);
         sym->type = t;
@@ -1678,7 +1665,7 @@ namespace AST {
       return this;
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << indent << name_ << " " << name << "{\n";
+      f << indent << what() << " " << name << "{\n";
       for (int i = 0; i != members.size(); ++i) {
         f << adj_indent(2) << indent << members[i].name << " = " << members[i].ct_value.v;
         if (i == members.size())
@@ -1709,15 +1696,20 @@ namespace AST {
   AST * SizeOf::parse_self(const Parse * p, ParseEnviron & env) {
     parse_ = p;
     assert_num_args(1);
+    if (p->arg(0)->is_a("(type)")) {
+      sizeof_type = expand_type(p->arg(0)->arg(0), env);
+    } else {
+      AST * exp = expand(p->arg(0), ExpPos, env);
+      sizeof_type = expand_type(new Parse(new Parse(".typeof"), new Parse(exp)), env);
+    }
     type = env.types->ct_const(env.types->inst(".size"));
-    sizeof_type = parse_type(env.types, p->arg(0), env);
     ct_value_ = &size_of_ct_value;
     return this;
   }
 
   AST * parse_top(const Parse * p) {
     ParseEnviron env;
-    assert(p->name == "top");
+    assert(p->is_a("top"));
     AST * res = (new Top)->parse_self(p, env);
     return res;
   }
@@ -1773,76 +1765,79 @@ namespace AST {
   }
 
   AST * try_decl(const Parse * p, ParseEnviron & env) {
-    if (p->name == "var")     return (new Var)->parse_self(p, env);
-    if (p->name == "fun" )    return (new Fun)->parse_self(p, env);
-    if (p->name == "struct")  return (new Struct)->parse_self(p, env);
-    if (p->name == "union")   return (new Union)->parse_self(p, env);
-    if (p->name == "enum")    return (new Enum)->parse_self(p, env);
-    if (p->name == "talias")  return (new TypeAlias)->parse_self(p, env);
-    if (p->name == "map")     return (new ASTList);
-    if (p->name == "smap")    return (new ASTList);
-    if (p->name == "slist")   return (new SList)->parse_self(p, env);
+    String what = p->what();
+    if (what == "var")     return (new Var)->parse_self(p, env);
+    if (what == "fun" )    return (new Fun)->parse_self(p, env);
+    if (what == "struct")  return (new Struct)->parse_self(p, env);
+    if (what == "union")   return (new Union)->parse_self(p, env);
+    if (what == "enum")    return (new Enum)->parse_self(p, env);
+    if (what == "talias")  return (new TypeAlias)->parse_self(p, env);
+    if (what == "map")     return (new ASTList);
+    if (what == "smap")    return (new ASTList);
+    if (what == "slist")   return (new SList)->parse_self(p, env);
     return 0;
   }
 
   AST * try_stmt(const Parse * p, ParseEnviron & env) {
-    if (p->name == "goto")    return (new Goto)->parse_self(p, env);
-    if (p->name == "lstmt")   return (new LStmt)->parse_self(p, env);
-    if (p->name == "lcstmt")  return (new LCStmt)->parse_self(p, env);
-    if (p->name == "if")      return (new If)->parse_self(p, env);
-    if (p->name == "loop")    return (new Loop)->parse_self(p, env);
-    if (p->name == "switch")  return (new Switch)->parse_self(p, env);
-    if (p->name == "break")   return (new Break)->parse_self(p, env);
-    if (p->name == "block")   return (new Block)->parse_self(p, env);
-    if (p->name == "print")   return (new Print)->parse_self(p, env);
-    if (p->name == "noop")    return (new NoOp)->parse_self(p, env);
-    if (p->name == "return")  return (new Return)->parse_self(p, env);
+    String what = p->what();
+    if (what == "goto")    return (new Goto)->parse_self(p, env);
+    if (what == "lstmt")   return (new LStmt)->parse_self(p, env);
+    if (what == "lcstmt")  return (new LCStmt)->parse_self(p, env);
+    if (what == "if")      return (new If)->parse_self(p, env);
+    if (what == "loop")    return (new Loop)->parse_self(p, env);
+    if (what == "switch")  return (new Switch)->parse_self(p, env);
+    if (what == "break")   return (new Break)->parse_self(p, env);
+    if (what == "block")   return (new Block)->parse_self(p, env);
+    if (what == "print")   return (new Print)->parse_self(p, env);
+    if (what == "noop")    return (new NoOp)->parse_self(p, env);
+    if (what == "return")  return (new Return)->parse_self(p, env);
     return 0;
   }
 
   AST * try_exp(const Parse * p, ParseEnviron & env) {
-    if (p->name == "id")      return (new Id)->parse_self(p, env);
-    if (p->name == "literal") return (new Literal)->parse_self(p, env);
-    if (p->name == "float")   return (new FloatC)->parse_self(p, env);
-    if (p->name == "char")    return (new CharC)->parse_self(p, env);
-    if (p->name == "string")  return (new StringC)->parse_self(p, env);
-    if (p->name == "eif")     return (new EIf)->parse_self(p, env);
-    if (p->name == "assign")  return (new Assign)->parse_self(p, env);
-    if (p->name == "plus")    return (new Plus)->parse_self(p, env);
-    if (p->name == "minus")   return (new Minus)->parse_self(p, env);
-    if (p->name == "times")   return (new Times)->parse_self(p, env);
-    if (p->name == "div")     return (new Div)->parse_self(p, env);
-    if (p->name == "mod")     return (new Mod)->parse_self(p, env);
-    if (p->name == "bor")     return (new BOr)->parse_self(p, env);
-    if (p->name == "xor")     return (new XOr)->parse_self(p, env);
-    if (p->name == "band")    return (new BAnd)->parse_self(p, env);
-    if (p->name == "postinc") return (new PostInc)->parse_self(p, env);
-    if (p->name == "postdec") return (new PostDec)->parse_self(p, env);
-    if (p->name == "neg")     return (new Neg)->parse_self(p, env);
-    if (p->name == "eq")      return (new Eq)->parse_self(p, env);
-    if (p->name == "ne")      return (new Ne)->parse_self(p, env);
-    if (p->name == "lt")      return (new Lt)->parse_self(p, env);
-    if (p->name == "qt")      return (new Gt)->parse_self(p, env);
-    if (p->name == "le")      return (new Le)->parse_self(p, env);
-    if (p->name == "ge")      return (new Ge)->parse_self(p, env);
-    if (p->name == "not")     return (new Not)->parse_self(p, env);
-    if (p->name == "addrof")  return (new AddrOf)->parse_self(p, env);
-    if (p->name == "deref")   return (new DeRef)->parse_self(p, env);
-    if (p->name == "member")  return (new MemberAccess)->parse_self(p, env);
-    if (p->name == "call")    return (new Call)->parse_self(p, env);
-    if (p->name == "eblock")  return (new EBlock)->parse_self(p, env);
-    if (p->name == "sizeof")  return (new SizeOf)->parse_self(p, env);
-    if (p->name == "cast")    return (new ExplicitCast)->parse_self(p, env);
-    if (p->name == "empty")   return (new Empty)->parse_self(p, env);
-    if (strcmp(p->name + p->name.size()-3, "_eq") == 0) {
+    String what = p->what();
+    if (what == "id")      return (new Id)->parse_self(p, env);
+    if (what == "literal") return (new Literal)->parse_self(p, env);
+    if (what == "float")   return (new FloatC)->parse_self(p, env);
+    if (what == "char")    return (new CharC)->parse_self(p, env);
+    if (what == "string")  return (new StringC)->parse_self(p, env);
+    if (what == "eif")     return (new EIf)->parse_self(p, env);
+    if (what == "assign")  return (new Assign)->parse_self(p, env);
+    if (what == "plus")    return (new Plus)->parse_self(p, env);
+    if (what == "minus")   return (new Minus)->parse_self(p, env);
+    if (what == "times")   return (new Times)->parse_self(p, env);
+    if (what == "div")     return (new Div)->parse_self(p, env);
+    if (what == "mod")     return (new Mod)->parse_self(p, env);
+    if (what == "bor")     return (new BOr)->parse_self(p, env);
+    if (what == "xor")     return (new XOr)->parse_self(p, env);
+    if (what == "band")    return (new BAnd)->parse_self(p, env);
+    if (what == "postinc") return (new PostInc)->parse_self(p, env);
+    if (what == "postdec") return (new PostDec)->parse_self(p, env);
+    if (what == "neg")     return (new Neg)->parse_self(p, env);
+    if (what == "eq")      return (new Eq)->parse_self(p, env);
+    if (what == "ne")      return (new Ne)->parse_self(p, env);
+    if (what == "lt")      return (new Lt)->parse_self(p, env);
+    if (what == "qt")      return (new Gt)->parse_self(p, env);
+    if (what == "le")      return (new Le)->parse_self(p, env);
+    if (what == "ge")      return (new Ge)->parse_self(p, env);
+    if (what == "not")     return (new Not)->parse_self(p, env);
+    if (what == "addrof")  return (new AddrOf)->parse_self(p, env);
+    if (what == "deref")   return (new DeRef)->parse_self(p, env);
+    if (what == "member")  return (new MemberAccess)->parse_self(p, env);
+    if (what == "call")    return (new Call)->parse_self(p, env);
+    if (what == "eblock")  return (new EBlock)->parse_self(p, env);
+    if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
+    if (what == "cast")    return (new ExplicitCast)->parse_self(p, env);
+    if (what == "empty")   return (new Empty)->parse_self(p, env);
+    if (strcmp(what + what.size()-3, "_eq") == 0) {
       // This is a bit of a hack to handle op_eq cases (ie += -=, etc)
-      StringBuf buf(p->name, p->name.size()-3);
+      StringBuf buf(what, what.size()-3);
       AST * ast = try_exp(new Parse(p->str(), new Parse(buf.freeze()), p->arg(0), p->arg(1)), env);
       if (!ast) return 0;
       BinOp * binop = dynamic_cast<BinOp *>(ast);
       StringBuf op;
       op << binop->op << "=";
-      return new CompoundAssign(p->name, op.freeze(), binop, env);
+      return new CompoundAssign(what, op.freeze(), binop, env);
     }
     return 0;
   }
