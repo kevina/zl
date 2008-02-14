@@ -118,9 +118,6 @@ namespace ast {
     }
   };
 
-  typedef Environ ResolveEnviron;
-  typedef Environ ParseEnviron;
-
 #if 0
   struct Scope {
     TypeSymbolTable * types;
@@ -262,7 +259,7 @@ namespace ast {
       if (parse_->num_args() < min || parse_->num_args() > max) 
         throw error(0, parse_->str(), "%s: Wrong Number of Arguments", ~what_);
     };
-    virtual AST * parse_self(const Parse * p, ParseEnviron &) = 0;
+    virtual AST * parse_self(const Parse * p, Environ &) = 0;
       // ^^ returns itself, to allow chaining ie 
       //      new Foo(p)->parse(env);
     virtual void prep_eval(PrepEvalEnviron &) {abort();}
@@ -354,12 +351,12 @@ namespace ast {
   struct ImplicitCast : public Cast {
     ImplicitCast(AST * e, const Type * t) 
       : Cast("<cast>") {exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
-    AST * parse_self(const Parse * p, ParseEnviron & env0) {abort();}
+    AST * parse_self(const Parse * p, Environ & env0) {abort();}
   };
 
   struct ExplicitCast : public Cast {
     ExplicitCast() : Cast("cast") {}
-    AST * parse_self(const Parse * p, ParseEnviron & env0);
+    AST * parse_self(const Parse * p, Environ & env0);
   };
 
   //
@@ -382,9 +379,10 @@ namespace ast {
     unsigned frame_size;
     TypeSymbolTable * types;
     VarSymbolTable * vars;
-    AST * parse_self(const Parse * p, ParseEnviron & env);
+    AST * parse_self(const Parse * p, Environ & env);
     //void resolve(ResolveEnviron & env);
     void eval(ExecEnviron & env);
+    
     void compile(CompileWriter & f, CompileEnviron & env);
   };
  
@@ -433,8 +431,7 @@ namespace ast {
     LabelSymbolTable * labels;
     unsigned frame_offset;
     unsigned frame_size;
-    AST * parse_self(const Parse * p, ParseEnviron & env0);
-    void resolve(ResolveEnviron & env0);
+    AST * parse_self(const Parse * p, Environ & env0);
     void eval(ExecEnviron & env);
     void compile(CompileWriter & f, CompileEnviron & env);
   };
@@ -443,8 +440,7 @@ namespace ast {
     Literal() : AST("literal") {}
     //AST * part(unsigned i);
     //long long value;
-    AST * parse_self(const Parse * p, ParseEnviron &);
-    void resolve(ResolveEnviron & env);
+    AST * parse_self(const Parse * p, Environ &);
     //void eval(ExecEnviron & env);
     void compile(CompileWriter & f, CompileEnviron &);
   };
@@ -453,7 +449,7 @@ namespace ast {
     FloatC() : AST("float") {}
     //AST * part(unsigned i);
     //long double value;
-    AST * parse_self(const Parse * p, ParseEnviron &);
+    AST * parse_self(const Parse * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
@@ -462,7 +458,7 @@ namespace ast {
     //AST * part(unsigned i);
     String orig;
     String value; // unused at the moment
-    AST * parse_self(const Parse * p, ParseEnviron &);
+    AST * parse_self(const Parse * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
@@ -471,13 +467,13 @@ namespace ast {
     //AST * part(unsigned i);
     String orig;
     char value; // unused at the moment
-    AST * parse_self(const Parse * p, ParseEnviron &);
+    AST * parse_self(const Parse * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
   struct Empty : public AST {
     Empty() : AST("empty") {}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
       type = env.void_type();
@@ -494,18 +490,18 @@ namespace ast {
   //
 
   template <typename T>
-  void resolve_to(ResolveEnviron & env, T * & exp, const Type * type) {
+  void resolve_to(Environ & env, T * & exp, const Type * type) {
     exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type));
   }
 
-  //int ct_value(const Parse * p, ParseEnviron &);
+  //int ct_value(const Parse * p, Environ &);
 
   AST * parse_top(const Parse * p);
 
-  AST * parse_top_level(const Parse * p, ParseEnviron & env);
-  AST * parse_member(const Parse * p, ParseEnviron & env);
-  AST * parse_stmt(const Parse * p, ParseEnviron & env);
-  AST * parse_stmt_decl(const Parse * p, ParseEnviron & env);
-  AST * parse_exp(const Parse * p, ParseEnviron & env);
+  AST * parse_top_level(const Parse * p, Environ & env);
+  AST * parse_member(const Parse * p, Environ & env);
+  AST * parse_stmt(const Parse * p, Environ & env);
+  AST * parse_stmt_decl(const Parse * p, Environ & env);
+  AST * parse_exp(const Parse * p, Environ & env);
 
 }

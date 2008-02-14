@@ -93,13 +93,13 @@ namespace ast {
     return op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
-  const Type * expand_type(TypeSymbolTable * types, const Parse * p, ParseEnviron & env) {
+  const Type * expand_type(TypeSymbolTable * types, const Parse * p, Environ & env) {
     return expand_type(p, env);
   }
 
   struct NoOp : public AST {
     NoOp() : AST("noop") {}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
       type = env.void_type();
@@ -113,7 +113,7 @@ namespace ast {
 
   struct Terminal : public AST {
     Terminal(const Parse * p) : AST(p->what(), p) {}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {abort();}
+    AST * parse_self(const Parse * p, Environ & env) {abort();}
     void eval(ExecEnviron & env) {abort();}
     void compile(CompileWriter & f, CompileEnviron &) {abort();}
   };
@@ -129,7 +129,7 @@ namespace ast {
     Generic(const Parse * p, const Vector<AST *> & pts) 
       : AST(p->what(), p), parts(pts) {}
     //AST * part(unsigned i) {return parts[i];}
-    AST * parse_self(const Parse*, ParseEnviron&) {abort();}
+    AST * parse_self(const Parse*, Environ&) {abort();}
     void eval(ExecEnviron & env) {abort();}
     void compile(CompileWriter & f, CompileEnviron &) {abort();}
   };
@@ -139,7 +139,7 @@ namespace ast {
     bool local;
     String label;
     AST * stmt;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       const Parse * arg0 = p->arg(0);
@@ -167,7 +167,7 @@ namespace ast {
     LCStmt() : AST("lcstmt") {}
     AST * exp; 
     AST * stmt;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       if (p->arg(0)->is_a("case")) {
@@ -194,7 +194,7 @@ namespace ast {
   struct Goto : public AST {
     Goto() : AST("goto") {}
     String label;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       assert(p->arg(0)->is_a("id"));
@@ -202,7 +202,7 @@ namespace ast {
       return this;
     }
     // FIXME, move into compile ...
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  if (!env.labels->exists(label))
     //    throw error(parse_->arg(0)->arg(0), "Unknown label %s", ~label);
     //  type = env.void_type();
@@ -215,9 +215,9 @@ namespace ast {
 
   //AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
   
-  CT_Value_Base * new_literal_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env);
+  CT_Value_Base * new_literal_ct_value(const Parse * vp, const Type * & t, Environ & env);
 
-  AST * Literal::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * Literal::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(1,2);
     type = env.types->inst(p->num_args() > 1 ? *p->arg(1) : String("int"));
@@ -252,7 +252,7 @@ namespace ast {
     T value(const AST *) const {return v;}
   };
 
-  CT_Value_Base * new_literal_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env) {
+  CT_Value_Base * new_literal_ct_value(const Parse * vp, const Type * & t, Environ & env) {
     const Int * it = dynamic_cast<const Int *>(t->unqualified);
     // FIXME: Need to promote type as indicated in the standard if
     //   the specified type is too small for the literal
@@ -294,9 +294,9 @@ namespace ast {
     }
   }
 
-  CT_Value_Base * new_float_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env);
+  CT_Value_Base * new_float_ct_value(const Parse * vp, const Type * & t, Environ & env);
 
-  AST * FloatC::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * FloatC::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(1,2);
     type = env.types->inst(p->num_args() > 1 ? *p->arg(1) : String("double"));
@@ -315,7 +315,7 @@ namespace ast {
       abort(); // unsupported type;
   }
 
-  CT_Value_Base * new_float_ct_value(const Parse * vp, const Type * & t, ParseEnviron & env) {
+  CT_Value_Base * new_float_ct_value(const Parse * vp, const Type * & t, Environ & env) {
     // FIXME: Do I need to make into ct_const type
     String n = t->exact_type->to_string();
     const char * s = ~*vp;
@@ -332,7 +332,7 @@ namespace ast {
       abort();
   }
 
-  AST * StringC::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * StringC::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(1,2);
     orig = *p->arg(0);
@@ -344,7 +344,7 @@ namespace ast {
     f << orig;
   }
 
-  AST * CharC::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * CharC::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(1, 2);
     orig = *p->arg(0);
@@ -361,7 +361,7 @@ namespace ast {
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     String name;
     Symbol * sym;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       name = *p->arg(0);
@@ -375,10 +375,10 @@ namespace ast {
       return this;
     }
     // these might needed to moved into eval_prep
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  return_offset = env.frame->alloc_tmp(type);
     //}
-    //void resolve_lvalue(ResolveEnviron & env) {
+    //void resolve_lvalue(Environ & env) {
     //  if (!env.vars->exists(name))
     //    throw error(parse_->arg(0), "Unknown Identifier: %s", name.c_str());
     //  sym = env.vars->lookup(name);
@@ -404,7 +404,7 @@ namespace ast {
     AST * exp;
     AST * if_true;
     AST * if_false;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2,3);
       exp = expand_exp(p->arg(0), env);
@@ -418,7 +418,7 @@ namespace ast {
       resolve_to(env, exp, env.bool_type());
       return this;
     }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  env.frame->pop_tmp(exp->type);
     // resolve_to_void(env, if_true);
     //  resolve_to_void(env, if_false);
@@ -444,8 +444,8 @@ namespace ast {
     AST * exp;
     AST * if_true;
     AST * if_false;
-    AST * parse_self(const Parse * p, ParseEnviron & env);
-    //void resolve(ResolveEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env);
+    //void resolve(Environ & env) {
     //  resolve_to(env, exp, env.bool_type());
     //  env.frame->pop_tmp(exp->type);
     //  if_true->resolve(env);
@@ -475,7 +475,7 @@ namespace ast {
     }
   };
 
-  AST * EIf::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * EIf::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(3);
     exp = expand_exp(p->arg(0), env);
@@ -493,7 +493,7 @@ namespace ast {
     AST * exp;
     AST * body;
     //AST * part(unsigned i) {return i == 0 ? exp : i == 1 ? body : 0;}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       exp = expand_exp(p->arg(0), env);
@@ -502,7 +502,7 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  type = env.void_type();
     //  resolve_to(env, exp, env.bool_type());      
     //  resolve_to_void(env, body);
@@ -519,14 +519,14 @@ namespace ast {
     //AST * part(unsigned i) 
     //  {return body;}
     AST * body;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       body = expand_stmt(p->arg(0), env);
       type = env.void_type();
       return this;
     }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  resolve_to_void(env, body);
     //}
     void eval(ExecEnviron & env) {
@@ -544,13 +544,13 @@ namespace ast {
   
   struct Break : public AST {
     Break() : AST("break") {}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
       type = env.void_type();
       return this;
     }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //}
     void eval(ExecEnviron &) {
       throw BreakException();
@@ -566,7 +566,7 @@ namespace ast {
     String name;
     const Type * var_type;
     AST * init;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2,3);
       name = *p->arg(0);
@@ -601,7 +601,7 @@ namespace ast {
     EStmt(AST * e) : AST("estmt"), exp(e) {type = exp->type;}
     //AST * part(unsigned i) {return exp;}
     AST * exp;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       exp = expand_exp(p->arg(0), env);
@@ -625,9 +625,9 @@ namespace ast {
     VarSymbolTable * vars;
     //AST * part(unsigned i) {return stmts[i];}
     Vector<AST *> stmts;
-    AST * parse_self(const Parse * p, ParseEnviron & env0) {
+    AST * parse_self(const Parse * p, Environ & env0) {
       parse_ = p;
-      ParseEnviron env = env0.new_scope();
+      Environ env = env0.new_scope();
       labels = env.labels = new LabelSymbolTable(env0.labels);
       types = env.types;
       vars  = env.vars;
@@ -692,7 +692,7 @@ namespace ast {
     Print() : AST("print") {}
     //AST * part(unsigned i) {return exp;}
     AST * exp;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       exp = expand_exp(p->arg(0), env);
@@ -700,7 +700,7 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  env.frame->pop_tmp(exp->type);
     //}
     void eval(ExecEnviron & env) {
@@ -722,7 +722,7 @@ namespace ast {
     //AST * part(unsigned i) {return exp;}
     AST * exp;
     String op;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       exp = expand_exp(p->arg(0), env);
@@ -730,14 +730,14 @@ namespace ast {
       make_ct_value(env);
       return this;
     }
-    virtual void resolve(ParseEnviron & env) = 0;
-    virtual void make_ct_value(ParseEnviron & env) {}
+    virtual void resolve(Environ & env) = 0;
+    virtual void make_ct_value(Environ & env) {}
     void compile(CompileWriter & f, CompileEnviron & env) {
       f << "(" << op << " " << exp << ")";
     }
   };
 
-  const Type * resolve_unop(ResolveEnviron & env, TypeCategory * cat, AST * exp) {
+  const Type * resolve_unop(Environ & env, TypeCategory * cat, AST * exp) {
     if (!exp->type->is(cat))
       abort();
     return exp->type;
@@ -756,21 +756,21 @@ namespace ast {
     SimpleUnOp(String name, String op0, TypeCategory * c) 
       : UnOp(name, op0), category(c) {}
     TypeCategory * category;
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       type = resolve_unop(env, category, exp);
     }
   };
 
   struct UPlus : public SimpleUnOp {
     UPlus() : SimpleUnOp("uplus", "+", NUMERIC_C) {}
-    void make_ct_value(ResolveEnviron &) {
+    void make_ct_value(Environ &) {
       ct_value_ = exp->ct_value_;
     }
   };
 
   struct Neg : public SimpleUnOp {
     Neg() : SimpleUnOp("neg", "-", NUMERIC_C) {}
-    void make_ct_value(ResolveEnviron &) {
+    void make_ct_value(Environ &) {
       ct_value_ = op_ct_value<UnOp_CT_Value, std::negate>(type);
     }
   };
@@ -781,21 +781,21 @@ namespace ast {
     struct F : public std::unary_function<T,T> {
       T operator()(T x) {return ~x;}
     };
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = int_op_ct_value<UnOp_CT_Value, F>(type);
     }
   };
 
   struct Not : public UnOp {
     Not() : UnOp("not", "!") {}
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       abort();
     }
   };
 
   struct AddrOf : public UnOp {
     AddrOf() : UnOp("addrof", "&") {}
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       if (!exp->lvalue) {
         throw error(exp->parse_, "Can not be used as lvalue");
       }
@@ -809,7 +809,7 @@ namespace ast {
 
   struct DeRef : public UnOp {
     DeRef() : UnOp("deref", "*") {}
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       check_type(exp, POINTER_C);
       const PointerLike * t = dynamic_cast<const PointerLike *>(exp->type->unqualified);
       type = t->subtype;
@@ -823,7 +823,7 @@ namespace ast {
     AST * lhs;
     AST * rhs;
     String op;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       lhs = expand_exp(p->arg(0), env);
@@ -832,8 +832,8 @@ namespace ast {
       make_ct_value(env);
       return this;
     }
-    virtual void resolve(ParseEnviron & env) = 0;
-    virtual void make_ct_value(ParseEnviron & env) {}
+    virtual void resolve(Environ & env) = 0;
+    virtual void make_ct_value(Environ & env) {}
     void compile(CompileWriter & f, CompileEnviron & env) {
       f << "(" << lhs << " " << op << " " << rhs << ")";
     }
@@ -844,7 +844,7 @@ namespace ast {
     AST * part(unsigned i) {abort();}
     AST * exp;
     String id;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       exp = expand_exp(p->arg(0), env);
@@ -869,7 +869,7 @@ namespace ast {
     return t->unqualified;
   }
 
-  const Type * resolve_binop(ResolveEnviron & env, TypeCategory * cat, AST *& lhs, AST *& rhs) {
+  const Type * resolve_binop(Environ & env, TypeCategory * cat, AST *& lhs, AST *& rhs) {
     check_type(lhs, cat);
     check_type(rhs, cat);
     const Type * t = env.type_relation->unify(0, lhs, rhs);
@@ -906,7 +906,7 @@ namespace ast {
   }
 
   enum PointerBinOp {P_MINUS, P_COMP};
-  void resolve_pointer_binop(PointerBinOp op, ResolveEnviron & env, AST *& lhs, AST *& rhs) {
+  void resolve_pointer_binop(PointerBinOp op, Environ & env, AST *& lhs, AST *& rhs) {
     check_type(lhs, POINTER_C);
     check_type(rhs, POINTER_C);
     const Type * lhs_subtype = p_subtype(lhs->type->unqualified)->unqualified;
@@ -925,7 +925,7 @@ namespace ast {
     throw error(rhs->parse_, "Incompatible pointer types");
   }
   
-  const Type * resolve_additive(ResolveEnviron & env, AST *& lhs, AST *& rhs) {
+  const Type * resolve_additive(Environ & env, AST *& lhs, AST *& rhs) {
     check_type(lhs, SCALAR_C);
     check_type(rhs, SCALAR_C);
     if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C)) {
@@ -943,7 +943,7 @@ namespace ast {
 
   struct Assign : public BinOp {
     Assign() : BinOp("assign", "=") {}
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       if (!lhs->lvalue)
         throw error(lhs->parse_, "Can not be used as lvalue");
       if (lhs->type->read_only) 
@@ -954,7 +954,7 @@ namespace ast {
   };
 
   struct CompoundAssign : public BinOp {
-    CompoundAssign(String name, String op0, BinOp *bop, ParseEnviron & env) 
+    CompoundAssign(String name, String op0, BinOp *bop, Environ & env) 
       : BinOp(name, op0), assign(new Assign), binop(bop) 
     {
       parse_ = binop->parse_;
@@ -968,25 +968,25 @@ namespace ast {
     }
     Assign * assign;
     BinOp * binop;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {abort();}
-    void resolve(ResolveEnviron & env) {abort();}
+    AST * parse_self(const Parse * p, Environ & env) {abort();}
+    void resolve(Environ & env) {abort();}
   };
 
   struct SimpleBinOp : public BinOp {
     SimpleBinOp(String name, String op0, TypeCategory * c) 
       : BinOp(name, op0), category(c) {}
     TypeCategory * category;
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       type = resolve_binop(env, category, lhs, rhs);
     }
   };
 
   struct Plus : public BinOp {
     Plus() : BinOp("plus", "+") {}
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       type = resolve_additive(env, lhs, rhs);
     }
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
         ct_value_ = op_ct_value<BinOp_CT_Value, std::plus>(type);
     }
@@ -994,7 +994,7 @@ namespace ast {
 
   struct Minus : public BinOp {
     Minus() : BinOp("minus", "-") {}
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       try {
         type = resolve_additive(env, lhs, rhs);
       } catch(...) {
@@ -1006,7 +1006,7 @@ namespace ast {
           throw;
       }
     }
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
         ct_value_ = op_ct_value<BinOp_CT_Value, std::minus>(type);
     }
@@ -1021,14 +1021,14 @@ namespace ast {
 
   struct Div : public SimpleBinOp {
     Div() : SimpleBinOp("div", "/", NUMERIC_C) {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<BinOp_CT_Value, std::divides>(type);
     }
   };
 
   struct Mod : public SimpleBinOp {
     Mod() : SimpleBinOp("mid", "%", INT_C) {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = int_op_ct_value<BinOp_CT_Value, std::modulus>(type);
     }
   };
@@ -1039,7 +1039,7 @@ namespace ast {
     struct F : public std::binary_function<T,T,T> {
       T operator()(T x, T y) {return x & y;}
     };
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
     }
   };
@@ -1050,7 +1050,7 @@ namespace ast {
     struct F : public std::binary_function<T,T,T> {
       T operator()(T x, T y) {return x | y;}
     };
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
     }
   };
@@ -1061,7 +1061,7 @@ namespace ast {
     struct F : public std::binary_function<T,T,T> {
       T operator()(T x, T y) {return x ^ y;}
     };
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
     }
   };
@@ -1072,7 +1072,7 @@ namespace ast {
 
   struct CompOp : public BinOp {
     CompOp(String n, String op) : BinOp(n, op) {}
-    void resolve(ResolveEnviron & env) {
+    void resolve(Environ & env) {
       check_type(lhs, SCALAR_C);
       check_type(rhs, SCALAR_C);
       if (lhs->type->is(NUMERIC_C)) {
@@ -1088,42 +1088,42 @@ namespace ast {
 
   struct Eq : public CompOp {
     Eq() : CompOp("eq", "==") {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<Comp_CT_Value, std::equal_to>(type);
     }
   };
 
   struct Ne : public CompOp {
     Ne() : CompOp("ne", "!=") {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<Comp_CT_Value, std::not_equal_to>(type);
     }
   };
 
   struct Lt : public CompOp {
     Lt() : CompOp("lt", "<") {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<Comp_CT_Value, std::less>(type);
     }
   };
 
   struct Gt : public CompOp {
     Gt() : CompOp("gt", ">") {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<Comp_CT_Value, std::greater>(type);
     }
   };
 
   struct Le : public CompOp {
     Le() : CompOp("le", "<=") {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<Comp_CT_Value, std::less_equal>(type);
     }
   };
 
   struct Ge : public CompOp {
     Ge() : CompOp("ge", ">=") {}
-    void make_ct_value(ParseEnviron & env) {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<Comp_CT_Value, std::greater_equal>(type);
     }
   };
@@ -1133,7 +1133,7 @@ namespace ast {
     AST * part(unsigned i) {return exp;}
     AST * exp;
     String op;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       exp = expand_exp(p->arg(0), env);
@@ -1157,8 +1157,8 @@ namespace ast {
     ASTList() : AST("astlist") {}
     AST * part(unsigned i) {return stmts[i];}
     Vector<AST *> stmts;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {abort();}
-    void resolve(ResolveEnviron & env) {abort();} 
+    AST * parse_self(const Parse * p, Environ & env) {abort();}
+    void resolve(Environ & env) {abort();} 
     void compile(CompileWriter & f, CompileEnviron & env) {abort();}
   };
 
@@ -1174,7 +1174,7 @@ namespace ast {
   }
 
   struct SList : public ASTList {
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       //parse_ = p;
       if (p->num_args() > 0) {
         for (int i = 0; i < p->num_args(); ++i) {
@@ -1185,7 +1185,7 @@ namespace ast {
     }
   };
 
-  AST * Top::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * Top::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     if (p->num_args() > 0) {
       for (int i = 0; i < p->num_args(); ++i) {
@@ -1199,7 +1199,7 @@ namespace ast {
     type = env.void_type();
     return this;
   }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  printf("***TOP RESOLVE %p***\n", this);
     //  types = env.types;
     //  vars = env.vars;
@@ -1308,7 +1308,7 @@ namespace ast {
     f << "((" << type->to_string() << ")" << "(" << exp << "))";
   };
 
-  AST * ExplicitCast::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * ExplicitCast::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(2);
     const Parse * t = p->arg(0);
@@ -1331,7 +1331,7 @@ namespace ast {
   }
 #endif
 
-  AST * Fun::parse_self(const Parse * p, ParseEnviron & env0) {
+  AST * Fun::parse_self(const Parse * p, Environ & env0) {
     parse_ = p;
     assert_num_args(3,4);
     name = *p->arg(0);
@@ -1341,7 +1341,7 @@ namespace ast {
     sym = new Symbol(name);
     env0.vars->root->add(name, sym);
 
-    ParseEnviron env = env0.new_frame();
+    Environ env = env0.new_frame();
     labels = env.labels = new LabelSymbolTable();
 
     parms = expand_fun_parms(p->arg(1), env);
@@ -1370,14 +1370,14 @@ namespace ast {
     return this;
   }
 
-//   void Fun::resolve(ResolveEnviron & env0) {
+//   void Fun::resolve(Environ & env0) {
 //     printf("RESOLVE FUN %s\n", name.c_str());
 //     sym = new Symbol(name);
 //     env0.vars->root->add(name, sym);
     
 //     return_offset = 0;
     
-//     ResolveEnviron env = env0.new_frame();
+//     Environ env = env0.new_frame();
 //     env.labels = labels;
 //     parms = dynamic_cast<const Tuple *>(expand_type(env.types, parms_parse));
 //     assert(parms); // FIXME: Move check up to parse
@@ -1432,7 +1432,7 @@ namespace ast {
     AST * what;
     Return() : AST("return") {}
     AST * part(unsigned i) {return what;}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       what = expand_exp(p->arg(0), env);
@@ -1440,7 +1440,7 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  resolve_to(env, what, env.frame->return_type);
     //  env.frame->pop_tmp(what->type);
     //  type = env.void_type();
@@ -1460,7 +1460,7 @@ namespace ast {
     //AST * part(unsigned i) {return i == 0 ? lhs : new Generic(parse_->arg(1), parms);}
     AST * lhs;
     Vector<AST *> parms;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       lhs = expand_exp(p->arg(0), env);
@@ -1491,7 +1491,7 @@ namespace ast {
       }
       return this;
     }
-    //void resolve(ResolveEnviron & env) {
+    //void resolve(Environ & env) {
     //  lhs->resolve(env);
     //  env.frame->pop_tmp(lhs->type);
     //  const FunctionPtr * ftype = dynamic_cast<const FunctionPtr *>(lhs->type);
@@ -1542,7 +1542,7 @@ namespace ast {
     String name;
     const Type * type;
     AST * part(unsigned i) {abort();}
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       name = *p->arg(0);
@@ -1565,7 +1565,7 @@ namespace ast {
       Body(Which w) : AST(w == STRUCT ? "struct_body" : "union_body") {}
       AST * part(unsigned i) {return members[i];}
       Vector<AST *> members;
-      AST * parse_self(const Parse * p, ParseEnviron & env) {
+      AST * parse_self(const Parse * p, Environ & env) {
         for (int i = 0; i != p->num_parts(); ++i) {
           add_ast_nodes(members, expand_member(p->part(i), env));
         }
@@ -1577,8 +1577,8 @@ namespace ast {
     AST * part(unsigned i) {return 0; /* FIXME */}
     String name;
     Body * body;
-    ResolveEnviron env;
-    AST * parse_self(const Parse * p, ParseEnviron & env0) {
+    Environ env;
+    AST * parse_self(const Parse * p, Environ & env0) {
       parse_ = p;
       assert(p->is_a(what()));
       name = *p->arg(0);
@@ -1631,7 +1631,7 @@ namespace ast {
       Member(const Parse * p, String n, int v) : name(n), ct_value(v) {}
     };
     Vector<Member> members;
-    AST * parse_self(const Parse * p, ParseEnviron & env) {
+    AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       name = *p->arg(0);
       EnumT * t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
@@ -1680,7 +1680,7 @@ namespace ast {
   struct SizeOf : public AST {
     SizeOf() : AST("sizeof") {}
     const Type * sizeof_type;
-    AST * parse_self(const Parse * p, ParseEnviron & env);
+    AST * parse_self(const Parse * p, Environ & env);
     void compile(CompileWriter & f, CompileEnviron &) {
       f << sizeof_type->size();
     }
@@ -1693,7 +1693,7 @@ namespace ast {
     }
   } size_of_ct_value;
 
-  AST * SizeOf::parse_self(const Parse * p, ParseEnviron & env) {
+  AST * SizeOf::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(1);
     if (p->arg(0)->is_a("(type)")) {
@@ -1708,17 +1708,17 @@ namespace ast {
   }
 
   AST * parse_top(const Parse * p) {
-    ParseEnviron env;
+    Environ env;
     assert(p->is_a("top"));
     AST * res = (new Top)->parse_self(p, env);
     return res;
   }
 
-  AST * try_decl(const Parse * p, ParseEnviron & env);
-  AST * try_stmt(const Parse * p, ParseEnviron & env);
-  AST * try_exp(const Parse * p, ParseEnviron & env);
+  AST * try_decl(const Parse * p, Environ & env);
+  AST * try_stmt(const Parse * p, Environ & env);
+  AST * try_exp(const Parse * p, Environ & env);
 
-  AST * parse_top_level(const Parse * p, ParseEnviron & env) {
+  AST * parse_top_level(const Parse * p, Environ & env) {
     AST * res;
     res = try_decl(p, env);
     if (res) return res;
@@ -1726,7 +1726,7 @@ namespace ast {
     throw error (p, "Expected top level expression.");
   }
 
-  AST * parse_member(const Parse * p, ParseEnviron & env) {
+  AST * parse_member(const Parse * p, Environ & env) {
     AST * res;
     res = try_decl(p, env);
     if (res) return res;
@@ -1734,7 +1734,7 @@ namespace ast {
     throw error (p, "Expected struct or union member.");
   }
 
-  AST * parse_stmt(const Parse * p, ParseEnviron & env) {
+  AST * parse_stmt(const Parse * p, Environ & env) {
     AST * res;
     res = try_stmt(p, env);
     if (res) return res;
@@ -1744,7 +1744,7 @@ namespace ast {
     throw error (p, "Expected statement.");
   }
 
-  AST * parse_stmt_decl(const Parse * p, ParseEnviron & env) {
+  AST * parse_stmt_decl(const Parse * p, Environ & env) {
     AST * res;
     res = try_decl(p, env);
     if (res) return res;
@@ -1756,7 +1756,7 @@ namespace ast {
     throw error (p, "Expected statement or declaration.");
   }
 
-  AST * parse_exp(const Parse * p, ParseEnviron & env) {
+  AST * parse_exp(const Parse * p, Environ & env) {
     AST * res;
     res = try_exp(p, env);
     if (res) return res;
@@ -1764,7 +1764,7 @@ namespace ast {
     throw error (p, "Expected expression.");
   }
 
-  AST * try_decl(const Parse * p, ParseEnviron & env) {
+  AST * try_decl(const Parse * p, Environ & env) {
     String what = p->what();
     if (what == "var")     return (new Var)->parse_self(p, env);
     if (what == "fun" )    return (new Fun)->parse_self(p, env);
@@ -1778,7 +1778,7 @@ namespace ast {
     return 0;
   }
 
-  AST * try_stmt(const Parse * p, ParseEnviron & env) {
+  AST * try_stmt(const Parse * p, Environ & env) {
     String what = p->what();
     if (what == "goto")    return (new Goto)->parse_self(p, env);
     if (what == "lstmt")   return (new LStmt)->parse_self(p, env);
@@ -1794,7 +1794,7 @@ namespace ast {
     return 0;
   }
 
-  AST * try_exp(const Parse * p, ParseEnviron & env) {
+  AST * try_exp(const Parse * p, Environ & env) {
     String what = p->what();
     if (what == "id")      return (new Id)->parse_self(p, env);
     if (what == "literal") return (new Literal)->parse_self(p, env);

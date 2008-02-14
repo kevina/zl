@@ -78,7 +78,7 @@ struct Map {
     }
     return res;
   }
-  const Parse * expand(const Parse * p, Position, ExpandEnviron &, unsigned shift = 0) const {
+  const Parse * expand(const Parse * p, Position, Environ &, unsigned shift = 0) const {
     //printf(">>EXPAND MAP %s\n", ~name);
     ReplTable * rparms = new ReplTable;
     int i = 0;
@@ -223,16 +223,16 @@ struct BuildIn {
 }
 */
 
-const Parse * expand_call_parms(const Parse * parse, ExpandEnviron & env);
+const Parse * expand_call_parms(const Parse * parse, Environ & env);
 
 AST * expand_top(const Parse * p) {
-  ExpandEnviron env;
+  Environ env;
   assert(p->is_a("top")); // FIXME Error
   return (new Top())->parse_self(p, env);
 }
 
 void read_macro(const Parse * p) {
-  ExpandEnviron env;
+  Environ env;
   expand(p, TopLevel, env);
 }
 
@@ -243,7 +243,7 @@ const Parse * ESTMT = new Parse("estmt");
 //   "exp" "stmt" "estmt" and TOKENS
 // FIXME: need to add check
 
-const Parse * handle_paran(const Parse * p, ExpandEnviron & env) {
+const Parse * handle_paran(const Parse * p, Environ & env) {
   try {
     const Parse * exp = reparse("PARAN_EXP", p);
     const Parse * type = parse_decl_->parse_type(exp, env);
@@ -257,7 +257,7 @@ const Parse * handle_paran(const Parse * p, ExpandEnviron & env) {
   }
 }
 
-const Parse * e_parse_exp(const Parse * p, ExpandEnviron & env) {
+const Parse * e_parse_exp(const Parse * p, Environ & env) {
   Parse * tmp = new Parse("exp");
   for (unsigned i = 0; i != p->num_args(); ++i) {
     const Parse * t = p->arg(i);
@@ -268,7 +268,7 @@ const Parse * e_parse_exp(const Parse * p, ExpandEnviron & env) {
   return res;
 }
 
-AST * expand(const Parse * p, Position pos, ExpandEnviron & env) {
+AST * expand(const Parse * p, Position pos, Environ & env) {
   if (p->entity()) {
     AST * ast = dynamic_cast<AST *>(p->entity());
     assert(ast); // FIXME Error message
@@ -344,7 +344,7 @@ AST * expand(const Parse * p, Position pos, ExpandEnviron & env) {
   }
 }
 
-Type * expand_type(const Parse * p, ExpandEnviron & env) {
+Type * expand_type(const Parse * p, Environ & env) {
   if (p->entity()) {
     Type * type = dynamic_cast<Type *>(p->entity());
     assert(type);
@@ -371,7 +371,7 @@ void assert_num_args(const Parse * p, unsigned min, unsigned max) {
     throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->what());
 }
 
-const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env, Parse * res) {
+const Parse * expand_args(const Parse * p, Position pos, Environ & env, Parse * res) {
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_args(); ++i) {
     // FIXME need to partly expand it first
@@ -384,7 +384,7 @@ const Parse * expand_args(const Parse * p, Position pos, ExpandEnviron & env, Pa
   return res;
 }
 
-Tuple * expand_fun_parms(const Parse * parse, ExpandEnviron & env) {
+Tuple * expand_fun_parms(const Parse * parse, Environ & env) {
   Parse * res = new Parse(parse->part(0));
   for (unsigned i = 0; i != parse->num_args(); ++i) {
     const Parse * p = parse->arg(i);
@@ -403,7 +403,7 @@ Tuple * expand_fun_parms(const Parse * parse, ExpandEnviron & env) {
   return tuple;
 }
 
-const Parse * expand_call_parms(const Parse * p, ExpandEnviron & env) {
+const Parse * expand_call_parms(const Parse * p, Environ & env) {
   if (p->is_a("list"))
     return expand_args(p, ExpPos, env, new Parse(p->str(), p->part(0)));
   assert(p->is_a("(,)"));

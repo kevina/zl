@@ -43,12 +43,12 @@ struct DeclWorking {
 
   bool parse_first_part(Parts::const_iterator & i, 
                         Parts::const_iterator end, 
-                        ExpandEnviron & env);
+                        Environ & env);
   const Parse * parse_outer_type_info(const Parse * & id, 
                                       Parts::const_iterator & i, 
                                       Parts::const_iterator end,
                                       const Parse * t,
-                                      ExpandEnviron & env,
+                                      Environ & env,
                                       bool id_required = true);
   const Parse * parse_init_exp(Parts::const_iterator & i, 
                                Parts::const_iterator end);
@@ -131,7 +131,7 @@ struct DeclWorking {
     return true;
   }
   String type_name;
-  bool try_type_name(const Parse * p, ExpandEnviron & env) {
+  bool try_type_name(const Parse * p, Environ & env) {
     String name = p->what_;
     if (env.lookup_symbol(name) == ast::TypeSym) {
       if (base_type) ignore();
@@ -141,7 +141,7 @@ struct DeclWorking {
       return false;
     }
   }
-  bool try_typeof(const Parse * p, ExpandEnviron &) {
+  bool try_typeof(const Parse * p, Environ &) {
     if (*p == ".typeof") {
       inner_type = new Parse(p->part(0), p->arg(0));
       return true;
@@ -149,9 +149,9 @@ struct DeclWorking {
       return false;
     }
   }
-  bool try_struct_union(const Parse * p, ExpandEnviron &);
-  bool try_enum(const Parse * p, ExpandEnviron &);
-  const Parse * parse_struct_union_body(const Parse * p, ExpandEnviron &);
+  bool try_struct_union(const Parse * p, Environ &);
+  bool try_enum(const Parse * p, Environ &);
+  const Parse * parse_struct_union_body(const Parse * p, Environ &);
   bool dots;
   Parse * inner_type;
   void make_inner_type(const Parse * orig);
@@ -164,14 +164,14 @@ struct DeclWorking {
 
   const Parse * make_declaration(const Parse * id, const Parse * t, const Parse * init = NULL);
   const Parse * make_function(const Parse * id, const Parse * t, const Parse * body);
-  const Parse * make_function_type(const Parse *, const Parse *, ExpandEnviron & env);
+  const Parse * make_function_type(const Parse *, const Parse *, Environ & env);
 };
 
 class ParseDeclImpl : public ParseDecl {
 public:
   ParseDeclImpl() {}
-  const Parse * parse_decl(const Parse * p, ExpandEnviron &);
-  const Parse * parse_type(const Parse * p, ExpandEnviron &);
+  const Parse * parse_decl(const Parse * p, Environ &);
+  const Parse * parse_type(const Parse * p, Environ &);
   
   void init() {}
   ~ParseDeclImpl() {}
@@ -188,7 +188,7 @@ DeclWorking::DeclWorking(Parts & p)
 // The real code....
 //
 
-const Parse * ParseDeclImpl::parse_decl(const Parse * p, ExpandEnviron & env)
+const Parse * ParseDeclImpl::parse_decl(const Parse * p, Environ & env)
 {
   Parse * res = new Parse(new Parse("slist"));
 
@@ -234,7 +234,7 @@ const Parse * ParseDeclImpl::parse_decl(const Parse * p, ExpandEnviron & env)
   return res;
 }
 
-const Parse * ParseDeclImpl::parse_type(const Parse * p, ExpandEnviron & env) {
+const Parse * ParseDeclImpl::parse_type(const Parse * p, Environ & env) {
   Parts dummy;
   Parts::const_iterator i = p->args_begin();
   Parts::const_iterator end = p->args_end();
@@ -251,7 +251,7 @@ const Parse * ParseDeclImpl::parse_type(const Parse * p, ExpandEnviron & env) {
 
 bool DeclWorking::parse_first_part(Parts::const_iterator & i, 
                                    Parts::const_iterator end,
-                                   ExpandEnviron & env) 
+                                   Environ & env) 
 {
   Parts::const_iterator begin = i;
   if (i != end && (*i)->is_a("sym", "...")) {
@@ -286,7 +286,7 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
   else return true;
 }
 
-bool DeclWorking::try_struct_union(const Parse * p, ExpandEnviron & env) {
+bool DeclWorking::try_struct_union(const Parse * p, Environ & env) {
   const Parse * name = NULL;
   const Parse * body = NULL;
   if (p->is_a("struct") || p->is_a("union")) {
@@ -318,7 +318,7 @@ bool DeclWorking::try_struct_union(const Parse * p, ExpandEnviron & env) {
   }
 }
 
-const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, ExpandEnviron & env)
+const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, Environ & env)
 {
   Parse * res = new Parse();
   for (unsigned h = 0; h != p0->num_args(); ++h) {
@@ -356,7 +356,7 @@ const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, ExpandEnvir
   return res;
 }
 
-bool DeclWorking::try_enum(const Parse * p, ExpandEnviron & env) {
+bool DeclWorking::try_enum(const Parse * p, Environ & env) {
   const Parse * name = NULL;
   const Parse * body = NULL;
   if (p->is_a("enum")) {
@@ -483,7 +483,7 @@ const Parse * DeclWorking::parse_outer_type_info(const Parse * & id,
                                                  Parts::const_iterator & i, 
                                                  Parts::const_iterator end,
                                                  const Parse * t,
-                                                 ExpandEnviron & env,
+                                                 Environ & env,
                                                  bool id_required) 
 {
   assert(t);
@@ -524,7 +524,7 @@ const Parse * DeclWorking::parse_outer_type_info(const Parse * & id,
 
 const Parse * DeclWorking::make_function_type(const Parse * ret,
                                               const Parse * parms,
-                                              ExpandEnviron & env)
+                                              Environ & env)
 {
   Parse * ps = new Parse(new Parse(".tuple"));
   Parts::const_iterator i = parms->args_begin();

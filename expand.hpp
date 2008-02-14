@@ -16,7 +16,6 @@ namespace ast {
 };
 
 using ast::Environ;
-typedef Environ ExpandEnviron;
 
 ast::AST * expand_top(const Parse * p);
 void read_macro(const Parse * p);
