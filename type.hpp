@@ -71,12 +71,11 @@ namespace ast {
     explicit TypeParm(What w) : what(w) {}
   };
 
-  struct TypeSymbolTable : public SymbolTable<const TypeSymbol *> {
-    typedef SymbolTable<const TypeSymbol *> Base;
-    TypeSymbolTable(TypeSymbolTable * p = 0) : Base(p) {}
-    const TypeSymbol * lookup(SymbolKey k) {
-      if (!Base::exists(k)) return 0;
-      return Base::lookup(k);
+  struct TypeSymbolTable {
+    SymbolTable * symbols;
+    TypeSymbolTable(SymbolTable * s) : symbols(s) {}
+    const TypeSymbol * find(const SymbolKey & k) {
+      return symbols->find<TypeSymbol>(k);
     }
     Type * inst(SymbolKey n, Vector<TypeParm> &);
     Type * inst(SymbolKey n) {
@@ -89,7 +88,8 @@ namespace ast {
       return inst(n, parms);
     }
     Type * ct_const(const Type * t);
-    void add_name(SymbolKey k, TypeSymbol * t);
+    inline void add(const SymbolKey & k, const TypeSymbol * t);
+    void add_name(const SymbolKey & n, TypeSymbol * t);
   };
 
   static inline bool operator==(TypeParm lhs, TypeParm rhs) {
@@ -155,7 +155,7 @@ namespace ast {
 
   class TypeInst;
   
-  class TypeSymbol : public Entity {
+  class TypeSymbol : public Symbol {
   public:
     Parse * parse;
     String name;
@@ -168,6 +168,8 @@ namespace ast {
     virtual TypeParm::What parm(unsigned i) const = 0; // return TypeParm::NONE if off end
     virtual ~TypeSymbol() {}
   };
+
+  inline void TypeSymbolTable::add(const SymbolKey & k, const TypeSymbol * t) {symbols->add(k, t);}
 
   static inline bool category_in(const TypeCategory * x, const TypeCategory * y) {
     if (x == y) return true;
@@ -259,9 +261,9 @@ namespace ast {
     TypeParm::What parm(unsigned i) const {return TypeParm::NONE;}
   };
 
-  static inline void add_simple_type(TypeSymbolTable * sym, SymbolKey name, SimpleTypeInst * type) {
+  static inline void add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleTypeInst * type) {
     SimpleTypeSymbol * t = new SimpleTypeSymbol(type);
-    sym->add_name(name, t);
+    sym.add_name(name, t);
   }
 
   //
@@ -762,12 +764,12 @@ namespace ast {
       return new FunctionPtr(static_cast<const Tuple *>(p[0].as_type), p[1].as_type);
     }
     using ParmTypeSymbol::inst;
-    FunctionPtr * inst(TypeSymbolTable * types, Fun * f) const;
+    FunctionPtr * inst(TypeSymbolTable types, Fun * f) const;
   };
 
 
   TypeRelation * new_c_type_relation();
-  void create_c_types(TypeSymbolTable * types);
+  void create_c_types(TypeSymbolTable types);
 
   extern Type * VOID_T; // FIXME: Hack
 

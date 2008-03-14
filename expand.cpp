@@ -38,7 +38,7 @@ String gen_sym() {
 
 const Parse * replace(const Parse * p, ReplTable * r);
 
-struct Map {
+struct Map : public Symbol {
   String name;
   SourceEntity entity;
   const Parse * parse;
@@ -210,8 +210,7 @@ const Parse * replace(const Parse * p, ReplTable * r) {
 // function and identifier macros in the same namespace
 // NOTE: may also want macros for tags...
 
-static SymbolTable<const Map *> syntax_maps;
-static SymbolTable<const Map *> maps;
+static SymbolTable syntax_maps;
 
 /*
 struct BuildIn {
@@ -287,7 +286,7 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
   } else if (what == "[]") {
     return expand(reparse("EXP", p->arg(0)), pos, env);
   } else if (syntax_maps.exists(what)) { // syntax macros
-    p = syntax_maps.lookup(what)->expand(p, pos, env);
+    p = syntax_maps.find<Map>(what)->expand(p, pos, env);
     return expand(p, pos, env);
   } else if (what == "call") { 
     assert_num_args(p, 2);
@@ -296,9 +295,12 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
     // the parameters are just a list of tokens at this point,
     // we need to turn them into a proper list
     const Parse * a = reparse("SPLIT", p->arg(1)->arg(0));
-    if (n && n->is_a("id") && maps.exists(*n->arg(0)) && !env.symbol_exists(*n->arg(0))) { // function macros
+    const Map * map = NULL;
+    if (n && n->is_a("id"))
+        map = env.symbols.find<Map>(*n->arg(0));
+    if (map) { // function macros
       //  (call (id fun) (list parm1 parm2 ...))?
-      p = maps.lookup(*n->arg(0))->expand(a, pos, env);
+      p = map->expand(a, pos, env);
       return expand(p, pos, env);
     } else {
       Parse * res = new Parse(p->str(), p->part(0));
@@ -313,7 +315,7 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
     if (what == "smap") 
       syntax_maps.add(m->name, m);
     else
-      maps.add(m->name, m);
+      env.symbols.add(m->name, m);
     return new Empty();
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);

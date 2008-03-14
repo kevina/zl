@@ -16,26 +16,28 @@ namespace ast {
   enum Scope {STATIC, STACK};
 
   struct VarLoc : public gc {
-    Scope scope;
-    unsigned offset; // offset in local block for interpreter
+    //Scope scope;
+    //unsigned offset; // offset in local block for interpreter
   };
 
-  struct Symbol : public VarLoc {
+  struct VarSymbol : public Symbol {
     String name;
     SourceStr str;
     const Type * type;
     const struct CT_Value_Base * ct_value;
-    Symbol(String n) : name(n), ct_value() {}
+    VarSymbol(String n) : name(n), ct_value() {}
   };
-
-  typedef SymbolTable<const Parse *> ParmsSymbolTable;
 
   enum LabelType {NormalLabel = 0, LocalLabel = 1};
 
-  typedef SymbolTable<Symbol *>     VarSymbolTable;
-  typedef SymbolTable<String>       LabelSymbolTable;
-  // note: value of label symbol table is mapping to unique c label
-
+  struct LabelSymbol : public Symbol {
+    String name;
+    mutable String uniq_name; // for local labels
+    LabelType type;
+    LabelSymbol() : type() {}
+    LabelSymbol(String n, LabelType t)
+      : name(n), uniq_name(n), type(t) {}
+  };
 
   struct Frame : public gc {
     const TypeInst * return_type;
@@ -74,45 +76,32 @@ namespace ast {
 #endif
   };
 
-  enum SymbolType {NoSym, VarSym, TypeSym};
   struct Environ : public gc {
-    LabelSymbolTable * labels;
     TypeRelation * type_relation;
-    TypeSymbolTable * types;
-    VarSymbolTable  * vars;
+    SymbolTable symbols;
+    TypeSymbolTable types;
+    OpenSymbolTable fun_labels;
     Frame * frame;
-    Type * void_type() {return types->inst("<void>");}
-    Type * bool_type() {return types->inst("<bool>");}
-    template <typename T>
-    bool symbol_exists(const T & s) {
-      return vars->exists(s) || types->exists(s);
-    }
-    template <typename T>
-    SymbolType lookup_symbol(const T & s) {
-      if (vars->exists(s)) return VarSym;
-      if (types->exists(s)) return TypeSym;
-      return NoSym;
-    }
+    Type * void_type() {return types.inst("<void>");}
+    Type * bool_type() {return types.inst("<bool>");}
     const FunctionPtrSymbol * function_sym() 
-      {return static_cast<const FunctionPtrSymbol *>(types->lookup(".fun"));}
-    Environ() {
+      {return static_cast<const FunctionPtrSymbol *>(types.find(".fun"));}
+    Environ() : types(&symbols) {
       type_relation = new_c_type_relation(); // FIXME HACK
-      types = new TypeSymbolTable;
       create_c_types(types); // FIXME Another HACK
-      vars  = new VarSymbolTable;
       frame = new Frame();
-      labels = 0;
     }
+    Environ(const Environ & other) 
+      : type_relation(other.type_relation), symbols(other.symbols),
+        types(&symbols), fun_labels(other.fun_labels), frame(other.frame) {}
     Environ new_scope() {
       Environ env = *this;
-      env.types = new TypeSymbolTable(env.types);
-      env.vars  = new VarSymbolTable(env.vars);
+      env.symbols = symbols.new_scope();
       return env;
     }
     Environ new_frame() {
       Environ env = *this;
-      env.types = new TypeSymbolTable(env.types);
-      env.vars  = new VarSymbolTable(env.vars);
+      env.symbols = symbols.new_scope(env.fun_labels);
       env.frame = new Frame();
       return env;
     }
@@ -164,13 +153,13 @@ namespace ast {
       {return *reinterpret_cast<T *>(static_ptr + i);}
     template <typename T> T & local_var(unsigned i)
       {return *reinterpret_cast<T *>(frame_ptr + i);}
-    template <typename T> T & var(const VarLoc & l)
-      {return *reinterpret_cast<T *>(var_ptrs[l.scope][l.offset]);}
+    //template <typename T> T & var(const VarLoc & l)
+    //  {return *reinterpret_cast<T *>(var_ptrs[l.scope][l.offset]);}
     template <typename T> inline T & ret(const AST *);
     void * local_var(unsigned i)
       {return static_cast<void *>(static_ptr + i);}
-    void * var(const VarLoc & l) 
-      {return static_cast<void *>(var_ptrs[l.scope][l.offset]);}
+    //void * var(const VarLoc & l) 
+    //  {return static_cast<void *>(var_ptrs[l.scope][l.offset]);}
     inline void * ret(const AST * exp);
     //template <typename T> T * push_tmp(const Type * t) {
     //  T * p = reinterpret_cast<T *>(stack_ptr);
@@ -211,8 +200,8 @@ namespace ast {
 
   class CompileWriter : public FStream {
   public:
+    SymbolNode * symbols;
     hash_set<String> label_names;
-    LabelSymbolTable * label_map;
     unsigned indent_level;
     CompileWriter() : indent_level(0) {}
     void indent() {
@@ -377,8 +366,8 @@ namespace ast {
     AST * part(unsigned i) {return stmts[i];}
     Vector<AST *> stmts;
     unsigned frame_size;
-    TypeSymbolTable * types;
-    VarSymbolTable * vars;
+    //TypeSymbolTable * types;
+    //VarSymbolTable * vars;
     AST * parse_self(const Parse * p, Environ & env);
     //void resolve(ResolveEnviron & env);
     void eval(ExecEnviron & env);
@@ -420,15 +409,15 @@ namespace ast {
     }
   };
 
- struct Fun : public Declaration {
+  struct Fun : public Declaration {
     Fun() : Declaration("fun") {}
     //AST * part(unsigned i);
     String name;
-    Symbol * sym;
+    VarSymbol * sym;
     const Tuple * parms;
     const Type * ret_type;
     Block * body;
-    LabelSymbolTable * labels;
+    //LabelSymbolTable * labels;
     unsigned frame_offset;
     unsigned frame_size;
     AST * parse_self(const Parse * p, Environ & env0);

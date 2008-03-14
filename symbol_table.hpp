@@ -3,91 +3,112 @@
 
 #include <utility>
 #include "hash.hpp"
-
-struct Parse;
+#include "parse.hpp"
 
 namespace ast {
 
-  struct NameSpace {
+  static const unsigned DEFAULT_NS = 0;
+  static const unsigned TAG_NS = 2;
+  static const unsigned LABEL_NS = 3;
+
+  struct SymbolKey {
     String name;
-    NameSpace(String n) : name(n) {}
+    unsigned ns;
+    SymbolKey(const char * n, unsigned ns0 = 0)
+      : name(n), ns(ns0) {}
+    SymbolKey(String n = String(), unsigned ns0 = 0)
+      : name(n), ns(ns0) {}
+    SymbolKey(const Parse & p) : name(p), ns() {}
   };
 
-  extern const NameSpace * DEFAULT_NS;
-  extern const NameSpace * TAG_NS;
-
-  struct SymbolKey : public std::pair<const NameSpace *, String> {
-    typedef std::pair<const NameSpace *, String> Base;
-    SymbolKey() : Base() {}
-    SymbolKey(String n) : Base(DEFAULT_NS, n) {}
-    SymbolKey(const char * n) : Base(DEFAULT_NS, n) {}
-    inline SymbolKey(const Parse & p); 
-    SymbolKey(const NameSpace * ns, String n) : Base(ns, n) {}
+  struct Symbol {
+    virtual ~Symbol() {}
   };
 
-#ifdef PARSE__HPP
-  inline SymbolKey::SymbolKey(const Parse & p) : Base(DEFAULT_NS, p) {}
-#endif
+  struct SymbolNode {
+    SymbolKey key;
+    const Symbol * value;
+    SymbolNode * next;
+    SymbolNode(const SymbolKey & k, const Symbol * v, SymbolNode * n) 
+      : key(k), value(v), next(n) {}
+  };
 
-  template <typename V>
-  class SymbolTable : public gc_cleanup
+  static inline bool operator==(const SymbolKey & x, const SymbolKey & y) {
+    return x.name == y.name && x.ns == y.ns;
+  }
+  static inline bool operator!=(const SymbolKey & x, const SymbolKey & y) {
+    return !(x == y);
+  }
+
+  template <typename T>
+  inline const T * find_symbol(const SymbolKey & k, SymbolNode * cur, SymbolNode * stop = 0) {
+    for (; cur != stop; cur = cur->next) {
+      if (k == cur->key) break;
+    }
+    if (cur == stop) return 0;
+    return dynamic_cast<const T *>(cur->value);
+  }
+
+  class OpenSymbolTable : public gc
   {
   public:
-    typedef V Value;
-    SymbolTable * const root;
-    SymbolTable * const parent;
-    bool is_root() {return root == this;}
+    bool is_root() {return back == 0;}
   public: // but don't use
-    typedef hash_map<SymbolKey, Value> Symbols;
-    Symbols symbols;
+    SymbolNode * * front;
+    SymbolNode * back;
   public:
-    SymbolTable(SymbolTable * p = 0) 
-      : root(p ? p->root : this), parent(p) {}
-    SymbolTable * pop() {
-      SymbolTable * r = parent;
-      return r;
+    OpenSymbolTable() // This is a placeholder, it can't be used in this statex
+      : front(), back() {}
+    OpenSymbolTable(SymbolNode * * f, SymbolNode * b)
+      : front(f), back(b) {}
+    template <typename T> 
+    const T * find(const SymbolKey & k) {
+      return find_symbol<T>(k, *front);
     }
-    void add(SymbolKey k, const Value & v) {
-      symbols[k] = v;
+    bool exists(const SymbolKey & k) {
+      return find_symbol<Symbol>(k, *front);
     }
-    //void add(const NameSpace * ns, String n, const Value v) {
-    //  add(SymbolKey(ns,n), v);
-    //}
-    //void add(String k, const Value v) {
-    //  add(SymbolKey(DEFAULT_NS, k), v);
-    //}
-    bool exists(SymbolKey k) const {
-      typename Symbols::const_iterator i = symbols.find(k);
-      if (i != symbols.end()) return true;
-      if (parent) return parent->exists(k);
-      else return false;
+    template <typename T>
+    void add(const SymbolKey & k, const T * sym) {
+      if (find_symbol<Symbol>(k, *front, back)) return; // FIXME: throw error
+      *front = new SymbolNode(k, sym, *front);
     }
-    //bool exists(const NameSpace * ns, String n) const {
-    //  return exists(SymbolKey(ns,n));
-    //}
-    //bool exists(String n) const {
-    //  return exists(SymbolKey(DEFAULT_NS, n));
-    //}
-    Value & lookup(SymbolKey k) const {
-      typename Symbols::const_iterator i = symbols.find(k);
-      if (i != symbols.end()) return i->second;
-      if (parent) return parent->lookup(k);
-      else abort();
+  };
+
+  class SymbolTable : public gc
+  {
+  public:
+    bool is_root() {return back == 0;}
+  public: // but don't use
+    SymbolNode * front;
+    SymbolNode * back;
+  public:
+    SymbolTable() 
+      : front(), back() {}
+    SymbolTable(SymbolNode * f, SymbolNode * b)
+      : front(f), back(b) {}
+    SymbolTable new_scope() {
+      return SymbolTable(front, front);
     }
-    //Value & lookup(const NameSpace * ns, String n) {
-    //  return lookup(SymbolKey(ns,n));
-    //}
-    //Value & lookup(String n) {
-    //  return lookup(SymbolKey(DEFAULT_NS,n));
-    //}
+    SymbolTable new_scope(OpenSymbolTable & o) {
+      SymbolNode * placeholder = new SymbolNode(SymbolKey(), NULL, front);
+      o.front = &placeholder->next;
+      o.back = front;
+      return SymbolTable(placeholder, placeholder);
+    }
+    template <typename T> 
+    const T * find(const SymbolKey & k) {
+      return find_symbol<T>(k, front);
+    }
+    bool exists(const SymbolKey & k) {
+      return find_symbol<Symbol>(k, front);
+    }
+    void add(const SymbolKey & k, const Symbol * sym) {
+      if (find_symbol<Symbol>(k, front, back)) return; // FIXME: throw error
+      front = new SymbolNode(k, sym, front);
+    }
   };
 
 }
-
-template <> struct hash<ast::SymbolKey>   {
-  unsigned long operator()(const ast::SymbolKey & k) const {
-    return ((unsigned long)k.first) ^ hash<String>()(k.second);
-  }
-};
 
 #endif

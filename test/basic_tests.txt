@@ -19,3 +19,4 @@ test20.c
 test21.c
 test22.c
 test23.c
+test25.c

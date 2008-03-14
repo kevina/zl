@@ -21,9 +21,6 @@ namespace ast {
   typedef size_t target_size_t;
   typedef ptrdiff_t target_ptrdiff_t;
 
-  const NameSpace * DEFAULT_NS = new NameSpace(".default");
-  const NameSpace * TAG_NS = new NameSpace(".tag");
-
   template <typename T>
   void add_ast_nodes(T & container, AST * node);
 
@@ -93,7 +90,7 @@ namespace ast {
     return op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
-  const Type * expand_type(TypeSymbolTable * types, const Parse * p, Environ & env) {
+  const Type * expand_type(TypeSymbolTable, const Parse * p, Environ & env) {
     return expand_type(p, env);
   }
 
@@ -136,19 +133,19 @@ namespace ast {
 
   struct LStmt : public AST {
     LStmt() : AST("lstmt") {}
-    bool local;
-    String label;
+    LabelSymbol * label;
     AST * stmt;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       const Parse * arg0 = p->arg(0);
-      label = *arg0->arg(0);
+      String n = *arg0->arg(0);
       if (arg0->is_a("local")) {
-        env.labels->add(label, label);
-        local = true;
+        label = new LabelSymbol(n, LocalLabel);
+        env.symbols.add(SymbolKey(n, LABEL_NS), label);
       } else {
-        env.labels->root->add(label, label);
+        label = new LabelSymbol(n, NormalLabel);
+        env.fun_labels.add(SymbolKey(n, LABEL_NS), label);
       }
       stmt = expand_stmt(p->arg(1), env);
       type = stmt->type;
@@ -158,7 +155,7 @@ namespace ast {
       stmt->eval(env);
     }
     void compile(CompileWriter & o, CompileEnviron &) {
-      o << adj_indent(-2) << indent << o.label_map->lookup(label) << ":\n";
+      o << adj_indent(-2) << indent << label->uniq_name << ":\n";
       o << stmt;
     }
   };
@@ -209,7 +206,10 @@ namespace ast {
     //}
     void eval(ExecEnviron&) {abort();}
     void compile(CompileWriter & o, CompileEnviron &) {
-      o << indent << "goto " << o.label_map->lookup(label) << ";\n";
+      o << indent 
+        << "goto " 
+        << find_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), o.symbols)->uniq_name 
+        << ";\n";
     }
   };
 
@@ -220,7 +220,7 @@ namespace ast {
   AST * Literal::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(1,2);
-    type = env.types->inst(p->num_args() > 1 ? *p->arg(1) : String("int"));
+    type = env.types.inst(p->num_args() > 1 ? *p->arg(1) : String("int"));
     ct_value_ = new_literal_ct_value(p->arg(0), type, env);
     return this;
   }
@@ -262,7 +262,7 @@ namespace ast {
       char * e = (char *)s;
       unsigned long long value = strtoull(s, &e, 0);
       if (*e) throw error(vp, "Expected Integer");
-      if (value == 0) t = env.types->inst(".zero", t);
+      if (value == 0) t = env.types.inst(".zero", t);
       String n = it->exact_type->to_string();
       if (n == ".uint8")
         return new Literal_Value<uint8_t>(value);
@@ -279,7 +279,7 @@ namespace ast {
       char * e = (char *)s;
       long long value = strtoll(s, &e, 0);
       if (*e) throw error(vp, "Expected Integer");
-      if (value == 0) t = env.types->inst(".zero", t);
+      if (value == 0) t = env.types.inst(".zero", t);
       String n = it->exact_type->to_string();
       if (n == ".int8")
         return new Literal_Value<int8_t>(value);
@@ -299,7 +299,7 @@ namespace ast {
   AST * FloatC::parse_self(const Parse * p, Environ & env) {
     parse_ = p;
     assert_num_args(1,2);
-    type = env.types->inst(p->num_args() > 1 ? *p->arg(1) : String("double"));
+    type = env.types.inst(p->num_args() > 1 ? *p->arg(1) : String("double"));
     ct_value_ = new_float_ct_value(p->arg(0), type, env);
     return this;
   }
@@ -336,8 +336,8 @@ namespace ast {
     parse_ = p;
     assert_num_args(1,2);
     orig = *p->arg(0);
-    type = env.types->inst(".pointer", env.types->ct_const(env.types->inst("char")));
-    type = env.types->ct_const(type);
+    type = env.types.inst(".pointer", env.types.ct_const(env.types.inst("char")));
+    type = env.types.ct_const(type);
     return this;
   }
   void StringC::compile(CompileWriter & f, CompileEnviron &) {
@@ -348,8 +348,8 @@ namespace ast {
     parse_ = p;
     assert_num_args(1, 2);
     orig = *p->arg(0);
-    type = env.types->inst("char");
-    type = env.types->ct_const(type);
+    type = env.types.inst("char");
+    type = env.types.ct_const(type);
     return this;
   }
   void CharC::compile(CompileWriter & f, CompileEnviron &) {
@@ -360,14 +360,14 @@ namespace ast {
     Id() : AST("id") {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     String name;
-    Symbol * sym;
+    const VarSymbol * sym;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       name = *p->arg(0);
-      if (!env.vars->exists(name))
+      sym = env.symbols.find<VarSymbol>(name);
+      if (!sym)
         throw error(parse_->arg(0), "Unknown Identifier: %s", name.c_str());
-      sym = env.vars->lookup(name);
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
@@ -571,11 +571,11 @@ namespace ast {
       assert_num_args(2,3);
       name = *p->arg(0);
       parse_flags(p);
-      Symbol * s = new Symbol(name);
+      VarSymbol * s = new VarSymbol(name);
       s->type = var_type = expand_type(env.types, p->arg(1), env);
       if (storage_class != EXTERN && var_type->size() == NPOS) 
         throw error(p->arg(0), "Size not known");
-      env.vars->add(name, s);
+      env.symbols.add(name, s);
       if (p->num_args() > 2) {
         init = expand_exp(p->arg(2), env);
         resolve_to(env, init, var_type);
@@ -619,18 +619,12 @@ namespace ast {
   struct BlockBase : public AST {
     BlockBase(String name, bool ae) : AST(name), as_exp(ae) {}
     bool as_exp;
-    hash_map<String, unsigned> local_lables;
-    LabelSymbolTable * labels;
-    TypeSymbolTable * types;
-    VarSymbolTable * vars;
     //AST * part(unsigned i) {return stmts[i];}
+    SymbolTable symbols; // not valid until done parsing block
     Vector<AST *> stmts;
     AST * parse_self(const Parse * p, Environ & env0) {
       parse_ = p;
       Environ env = env0.new_scope();
-      labels = env.labels = new LabelSymbolTable(env0.labels);
-      types = env.types;
-      vars  = env.vars;
       if (p->num_args() > 0) {
         for (int i = 0; i < p->num_args(); ++i) {
           add_ast_nodes(stmts, expand_stmt_decl(p->arg(i), env));
@@ -638,10 +632,12 @@ namespace ast {
       } else {
         stmts.push_back(new NoOp);
       }
+      symbols = env.symbols;
       if (as_exp) 
         type = stmts.back()->type;
       else
         type = env.void_type();
+      
       return this;
     }
     void eval(ExecEnviron & env) {
@@ -650,21 +646,21 @@ namespace ast {
       }
     };
     void compile(CompileWriter & f, CompileEnviron & env) {
-      for (LabelSymbolTable::Symbols::iterator 
-             i = labels->symbols.begin(), e = labels->symbols.end();
-           i != e; ++i)
+      f.symbols = symbols.front;
+      for (SymbolNode * cur = symbols.front; cur != symbols.back; cur = cur->next)
       {
+        const LabelSymbol * l = dynamic_cast<const LabelSymbol *>(cur->value);
+        if (!l) continue;
         String n;
         int j = 0;
         StringBuf new_name;
         do {
-          new_name.printf("%s__%d", ~i->first.second+1 /*FIXME: Hack*/, j++);
+          new_name.printf("%s$%d", ~l->uniq_name, j++);
           n = new_name.freeze();
         } while (f.label_names.have(n));
         f.label_names.insert(n);
-        i->second = n;
+        l->uniq_name = n;
       }
-      f.label_map = labels;
       if (as_exp)
         f << "({\n";
       else
@@ -676,7 +672,6 @@ namespace ast {
         f << indent << "})";
       else
         f << indent << "}\n";
-      f.label_map = f.label_map->parent;
     }
   };
 
@@ -696,7 +691,7 @@ namespace ast {
       parse_ = p;
       assert_num_args(1);
       exp = expand_exp(p->arg(0), env);
-      resolve_to(env, exp, env.types->inst("int"));
+      resolve_to(env, exp, env.types.inst("int"));
       type = env.void_type();
       return this;
     }
@@ -800,7 +795,7 @@ namespace ast {
         throw error(exp->parse_, "Can not be used as lvalue");
       }
       // FIXME: add check for register qualifier
-      const TypeSymbol * t = env.types->lookup(".pointer");
+      const TypeSymbol * t = env.types.find(".pointer");
       Vector<TypeParm> p;
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
@@ -853,10 +848,10 @@ namespace ast {
       const StructUnionT * t = dynamic_cast<const StructUnionT *>(exp->type->unqualified);
       if (!t) throw error(p->arg(0), "Expected struct or union type");
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
-      if (!t->env->vars->exists(id))
+      if (!t->env->symbols.exists(id))
         throw error(p->arg(1), "\"%s\" is not a member of \"%s\"", 
                     ~id, ~t->to_string());
-      type = t->env->vars->lookup(id)->type;
+      type = t->env->symbols.find<VarSymbol>(id)->type;
       lvalue = true;
       return this;
     };
@@ -1000,7 +995,7 @@ namespace ast {
       } catch(...) {
         if (lhs->type->is(POINTER_C) || rhs->type->is(POINTER_C)) {
           resolve_pointer_binop(P_MINUS, env, lhs, rhs);
-          type = env.types->inst("int");
+          type = env.types.inst("int");
         }
         else
           throw;
@@ -1082,7 +1077,7 @@ namespace ast {
       } else {
         abort(); // This should't happen
       }
-      type = env.types->inst("<bool>");
+      type = env.types.inst("<bool>");
     }
   };
 
@@ -1194,8 +1189,8 @@ namespace ast {
     } else {
       stmts.push_back(new NoOp());
     }
-    types = env.types;
-    vars = env.vars;
+    //types = env.types;
+    //vars = env.vars;
     type = env.void_type();
     return this;
   }
@@ -1338,11 +1333,10 @@ namespace ast {
 
     parse_flags(p);
 
-    sym = new Symbol(name);
-    env0.vars->root->add(name, sym);
+    sym = new VarSymbol(name);
+    env0.symbols.add(name, sym);
 
     Environ env = env0.new_frame();
-    labels = env.labels = new LabelSymbolTable();
 
     parms = expand_fun_parms(p->arg(1), env);
 
@@ -1356,9 +1350,9 @@ namespace ast {
            i != e; ++i)
       {
         String n = i->name;
-        Symbol * sym = new Symbol(n);
+        VarSymbol * sym = new VarSymbol(n);
         sym->type = i->type;
-        env.vars->add(n, sym);
+        env.symbols.add(n, sym);
       }
 
       body = dynamic_cast<Block *>(expand_stmt(p->arg(3), env));
@@ -1416,7 +1410,7 @@ namespace ast {
   }
 
   void Fun::compile(CompileWriter & f, CompileEnviron & env) {
-    f.label_names.clear();
+    f.label_names.clear(); // FIXME: This won't work for nested functions
     write_flags(f);
     StringBuf buf;
     c_print_inst->declaration(name, *sym->type, buf);
@@ -1425,7 +1419,6 @@ namespace ast {
       f << "\n" << body;
     else
       f << ";\n";
-    f.label_map = 0;
   }
 
   struct Return : public AST {
@@ -1587,7 +1580,7 @@ namespace ast {
         body = new Body(which);
         body->parse_self(p->arg(1), env);
       }
-      const Type * t0 = env.types->inst(SymbolKey(TAG_NS,name));
+      const Type * t0 = env.types.inst(SymbolKey(name, TAG_NS));
       StructUnionT * s;
       if (t0) s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
       else if (which == STRUCT) s = new StructT(name);
@@ -1601,7 +1594,7 @@ namespace ast {
       //type_name << "struct " << what();
       s->env = &env;
       s->finalize();
-      add_simple_type(env0.types, SymbolKey(TAG_NS, name), s);
+      add_simple_type(env0.types, SymbolKey(name, TAG_NS), s);
       return this; 
     }
     void compile(CompileWriter & f, CompileEnviron &) {
@@ -1635,14 +1628,14 @@ namespace ast {
       parse_ = p;
       name = *p->arg(0);
       EnumT * t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
-                      (env.types->inst(SymbolKey(TAG_NS,name)))));
+                                        (env.types.inst(SymbolKey(name, TAG_NS)))));
       if (!t0) t0 = new EnumT(name);
-      t0->exact_type = env.types->inst("int")->exact_type;
-      add_simple_type(env.types, SymbolKey(TAG_NS, name), t0);
+      t0->exact_type = env.types.inst("int")->exact_type;
+      add_simple_type(env.types, SymbolKey(name, TAG_NS), t0);
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
       q_parms.push_back(TypeParm(t0));
-      const Type * t = env.types->lookup(".qualified")->inst(q_parms);
+      const Type * t = env.types.find(".qualified")->inst(q_parms);
       int val = 0;
       const Parse * arg1 = p->arg(1);
       members.reserve(arg1->num_args());
@@ -1650,16 +1643,16 @@ namespace ast {
         const Parse * arg = arg1->arg(i);
         if (arg->num_parts() > 1) {
           AST * e = expand_exp(arg->part(1), env);
-          resolve_to(env, e, env.types->inst("int"));
+          resolve_to(env, e, env.types.inst("int"));
           val = e->ct_value<target_int>();
         }
         Member mem(arg1, *arg->part(0), val);
         val++;
-        Symbol * sym = new Symbol(mem.name);
+        VarSymbol * sym = new VarSymbol(mem.name);
         sym->type = t;
         members.push_back(mem);
         sym->ct_value = &members.back().ct_value;
-        env.vars->root->add(mem.name, sym);
+        env.symbols.add(mem.name, sym);
       }
       t0->finalize();
       return this;
@@ -1702,7 +1695,7 @@ namespace ast {
       AST * exp = expand(p->arg(0), ExpPos, env);
       sizeof_type = expand_type(new Parse(new Parse(".typeof"), new Parse(exp)), env);
     }
-    type = env.types->ct_const(env.types->inst(".size"));
+    type = env.types.ct_const(env.types.inst(".size"));
     ct_value_ = &size_of_ct_value;
     return this;
   }

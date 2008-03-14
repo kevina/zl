@@ -37,14 +37,14 @@ namespace ast {
   }
 
   Type * TypeSymbolTable::inst(SymbolKey n, Vector<TypeParm> & p) {
-    if (!exists(n)) return 0;
-    const TypeSymbol * s = lookup(n);
+    const TypeSymbol * s = find(n);
+    if (!s) return NULL;
     return s->inst(p);
   }
 
-  void TypeSymbolTable::add_name(SymbolKey k, TypeSymbol * t) {
-    t->name = k.second;
-    Base::add(k,t);
+  void TypeSymbolTable::add_name(const SymbolKey & k, TypeSymbol * t) {
+    t->name = k.name;
+    symbols->add(k, t);
   }
 
   PrintInst const * const generic_print_inst = new GenericPrintInst();
@@ -196,9 +196,9 @@ namespace ast {
     : SimpleTypeInst(a->type), of_ast(a), of(a->type) {type_symbol = of->type_symbol;}
 
   Type * parse_type(const Parse * p, Environ & env) {
-    TypeSymbolTable * types = env.types;
+    TypeSymbolTable types = env.types;
     unsigned sz = p->num_args();
-    const NameSpace * ns = DEFAULT_NS;
+    unsigned ns = DEFAULT_NS;
     String name = p->what();
     String full_name = name;
     String tag;
@@ -219,7 +219,7 @@ namespace ast {
       t->finalize();
       return t;
     }
-    const TypeSymbol * t = types->lookup(SymbolKey(ns,name));
+    const TypeSymbol * t = types.find(SymbolKey(name, ns));
     if (!t) {
       if (tag.empty()) {
         throw error(p, "Unknown type: %s", ~full_name);
@@ -229,8 +229,8 @@ namespace ast {
         else if (tag == "union") ti = new UnionT(name);
         else if (tag == "enum")  ti = new EnumT(name);
         else abort();
-        add_simple_type(types, SymbolKey(TAG_NS, name), ti);
-        t = types->lookup(SymbolKey(TAG_NS,name));
+        add_simple_type(types, SymbolKey(name, TAG_NS), ti);
+        t = types.find(SymbolKey(name, TAG_NS));
         assert(t);
       }
     }
@@ -261,7 +261,7 @@ namespace ast {
       }
       case TypeParm::INT: {
         AST * exp = expand_exp(p0, env);
-        resolve_to(env, exp, types->inst("int"));
+        resolve_to(env, exp, types.inst("int"));
         parms.push_back(TypeParm(exp->ct_value<int>()));
         break;
       }
@@ -294,13 +294,13 @@ namespace ast {
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(qualifiers));
       q_parms.push_back(TypeParm(inst_type));
-      return types->lookup(".qualified")->inst(q_parms);
+      return types.find(".qualified")->inst(q_parms);
     } else {
       return inst_type;
     }
   }
   
-  FunctionPtr * FunctionPtrSymbol::inst(TypeSymbolTable * types, Fun * f) const {
+  FunctionPtr * FunctionPtrSymbol::inst(TypeSymbolTable types, Fun * f) const {
     Vector<TypeParm> p;
     p.clear();
     p.push_back(TypeParm(TypeParm::TUPLE, f->parms));
@@ -421,9 +421,9 @@ namespace ast {
     return new C_TypeRelation();
   }
 
-  void add_c_int(TypeSymbolTable * types, String n);
+  void add_c_int(TypeSymbolTable types, String n);
 
-  void create_c_types(TypeSymbolTable * types) {
+  void create_c_types(TypeSymbolTable types) {
     add_simple_type(types, ".int8", new_signed_int(1));
     add_simple_type(types, ".uint8", new_unsigned_int(1));
     add_simple_type(types, ".int16", new_signed_int(2));
@@ -439,10 +439,10 @@ namespace ast {
     add_c_int(types, "long");
     add_c_int(types, "long long");
 
-    //types->add("signed short", types->lookup("short"));
-    //types->add("signed int", types->lookup("int"));
-    //types->add("signed long", types->lookup("long"));
-    //types->add("signed long long", types->lookup("long long"));
+    //types.add("signed short", types.find("short"));
+    //types.add("signed int", types.find("int"));
+    //types.add("signed long", types.find("long"));
+    //types.add("signed long long", types.find("long long"));
 
     add_c_int(types, "unsigned char");
     add_c_int(types, "unsigned short");
@@ -450,7 +450,7 @@ namespace ast {
     add_c_int(types, "unsigned long");
     add_c_int(types, "unsigned long long");
 
-    types->add("unsigned", types->lookup("unsigned int"));
+    types.add("unsigned", types.find("unsigned int"));
 
     add_c_int(types, "char");
 
@@ -461,21 +461,21 @@ namespace ast {
     add_simple_type(types, "double", new Float(Float::DOUBLE));
     add_simple_type(types, "long double", new Float(Float::LONG));
 
-    add_simple_type(types, "<bool>", new AliasT(types->inst("int")));
+    add_simple_type(types, "<bool>", new AliasT(types.inst("int")));
 
-    types->add("<void>", types->lookup("void"));
+    types.add("<void>", types.find("void"));
 
-    types->add(".size", types->lookup("unsigned long"));
-    types->add(".ptrdiff", types->lookup("long"));
+    types.add(".size", types.find("unsigned long"));
+    types.add(".ptrdiff", types.find("long"));
 
-    types->add_name(".pointer", new PointerSymbol);
-    //types->add_name("<const>", new ConstSymbol);
-    types->add_name(".array", new ArraySymbol);
-    types->add_name(".fun", new FunctionPtrSymbol);
-    types->add_name(".tuple", new TupleSymbol);
-    types->add_name(".qualified", new QualifiedTypeSymbol);
-    types->add_name(".zero", new ZeroTypeSymbol);
-    types->add_name(".typeof", new TypeOfSymbol);
+    types.add_name(".pointer", new PointerSymbol);
+    //types.add_name("<const>", new ConstSymbol);
+    types.add_name(".array", new ArraySymbol);
+    types.add_name(".fun", new FunctionPtrSymbol);
+    types.add_name(".tuple", new TupleSymbol);
+    types.add_name(".qualified", new QualifiedTypeSymbol);
+    types.add_name(".zero", new ZeroTypeSymbol);
+    types.add_name(".typeof", new TypeOfSymbol);
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {
@@ -543,8 +543,8 @@ namespace ast {
     abort();
   }
   
-  void add_c_int(TypeSymbolTable * types, String n) {
-    add_simple_type(types, n, new Int(static_cast<const Int *>(types->inst(c_type_to_exact(n)))));
+  void add_c_int(TypeSymbolTable types, String n) {
+    add_simple_type(types, n, new Int(static_cast<const Int *>(types.inst(c_type_to_exact(n)))));
   }
 
 }

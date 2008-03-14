@@ -3,6 +3,7 @@
 #include "string_buf.hpp"
 #include "expand.hpp"
 #include "ast.hpp"
+#include "type.hpp"
 
 // the ";" is just noise at this point and is NOT expected to be included
 
@@ -133,7 +134,7 @@ struct DeclWorking {
   String type_name;
   bool try_type_name(const Parse * p, Environ & env) {
     String name = p->what_;
-    if (env.lookup_symbol(name) == ast::TypeSym) {
+    if (env.symbols.find<ast::TypeSymbol>(name)) {
       if (base_type) ignore();
       type_name = name;
       return true;
