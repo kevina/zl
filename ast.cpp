@@ -133,17 +133,14 @@ namespace ast {
 
   struct LStmt : public AST {
     LStmt() : AST("lstmt") {}
-    LabelSymbol * label;
+    const LabelSymbol * label;
     AST * stmt;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
-      const Parse * arg0 = p->arg(0);
-      String n = *arg0->arg(0);
-      if (arg0->is_a("local")) {
-        label = new LabelSymbol(n, LocalLabel);
-        env.symbols.add(SymbolKey(n, LABEL_NS), label);
-      } else {
+      String n = *p->arg(0);
+      label = env.symbols.find<LabelSymbol>(SymbolKey(n, LABEL_NS));
+      if (!label) {
         label = new LabelSymbol(n, NormalLabel);
         env.fun_labels.add(SymbolKey(n, LABEL_NS), label);
       }
@@ -155,7 +152,7 @@ namespace ast {
       stmt->eval(env);
     }
     void compile(CompileWriter & o, CompileEnviron &) {
-      o << adj_indent(-2) << indent << label->uniq_name << ":\n";
+      o << adj_indent(-2) << indent << label << ":\n";
       o << stmt;
     }
   };
@@ -170,6 +167,7 @@ namespace ast {
       if (p->arg(0)->is_a("case")) {
         exp = expand_exp(p->arg(0)->arg(0), env);
       } else /* default */ {
+        exp = NULL;
       }
       stmt = expand_stmt(p->arg(1), env);
       type = stmt->type;
@@ -191,11 +189,13 @@ namespace ast {
   struct Goto : public AST {
     Goto() : AST("goto") {}
     String label;
+    const LabelSymbol * sym;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       assert(p->arg(0)->is_a("id"));
       label = *p->arg(0)->arg(0);
+      sym = env.symbols.find<LabelSymbol>(SymbolKey(label, LABEL_NS));
       return this;
     }
     // FIXME, move into compile ...
@@ -207,9 +207,26 @@ namespace ast {
     void eval(ExecEnviron&) {abort();}
     void compile(CompileWriter & o, CompileEnviron &) {
       o << indent 
-        << "goto " 
-        << find_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), o.symbols)->uniq_name 
+        << "goto "
+        << (sym ? sym : find_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), o.fun_symbols))
         << ";\n";
+    }
+  };
+  
+  struct LocalLabelDecl : public AST {
+    LocalLabelDecl() : AST("local_label") {}
+    const LabelSymbol * label;
+    AST * parse_self(const Parse * p, Environ & env) {
+      parse_ = p;
+      assert_num_args(1);
+      String n = *p->arg(0);
+      label = new LabelSymbol(n, LocalLabel);
+      env.symbols.add(SymbolKey(n, LABEL_NS), label);
+      type = env.void_type();
+      return this;
+    }
+    void compile(CompileWriter & o, CompileEnviron &) {
+      o << indent << "__label__ " << label << ";\n";
     }
   };
 
@@ -359,15 +376,14 @@ namespace ast {
   struct Id : public AST {
     Id() : AST("id") {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
-    String name;
     const VarSymbol * sym;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
-      name = *p->arg(0);
-      sym = env.symbols.find<VarSymbol>(name);
+      String n = *p->arg(0);
+      sym = env.symbols.find<VarSymbol>(n);
       if (!sym)
-        throw error(parse_->arg(0), "Unknown Identifier: %s", name.c_str());
+        throw error(parse_->arg(0), "Unknown Identifier: %s", n.c_str());
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
@@ -393,7 +409,7 @@ namespace ast {
       // }
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << name;
+      f << sym;
     }
   };
 
@@ -563,22 +579,21 @@ namespace ast {
   struct Var : public Declaration {
     Var() : Declaration("var"), init() {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
-    String name;
-    const Type * var_type;
+    VarSymbol * sym;
     AST * init;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2,3);
-      name = *p->arg(0);
+      String n = *p->arg(0);
       parse_flags(p);
-      VarSymbol * s = new VarSymbol(name);
-      s->type = var_type = expand_type(env.types, p->arg(1), env);
-      if (storage_class != EXTERN && var_type->size() == NPOS) 
+      sym = new VarSymbol(n);
+      sym->type = expand_type(env.types, p->arg(1), env);
+      if (storage_class != EXTERN && sym->type->size() == NPOS) 
         throw error(p->arg(0), "Size not known");
-      env.symbols.add(name, s);
+      env.symbols.add(sym->name, sym);
       if (p->num_args() > 2) {
         init = expand_exp(p->arg(2), env);
-        resolve_to(env, init, var_type);
+        resolve_to(env, init, sym->type);
       }
       return this;
       type = env.void_type();
@@ -588,7 +603,7 @@ namespace ast {
       f << indent;
       write_flags(f);
       StringBuf buf;
-      c_print_inst->declaration(name, *var_type, buf);
+      c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
       f << buf.freeze();
       if (init)
         f << " = " << init;
@@ -646,21 +661,7 @@ namespace ast {
       }
     };
     void compile(CompileWriter & f, CompileEnviron & env) {
-      f.symbols = symbols.front;
-      for (SymbolNode * cur = symbols.front; cur != symbols.back; cur = cur->next)
-      {
-        const LabelSymbol * l = dynamic_cast<const LabelSymbol *>(cur->value);
-        if (!l) continue;
-        String n;
-        int j = 0;
-        StringBuf new_name;
-        do {
-          new_name.printf("%s$%d", ~l->uniq_name, j++);
-          n = new_name.freeze();
-        } while (f.label_names.have(n));
-        f.label_names.insert(n);
-        l->uniq_name = n;
-      }
+      symbols.rename();
       if (as_exp)
         f << "({\n";
       else
@@ -1191,6 +1192,7 @@ namespace ast {
     }
     //types = env.types;
     //vars = env.vars;
+    symbols = env.symbols;
     type = env.void_type();
     return this;
   }
@@ -1349,15 +1351,15 @@ namespace ast {
       for (Tuple::Parms::const_iterator i = parms->parms.begin(), e = parms->parms.end();
            i != e; ++i)
       {
-        String n = i->name;
-        VarSymbol * sym = new VarSymbol(n);
-        sym->type = i->type;
-        env.symbols.add(n, sym);
+        const VarSymbol * sym = i->name_sym;
+        env.symbols.add(sym->name, sym);
       }
 
       body = dynamic_cast<Block *>(expand_stmt(p->arg(3), env));
       assert(body); // FiXME
     }
+
+    symbols = env.symbols;
 
     //sym->value = this;
 
@@ -1410,11 +1412,12 @@ namespace ast {
   }
 
   void Fun::compile(CompileWriter & f, CompileEnviron & env) {
-    f.label_names.clear(); // FIXME: This won't work for nested functions
+    symbols.rename();
     write_flags(f);
     StringBuf buf;
     c_print_inst->declaration(name, *sym->type, buf);
     f << buf.freeze();
+    f.fun_symbols = symbols.front;
     if (body)
       f << "\n" << body;
     else
@@ -1532,21 +1535,21 @@ namespace ast {
 
   struct TypeAlias : public AST {
     TypeAlias() : AST("talias") {}
-    String name;
+    TypeSymbol * name_sym;
     const Type * type;
     AST * part(unsigned i) {abort();}
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
-      name = *p->arg(0);
+      String n = *p->arg(0);
       type = expand_type(env.types, p->arg(1), env);
-      add_simple_type(env.types, name, new AliasT(type));
+      name_sym = add_simple_type(env.types, n, new AliasT(type));
       return this;
     }
     void compile(CompileWriter & f, CompileEnviron &) {
       f << indent << "typedef ";
       StringBuf buf;
-      c_print_inst->declaration(name, *type, buf);
+      c_print_inst->declaration(name_sym->uniq_name(), *type, buf);
       f << buf.freeze();
       f << ";\n";
     }
@@ -1569,6 +1572,7 @@ namespace ast {
     StructUnion(Which w) : AST(w == STRUCT ? "struct" : "union"), which(w)  {}
     AST * part(unsigned i) {return 0; /* FIXME */}
     String name;
+    TypeSymbol * sym;
     Body * body;
     Environ env;
     AST * parse_self(const Parse * p, Environ & env0) {
@@ -1588,17 +1592,17 @@ namespace ast {
       for (unsigned i = 0; i != body->members.size(); ++i) {
 	Var * v = dynamic_cast<Var *>(body->members[i]);
 	assert(v);
-	s->members.push_back(Member(v->name,v->var_type));
+	s->members.push_back(Member(v->sym->name,v->sym->type));
       }
       //StringBuf type_name;
       //type_name << "struct " << what();
       s->env = &env;
       s->finalize();
-      add_simple_type(env0.types, SymbolKey(name, TAG_NS), s);
+      sym = add_simple_type(env0.types, SymbolKey(name, TAG_NS), s);
       return this; 
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << indent << what() << " " << name << "{\n";
+      f << indent << what() << " " << sym << "{\n";
       for (int i = 0; i != body->members.size(); ++i) {
         f << adj_indent(2) << body->members[i];
       }
@@ -1768,6 +1772,7 @@ namespace ast {
     if (what == "map")     return (new ASTList);
     if (what == "smap")    return (new ASTList);
     if (what == "slist")   return (new SList)->parse_self(p, env);
+    if (what == "local_label") return (new LocalLabelDecl)->parse_self(p, env);
     return 0;
   }
 

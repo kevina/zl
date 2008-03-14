@@ -22,6 +22,8 @@ namespace ast {
   typedef TypeInst Type;
   class Tuple;
   struct Environ;
+  struct VarSymbol;
+  
 
   struct AST;
 
@@ -57,14 +59,15 @@ namespace ast {
       const Type * as_type;
       int          as_int;
       AST        * as_exp;
+      
     };
-    String name;
+    const VarSymbol * name_sym;
     bool is_type() {return what == TYPE || what == TUPLE;}
     explicit TypeParm() : what(NONE) {}
-    explicit TypeParm(const Type * t, String n = String()) : what(TYPE), as_type(t), name(n) {}
-    explicit TypeParm(What w, const Type * t, String n = String()) : what(w), as_type(t), name(n) {}
-    explicit TypeParm(int i, String n = String()) : what(INT), as_int(i), name(n) {}
-    explicit TypeParm(AST * exp, String n = String()) : what(EXP), as_exp(exp), name(n) {}
+    explicit TypeParm(const Type * t, const VarSymbol * s = NULL) : what(TYPE), as_type(t), name_sym(s) {}
+    explicit TypeParm(What w, const Type * t, const VarSymbol * s = NULL) : what(w), as_type(t), name_sym(s) {}
+    explicit TypeParm(int i, const VarSymbol * s = NULL) : what(INT), as_int(i), name_sym(s) {}
+    explicit TypeParm(AST * exp, const VarSymbol * s = NULL) : what(EXP), as_exp(exp), name_sym(s) {}
     void to_string(StringBuf & buf) const;
     static TypeParm dots() {return TypeParm(DOTS);}
   private:
@@ -99,7 +102,7 @@ namespace ast {
       return true;
     case TypeParm::TYPE:
     case TypeParm::TUPLE:
-      return lhs.as_type == rhs.as_type && lhs.name == rhs.name;
+      return lhs.as_type == rhs.as_type && lhs.name_sym == rhs.name_sym;
     case TypeParm::INT:
       return lhs.as_int == rhs.as_int;
     case TypeParm::EXP:
@@ -158,7 +161,6 @@ namespace ast {
   class TypeSymbol : public Symbol {
   public:
     Parse * parse;
-    String name;
     String what() const {return name;}
     const PrintInst * print_inst;
     TypeSymbol() : parse(), print_inst(c_print_inst) {}
@@ -261,9 +263,11 @@ namespace ast {
     TypeParm::What parm(unsigned i) const {return TypeParm::NONE;}
   };
 
-  static inline void add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleTypeInst * type) {
+  static inline SimpleTypeSymbol *  
+  add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleTypeInst * type) {
     SimpleTypeSymbol * t = new SimpleTypeSymbol(type);
     sym.add_name(name, t);
+    return t;
   }
 
   //
@@ -365,9 +369,9 @@ namespace ast {
   public:
     struct Parm {
       const Type * type;
-      String name;
+      const VarSymbol * name_sym;
       Parm() {}
-      Parm(const Type * t, String n) : type(t), name(n) {}
+      Parm(const Type * t, const VarSymbol * s) : type(t), name_sym(s) {}
     };
     typedef Vector<Parm> Parms;
     Parms parms;
@@ -376,7 +380,7 @@ namespace ast {
     virtual unsigned num_parms() const {return parms.size() + vararg;}
     virtual TypeParm parm(unsigned i) const {
       if (i < parms.size())
-	return TypeParm(parms[i].type, parms[i].name);
+	return TypeParm(parms[i].type, parms[i].name_sym);
       else if (vararg)
 	return TypeParm::dots();
       else
@@ -398,7 +402,7 @@ namespace ast {
 	  break;
 	} else {
 	  assert(p[i].what == TypeParm::TYPE);
-	  r->parms.push_back(Tuple::Parm(p[i].as_type, p[i].name));
+	  r->parms.push_back(Tuple::Parm(p[i].as_type, p[i].name_sym));
 	}
       }
       return r;

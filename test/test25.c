@@ -6,11 +6,16 @@ int main() {
   else
     goto outer;
   {
-  .loop:
+    __label__ loop;
+  loop:
     {
-    inner: x = 20;
-      goto loop;
-    .loop: x = 15;
+      __label__ loop;
+    inner: 
+      {
+        x = 20;
+        goto loop;
+      }
+    loop: x = 15;
     }
     goto loop;
   }

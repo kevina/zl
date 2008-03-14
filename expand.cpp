@@ -39,7 +39,6 @@ String gen_sym() {
 const Parse * replace(const Parse * p, ReplTable * r);
 
 struct Map : public Symbol {
-  String name;
   SourceEntity entity;
   const Parse * parse;
   const Parse * parms;

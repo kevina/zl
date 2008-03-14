@@ -140,7 +140,7 @@ namespace ast {
     if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
       buf << "(";
       for (unsigned i = 0; i < t->parms.size();) {
-        declaration(t->parms[i].name, *t->parms[i].type, buf);
+        declaration(t->parms[i].name_sym->uniq_name(), *t->parms[i].type, buf);
         ++i;
         if (i == t->parms.size()) break;
         buf << ", ";
@@ -176,7 +176,7 @@ namespace ast {
       if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
         buf << t->what << " ";
       }
-      buf << type->type_symbol->name << qualifiers;
+      buf << type->type_symbol->uniq_name() << qualifiers;
       if (!var.empty())
 	buf << " " << var;
     } else {
@@ -243,10 +243,10 @@ namespace ast {
     parms.reserve(sz);
     for (int i = 0; i != sz; ++i) {
       const Parse * p0 = p->arg(i);
-      String n;
+      VarSymbol * n = NULL;
       if (name == ".tuple" && !p0->part(0)->simple()) { // HACK!
 	if (p0->num_parts() > 1)
-	  n = *p0->part(1);
+	  n = new VarSymbol(*p0->part(1));
 	p0 = p0->part(0);
       }
       switch(t->parm(i)) {
@@ -255,6 +255,7 @@ namespace ast {
 	  parms.push_back(TypeParm::dots());
 	} else {
 	  Type * t0 = expand_type(p0, env);
+          if (n) n->type = t0;
 	  parms.push_back(TypeParm(t0, n));
 	}
         break;

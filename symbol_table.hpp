@@ -22,6 +22,21 @@ namespace ast {
   };
 
   struct Symbol {
+    String name;
+    mutable unsigned num;
+    Symbol() : num() {}
+    Symbol(String n) : name(n), num() {}
+    virtual void uniq_name(OStream & o) const {
+      if (num > 0)
+        o.printf("%s$%u", ~name, num);
+      else
+        o << name;
+    }
+    String uniq_name() const {
+      StringBuf buf;
+      uniq_name(buf);
+      return buf.freeze();
+    }
     virtual ~Symbol() {}
   };
 
@@ -94,7 +109,7 @@ namespace ast {
       SymbolNode * placeholder = new SymbolNode(SymbolKey(), NULL, front);
       o.front = &placeholder->next;
       o.back = front;
-      return SymbolTable(placeholder, placeholder);
+      return SymbolTable(placeholder, front);
     }
     template <typename T> 
     const T * find(const SymbolKey & k) {
@@ -106,6 +121,24 @@ namespace ast {
     void add(const SymbolKey & k, const Symbol * sym) {
       if (find_symbol<Symbol>(k, front, back)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);
+    }
+    void rename() {
+      Vector<SymbolNode *> nodes;
+      for (SymbolNode * cur = front; cur != back; cur = cur->next) {
+        if (!cur->value) continue;
+        nodes.push_back(cur);
+      }
+      while (!nodes.empty()) {
+        SymbolNode * cur = nodes.back();
+        nodes.pop_back();
+        SymbolNode * p = cur->next;
+        for (; p; p = p->next) {
+          if (p != cur && p->key.name == cur->key.name) break;
+        }
+        unsigned num = 1;
+        if (p) num = p->value->num + 1;
+        cur->value->num = num;
+      }
     }
   };
 

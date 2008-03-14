@@ -1,26 +1,29 @@
 (smap while (TEST BODY)
      (loop (block 
-             (lstmt (local ".continue")
+             (local_label "continue")
+             (lstmt "continue"
                (if TEST (noop) (break)))
              BODY)))
 
 (smap do (BODY TEST)
      (loop (block 
+             (local_label "continue")
              BODY
-             (lstmt (local ".continue")
+             (lstmt "continue"
                (if TEST (noop) (break))))))
 
 (smap for (INIT TEST POST BODY)
       (block 
                INIT
                (loop (block
+                 (local_label "continue")
                  (if TEST (noop) (break))
                  BODY
-                 (lstmt (local ".continue")
+                 (lstmt "continue"
                    POST)))))
 
 (smap continue ()
-       (goto (id ".continue")))
+       (goto (id "continue")))
 
 #(smap "()" (...)
 #    (exp ...))

@@ -21,24 +21,21 @@ namespace ast {
   };
 
   struct VarSymbol : public Symbol {
-    String name;
     SourceStr str;
     const Type * type;
     const struct CT_Value_Base * ct_value;
-    VarSymbol(String n) : name(n), ct_value() {}
+    VarSymbol(String n) : Symbol(n), ct_value() {}
   };
 
   enum LabelType {NormalLabel = 0, LocalLabel = 1};
 
   struct LabelSymbol : public Symbol {
-    String name;
-    mutable String uniq_name; // for local labels
     LabelType type;
     LabelSymbol() : type() {}
     LabelSymbol(String n, LabelType t)
-      : name(n), uniq_name(n), type(t) {}
+      : Symbol(n), type(t) {}
   };
-
+  
   struct Frame : public gc {
     const TypeInst * return_type;
 #if 0
@@ -200,8 +197,7 @@ namespace ast {
 
   class CompileWriter : public FStream {
   public:
-    SymbolNode * symbols;
-    hash_set<String> label_names;
+    SymbolNode * fun_symbols;
     unsigned indent_level;
     CompileWriter() : indent_level(0) {}
     void indent() {
@@ -280,6 +276,12 @@ namespace ast {
   //
   //
   //
+
+  static inline
+  CompileWriter & operator<< (CompileWriter & o, const Symbol * sym) {
+    sym->uniq_name(o);
+    return o;
+  }
 
   static inline 
   CompileWriter & operator<< (CompileWriter & o, const char * str) {
@@ -364,6 +366,7 @@ namespace ast {
   struct Top : public AST {
     Top() : AST("top") {}
     AST * part(unsigned i) {return stmts[i];}
+    SymbolTable symbols;
     Vector<AST *> stmts;
     unsigned frame_size;
     //TypeSymbolTable * types;
@@ -413,6 +416,7 @@ namespace ast {
     Fun() : Declaration("fun") {}
     //AST * part(unsigned i);
     String name;
+    SymbolTable symbols;
     VarSymbol * sym;
     const Tuple * parms;
     const Type * ret_type;
