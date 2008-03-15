@@ -151,26 +151,18 @@ const Parse * replace(const Parse * p, ReplTable * r) {
       if (!r->have(s))
         r->insert(s, new Parse(gen_sym(), p->str_));
       return r->lookup(s);
-    } else if (r->have(s)) {
-      return r->lookup(s);
     } else {
       return p;
     }
-  } else if (p->is_a("id") && ((String)*p->arg(0))[0] != '`' && r->have(*p->arg(0))) {
-    return r->lookup(*p->arg(0)); 
-  } else if (p->is_a("mid")) {
+  } else if (p->is_a("mid") && r->have(*p->arg(0))) {
     const Parse * p0 = r->lookup(*p->arg(0));
-    if (p0) {
-      if (p0->is_a("parm")) {
-        String what = *p->arg(1);
-        if (what == "TOKEN" || what == "EXP" || what == "STMT")
-          what = "PARM";
-        p0 = reparse(what, p0->arg(0));
-      }
-      return p0;
-    } else {
-      return p;
+    if (p0->is_a("parm")) {
+      String what = *p->arg(1);
+      if (what == "TOKEN" || what == "EXP" || what == "STMT")
+        what = "PARM";
+      p0 = reparse(what, p0->arg(0));
     }
+    return p0;
   } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
     return p;
   } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("parm")) {

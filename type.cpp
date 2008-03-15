@@ -43,7 +43,7 @@ namespace ast {
   }
 
   void TypeSymbolTable::add_name(const SymbolKey & k, TypeSymbol * t) {
-    t->name = k.name;
+    t->name = k.name();
     symbols->add(k, t);
   }
 

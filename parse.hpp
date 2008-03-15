@@ -7,8 +7,11 @@
 #include "util.hpp"
 #include "string_buf.hpp" // FIXME: elim dep
 #include "entity.hpp"
+#include "symbol_table.hpp"
 
 // common structure used for parse results
+
+using ast::SymbolName;
 
 struct Parse;
 
@@ -123,13 +126,23 @@ struct Flags : public gc {
   const_iterator end() const {return data.end();}
   bool empty() const {return data.empty();}
   unsigned size() const {return data.size();}
-  inline const Parse * lookup(String d);
+  inline const Parse * lookup(SymbolName d);
   bool have(String d) {
     return lookup(d) != NULL;
   }
   inline bool insert(const Parse * p);
   void print() const;
 };
+
+
+// A parse is:                                      d  repl  entity_   marks
+//   Branch                                         X   -       -        -
+//   Symbol -- w/ marks                             -   -       -        x
+//   Literal -- w/o marks                           -   -       -        -
+//   Unparsed Text -- w/ repl and marks closure (1) x   X       -        -
+//   An Entity                                      2   -       X        -
+//   NOTES: (1) ...
+//          (2) set to AS_ENTITY
 
 // A simple parse is one with only one part which is itself
 // If not a simple parse than the name IS the name of the first
@@ -144,10 +157,11 @@ struct Parse : public gc {
     Flags flags;
   };
   static D * const AS_ENTITY;
-  String what_;
-  String what() const {return what_;}
-  operator String () const {assert(simple() || part(0)->simple()); return what_;}
-  const char * operator ~ () const {return ~operator String();}
+  SymbolName what_;
+  SymbolName what() const {return what_;}
+  //operator String () const {assert(simple() || part(0)->simple()); return what_;}
+  operator SymbolName () const {assert(simple() || part(0)->simple()); return what_;}
+  const char * operator ~ () const {return ~operator SymbolName();}
   String string_if_simple() const {return simple() ? what() : String();}
   mutable SourceStr str_;
   const SourceStr & str() const {if (d && str_.empty()) set_src_from_parts(); return str_;}
@@ -316,8 +330,8 @@ struct Parse : public gc {
   void set_src_from_parts() const; // const is a lie
 
   void print() const;
-  bool is_a(String n) const {return what_ == n;}
-  bool is_a(String n, String p) const {return what_ == n && num_args() > 0 && arg(0)->is_a(p);}
+  bool is_a(SymbolName n) const {return what_ == n;}
+  bool is_a(SymbolName n, SymbolName p) const {return what_ == n && num_args() > 0 && arg(0)->is_a(p);}
 
   virtual ~Parse() {}
 };
@@ -331,7 +345,7 @@ static inline bool operator==(const Parse & p, const char * str) {
 inline SourceEntity::SourceEntity(const Parse * e)
   : file_(e->str().source->file_), expansion_(e) {}
 
-inline const Parse * Flags::lookup(String d) {
+inline const Parse * Flags::lookup(SymbolName d) {
   for (iterator i = begin(); i != end(); ++i) 
     if ((*i)->what() == d) return *i;
   return NULL;
@@ -342,6 +356,10 @@ inline bool Flags::insert(const Parse * p) {
   if (have(p->what())) return false;
   data.push_back(p);
   return true;
+}
+
+namespace ast {
+  inline SymbolKey::SymbolKey(const Parse & p) : SymbolName(p), ns() {}
 }
 
 namespace parse_parse {
