@@ -21,3 +21,12 @@ test22.c
 test23.c
 test25.c
 test26.c
+test27.c
+test28.c
+test29.c
+test30.c
+test31.c
+test32.c
+test33.c
+test34.c
+test35.c

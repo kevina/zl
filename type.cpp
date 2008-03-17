@@ -43,7 +43,7 @@ namespace ast {
   }
 
   void TypeSymbolTable::add_name(const SymbolKey & k, TypeSymbol * t) {
-    t->name = k.name();
+    t->name = k.name;
     symbols->add(k, t);
   }
 
@@ -140,7 +140,8 @@ namespace ast {
     if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
       buf << "(";
       for (unsigned i = 0; i < t->parms.size();) {
-        declaration(t->parms[i].name_sym->uniq_name(), *t->parms[i].type, buf);
+        declaration(t->parms[i].sym ? t->parms[i].sym->uniq_name() : t->parms[i].name.name, 
+                    *t->parms[i].type, buf);
         ++i;
         if (i == t->parms.size()) break;
         buf << ", ";
@@ -176,7 +177,8 @@ namespace ast {
       if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
         buf << t->what << " ";
       }
-      buf << type->type_symbol->uniq_name() << qualifiers;
+      type->type_symbol->uniq_name(buf);
+      buf << qualifiers;
       if (!var.empty())
 	buf << " " << var;
     } else {
@@ -199,18 +201,19 @@ namespace ast {
     TypeSymbolTable types = env.types;
     unsigned sz = p->num_args();
     unsigned ns = DEFAULT_NS;
-    String name = p->what();
-    String full_name = name;
+    SymbolName name = p->what();
+    SymbolName full_name = name;
     String tag;
     if (name == "struct" || name == "union" || name == "enum") {
-      tag = name;
+      tag = name.name;
       assert(sz == 1);
       // FIXME: Add check for wrong type of tag
       ns = TAG_NS;
       name = *p->arg(0);
       StringBuf buf;
-      buf << p->what() << " " << p->arg(0)->what();
-      full_name = buf.freeze();
+      buf << tag << " " << name.name;
+      full_name.name = buf.freeze();
+      full_name.marks = name.marks;
       --sz;
     }
     if (name == ".typeof") {
@@ -243,10 +246,10 @@ namespace ast {
     parms.reserve(sz);
     for (int i = 0; i != sz; ++i) {
       const Parse * p0 = p->arg(i);
-      VarSymbol * n = NULL;
+      SymbolName n;
       if (name == ".tuple" && !p0->part(0)->simple()) { // HACK!
 	if (p0->num_parts() > 1)
-	  n = new VarSymbol(*p0->part(1));
+	  n = *p0->part(1);
 	p0 = p0->part(0);
       }
       switch(t->parm(i)) {
@@ -255,7 +258,6 @@ namespace ast {
 	  parms.push_back(TypeParm::dots());
 	} else {
 	  Type * t0 = expand_type(p0, env);
-          if (n) n->type = t0;
 	  parms.push_back(TypeParm(t0, n));
 	}
         break;

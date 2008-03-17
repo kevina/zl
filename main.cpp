@@ -9,13 +9,13 @@
 #include "peg.hpp"
 #include "expand.hpp"
 
-void parse_maps() {
+void parse_maps(ast::Environ & env) {
   SourceFile * code = new_source_file("grammer.ins");
   const char * s = code->begin();
   try {
     while (s != code->end()) {
       parse_parse::Res r = parse_parse::parse(SourceStr(code->entity(), s, code->end()));
-      read_macro(r.parse);
+      read_macro(r.parse, env);
       s = r.end;
     }
   } catch (Error * err) {
@@ -28,12 +28,13 @@ void parse_maps() {
 ParsePeg::Parse parse;
 SourceFile * file = 0;
 
-int main()
+int main(int argc, const char *argv[])
 {
   assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
   assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
   parse_exp_->init();
   file = new_source_file("grammer.in");
+  ast::Environ env;
   try {
     parse.top(file->begin(), file->end());
   } catch (Error * err) {
@@ -41,11 +42,16 @@ int main()
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
-  parse_maps();
-  SourceFile * code = new_source_file(STDIN_FILENO);
+  parse_maps(env);
+  SourceFile * code;
+  if (argc >= 2) {
+    code = new_source_file(argv[1]);
+  } else {
+    code = new_source_file(STDIN_FILENO);
+  }
   try {
     const Parse * to_expand = parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
-    ast::AST * ast = expand_top(to_expand);
+    ast::AST * ast = expand_top(to_expand, env);
     //printf("\n*************** EXPANDED *********************\n");
     //expanded->print();
     //printf("\n");

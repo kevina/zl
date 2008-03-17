@@ -42,17 +42,21 @@ struct Map : public Symbol {
   SourceEntity entity;
   const Parse * parse;
   const Parse * parms;
+  const Parse * free;
   const Parse * repl;
-  Map * parse_self(const Parse * p) {
+  const SymbolNode * env;
+  Map * parse_self(const Parse * p, Environ & e) {
     //printf("PARSING MAP %s\n", ~p->arg(0)->name);
     //p->print();
     //printf("\n");
+    env = e.symbols.front;
     entity = SourceEntity(p);
     parse = p;
-    assert_num_args(p, 3);
+    assert_num_args(p, 4);
     name = *p->arg(0);
     parms = p->arg(1);
-    repl = p->arg(2);
+    free = p->arg(2);
+    repl = p->arg(3);
     repl = change_src(repl->str(), repl);
     return this;
   }
@@ -80,8 +84,8 @@ struct Map : public Symbol {
   const Parse * expand(const Parse * p, Position, Environ &, unsigned shift = 0) const {
     //printf(">>EXPAND MAP %s\n", ~name);
     ReplTable * rparms = new ReplTable;
-    int i = 0;
-    for (; i != parms->num_parts(); ++i) {
+    rparms->mark = new Mark(env);
+    for (int i = 0; i != parms->num_parts(); ++i) {
       const Parse * mp = parms->part(i);
       if (mp->num_args() > 0) {
         const Parse * sp = p->arg(i + shift);
@@ -98,6 +102,10 @@ struct Map : public Symbol {
         break;
       }
       rparms->insert(mp->what(), p->arg(i + shift));
+    }
+    for (int i = 0; i != free->num_parts(); ++i) {
+      const Parse * mp = free->part(i);
+      rparms->insert(mp->what(), mp);
     }
     //printf(">>TO EXPAND %s\n", ~name);
     //repl->print();
@@ -143,24 +151,20 @@ const Parse * reparse(String what, const Parse * p, ReplTable * r) {
 
 const Parse * replace(const Parse * p, ReplTable * r) {
   if (p->simple()) {
-    String s = *p;
-    if (s.size() > 2 && s[0] == '`' && s[1] == '`') {
-      // strip one `
-      return new Parse(~s + 1, p->str_, p->str_.begin + 1, p->str_.end);
-    } else if (s.size() > 1 && s[0] == '`') {
-      if (!r->have(s))
-        r->insert(s, new Parse(gen_sym(), p->str_));
-      return r->lookup(s);
-    } else {
-      return p;
-    }
+    //return p;
+    //printf("MARK %s %p\n", ~p->what(), r->mark);
+    return new Parse(p, r->mark);
   } else if (p->is_a("mid") && r->have(*p->arg(0))) {
     const Parse * p0 = r->lookup(*p->arg(0));
-    if (p0->is_a("parm")) {
-      String what = *p->arg(1);
+    if (p->num_args() > 1) {
+      String what = p->arg(1)->as_symbol_name().name;
       if (what == "TOKEN" || what == "EXP" || what == "STMT")
         what = "PARM";
-      p0 = reparse(what, p0->arg(0));
+      if (p0->simple()) {
+        p0 = reparse(what, p0);
+      } else if (p0->is_a("parm")) {
+        p0 = reparse(what, p0->arg(0));
+      }
     }
     return p0;
   } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
@@ -179,6 +183,7 @@ const Parse * replace(const Parse * p, ReplTable * r) {
   } else {
     Parse * res = new Parse(p->str());
     for (unsigned i = 0; i != p->num_parts(); ++i) {
+      //const Parse * q = (i == 0 && p->part(0)->simple()) ? p->part(0) : replace(p->part(i), r); // HACK
       const Parse * q = replace(p->part(i), r);
       if (q->is_a("...")) {
         for (unsigned j = 0; j != q->num_args(); ++j)
@@ -201,7 +206,7 @@ const Parse * replace(const Parse * p, ReplTable * r) {
 // function and identifier macros in the same namespace
 // NOTE: may also want macros for tags...
 
-static SymbolTable syntax_maps;
+//static SymbolTable syntax_maps;
 
 /*
 struct BuildIn {
@@ -215,14 +220,12 @@ struct BuildIn {
 
 const Parse * expand_call_parms(const Parse * parse, Environ & env);
 
-AST * expand_top(const Parse * p) {
-  Environ env;
+AST * expand_top(const Parse * p, Environ & env) {
   assert(p->is_a("top")); // FIXME Error
   return (new Top())->parse_self(p, env);
 }
 
-void read_macro(const Parse * p) {
-  Environ env;
+void read_macro(const Parse * p, Environ & env) {
   expand(p, TopLevel, env);
 }
 
@@ -264,7 +267,7 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
     assert(ast); // FIXME Error message
     return ast;
   }
-  String what = p->what();
+  SymbolName what = p->what().name;
   //printf("\n>expand>%s//\n", ~what);
   //p->print();
   //printf("\n////\n");
@@ -276,8 +279,8 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
     return expand(reparse("PARAN_EXP", p), pos, env);
   } else if (what == "[]") {
     return expand(reparse("EXP", p->arg(0)), pos, env);
-  } else if (syntax_maps.exists(what)) { // syntax macros
-    p = syntax_maps.find<Map>(what)->expand(p, pos, env);
+  } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
+    p = env.symbols.find<Map>(SymbolKey(what, SYNTAX_NS))->expand(p, pos, env);
     return expand(p, pos, env);
   } else if (what == "call") { 
     assert_num_args(p, 2);
@@ -297,14 +300,14 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
       Parse * res = new Parse(p->str(), p->part(0));
       res->add_part(p->arg(0));
       res->add_part(expand_call_parms(a, env));
-      return parse_exp(res, env);
+      p = res;
     }
   } else if (what == "smap" || what == "map") {
     assert_pos(p, pos, TopLevel);
     Map * m = new Map;
-    m->parse_self(p);
+    m->parse_self(p, env);
     if (what == "smap") 
-      syntax_maps.add(m->name, m);
+      env.symbols.add(SymbolKey(m->name, SYNTAX_NS), m);
     else
       env.symbols.add(m->name, m);
     return new Empty();
@@ -318,22 +321,21 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env);
     return expand(p, pos, env);
-  } else {
-    // we should have a primitive
-    switch (pos) {
-    case TopLevel:
-      return parse_top_level(p, env);
-    case FieldPos:
-      return parse_member(p, env);
-    case StmtDeclPos:
-      return parse_stmt_decl(p, env);
-    case StmtPos:
-      return parse_stmt(p, env);
-    case ExpPos:
-      return parse_exp(p, env);
-    default:
-      abort();
-    }
+  }
+  // we should have a primitive
+  switch (pos) {
+  case TopLevel:
+    return parse_top_level(p, env);
+  case FieldPos:
+    return parse_member(p, env);
+  case StmtDeclPos:
+    return parse_stmt_decl(p, env);
+  case StmtPos:
+    return parse_stmt(p, env);
+  case ExpPos:
+    return parse_exp(p, env);
+  default:
+    abort();
   }
 }
 

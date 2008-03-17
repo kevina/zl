@@ -25,6 +25,7 @@ namespace ast {
     const Type * type;
     const struct CT_Value_Base * ct_value;
     VarSymbol(String n) : Symbol(n), ct_value() {}
+    VarSymbol(SymbolName n) : Symbol(n.name), ct_value() {}
   };
 
   enum LabelType {NormalLabel = 0, LocalLabel = 1};
@@ -415,7 +416,7 @@ namespace ast {
   struct Fun : public Declaration {
     Fun() : Declaration("fun") {}
     //AST * part(unsigned i);
-    String name;
+    SymbolName name;
     SymbolTable symbols;
     VarSymbol * sym;
     const Tuple * parms;

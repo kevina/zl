@@ -130,13 +130,13 @@ String escape(String n) {
 void Parse::print() const {
   if (!d) { 
     if (entity_)
-      printf("(%s)", ~escape(what_));
+      printf("(%s)", ~escape(what_.to_string()));
     else if (!what_.defined()) 
       printf("()");
     else if (what_.empty()) 
       printf("\"\"");
     else
-      printf("%s", ~escape(what_));
+      printf("%s", ~escape(what_.to_string()));
   } else {
     printf("(");
     d->parts.print();

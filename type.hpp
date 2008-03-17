@@ -13,17 +13,17 @@ struct Parse;
 
 namespace ast {
 
-  // NOTE: In order to avoid expensive comparasions between types each
+  // NOTE: In order to avoid expensive compressions between types each
   // type object must only be allocated once, this way an cheap pointer
-  // comparison can be used
+  // comparison can be used EXCEPT for Tuple which are "special" since
+  // they are used as function parameters and have lots of special 
+  // properties
 
   class TypeSymbol;
   class TypeInst;
   typedef TypeInst Type;
   class Tuple;
   struct Environ;
-  struct VarSymbol;
-  
 
   struct AST;
 
@@ -59,15 +59,14 @@ namespace ast {
       const Type * as_type;
       int          as_int;
       AST        * as_exp;
-      
     };
-    const VarSymbol * name_sym;
+    SymbolName name;
     bool is_type() {return what == TYPE || what == TUPLE;}
     explicit TypeParm() : what(NONE) {}
-    explicit TypeParm(const Type * t, const VarSymbol * s = NULL) : what(TYPE), as_type(t), name_sym(s) {}
-    explicit TypeParm(What w, const Type * t, const VarSymbol * s = NULL) : what(w), as_type(t), name_sym(s) {}
-    explicit TypeParm(int i, const VarSymbol * s = NULL) : what(INT), as_int(i), name_sym(s) {}
-    explicit TypeParm(AST * exp, const VarSymbol * s = NULL) : what(EXP), as_exp(exp), name_sym(s) {}
+    explicit TypeParm(const Type * t, SymbolName n = SymbolName()) : what(TYPE), as_type(t), name(n) {}
+    explicit TypeParm(What w, const Type * t, SymbolName n = SymbolName()) : what(w), as_type(t), name(n) {}
+    explicit TypeParm(int i, SymbolName n = SymbolName()) : what(INT), as_int(i), name(n) {}
+    explicit TypeParm(AST * exp, SymbolName n = SymbolName()) : what(EXP), as_exp(exp), name(n) {}
     void to_string(StringBuf & buf) const;
     static TypeParm dots() {return TypeParm(DOTS);}
   private:
@@ -102,7 +101,7 @@ namespace ast {
       return true;
     case TypeParm::TYPE:
     case TypeParm::TUPLE:
-      return lhs.as_type == rhs.as_type && lhs.name_sym == rhs.name_sym;
+      return lhs.as_type == rhs.as_type && lhs.name == rhs.name;
     case TypeParm::INT:
       return lhs.as_int == rhs.as_int;
     case TypeParm::EXP:
@@ -365,13 +364,14 @@ namespace ast {
   //
   //
 
-  class Tuple : public ParmTypeInst {
+  class Tuple : public TypeInst {
   public:
     struct Parm {
       const Type * type;
-      const VarSymbol * name_sym;
+      SymbolName name;
+      mutable const Symbol * sym; // evil I know, but necessary
       Parm() {}
-      Parm(const Type * t, const VarSymbol * s) : type(t), name_sym(s) {}
+      Parm(const Type * t, SymbolName n) : type(t), name(n), sym() {}
     };
     typedef Vector<Parm> Parms;
     Parms parms;
@@ -380,7 +380,7 @@ namespace ast {
     virtual unsigned num_parms() const {return parms.size() + vararg;}
     virtual TypeParm parm(unsigned i) const {
       if (i < parms.size())
-	return TypeParm(parms[i].type, parms[i].name_sym);
+	return TypeParm(parms[i].type, parms[i].name);
       else if (vararg)
 	return TypeParm::dots();
       else
@@ -390,11 +390,11 @@ namespace ast {
     unsigned align() const {return 0;}
   };
 
-  class TupleSymbol : public ParmTypeSymbol {
+  class TupleSymbol : public TypeSymbol {
   public:
     unsigned required_parms() const {return 0;}
     virtual TypeParm::What parm(unsigned i) const {return TypeParm::TYPE;}
-    virtual ParmTypeInst * inst_p(Vector<TypeParm> & p) const {
+    virtual Type * inst(Vector<TypeParm> & p) const {
       Tuple * r = new Tuple();
       for (int i = 0; i != p.size(); ++i) {
 	if (p[i].what == TypeParm::DOTS) {
@@ -402,9 +402,11 @@ namespace ast {
 	  break;
 	} else {
 	  assert(p[i].what == TypeParm::TYPE);
-	  r->parms.push_back(Tuple::Parm(p[i].as_type, p[i].name_sym));
+	  r->parms.push_back(Tuple::Parm(p[i].as_type, p[i].name));
 	}
       }
+      r->type_symbol = this;
+      r->finalize();
       return r;
     }
   };

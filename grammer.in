@@ -33,7 +33,10 @@ CASE_LABEL =
 CASE_EXP = <exp> (!":" {TOKEN})+;
 
 MAP =
-  <map> "map" {ID} "(" {<> ({ID} ",")* {ID}?} ")" {BRACE} ;
+  <map> "map" {ID} "(" {ID_LIST} ")" (":" "(" {ID_LIST} ")" / <>) {BRACE} ;
+
+ID_LIST =
+  <> ({ID} ",")* {ID}?;
 
 #
 # C Token
@@ -97,7 +100,7 @@ RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 #
 
 ID : "identifier" =
-     <<mid>> {MID} / {[`]*[\a_]+[\a_\d]*} SPACING;
+     <<mid>> {MID} / {[\a_]+[\a_\d]*} SPACING;
 
 MID : "macro identifier" = 
      {[\a_]+[\a_\d]*} SPACING;

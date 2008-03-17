@@ -1,9 +1,14 @@
 #ifndef SYMBOL_TABLE__HPP
 #define SYMBOL_TABLE__HPP
 
+#include <stdio.h>
+
 #include <utility>
+#include "ostream.hpp"
 #include "vector.hpp"
 #include "string_buf.hpp"
+
+struct Parse;
 
 namespace ast {
 
@@ -15,9 +20,12 @@ namespace ast {
     const Marks * prev;
     Marks(const Mark * m, const Marks * p) 
       : mark(m), prev(p) {}
+    void to_string(OStream & o) const;
   };
 
   struct Mark : public gc_cleanup {
+    static unsigned last_id; 
+    unsigned id;
     const SymbolNode * env;
     typedef std::pair<const Marks *, const Marks *> CacheNode;
     // Cache is a mapping
@@ -25,13 +33,13 @@ namespace ast {
     // to:   the new mark set with the mark added
     typedef Vector<CacheNode> Cache;
     mutable Cache cache;
-    Mark(const SymbolNode * e) : env(e) {
+    Mark(const SymbolNode * e) : id(last_id++), env(e) {
       cache.reserve(1);
       cache.push_back(CacheNode(NULL, new Marks(this, NULL)));
     }
   };
   
-  inline const Marks * mark(const Marks * ms, const Mark * m) {
+  static inline const Marks * mark(const Marks * ms, const Mark * m) {
     for (Mark::Cache::iterator i = m->cache.begin(), e = m->cache.end(); i != e; ++i) 
       if (i->first == ms) return i->second;
     Marks * nms = new Marks(m, ms);
@@ -46,25 +54,58 @@ namespace ast {
     return tmp;
   }
 
+  void marks_ignored(String name);
 
-  struct SymbolName : public String {
-    String name() const {return *this;}
+  struct SymbolName {
+    String name;
     //void set_name(String s) {String::operator=(s);}
     const Marks * marks;
     SymbolName() : marks() {}
-    SymbolName(const char * n) : String(n), marks() {}
-    SymbolName(String n) : String(n), marks() {}
+    SymbolName(const char * n) : name(n), marks() {}
+    SymbolName(String n) : name(n), marks() {}
+
+    // Convert to a string with marks append as '<mark>
+    void to_string(OStream & o) const;
+    String to_string() const {
+      StringBuf buf;
+      to_string(buf);
+      return buf.freeze();
+    }
+
+    void assert_no_marks() const {
+      if (marks) marks_ignored(name);
+    }
+
+    bool defined() const {return name.defined();}
+    bool empty() const {return name.empty();}
+    operator String() const {assert_no_marks(); return name;}
+    operator ParmString() const {assert_no_marks(); return name;}
+    operator String & () {assert_no_marks(); return name;}
+    const char * operator ~() const {assert_no_marks(); return ~name;}
+    const char * c_str() const {assert_no_marks(); return name.c_str();}
   };
+
+  //static inline OStream & operator<<(OStream & o, const SymbolName & n) {
+  //  n.to_string(o);
+  //  return o;
+  //}
+
+  static inline bool operator==(const SymbolName & rhs, const char * lhs) {
+    return rhs.name == lhs;
+  }
 
   static const unsigned DEFAULT_NS = 0;
   static const unsigned TAG_NS = 2;
   static const unsigned LABEL_NS = 3;
+  static const unsigned SYNTAX_NS = 4;
 
   struct SymbolKey : public SymbolName {
     unsigned ns;
     SymbolKey(const char * n, unsigned ns0 = 0)
       : SymbolName(n), ns(ns0) {}
-    SymbolKey(String n = String(), unsigned ns0 = 0)
+    SymbolKey(String n, unsigned ns0 = 0)
+      : SymbolName(n), ns(ns0) {}
+    SymbolKey(SymbolName n = SymbolName(), unsigned ns0 = 0)
       : SymbolName(n), ns(ns0) {}
     inline SymbolKey(const Parse & p);
   };
@@ -113,20 +154,22 @@ namespace ast {
   enum MarksStrategy {ExactMatch, NormalMarksStrategy, StripMarks};
 
   template <typename T>
-  inline const T * find_symbol(SymbolKey k, const SymbolNode * cur, const SymbolNode * stop = NULL,
-                               MarksStrategy ms = ExactMatch) 
+  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
+                        MarksStrategy ms = ExactMatch) 
   {
+    const SymbolNode * cur = start;
+    //printf(">>%s %p\n", ~k, k.marks);
     for (; cur != stop; cur = cur->next) {
       if (k == cur->key) break;
     }
     if (cur == stop) {
-      if (ms ==  NormalMarksStrategy && k.marks) {
+      if (ms == NormalMarksStrategy && k.marks) {
         cur = k.marks->mark->env;
         k.marks = k.marks->prev;
         return find_symbol<T>(k, cur, stop, ms);
       } else if (ms == StripMarks && k.marks) {
         k.marks = k.marks->prev;
-        return find_symbol<T>(k, cur, stop, ms);
+        return find_symbol<T>(k, start, stop, ms);
       } else {
         return NULL;
       }
@@ -182,34 +225,19 @@ namespace ast {
       return SymbolTable(placeholder, front);
     }
     template <typename T> 
-    const T * find(const SymbolKey & k) {
-      return find_symbol<T>(k, front);
+    const T * find(const SymbolKey & k, MarksStrategy ms = NormalMarksStrategy) {
+      return find_symbol<T>(k, front, NULL, ms);
     }
-    bool exists(const SymbolKey & k) {
-      return find_symbol<Symbol>(k, front);
+    bool exists(const SymbolKey & k, MarksStrategy ms = NormalMarksStrategy) {
+      return find_symbol<Symbol>(k, front, NULL, ms);
     }
     void add(const SymbolKey & k, const Symbol * sym) {
       if (find_symbol<Symbol>(k, front, back)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);
     }
-    void rename() {
-      Vector<SymbolNode *> nodes;
-      for (SymbolNode * cur = front; cur != back; cur = cur->next) {
-        if (!cur->value) continue;
-        nodes.push_back(cur);
-      }
-      while (!nodes.empty()) {
-        SymbolNode * cur = nodes.back();
-        nodes.pop_back();
-        SymbolNode * p = cur->next;
-        for (; p; p = p->next) {
-          if (p != cur && p->key.name() == cur->key.name()) break;
-        }
-        unsigned num = 1;
-        if (p) num = p->value->num + 1;
-        cur->value->num = num;
-      }
-    }
+    void rename(bool if_marked);
+    void rename() {rename(false);}
+    void rename_marked() {rename(true);}
   };
 
 }

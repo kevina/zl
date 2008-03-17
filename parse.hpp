@@ -135,17 +135,16 @@ struct Flags : public gc {
 };
 
 
-// A parse is:                                      d  repl  entity_   marks
-//   Branch                                         X   -       -        -
-//   Symbol -- w/ marks                             -   -       -        x
-//   Literal -- w/o marks                           -   -       -        -
-//   Unparsed Text -- w/ repl and marks closure (1) x   X       -        -
-//   An Entity                                      2   -       X        -
+// A parse is:                                      d  repl  entity_
+//   Branch                                         X   -       -   
+//   Symbol                                         -   -       -   
+//   Unparsed Text -- w/ repl and marks closure (1) x   X       -   
+//   An Entity                                      2   -       X   
 //   NOTES: (1) ...
 //          (2) set to AS_ENTITY
 
 // A simple parse is one with only one part which is itself
-// If not a simple parse than the name IS the name of the first
+// If not a simple parse than the name is the name of the first
 //   part, provided it is simple, otherwise it doesn't exist
 
 struct Replacements;
@@ -159,10 +158,12 @@ struct Parse : public gc {
   static D * const AS_ENTITY;
   SymbolName what_;
   SymbolName what() const {return what_;}
-  //operator String () const {assert(simple() || part(0)->simple()); return what_;}
-  operator SymbolName () const {assert(simple() || part(0)->simple()); return what_;}
-  const char * operator ~ () const {return ~operator SymbolName();}
-  String string_if_simple() const {return simple() ? what() : String();}
+  String as_string() const {assert(simple() || part(0)->simple()); return what_;}
+  const SymbolName & as_symbol_name() const {assert(simple() || part(0)->simple()); return what_;}
+  operator String () const {return as_string();}
+  operator const SymbolName & () const {return as_symbol_name();}
+  const char * operator ~ () const {return ~as_string();}
+  SymbolName string_if_simple() const {return simple() ? what() : SymbolName();}
   mutable SourceStr str_;
   const SourceStr & str() const {if (d && str_.empty()) set_src_from_parts(); return str_;}
   D * d;
@@ -192,6 +193,10 @@ struct Parse : public gc {
     : what_(n), str_(s.source, b, e), d(), repl(), entity_() {}
   Parse(const SourceStr & s) 
     : str_(s), d(), repl(0), entity_() {}
+
+  Parse(const Parse * o, const ast::Mark * m)
+    : what_(ast::mark(o->what_, m)), str_(o->str_), d(), repl(), entity_()
+    {assert(o->simple()); /*printf(">>%s %p\n", ~what_, what_.marks);*/}
 
   Parse(const SourceStr & s, const Parse * p) : str_(s), repl(), entity_() {
     d = new D; 
@@ -330,8 +335,10 @@ struct Parse : public gc {
   void set_src_from_parts() const; // const is a lie
 
   void print() const;
+  bool is_a(const char * n) const {return what_.name == n;}
+  bool is_a(String n) const {return what_.name == n;}
   bool is_a(SymbolName n) const {return what_ == n;}
-  bool is_a(SymbolName n, SymbolName p) const {return what_ == n && num_args() > 0 && arg(0)->is_a(p);}
+  bool is_a(const char * n, const char * p) const {return what_.name == n && num_args() > 0 && arg(0)->is_a(p);}
 
   virtual ~Parse() {}
 };
@@ -339,7 +346,7 @@ struct Parse : public gc {
 static inline bool operator==(const Parse & p, const char * str) {
   //printf("%s %d == %s\n", ~p.what(), p.simple(), str);
   if (!p.simple() && !p.part(0)->simple()) return false;
-  return (String)p == str;
+  return p.what().name == str;
 }
 
 inline SourceEntity::SourceEntity(const Parse * e)
@@ -359,7 +366,7 @@ inline bool Flags::insert(const Parse * p) {
 }
 
 namespace ast {
-  inline SymbolKey::SymbolKey(const Parse & p) : SymbolName(p), ns() {}
+  inline SymbolKey::SymbolKey(const Parse & p) : SymbolName(static_cast<const SymbolName &>(p)), ns() {}
 }
 
 namespace parse_parse {

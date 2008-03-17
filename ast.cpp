@@ -138,10 +138,10 @@ namespace ast {
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
-      String n = *p->arg(0);
+      SymbolName n = *p->arg(0);
       label = env.symbols.find<LabelSymbol>(SymbolKey(n, LABEL_NS));
       if (!label) {
-        label = new LabelSymbol(n, NormalLabel);
+        label = new LabelSymbol(n.name, NormalLabel);
         env.fun_labels.add(SymbolKey(n, LABEL_NS), label);
       }
       stmt = expand_stmt(p->arg(1), env);
@@ -188,7 +188,7 @@ namespace ast {
 
   struct Goto : public AST {
     Goto() : AST("goto") {}
-    String label;
+    SymbolName label;
     const LabelSymbol * sym;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
@@ -380,10 +380,11 @@ namespace ast {
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
-      String n = *p->arg(0);
+      SymbolName n = *p->arg(0);
+      //printf("<>%s\n", ~n);
       sym = env.symbols.find<VarSymbol>(n);
       if (!sym)
-        throw error(parse_->arg(0), "Unknown Identifier: %s", n.c_str());
+        throw error(parse_->arg(0), "Unknown Identifier: %s", ~n.name);
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
@@ -584,13 +585,13 @@ namespace ast {
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2,3);
-      String n = *p->arg(0);
+      SymbolName n = *p->arg(0);
       parse_flags(p);
-      sym = new VarSymbol(n);
+      sym = new VarSymbol(n.name);
       sym->type = expand_type(env.types, p->arg(1), env);
       if (storage_class != EXTERN && sym->type->size() == NPOS) 
         throw error(p->arg(0), "Size not known");
-      env.symbols.add(sym->name, sym);
+      env.symbols.add(n, sym);
       if (p->num_args() > 2) {
         init = expand_exp(p->arg(2), env);
         resolve_to(env, init, sym->type);
@@ -839,25 +840,26 @@ namespace ast {
     MemberAccess() : AST("member") {}
     AST * part(unsigned i) {abort();}
     AST * exp;
-    String id;
+    const VarSymbol * sym;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
       exp = expand_exp(p->arg(0), env);
       if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected identifier");
-      id = *p->arg(1)->arg(0);
+      SymbolName id = *p->arg(1)->arg(0);
       const StructUnionT * t = dynamic_cast<const StructUnionT *>(exp->type->unqualified);
       if (!t) throw error(p->arg(0), "Expected struct or union type");
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
-      if (!t->env->symbols.exists(id))
+      sym = t->env->symbols.find<VarSymbol>(id, StripMarks);
+      if (!sym)
         throw error(p->arg(1), "\"%s\" is not a member of \"%s\"", 
-                    ~id, ~t->to_string());
-      type = t->env->symbols.find<VarSymbol>(id)->type;
+                    ~id.to_string(), ~t->to_string());
+      type = sym->type;
       lvalue = true;
       return this;
     };
     void compile(CompileWriter & f, CompileEnviron & env) {
-      f << "((" << exp << ")" << "." << id << ")";
+      f << "((" << exp << ")" << "." << sym->uniq_name() << ")";
     }
   };
 
@@ -1213,6 +1215,7 @@ namespace ast {
     }
   }
   void Top::compile(CompileWriter & f, CompileEnviron & env) {
+    symbols.rename_marked();
     f << "static inline void noop() {}\n";
     f << "\n";
     for (int i = 0; i != stmts.size(); ++i) {
@@ -1351,8 +1354,11 @@ namespace ast {
       for (Tuple::Parms::const_iterator i = parms->parms.begin(), e = parms->parms.end();
            i != e; ++i)
       {
-        const VarSymbol * sym = i->name_sym;
-        env.symbols.add(sym->name, sym);
+        SymbolName n = i->name;
+        VarSymbol * sym = new VarSymbol(n);
+        i->sym = sym;
+        sym->type = i->type;
+        env.symbols.add(n, sym);
       }
 
       body = dynamic_cast<Block *>(expand_stmt(p->arg(3), env));
@@ -1415,7 +1421,7 @@ namespace ast {
     symbols.rename();
     write_flags(f);
     StringBuf buf;
-    c_print_inst->declaration(name, *sym->type, buf);
+    c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
     f << buf.freeze();
     f.fun_symbols = symbols.front;
     if (body)
@@ -1541,7 +1547,7 @@ namespace ast {
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
-      String n = *p->arg(0);
+      SymbolName n = *p->arg(0);
       type = expand_type(env.types, p->arg(1), env);
       name_sym = add_simple_type(env.types, n, new AliasT(type));
       return this;
@@ -1571,14 +1577,13 @@ namespace ast {
     };
     StructUnion(Which w) : AST(w == STRUCT ? "struct" : "union"), which(w)  {}
     AST * part(unsigned i) {return 0; /* FIXME */}
-    String name;
     TypeSymbol * sym;
     Body * body;
     Environ env;
     AST * parse_self(const Parse * p, Environ & env0) {
       parse_ = p;
       assert(p->is_a(what()));
-      name = *p->arg(0);
+      SymbolName name = *p->arg(0);
       env = env0.new_scope();
       if (p->num_args() > 1) {
         body = new Body(which);
@@ -1587,8 +1592,8 @@ namespace ast {
       const Type * t0 = env.types.inst(SymbolKey(name, TAG_NS));
       StructUnionT * s;
       if (t0) s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
-      else if (which == STRUCT) s = new StructT(name);
-      else                     s = new UnionT(name);
+      else if (which == STRUCT) s = new StructT(name.name);
+      else                      s = new UnionT(name.name);
       for (unsigned i = 0; i != body->members.size(); ++i) {
 	Var * v = dynamic_cast<Var *>(body->members[i]);
 	assert(v);
@@ -1602,7 +1607,8 @@ namespace ast {
       return this; 
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << indent << what() << " " << sym << "{\n";
+      env.symbols.rename_marked();
+      f << indent << what() << " " << sym << " {\n";
       for (int i = 0; i != body->members.size(); ++i) {
         f << adj_indent(2) << body->members[i];
       }
@@ -1620,22 +1626,22 @@ namespace ast {
 
   struct Enum : public AST {
     Enum() : AST("enum") {}
-    String name;
+    TypeSymbol * sym;
     struct Member {
       const Parse * parse;
-      String name;
+      VarSymbol * sym;
       Literal_Value<target_int> ct_value;
-      Member(const Parse * p, String n, int v) : name(n), ct_value(v) {}
+      Member(const Parse * p, VarSymbol * sym, int v) : parse(p), sym(sym), ct_value(v) {}
     };
     Vector<Member> members;
     AST * parse_self(const Parse * p, Environ & env) {
       parse_ = p;
-      name = *p->arg(0);
+      SymbolName name = *p->arg(0);
       EnumT * t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
                                         (env.types.inst(SymbolKey(name, TAG_NS)))));
-      if (!t0) t0 = new EnumT(name);
+      if (!t0) t0 = new EnumT(name.name);
       t0->exact_type = env.types.inst("int")->exact_type;
-      add_simple_type(env.types, SymbolKey(name, TAG_NS), t0);
+      sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0);
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
       q_parms.push_back(TypeParm(t0));
@@ -1650,21 +1656,22 @@ namespace ast {
           resolve_to(env, e, env.types.inst("int"));
           val = e->ct_value<target_int>();
         }
-        Member mem(arg1, *arg->part(0), val);
+        SymbolName n = *arg->part(0);
+        Member mem(arg1, new VarSymbol(n), val);
+        VarSymbol * sym = mem.sym;
         val++;
-        VarSymbol * sym = new VarSymbol(mem.name);
         sym->type = t;
         members.push_back(mem);
         sym->ct_value = &members.back().ct_value;
-        env.symbols.add(mem.name, sym);
+        env.symbols.add(n, sym);
       }
       t0->finalize();
       return this;
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << indent << what() << " " << name << "{\n";
+      f << indent << what() << " " << sym << "{\n";
       for (int i = 0; i != members.size(); ++i) {
-        f << adj_indent(2) << indent << members[i].name << " = " << members[i].ct_value.v;
+        f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.v;
         if (i == members.size())
           f << "\n";
         else
@@ -1762,7 +1769,7 @@ namespace ast {
   }
 
   AST * try_decl(const Parse * p, Environ & env) {
-    String what = p->what();
+    String what = p->what().name;
     if (what == "var")     return (new Var)->parse_self(p, env);
     if (what == "fun" )    return (new Fun)->parse_self(p, env);
     if (what == "struct")  return (new Struct)->parse_self(p, env);
@@ -1777,7 +1784,7 @@ namespace ast {
   }
 
   AST * try_stmt(const Parse * p, Environ & env) {
-    String what = p->what();
+    String what = p->what().name;
     if (what == "goto")    return (new Goto)->parse_self(p, env);
     if (what == "lstmt")   return (new LStmt)->parse_self(p, env);
     if (what == "lcstmt")  return (new LCStmt)->parse_self(p, env);
@@ -1793,7 +1800,7 @@ namespace ast {
   }
 
   AST * try_exp(const Parse * p, Environ & env) {
-    String what = p->what();
+    String what = p->what().name;
     if (what == "id")      return (new Id)->parse_self(p, env);
     if (what == "literal") return (new Literal)->parse_self(p, env);
     if (what == "float")   return (new FloatC)->parse_self(p, env);

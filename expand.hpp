@@ -16,27 +16,54 @@ namespace ast {
 };
 
 using ast::Environ;
+using ast::SymbolName;
 
-ast::AST * expand_top(const Parse * p);
-void read_macro(const Parse * p);
+ast::AST * expand_top(const Parse * p, Environ &);
+void read_macro(const Parse * p, Environ &);
 
-struct ReplTable : public hash_map<String, const Parse *> {
-  const Parse * lookup(String n) const {
-    const_iterator i = find(n);
-    if (i == end()) return 0;
-    else return i->second;
+// misnamed, now replaces and marks
+struct ReplTable : public gc_cleanup {
+  typedef Vector<std::pair<SymbolName, const Parse *> > Table;
+  Table table;
+  const Parse * lookup(SymbolName n) const {
+    for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
+      if (i->first == n) return i->second;
+    }
+    return NULL;
   }
+  bool have(SymbolName n) const {
+    return lookup(n);
+  }
+  const Parse * lookup(String n) const {
+    for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
+      if (i->first.name == n) return i->second;
+    }
+    return NULL;
+  }
+  bool have(String n) const {
+    return lookup(n);
+  }
+  const Parse * lookup(const Parse & n) const {
+    return lookup(static_cast<const SymbolName &>(n));
+  }
+  bool have(const Parse & n) const {
+    return have(static_cast<const SymbolName &>(n));
+  }
+  void insert(SymbolName n, const Parse * p) {
+    table.push_back(std::pair<SymbolName, const Parse *>(n,p));
+  }
+  const ast::Mark * mark;
   void print() const {
-    abort();
-#if 0
+//    abort();
+//#if 0
     printf("{");
-    for (const_iterator i = begin(), e = end(); i != e; ++i) {
-      printf("%s=>", ~i->first);
+    for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
+      printf("%s=>", ~i->first.to_string());
       i->second->print();
       printf(",");
     }
     printf("}");
-#endif
+//#endif
   }
 };
 

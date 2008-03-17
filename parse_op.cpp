@@ -17,10 +17,11 @@ struct OpKey : public gc {
   String category;
   String symbol;
   OpKey() {}
-  OpKey(const String & c)
-    : category(c) {}
-  OpKey(const String & c, const String & s)
-    : category(c), symbol(s) {}
+  // FIXME: operators should proabaly be hygienic
+  OpKey(const SymbolName & c)
+    : category(c.name) {}
+  OpKey(const SymbolName & c, const SymbolName & s)
+    : category(c.name), symbol(s.name) {}
 };
 
 static inline bool operator== (const OpKey & x, const OpKey & y) {

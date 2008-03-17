@@ -9,9 +9,9 @@ map stmts (x, y) {{
 }}
 
 map decl0 (t, v) {
-  t `z = 0;
-  `z = 20;
-  t v = `z;
+  t z = 0;
+  z = 20;
+  t v = z;
 }
 
 map loop (body) {
@@ -29,6 +29,7 @@ make_macro (square_, *);
 
 int main() {
   int x = 0;
+  int z;
   decl0(int, y);
   y += 1;
   y = times2(y) + 4;
@@ -38,7 +39,6 @@ int main() {
     stmts(x,y);
   else 
     times2(y);
-  int z;
   z = double_(5);
   z = square_(2+3);
   double_(square_(y));

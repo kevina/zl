@@ -133,7 +133,7 @@ struct DeclWorking {
   }
   String type_name;
   bool try_type_name(const Parse * p, Environ & env) {
-    String name = p->what_;
+    SymbolName name = p->what_;
     if (env.symbols.find<ast::TypeSymbol>(name)) {
       if (base_type) ignore();
       type_name = name;
