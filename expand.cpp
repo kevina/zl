@@ -25,9 +25,9 @@
 
 using namespace ast;
 
-void assert_pos(const Parse * p, Position have, unsigned need);
-void assert_num_args(const Parse * p, unsigned num);
-void assert_num_args(const Parse * p, unsigned min, unsigned max);
+void assert_pos(const Syntax * p, Position have, unsigned need);
+void assert_num_args(const Syntax * p, unsigned num);
+void assert_num_args(const Syntax * p, unsigned min, unsigned max);
 
 String gen_sym() {
   static unsigned uniq_num = 0;
@@ -36,16 +36,16 @@ String gen_sym() {
   return buf.freeze();
 }
 
-const Parse * replace(const Parse * p, ReplTable * r);
+const Syntax * replace(const Syntax * p, ReplTable * r);
 
 struct Map : public Symbol {
   SourceEntity entity;
-  const Parse * parse;
-  const Parse * parms;
-  const Parse * free;
-  const Parse * repl;
+  const Syntax * parse;
+  const Syntax * parms;
+  const Syntax * free;
+  const Syntax * repl;
   const SymbolNode * env;
-  Map * parse_self(const Parse * p, Environ & e) {
+  Map * parse_self(const Syntax * p, Environ & e) {
     //printf("PARSING MAP %s\n", ~p->arg(0)->name);
     //p->print();
     //printf("\n");
@@ -60,15 +60,15 @@ struct Map : public Symbol {
     repl = change_src(repl->str(), repl);
     return this;
   }
-  const Parse * change_src(SourceStr outer_str, const Parse * orig) {
-    Parse * res = new Parse(orig->what(), orig->str());
+  const Syntax * change_src(SourceStr outer_str, const Syntax * orig) {
+    Syntax * res = new Syntax(orig->what(), orig->str());
     res->repl = orig->repl;
     SourceStr orig_str = orig->str();
     if (orig_str.source == outer_str.source && 
         outer_str.begin <= orig_str.begin && orig_str.end <= outer_str.end)
       res->str_.source = &entity;
     if (orig->d) {
-      res->d = new Parse::D;
+      res->d = new Syntax::D;
       res->d->parts.reserve(orig->d->parts.size());
       for (Parts::const_iterator i = orig->d->parts.begin(), e = orig->d->parts.end();
            i != e;
@@ -81,20 +81,20 @@ struct Map : public Symbol {
     }
     return res;
   }
-  const Parse * expand(const Parse * p, Position, Environ &, unsigned shift = 0) const {
+  const Syntax * expand(const Syntax * p, Position, Environ &, unsigned shift = 0) const {
     //printf(">>EXPAND MAP %s\n", ~name);
     ReplTable * rparms = new ReplTable;
     rparms->mark = new Mark(env);
     for (int i = 0; i != parms->num_parts(); ++i) {
-      const Parse * mp = parms->part(i);
+      const Syntax * mp = parms->part(i);
       if (mp->num_args() > 0) {
-        const Parse * sp = p->arg(i + shift);
+        const Syntax * sp = p->arg(i + shift);
         assert(mp->what() == sp->what());
         for (int j = 0; j != mp->num_args(); ++j) {
           rparms->insert(*mp->arg(j), sp->arg(j));
         }
       } else if (mp->is_a("...")) {
-        Parse * p2 = new Parse(new Parse("..."));
+        Syntax * p2 = new Syntax(new Syntax("..."));
         for (; i != p->num_args(); ++i) {
           p2->add_part(p->arg(i + shift));
         }
@@ -104,13 +104,13 @@ struct Map : public Symbol {
       rparms->insert(mp->what(), p->arg(i + shift));
     }
     for (int i = 0; i != free->num_parts(); ++i) {
-      const Parse * mp = free->part(i);
+      const Syntax * mp = free->part(i);
       rparms->insert(mp->what(), mp);
     }
     //printf(">>TO EXPAND %s\n", ~name);
     //repl->print();
     //printf("\n");
-    const Parse * res;
+    const Syntax * res;
     if (repl->is_a("{}")) {
       res = reparse("STMTS", repl->arg(0), rparms);
       if (res->num_args() == 1)
@@ -126,9 +126,9 @@ struct Map : public Symbol {
   }
 };
 
-const Parse * reparse(String what, const Parse * p, ReplTable * r) {
+const Syntax * reparse(String what, const Syntax * p, ReplTable * r) {
   const Replacements * repls = combine_repl(p->repl, r);
-  const Parse * res = parse_str(what, p->str(), repls);
+  const Syntax * res = parse_str(what, p->str(), repls);
   //printf("PARSED STRING\n");
   //res->print();
   //if (repls) repls->print();
@@ -149,13 +149,13 @@ const Parse * reparse(String what, const Parse * p, ReplTable * r) {
   return res;
 }
 
-const Parse * replace(const Parse * p, ReplTable * r) {
+const Syntax * replace(const Syntax * p, ReplTable * r) {
   if (p->simple()) {
     //return p;
     //printf("MARK %s %p\n", ~p->what(), r->mark);
-    return new Parse(p, r->mark);
+    return new Syntax(p, r->mark);
   } else if (p->is_a("mid") && r->have(*p->arg(0))) {
-    const Parse * p0 = r->lookup(*p->arg(0));
+    const Syntax * p0 = r->lookup(*p->arg(0));
     if (p->num_args() > 1) {
       String what = p->arg(1)->as_symbol_name().name;
       if (what == "TOKEN" || what == "EXP" || what == "STMT")
@@ -174,17 +174,17 @@ const Parse * replace(const Parse * p, ReplTable * r) {
     assert(p->num_args() == 1);
     assert(p->arg(0)->simple());
     assert(p->repl == p->arg(0)->repl);
-    Parse * res = new Parse(p->str(), p->part(0));
+    Syntax * res = new Syntax(p->str(), p->part(0));
     res->repl = combine_repl(p->repl, r);
-    Parse * r0 = new Parse(String(p->arg(0)->str()), p->arg(0)->str());
+    Syntax * r0 = new Syntax(String(p->arg(0)->str()), p->arg(0)->str());
     r0->repl = res->repl;
     res->add_part(r0);
     return res;
   } else {
-    Parse * res = new Parse(p->str());
+    Syntax * res = new Syntax(p->str());
     for (unsigned i = 0; i != p->num_parts(); ++i) {
-      //const Parse * q = (i == 0 && p->part(0)->simple()) ? p->part(0) : replace(p->part(i), r); // HACK
-      const Parse * q = replace(p->part(i), r);
+      //const Syntax * q = (i == 0 && p->part(0)->simple()) ? p->part(0) : replace(p->part(i), r); // HACK
+      const Syntax * q = replace(p->part(i), r);
       if (q->is_a("...")) {
         for (unsigned j = 0; j != q->num_args(); ++j)
           res->add_part(q->arg(j));
@@ -218,29 +218,29 @@ struct BuildIn {
 }
 */
 
-const Parse * expand_call_parms(const Parse * parse, Environ & env);
+const Syntax * expand_call_parms(const Syntax * parse, Environ & env);
 
-AST * expand_top(const Parse * p, Environ & env) {
+AST * expand_top(const Syntax * p, Environ & env) {
   assert(p->is_a("top")); // FIXME Error
   return (new Top())->parse_self(p, env);
 }
 
-void read_macro(const Parse * p, Environ & env) {
+void read_macro(const Syntax * p, Environ & env) {
   expand(p, TopLevel, env);
 }
 
-const Parse * ID = new Parse("id");
-const Parse * ESTMT = new Parse("estmt");
+const Syntax * ID = new Syntax("id");
+const Syntax * ESTMT = new Syntax("estmt");
 
 // should't override following primatives
 //   "exp" "stmt" "estmt" and TOKENS
 // FIXME: need to add check
 
-const Parse * handle_paran(const Parse * p, Environ & env) {
+const Syntax * handle_paran(const Syntax * p, Environ & env) {
   try {
-    const Parse * exp = reparse("PARAN_EXP", p);
-    const Parse * type = parse_decl_->parse_type(exp, env);
-    if (type) return new Parse(p->str(), new Parse("(type)"), type);
+    const Syntax * exp = reparse("PARAN_EXP", p);
+    const Syntax * type = parse_decl_->parse_type(exp, env);
+    if (type) return new Syntax(p->str(), new Syntax("(type)"), type);
     // Since the raw string might need to be reparsed we can't use an
     // exp here.  Unfortunately this will likely mean duplicate work.
     // Avoiding that will take more thought
@@ -250,18 +250,18 @@ const Parse * handle_paran(const Parse * p, Environ & env) {
   }
 }
 
-const Parse * e_parse_exp(const Parse * p, Environ & env) {
-  Parse * tmp = new Parse("exp");
+const Syntax * e_parse_exp(const Syntax * p, Environ & env) {
+  Syntax * tmp = new Syntax("exp");
   for (unsigned i = 0; i != p->num_args(); ++i) {
-    const Parse * t = p->arg(i);
+    const Syntax * t = p->arg(i);
     if (t->is_a("()")) t = handle_paran(t, env);
     tmp->add_part(t);
   }
-  const Parse * res = parse_exp_->parse(tmp);
+  const Syntax * res = parse_exp_->parse(tmp);
   return res;
 }
 
-AST * expand(const Parse * p, Position pos, Environ & env) {
+AST * expand(const Syntax * p, Position pos, Environ & env) {
   if (p->entity()) {
     AST * ast = dynamic_cast<AST *>(p->entity());
     assert(ast); // FIXME Error message
@@ -284,11 +284,11 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
     return expand(p, pos, env);
   } else if (what == "call") { 
     assert_num_args(p, 2);
-    const Parse * n = p->arg(0); // FIXME: Need to "partly expand"
+    const Syntax * n = p->arg(0); // FIXME: Need to "partly expand"
     // The parms might already be parsed as something else,
     // the parameters are just a list of tokens at this point,
     // we need to turn them into a proper list
-    const Parse * a = reparse("SPLIT", p->arg(1)->arg(0));
+    const Syntax * a = reparse("SPLIT", p->arg(1)->arg(0));
     const Map * map = NULL;
     if (n && n->is_a("id"))
         map = env.symbols.find<Map>(*n->arg(0));
@@ -297,7 +297,7 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
       p = map->expand(a, pos, env);
       return expand(p, pos, env);
     } else {
-      Parse * res = new Parse(p->str(), p->part(0));
+      Syntax * res = new Syntax(p->str(), p->part(0));
       res->add_part(p->arg(0));
       res->add_part(expand_call_parms(a, env));
       p = res;
@@ -313,7 +313,7 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
     return new Empty();
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
-    const Parse * res = parse_decl_->parse_decl(p, env);
+    const Syntax * res = parse_decl_->parse_decl(p, env);
     if (!res)
       res = e_parse_exp(p, env);
     return expand(res, pos, env);
@@ -339,7 +339,7 @@ AST * expand(const Parse * p, Position pos, Environ & env) {
   }
 }
 
-Type * expand_type(const Parse * p, Environ & env) {
+Type * expand_type(const Syntax * p, Environ & env) {
   if (p->entity()) {
     Type * type = dynamic_cast<Type *>(p->entity());
     assert(type);
@@ -348,43 +348,43 @@ Type * expand_type(const Parse * p, Environ & env) {
   return parse_type(p, env);
 }
 
-void assert_pos(const Parse * p, Position have, unsigned need) {
+void assert_pos(const Syntax * p, Position have, unsigned need) {
   // FIXME Better Error Message
   //if (!(have & need)) 
   //  throw error(p, "syntax error");
 }
 
-void assert_num_args(const Parse * p, unsigned num) {
+void assert_num_args(const Syntax * p, unsigned num) {
   if (p->num_args() != num)
     throw error(p, "Expected %d arguments but got %d for \"%s\"", num, p->num_args(), ~p->what());
 }
 
-void assert_num_args(const Parse * p, unsigned min, unsigned max) {
+void assert_num_args(const Syntax * p, unsigned min, unsigned max) {
   if (p->num_args() < min)
     throw error(p, "Expected at least %d arguments but got %d for \"%s\"", min, p->num_args(), ~p->what());
   if (p->num_args() > max)
     throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->what());
 }
 
-const Parse * expand_args(const Parse * p, Position pos, Environ & env, Parse * res) {
+const Syntax * expand_args(const Syntax * p, Position pos, Environ & env, Syntax * res) {
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_args(); ++i) {
     // FIXME need to partly expand it first
     if (p->arg(i)->is_a("list")) {
       expand_args(p->arg(i), pos, env, res);
     } else {
-      res->add_part(new Parse(expand(p->arg(i), pos, env))); // FIXME: maybe partial expand only?
+      res->add_part(new Syntax(expand(p->arg(i), pos, env))); // FIXME: maybe partial expand only?
     }
   }
   return res;
 }
 
-Tuple * expand_fun_parms(const Parse * parse, Environ & env) {
-  Parse * res = new Parse(parse->part(0));
+Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
+  Syntax * res = new Syntax(parse->part(0));
   for (unsigned i = 0; i != parse->num_args(); ++i) {
-    const Parse * p = parse->arg(i);
+    const Syntax * p = parse->arg(i);
     if (!p->is_a("...")) {
-      Parse * r = new Parse(expand_type(p->part(0), env));
+      Syntax * r = new Syntax(expand_type(p->part(0), env));
       if (p->num_parts() == 2) 
 	r->add_part(p->part(1));
       res->add_part(r);
@@ -398,16 +398,16 @@ Tuple * expand_fun_parms(const Parse * parse, Environ & env) {
   return tuple;
 }
 
-const Parse * expand_call_parms(const Parse * p, Environ & env) {
+const Syntax * expand_call_parms(const Syntax * p, Environ & env) {
   if (p->is_a("list"))
-    return expand_args(p, ExpPos, env, new Parse(p->str(), p->part(0)));
+    return expand_args(p, ExpPos, env, new Syntax(p->str(), p->part(0)));
   assert(p->is_a("(,)"));
   
-  Parse * res = new Parse(p->str(), new Parse("list"));
+  Syntax * res = new Syntax(p->str(), new Syntax("list"));
   res->set_flags(p);
   for (unsigned i = 0; i != p->num_args(); ++i) {
-    const Parse * q = reparse("EXP", p->arg(i));
-    res->add_part(new Parse(expand(q, ExpPos, env)));
+    const Syntax * q = reparse("EXP", p->arg(i));
+    res->add_part(new Syntax(expand(q, ExpPos, env)));
   }
   return res;
 }

@@ -197,7 +197,7 @@ namespace ast {
   inline TypeOf::TypeOf(AST * a) 
     : SimpleTypeInst(a->type), of_ast(a), of(a->type) {type_symbol = of->type_symbol;}
 
-  Type * parse_type(const Parse * p, Environ & env) {
+  Type * parse_type(const Syntax * p, Environ & env) {
     TypeSymbolTable types = env.types;
     unsigned sz = p->num_args();
     unsigned ns = DEFAULT_NS;
@@ -245,7 +245,7 @@ namespace ast {
     Vector<TypeParm> parms;
     parms.reserve(sz);
     for (int i = 0; i != sz; ++i) {
-      const Parse * p0 = p->arg(i);
+      const Syntax * p0 = p->arg(i);
       SymbolName n;
       if (name == ".tuple" && !p0->part(0)->simple()) { // HACK!
 	if (p0->num_parts() > 1)

@@ -4,7 +4,7 @@
 
 class ParseExp {
 public:
-  virtual const Parse * parse(const Parse * p) = 0;
+  virtual const Syntax * parse(const Syntax * p) = 0;
   virtual void init() = 0;
   virtual ~ParseExp() {}
 };

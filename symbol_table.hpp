@@ -8,7 +8,7 @@
 #include "vector.hpp"
 #include "string_buf.hpp"
 
-struct Parse;
+struct Syntax;
 
 namespace ast {
 
@@ -107,7 +107,7 @@ namespace ast {
       : SymbolName(n), ns(ns0) {}
     SymbolKey(SymbolName n = SymbolName(), unsigned ns0 = 0)
       : SymbolName(n), ns(ns0) {}
-    inline SymbolKey(const Parse & p);
+    inline SymbolKey(const Syntax & p);
   };
 
   struct Symbol {

@@ -37,7 +37,7 @@ Error * error(SourceStr str, const char * fmt, ...) {
   return res;
 }
 
-Error * error(const Parse * p, const char * fmt, ...) {
+Error * error(const Syntax * p, const char * fmt, ...) {
   SourceStr str = p ? p->str() : SourceStr();
   va_list ap;
   va_start(ap, fmt);
@@ -54,7 +54,7 @@ Error * error(const char * pos, const char * fmt, ...) {
   return res;
 }
 
-void Parse::set_src_from_parts() const {
+void Syntax::set_src_from_parts() const {
   //printf("SET SRC FROM PARTS\n");
   SourceStr s;
   for (unsigned i = 0; i != d->parts.size(); ++i) {
@@ -127,7 +127,7 @@ String escape(String n) {
   }
 }
 
-void Parse::print() const {
+void Syntax::print() const {
   if (!d) { 
     if (entity_)
       printf("(%s)", ~escape(what_.to_string()));
@@ -177,7 +177,7 @@ namespace parse_parse {
 
   Res parse(SourceStr str)
   {
-    Parse * res = new Parse();
+    Syntax * res = new Syntax();
     String name;
     const char * start = str.begin;
     str = spacing(str);
@@ -190,14 +190,14 @@ namespace parse_parse {
     str = spacing(str);
     if (str.empty())
     else
-    res = new Parse(new Parse(name, str, name_start, name_end));*/
+    res = new Syntax(new Syntax(name, str, name_start, name_end));*/
     while (!str.empty() && *str != ')') {
       if (*str == '(') {
         Res r = parse(str);
         str = r.end;
         res->add_part(r.parse);
       } else {
-        Parse * r = new Parse();
+        Syntax * r = new Syntax();
         r->str_.begin = str;
         str = s_id(str, r->what_);
         r->str_.end = str;
@@ -303,9 +303,9 @@ namespace parse_common {
 }
 
 
-static inline Parse::D * make_as_entity() {
-  Parse::D * d = new Parse::D;
-  d->parts.push_back(new Parse("<entity>"));
+static inline Syntax::D * make_as_entity() {
+  Syntax::D * d = new Syntax::D;
+  d->parts.push_back(new Syntax("<entity>"));
   return d;
 }
-Parse::D * const Parse::AS_ENTITY = make_as_entity();
+Syntax::D * const Syntax::AS_ENTITY = make_as_entity();

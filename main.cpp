@@ -50,7 +50,7 @@ int main(int argc, const char *argv[])
     code = new_source_file(STDIN_FILENO);
   }
   try {
-    const Parse * to_expand = parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
+    const Syntax * to_expand = parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
     ast::AST * ast = expand_top(to_expand, env);
     //printf("\n*************** EXPANDED *********************\n");
     //expanded->print();

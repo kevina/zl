@@ -230,12 +230,12 @@ namespace ast {
     String what_;
     String what() const {return what_;}
     virtual AST * part(unsigned i) {return 0;}
-    const Parse * parse_;
+    const Syntax * parse_;
     const Type * type;
     bool lvalue;
     unsigned return_offset; // for rhs values: NPOS if not LHS
     VarLoc addr;            // for lhs values
-    AST(String n, const Parse * p = 0) : what_(n), parse_(p), type(), lvalue(false), return_offset(NPOS), addr(), ct_value_(0) {}
+    AST(String n, const Syntax * p = 0) : what_(n), parse_(p), type(), lvalue(false), return_offset(NPOS), addr(), ct_value_(0) {}
     void assert_num_args(int p) {
       if (parse_->num_args() != p) 
         //abort();
@@ -245,7 +245,7 @@ namespace ast {
       if (parse_->num_args() < min || parse_->num_args() > max) 
         throw error(0, parse_->str(), "%s: Wrong Number of Arguments", ~what_);
     };
-    virtual AST * parse_self(const Parse * p, Environ &) = 0;
+    virtual AST * parse_self(const Syntax * p, Environ &) = 0;
       // ^^ returns itself, to allow chaining ie 
       //      new Foo(p)->parse(env);
     virtual void prep_eval(PrepEvalEnviron &) {abort();}
@@ -343,12 +343,12 @@ namespace ast {
   struct ImplicitCast : public Cast {
     ImplicitCast(AST * e, const Type * t) 
       : Cast("<cast>") {exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
-    AST * parse_self(const Parse * p, Environ & env0) {abort();}
+    AST * parse_self(const Syntax * p, Environ & env0) {abort();}
   };
 
   struct ExplicitCast : public Cast {
     ExplicitCast() : Cast("cast") {}
-    AST * parse_self(const Parse * p, Environ & env0);
+    AST * parse_self(const Syntax * p, Environ & env0);
   };
 
   //
@@ -359,8 +359,8 @@ namespace ast {
   struct Parm : public gc {
     String name;
     const Type * type;
-    const Parse * type_parse;
-    Parm(String n, const Parse * t) : name(n), type(), type_parse(t) {}
+    const Syntax * type_parse;
+    Parm(String n, const Syntax * t) : name(n), type(), type_parse(t) {}
   };
   */
 
@@ -372,7 +372,7 @@ namespace ast {
     unsigned frame_size;
     //TypeSymbolTable * types;
     //VarSymbolTable * vars;
-    AST * parse_self(const Parse * p, Environ & env);
+    AST * parse_self(const Syntax * p, Environ & env);
     //void resolve(ResolveEnviron & env);
     void eval(ExecEnviron & env);
     
@@ -386,7 +386,7 @@ namespace ast {
     enum StorageClass {NONE, AUTO, STATIC, EXTERN, REGISTER};
     StorageClass storage_class;
     bool inline_;
-    void parse_flags(const Parse * p) {
+    void parse_flags(const Syntax * p) {
       storage_class = NONE;
       if (p->flag("auto")) storage_class = AUTO;
       else if (p->flag("static")) storage_class = STATIC;
@@ -425,7 +425,7 @@ namespace ast {
     //LabelSymbolTable * labels;
     unsigned frame_offset;
     unsigned frame_size;
-    AST * parse_self(const Parse * p, Environ & env0);
+    AST * parse_self(const Syntax * p, Environ & env0);
     void eval(ExecEnviron & env);
     void compile(CompileWriter & f, CompileEnviron & env);
   };
@@ -434,7 +434,7 @@ namespace ast {
     Literal() : AST("literal") {}
     //AST * part(unsigned i);
     //long long value;
-    AST * parse_self(const Parse * p, Environ &);
+    AST * parse_self(const Syntax * p, Environ &);
     //void eval(ExecEnviron & env);
     void compile(CompileWriter & f, CompileEnviron &);
   };
@@ -443,7 +443,7 @@ namespace ast {
     FloatC() : AST("float") {}
     //AST * part(unsigned i);
     //long double value;
-    AST * parse_self(const Parse * p, Environ &);
+    AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
@@ -452,7 +452,7 @@ namespace ast {
     //AST * part(unsigned i);
     String orig;
     String value; // unused at the moment
-    AST * parse_self(const Parse * p, Environ &);
+    AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
@@ -461,13 +461,13 @@ namespace ast {
     //AST * part(unsigned i);
     String orig;
     char value; // unused at the moment
-    AST * parse_self(const Parse * p, Environ &);
+    AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
   };
 
   struct Empty : public AST {
     Empty() : AST("empty") {}
-    AST * parse_self(const Parse * p, Environ & env) {
+    AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
       type = env.void_type();
@@ -488,14 +488,14 @@ namespace ast {
     exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type));
   }
 
-  //int ct_value(const Parse * p, Environ &);
+  //int ct_value(const Syntax * p, Environ &);
 
-  AST * parse_top(const Parse * p);
+  AST * parse_top(const Syntax * p);
 
-  AST * parse_top_level(const Parse * p, Environ & env);
-  AST * parse_member(const Parse * p, Environ & env);
-  AST * parse_stmt(const Parse * p, Environ & env);
-  AST * parse_stmt_decl(const Parse * p, Environ & env);
-  AST * parse_exp(const Parse * p, Environ & env);
+  AST * parse_top_level(const Syntax * p, Environ & env);
+  AST * parse_member(const Syntax * p, Environ & env);
+  AST * parse_stmt(const Syntax * p, Environ & env);
+  AST * parse_stmt_decl(const Syntax * p, Environ & env);
+  AST * parse_exp(const Syntax * p, Environ & env);
 
 }

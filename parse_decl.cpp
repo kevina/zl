@@ -27,17 +27,17 @@
 // TO FIX
 void ignore() {}
 
-//static const Parse * const TYPE = new Parse("type");
+//static const Syntax * const TYPE = new Syntax("type");
 
 static unsigned uniq_num = 0;
 
 struct DeclWorking {
   DeclWorking(Parts &); // FIXME
 
-  const Parse * gen_sym() {
+  const Syntax * gen_sym() {
     StringBuf buf;
     buf.printf("_s_%d_", uniq_num++);
-    return new Parse(buf.freeze());
+    return new Syntax(buf.freeze());
   }
 
   Parts & type_scope;
@@ -45,19 +45,19 @@ struct DeclWorking {
   bool parse_first_part(Parts::const_iterator & i, 
                         Parts::const_iterator end, 
                         Environ & env);
-  const Parse * parse_outer_type_info(const Parse * & id, 
+  const Syntax * parse_outer_type_info(const Syntax * & id, 
                                       Parts::const_iterator & i, 
                                       Parts::const_iterator end,
-                                      const Parse * t,
+                                      const Syntax * t,
                                       Environ & env,
                                       bool id_required = true);
-  const Parse * parse_init_exp(Parts::const_iterator & i, 
+  const Syntax * parse_init_exp(Parts::const_iterator & i, 
                                Parts::const_iterator end);
 
-  const Parse * storage_class;
+  const Syntax * storage_class;
   enum What {VAR, TYPEDEF} what;
 
-  bool try_storage_class(const Parse * p) {
+  bool try_storage_class(const Syntax * p) {
     if (*p == "typedef") {
       what = TYPEDEF;
     } else if (*p == "extern" || *p == "static" ||
@@ -73,7 +73,7 @@ struct DeclWorking {
 
   SourceStr inner_type_str;
   enum Sign {NO_SIGN, UNSIGNED, SIGNED} sign;
-  bool try_sign(const Parse * p) {
+  bool try_sign(const Syntax * p) {
     if      (*p == "unsigned") set_sign(UNSIGNED);
     else if (*p == "signed")   set_sign(SIGNED);
     else return false;
@@ -85,7 +85,7 @@ struct DeclWorking {
     else sign = v;
   }
   enum Size {NO_SIZE, SHORT, LONG, LONG_LONG} size;
-  bool try_size(const Parse * p) {
+  bool try_size(const Syntax * p) {
     if (*p == "short") {
       if (size != NO_SIZE) ignore();
       size = SHORT;
@@ -100,7 +100,7 @@ struct DeclWorking {
     return true;
   }
   enum BaseType {NO_BT, VOID, CHAR, INT, FLOAT, DOUBLE} base_type;
-  bool try_base_type(const Parse * p) {
+  bool try_base_type(const Syntax * p) {
     if      (*p == "void")      set_base_type(VOID);
     else if (*p == "char")      set_base_type(CHAR);
     else if (*p == "int")       set_base_type(INT);
@@ -117,22 +117,22 @@ struct DeclWorking {
   }
 
   Flags qualifiers;
-  bool try_qualifier(const Parse * p, Flags & qualifiers) {
+  bool try_qualifier(const Syntax * p, Flags & qualifiers) {
     if (*p == "const" || *p == "restrict" || *p == "volatile") 
       qualifiers.insert(p);
     else return false;
     return true;
   }
-  bool try_qualifier(const Parse * p) {return try_qualifier(p, qualifiers);}
+  bool try_qualifier(const Syntax * p) {return try_qualifier(p, qualifiers);}
 
-  const Parse * inline_;
-  bool try_function_specifier(const Parse * p) {
+  const Syntax * inline_;
+  bool try_function_specifier(const Syntax * p) {
     if (*p == "inline") inline_ = p;
     else return false;
     return true;
   }
   String type_name;
-  bool try_type_name(const Parse * p, Environ & env) {
+  bool try_type_name(const Syntax * p, Environ & env) {
     SymbolName name = p->what_;
     if (env.symbols.find<ast::TypeSymbol>(name)) {
       if (base_type) ignore();
@@ -142,37 +142,37 @@ struct DeclWorking {
       return false;
     }
   }
-  bool try_typeof(const Parse * p, Environ &) {
+  bool try_typeof(const Syntax * p, Environ &) {
     if (*p == ".typeof") {
-      inner_type = new Parse(p->part(0), p->arg(0));
+      inner_type = new Syntax(p->part(0), p->arg(0));
       return true;
     } else {
       return false;
     }
   }
-  bool try_struct_union(const Parse * p, Environ &);
-  bool try_enum(const Parse * p, Environ &);
-  const Parse * parse_struct_union_body(const Parse * p, Environ &);
+  bool try_struct_union(const Syntax * p, Environ &);
+  bool try_enum(const Syntax * p, Environ &);
+  const Syntax * parse_struct_union_body(const Syntax * p, Environ &);
   bool dots;
-  Parse * inner_type;
-  void make_inner_type(const Parse * orig);
-  const Parse * try_pointers(Parts::const_iterator & i, 
+  Syntax * inner_type;
+  void make_inner_type(const Syntax * orig);
+  const Syntax * try_pointers(Parts::const_iterator & i, 
                              Parts::const_iterator end,
-                             const Parse * t);
-  const Parse * try_arrays(Parts::const_iterator & i, 
+                             const Syntax * t);
+  const Syntax * try_arrays(Parts::const_iterator & i, 
                            Parts::const_iterator end,
-                           const Parse * t);
+                           const Syntax * t);
 
-  const Parse * make_declaration(const Parse * id, const Parse * t, const Parse * init = NULL);
-  const Parse * make_function(const Parse * id, const Parse * t, const Parse * body);
-  const Parse * make_function_type(const Parse *, const Parse *, Environ & env);
+  const Syntax * make_declaration(const Syntax * id, const Syntax * t, const Syntax * init = NULL);
+  const Syntax * make_function(const Syntax * id, const Syntax * t, const Syntax * body);
+  const Syntax * make_function_type(const Syntax *, const Syntax *, Environ & env);
 };
 
 class ParseDeclImpl : public ParseDecl {
 public:
   ParseDeclImpl() {}
-  const Parse * parse_decl(const Parse * p, Environ &);
-  const Parse * parse_type(const Parse * p, Environ &);
+  const Syntax * parse_decl(const Syntax * p, Environ &);
+  const Syntax * parse_type(const Syntax * p, Environ &);
   
   void init() {}
   ~ParseDeclImpl() {}
@@ -189,9 +189,9 @@ DeclWorking::DeclWorking(Parts & p)
 // The real code....
 //
 
-const Parse * ParseDeclImpl::parse_decl(const Parse * p, Environ & env)
+const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 {
-  Parse * res = new Parse(new Parse("slist"));
+  Syntax * res = new Syntax(new Syntax("slist"));
 
   Parts::const_iterator i = p->args_begin();
   Parts::const_iterator end = p->args_end();
@@ -207,16 +207,16 @@ const Parse * ParseDeclImpl::parse_decl(const Parse * p, Environ & env)
 
   while (i != end) {
 
-    const Parse * id;
-    const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
+    const Syntax * id;
+    const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
 
-    const Parse * decl;
+    const Syntax * decl;
     if (i != end && (*i)->is_a("sym", "=")) {
       ++i;
-      const Parse * init = w.parse_init_exp(i, end);
+      const Syntax * init = w.parse_init_exp(i, end);
       decl = w.make_declaration(id, t, init);
     } else if (i != end && (*i)->is_a("{}")) {
-      const Parse * body = *i;
+      const Syntax * body = *i;
       ++i;
       decl = w.make_function(id, t, body);
     } else {
@@ -235,16 +235,16 @@ const Parse * ParseDeclImpl::parse_decl(const Parse * p, Environ & env)
   return res;
 }
 
-const Parse * ParseDeclImpl::parse_type(const Parse * p, Environ & env) {
+const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
   Parts dummy;
   Parts::const_iterator i = p->args_begin();
   Parts::const_iterator end = p->args_end();
   DeclWorking w(dummy);
-  const Parse * id = NULL;
+  const Syntax * id = NULL;
   bool r = w.parse_first_part(i, end, env);
   if (!r) return NULL;
   w.make_inner_type(p);
-  const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
+  const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
   if (i != end || id) return NULL;
   assert(dummy.empty()); // FIXME: Error Message
   return t;
@@ -257,12 +257,12 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
   Parts::const_iterator begin = i;
   if (i != end && (*i)->is_a("sym", "...")) {
     dots = true;
-    inner_type = new Parse("...", (*i)->str());
+    inner_type = new Syntax("...", (*i)->str());
     ++i;
   } else while (i != end) {
-    const Parse * cur = *i;
+    const Syntax * cur = *i;
     if (cur->is_a("id")) {
-      const Parse * p = cur->arg(0);
+      const Syntax * p = cur->arg(0);
       bool any = 
         try_storage_class(p) ||
         try_sign(p) ||
@@ -287,9 +287,9 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
   else return true;
 }
 
-bool DeclWorking::try_struct_union(const Parse * p, Environ & env) {
-  const Parse * name = NULL;
-  const Parse * body = NULL;
+bool DeclWorking::try_struct_union(const Syntax * p, Environ & env) {
+  const Syntax * name = NULL;
+  const Syntax * body = NULL;
   if (p->is_a("struct") || p->is_a("union")) {
     unsigned i = 0;
     if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
@@ -306,9 +306,9 @@ bool DeclWorking::try_struct_union(const Parse * p, Environ & env) {
   finish:
     if (name->what().empty())
       name = gen_sym();
-    inner_type = new Parse(p->part(0), name);
+    inner_type = new Syntax(p->part(0), name);
     if (body) {
-      Parse * struct_union = new Parse(p->part(0));
+      Syntax * struct_union = new Syntax(p->part(0));
       struct_union->add_part(name);
       struct_union->add_part(parse_struct_union_body(body, env));
       type_scope.push_back(struct_union);
@@ -319,12 +319,12 @@ bool DeclWorking::try_struct_union(const Parse * p, Environ & env) {
   }
 }
 
-const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, Environ & env)
+const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ & env)
 {
-  Parse * res = new Parse();
+  Syntax * res = new Syntax();
   for (unsigned h = 0; h != p0->num_args(); ++h) {
 
-    const Parse * p = p0->arg(h);
+    const Syntax * p = p0->arg(h);
 
     DeclWorking w(type_scope);
 
@@ -340,10 +340,10 @@ const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, Environ & e
     
     while (i != end) {
 
-      const Parse * id;
-      const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
+      const Syntax * id;
+      const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
       
-      const Parse * decl = w.make_declaration(id, t);
+      const Syntax * decl = w.make_declaration(id, t);
       
       res->add_part(decl);
       
@@ -357,9 +357,9 @@ const Parse * DeclWorking::parse_struct_union_body(const Parse * p0, Environ & e
   return res;
 }
 
-bool DeclWorking::try_enum(const Parse * p, Environ & env) {
-  const Parse * name = NULL;
-  const Parse * body = NULL;
+bool DeclWorking::try_enum(const Syntax * p, Environ & env) {
+  const Syntax * name = NULL;
+  const Syntax * body = NULL;
   if (p->is_a("enum")) {
     unsigned i = 0;
     if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
@@ -376,9 +376,9 @@ bool DeclWorking::try_enum(const Parse * p, Environ & env) {
   finish:
     if (name->what().empty())
       name = gen_sym();
-    inner_type = new Parse(p->part(0), name);
+    inner_type = new Syntax(p->part(0), name);
     if (body) {
-      Parse * enum_ = new Parse(p->part(0));
+      Syntax * enum_ = new Syntax(p->part(0));
       enum_->add_part(name);
       enum_->add_part(body);
       type_scope.push_back(enum_);
@@ -389,9 +389,9 @@ bool DeclWorking::try_enum(const Parse * p, Environ & env) {
   }
 }
 
-void DeclWorking::make_inner_type(const Parse * orig) {
+void DeclWorking::make_inner_type(const Syntax * orig) {
   if (!inner_type) {
-    inner_type = new Parse();
+    inner_type = new Syntax();
     StringBuf t;
     switch (base_type) {
     case NO_BT:
@@ -471,7 +471,7 @@ void DeclWorking::make_inner_type(const Parse * orig) {
       break;
     }
     assert(!t.empty());
-    inner_type->add_part(new Parse(t.freeze()));
+    inner_type->add_part(new Syntax(t.freeze()));
   } else {
     // stuct or union
     // nothing to do
@@ -480,10 +480,10 @@ void DeclWorking::make_inner_type(const Parse * orig) {
 }
 
 // returns a type and sets id
-const Parse * DeclWorking::parse_outer_type_info(const Parse * & id, 
+const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id, 
                                                  Parts::const_iterator & i, 
                                                  Parts::const_iterator end,
-                                                 const Parse * t,
+                                                 const Syntax * t,
                                                  Environ & env,
                                                  bool id_required) 
 {
@@ -491,7 +491,7 @@ const Parse * DeclWorking::parse_outer_type_info(const Parse * & id,
   t = try_pointers(i, end, t);
   if (i == end) return t;
 
-  const Parse * outer = NULL;
+  const Syntax * outer = NULL;
   
   if ((*i)->is_a("id")) {
     id = (*i)->arg(0);
@@ -523,25 +523,25 @@ const Parse * DeclWorking::parse_outer_type_info(const Parse * & id,
   }
 }
 
-const Parse * DeclWorking::make_function_type(const Parse * ret,
-                                              const Parse * parms,
+const Syntax * DeclWorking::make_function_type(const Syntax * ret,
+                                              const Syntax * parms,
                                               Environ & env)
 {
-  Parse * ps = new Parse(new Parse(".tuple"));
+  Syntax * ps = new Syntax(new Syntax(".tuple"));
   Parts::const_iterator i = parms->args_begin();
   Parts::const_iterator end = parms->args_end();
   if (i != end) for (;;) {
     Parts::const_iterator begin = i;
     DeclWorking w(type_scope);
-    const Parse * id = NULL;
+    const Syntax * id = NULL;
     bool r = w.parse_first_part(i, end, env);
     if (!r) throw error(*i, "Expected type or \"...\".");
     if (w.dots) {
       ps->add_part(w.inner_type); // FIXME: Preserve source info..
     } else {
       w.make_inner_type(parms);
-      const Parse * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
-      Parse * p = new Parse();
+      const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
+      Syntax * p = new Syntax();
       assert(t);
       p->add_part(t);
       if (id)
@@ -553,27 +553,27 @@ const Parse * DeclWorking::make_function_type(const Parse * ret,
     if (!(*i)->is_a("sym", ",")) throw error(*i, "Expected \",\".");
     ++i;
   }
-  return new Parse(new Parse(".fun"), ps, ret);
+  return new Syntax(new Syntax(".fun"), ps, ret);
 }
 
-const Parse * DeclWorking::parse_init_exp(Parts::const_iterator & i, 
+const Syntax * DeclWorking::parse_init_exp(Parts::const_iterator & i, 
                                             Parts::const_iterator end)
 {
   Parts::const_iterator begin = i;
   while (i != end && !(*i)->is_a("sym", ","))
     ++i;
-  Parse * p = new Parse(new Parse("exp"));
+  Syntax * p = new Syntax(new Syntax("exp"));
   p->d->parts.insert(p->d->parts.end(), begin, i);
   return p;
 }
 
-const Parse * DeclWorking::try_pointers(Parts::const_iterator & i, 
+const Syntax * DeclWorking::try_pointers(Parts::const_iterator & i, 
                                         Parts::const_iterator end,
-                                        const Parse * t) 
+                                        const Syntax * t) 
 {
   while (i != end && (*i)->is_a("sym", "*")) {
     ++i;
-    Parse * new_t = new Parse(new Parse(".pointer"), t);
+    Syntax * new_t = new Syntax(new Syntax(".pointer"), t);
     while (i != end && 
            (*i)->is_a("id") && try_qualifier((*i)->arg(0), new_t->d->flags))
       ++i;
@@ -583,31 +583,31 @@ const Parse * DeclWorking::try_pointers(Parts::const_iterator & i,
 }
 
 
-const Parse * DeclWorking::try_arrays(Parts::const_iterator & i, 
+const Syntax * DeclWorking::try_arrays(Parts::const_iterator & i, 
                                       Parts::const_iterator end,
-                                      const Parse * t) 
+                                      const Syntax * t) 
 {
-  Vector<const Parse *> stack;
+  Vector<const Syntax *> stack;
   while (i != end && (*i)->is_a("[]")) {
     stack.push_back(reparse("ARRAY_SIZE", (*i)->arg(0)));
     ++i;
   }
-  Vector<const Parse *>::const_reverse_iterator j = stack.rbegin();
-  Vector<const Parse *>::const_reverse_iterator e = stack.rend();
+  Vector<const Syntax *>::const_reverse_iterator j = stack.rbegin();
+  Vector<const Syntax *>::const_reverse_iterator e = stack.rend();
   while (j != e) {
-    t = new Parse(new Parse(".array"), t, *j);
+    t = new Syntax(new Syntax(".array"), t, *j);
     ++j;
   }
   return t;
 }
 
-const Parse *  DeclWorking::make_declaration(const Parse * id, const Parse * t, const Parse * init)
+const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * t, const Syntax * init)
 {
   if (what == VAR) {
     if (t->is_a(".fun")) {
       return make_function(id, t, NULL);
     } else {
-      Parse * p = new Parse(new Parse("var"));
+      Syntax * p = new Syntax(new Syntax("var"));
       p->add_part(id);
       assert(t);
       p->add_part(t);
@@ -618,7 +618,7 @@ const Parse *  DeclWorking::make_declaration(const Parse * id, const Parse * t, 
       return p;
     }
   } else if (what == TYPEDEF) {
-    Parse * p = new Parse(new Parse("talias"));
+    Syntax * p = new Syntax(new Syntax("talias"));
     p->add_part(id);
     p->add_part(t);
     return p;
@@ -627,10 +627,10 @@ const Parse *  DeclWorking::make_declaration(const Parse * id, const Parse * t, 
   }
 }
 
-const Parse * DeclWorking::make_function(const Parse * id, const Parse * t, const Parse * body)
+const Syntax * DeclWorking::make_function(const Syntax * id, const Syntax * t, const Syntax * body)
 {
   if (what == VAR) {
-    Parse * p = new Parse(new Parse("fun"));
+    Syntax * p = new Syntax(new Syntax("fun"));
     if (inline_)
       p->add_flag(inline_);
     if (storage_class)

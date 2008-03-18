@@ -9,7 +9,7 @@
 #include "symbol_table.hpp"
 #include "string_buf.hpp"
 
-struct Parse;
+struct Syntax;
 
 namespace ast {
 
@@ -159,12 +159,12 @@ namespace ast {
   
   class TypeSymbol : public Symbol {
   public:
-    Parse * parse;
+    Syntax * parse;
     String what() const {return name;}
     const PrintInst * print_inst;
     TypeSymbol() : parse(), print_inst(c_print_inst) {}
     virtual Type * inst(Vector<TypeParm> & d) const = 0;
-    //virtual Type * inst(const Parse *) const = 0;
+    //virtual Type * inst(const Syntax *) const = 0;
     virtual unsigned required_parms() const = 0;
     virtual TypeParm::What parm(unsigned i) const = 0; // return TypeParm::NONE if off end
     virtual ~TypeSymbol() {}
@@ -415,7 +415,7 @@ namespace ast {
   //
   //
 
-  Type * parse_type(const Parse * p, Environ & env);
+  Type * parse_type(const Syntax * p, Environ & env);
 
   //
   //

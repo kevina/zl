@@ -47,7 +47,7 @@ public:
     } else { // type is None
       const char * s = prod->match(str, 0, errs);
       if (!s) return FAIL;
-      Parse * parse = new Parse(String(str.begin, s), str, s);
+      Syntax * parse = new Syntax(String(str.begin, s), str, s);
       parts->append(parse);
       return s;
     }
@@ -104,7 +104,7 @@ class NamedCapture : public Prod {
 private:
   struct Parm { // one or the other
     Parm() : start(NPOS), stop(NPOS) {}
-    const Parse * name;
+    const Syntax * name;
     unsigned start;
     unsigned stop;
   };
@@ -115,19 +115,19 @@ public:
     Parts lparts;
     const char * s = prod->match(str, prod->capture_type.is_explicit() ? &lparts : 0, errs);
     if (!s) return FAIL;
-    Parse * parse;
+    Syntax * parse;
     if (parms.empty()) {
       if (name)
-        parse = new Parse(name);
+        parse = new Syntax(name);
       else
-        parse = new Parse();
+        parse = new Syntax();
       parse->add_parts(lparts);
     } else {
       Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
       if (i->start == NPOS) {
-        parse = new Parse(i->name);
+        parse = new Syntax(i->name);
       } else {
-        parse = new Parse(lparts[i->start]);
+        parse = new Syntax(lparts[i->start]);
       }
       ++i;
       for (; i != e; ++i) {
@@ -146,10 +146,10 @@ public:
     return s;
   }
 
-  // FIXME: Should take in Parse or SourceStr rater than String so we
+  // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
   NamedCapture(const char * s, const char * e, Prod * p, String n)
-    : Prod(s,e), prod(p), name(!n.empty() ? new Parse(n) : 0) {capture_type.set_to_explicit(); parse_name();}
+    : Prod(s,e), prod(p), name(!n.empty() ? new Syntax(n) : 0) {capture_type.set_to_explicit(); parse_name();}
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : Prod(o), prod(o.prod->clone(p)), name(o.name), parms(o.parms) {}
   virtual Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
@@ -163,7 +163,7 @@ private:
     const char * s = ~*name;
     const char * e = first_space(s);
     if (s[0] != '%' && !*e) {
-      name = new Parse(parse_common::unescape(s, e, '"')); // FIXME: Add source info
+      name = new Syntax(parse_common::unescape(s, e, '"')); // FIXME: Add source info
       return;
     }
     unsigned last_used = 0; // FIXME: Misnamed
@@ -171,7 +171,7 @@ private:
     unsigned i = 0;
     for (;;) {
       Parm p;
-      p.name = new Parse(parse_common::unescape(s, e, '"')); // FIXME: Add source info
+      p.name = new Syntax(parse_common::unescape(s, e, '"')); // FIXME: Add source info
       String n = ~*p.name;
       if (n == "...") {
         assert(dots == NPOS); // FIXME: Error message
@@ -196,7 +196,7 @@ private:
     }
     if (dots == NPOS) {
       Parm p;
-      p.name = new Parse("...");
+      p.name = new Syntax("...");
       dots = parms.size();
       parms.push_back(p);
     }
@@ -204,7 +204,7 @@ private:
     parms[dots].stop = NPOS;
   }
   Prod * prod;
-  const Parse * name;
+  const Syntax * name;
   Vector<Parm> parms;
 };
 
@@ -476,7 +476,7 @@ public:
     if (r == FAIL) return r;
     assert(prts.size() == 1);
     if (mids && mids->anywhere(*prts[0]->arg(0)) > 0) {
-      Parse * p = new Parse(prts[0]->str(), prts[0]->part(0), prts[0]->arg(0), new Parse(in_named_prod));
+      Syntax * p = new Syntax(prts[0]->str(), prts[0]->part(0), prts[0]->arg(0), new Syntax(in_named_prod));
       if (res) res->append(p);
       return r;
     } else {
@@ -550,7 +550,7 @@ private:
 
 #endif
 
-const Parse * parse_str(String what, SourceStr str, const Replacements * repls) {
+const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
   //printf("PARSE STR as %s\n", ~what);
   mids = repls;
   Prod * p = parse.named_prods[what];

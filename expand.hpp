@@ -18,14 +18,14 @@ namespace ast {
 using ast::Environ;
 using ast::SymbolName;
 
-ast::AST * expand_top(const Parse * p, Environ &);
-void read_macro(const Parse * p, Environ &);
+ast::AST * expand_top(const Syntax * p, Environ &);
+void read_macro(const Syntax * p, Environ &);
 
 // misnamed, now replaces and marks
 struct ReplTable : public gc_cleanup {
-  typedef Vector<std::pair<SymbolName, const Parse *> > Table;
+  typedef Vector<std::pair<SymbolName, const Syntax *> > Table;
   Table table;
-  const Parse * lookup(SymbolName n) const {
+  const Syntax * lookup(SymbolName n) const {
     for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
       if (i->first == n) return i->second;
     }
@@ -34,7 +34,7 @@ struct ReplTable : public gc_cleanup {
   bool have(SymbolName n) const {
     return lookup(n);
   }
-  const Parse * lookup(String n) const {
+  const Syntax * lookup(String n) const {
     for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
       if (i->first.name == n) return i->second;
     }
@@ -43,14 +43,14 @@ struct ReplTable : public gc_cleanup {
   bool have(String n) const {
     return lookup(n);
   }
-  const Parse * lookup(const Parse & n) const {
+  const Syntax * lookup(const Syntax & n) const {
     return lookup(static_cast<const SymbolName &>(n));
   }
-  bool have(const Parse & n) const {
+  bool have(const Syntax & n) const {
     return have(static_cast<const SymbolName &>(n));
   }
-  void insert(SymbolName n, const Parse * p) {
-    table.push_back(std::pair<SymbolName, const Parse *>(n,p));
+  void insert(SymbolName n, const Syntax * p) {
+    table.push_back(std::pair<SymbolName, const Syntax *>(n,p));
   }
   const ast::Mark * mark;
   void print() const {
@@ -97,26 +97,26 @@ static inline const Replacements * combine_repl(const Replacements * rs, ReplTab
 
 enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4, 
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32};
-ast::AST * expand(const Parse * p, Position pos, Environ & env);
-ast::Type * expand_type(const Parse * p, Environ & env);
-ast::Tuple * expand_fun_parms(const Parse * parse, Environ & env);
+ast::AST * expand(const Syntax * p, Position pos, Environ & env);
+ast::Type * expand_type(const Syntax * p, Environ & env);
+ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
 
-static inline ast::AST * expand_top_level(const Parse * p, Environ & env) {
+static inline ast::AST * expand_top_level(const Syntax * p, Environ & env) {
   return expand(p, TopLevel, env);
 }
-static inline ast::AST * expand_member(const Parse * p, Environ & env) {
+static inline ast::AST * expand_member(const Syntax * p, Environ & env) {
   return expand(p, FieldPos, env);
 }
-static inline ast::AST * expand_stmt(const Parse * p, Environ & env) {
+static inline ast::AST * expand_stmt(const Syntax * p, Environ & env) {
   return expand(p, StmtPos, env);
 }
-static inline ast::AST * expand_stmt_decl(const Parse * p, Environ & env) {
+static inline ast::AST * expand_stmt_decl(const Syntax * p, Environ & env) {
   return expand(p, StmtDeclPos, env);
 }
-static inline ast::AST * expand_exp(const Parse * p, Environ & env) {
+static inline ast::AST * expand_exp(const Syntax * p, Environ & env) {
   return expand(p, ExpPos, env); 
 }
 
-const Parse * reparse(String what, const Parse * p, ReplTable * r = 0);
+const Syntax * reparse(String what, const Syntax * p, ReplTable * r = 0);
 
 #endif

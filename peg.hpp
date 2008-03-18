@@ -9,7 +9,7 @@
 
 struct Prod;
 
-struct Parse;
+struct Syntax;
 
 // FIXME: Need more effect representation for const strings
 //        (Pool of strings, hash lookup, ...)
@@ -238,7 +238,7 @@ extern ParsePeg::Parse parse;
 extern SourceFile * file;
 
 struct Replacements;
-const Parse * parse_str(String what, SourceStr str, const Replacements * repls = 0);
+const Syntax * parse_str(String what, SourceStr str, const Replacements * repls = 0);
 
 // FIXME: No global
 //extern ReplTable * mids;
