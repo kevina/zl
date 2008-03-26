@@ -198,6 +198,11 @@ namespace ast {
     : SimpleTypeInst(a->type), of_ast(a), of(a->type) {type_symbol = of->type_symbol;}
 
   Type * parse_type(const Syntax * p, Environ & env) {
+    if (p->entity()) {
+      Type * type = dynamic_cast<Type *>(p->entity());
+      assert(type);
+      return type;
+    }
     TypeSymbolTable types = env.types;
     unsigned sz = p->num_args();
     unsigned ns = DEFAULT_NS;
@@ -217,7 +222,7 @@ namespace ast {
       --sz;
     }
     if (name == ".typeof") {
-      AST * ast = expand_exp(p->arg(0), env);
+      AST * ast = parse_exp(p->arg(0), env);
       Type * t = new TypeOf(ast);
       t->finalize();
       return t;
@@ -257,19 +262,19 @@ namespace ast {
 	if (*p0 == "...") {
 	  parms.push_back(TypeParm::dots());
 	} else {
-	  Type * t0 = expand_type(p0, env);
+	  Type * t0 = parse_type(p0, env);
 	  parms.push_back(TypeParm(t0, n));
 	}
         break;
       }
       case TypeParm::INT: {
-        AST * exp = expand_exp(p0, env);
+        AST * exp = parse_exp(p0, env);
         resolve_to(env, exp, types.inst("int"));
         parms.push_back(TypeParm(exp->ct_value<int>()));
         break;
       }
       case TypeParm::TUPLE: {
-        Type * t0 = expand_type(p0, env);
+        Type * t0 = parse_type(p0, env);
         Tuple * tt = dynamic_cast<Tuple *>(t0);
         if (!tt)
           throw error(p0, "Expected Tuple Type");
@@ -277,7 +282,7 @@ namespace ast {
         break;
       }
       case TypeParm::EXP: {
-        AST * exp = expand_exp(p0, env);
+        AST * exp = parse_exp(p0, env); // FIXME: Do I really need to parse here....
         parms.push_back(TypeParm(exp));
         break;
       }
@@ -479,6 +484,11 @@ namespace ast {
     types.add_name(".qualified", new QualifiedTypeSymbol);
     types.add_name(".zero", new ZeroTypeSymbol);
     types.add_name(".typeof", new TypeOfSymbol);
+
+    //add_simple_type(types, "Match", new Void());
+    //add_simple_type(types, "Syntax", new Void());
+    //add_simple_type(types, "Mark", new Void());
+    //add_simple_type(types, "Context", new Void());
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {

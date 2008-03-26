@@ -62,7 +62,7 @@ namespace ast {
     const Marks * marks;
     SymbolName() : marks() {}
     SymbolName(const char * n) : name(n), marks() {}
-    SymbolName(String n) : name(n), marks() {}
+    SymbolName(String n, const Marks * m = NULL) : name(n), marks(m) {}
 
     // Convert to a string with marks append as '<mark>
     void to_string(OStream & o) const;
@@ -78,7 +78,7 @@ namespace ast {
 
     bool defined() const {return name.defined();}
     bool empty() const {return name.empty();}
-    operator String() const {assert_no_marks(); return name;}
+    operator const String & () const {assert_no_marks(); return name;}
     operator ParmString() const {assert_no_marks(); return name;}
     operator String & () {assert_no_marks(); return name;}
     const char * operator ~() const {assert_no_marks(); return ~name;}
@@ -138,7 +138,7 @@ namespace ast {
   };
 
   static inline bool operator==(const SymbolName & x, const SymbolName & y) {
-    return (const String &)x == (const String &)y && x.marks == y.marks;
+    return x.name == y.name && x.marks == y.marks;
   }
   static inline bool operator!=(const SymbolName & x, const SymbolName & y) {
     return !(x == y);
@@ -232,12 +232,12 @@ namespace ast {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }
     void add(const SymbolKey & k, const Symbol * sym) {
-      if (find_symbol<Symbol>(k, front, back)) return; // FIXME: throw error
+      //if (find_symbol<Symbol>(k, front, back)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);
     }
-    void rename(bool if_marked);
-    void rename() {rename(false);}
-    void rename_marked() {rename(true);}
+    void rename(bool if_marked, const SymbolNode * stop);
+    void rename(const SymbolNode * stop = NULL) {rename(false, stop);}
+    void rename_marked(const SymbolNode * stop = NULL) {rename(true, stop);}
   };
 
 }

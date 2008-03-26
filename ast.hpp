@@ -13,19 +13,27 @@
 namespace ast {
 
   struct AST;
-  enum Scope {STATIC, STACK};
+  struct Declaration;
+  //enum Scope {STATIC, STACK};
 
   struct VarLoc : public gc {
     //Scope scope;
     //unsigned offset; // offset in local block for interpreter
   };
 
+  enum Scope {OTHER, TOPLEVEL, LEXICAL};
+
   struct VarSymbol : public Symbol {
     SourceStr str;
     const Type * type;
     const struct CT_Value_Base * ct_value;
-    VarSymbol(String n) : Symbol(n), ct_value() {}
-    VarSymbol(SymbolName n) : Symbol(n.name), ct_value() {}
+    mutable void * ct_ptr; // ...
+    const Declaration * decl;
+    Scope scope;
+    VarSymbol(String n, Scope s = OTHER, const Declaration * d = NULL)
+      : Symbol(n), ct_value(), ct_ptr(), decl(d), scope(s) {}
+    VarSymbol(SymbolName n, Scope s = OTHER, const Declaration * d = NULL) 
+      : Symbol(n.name), ct_value(), ct_ptr(), decl(d), scope(s) {}
   };
 
   enum LabelType {NormalLabel = 0, LocalLabel = 1};
@@ -74,24 +82,54 @@ namespace ast {
 #endif
   };
 
+  struct Deps : public Vector<const VarSymbol *> {
+    void insert(const VarSymbol * sym) {
+      for (iterator i = begin(), e = end(); i != e; ++i)
+        if (*i == sym) return;
+      push_back(sym);
+    }
+    void merge(const Deps & other) {
+      for (const_iterator i = other.begin(), e = other.end(); i != e; ++i)
+        insert(*i);
+    }
+    bool have(const VarSymbol * sym) {
+      for (const_iterator i = begin(), e = end(); i != e; ++i)
+        if (*i == sym) return true;
+      return false;
+    }
+  };
+
   struct Environ : public gc {
     TypeRelation * type_relation;
     SymbolTable symbols;
     TypeSymbolTable types;
     OpenSymbolTable fun_labels;
+    Scope scope;
     Frame * frame;
+    AST * top;
+    SymbolNode * const * top_level_environ;
+    Deps * deps;
+    bool * for_ct; // set if this function uses a ct primitive such as syntax
     Type * void_type() {return types.inst("<void>");}
     Type * bool_type() {return types.inst("<bool>");}
     const FunctionPtrSymbol * function_sym() 
       {return static_cast<const FunctionPtrSymbol *>(types.find(".fun"));}
-    Environ() : types(&symbols) {
-      type_relation = new_c_type_relation(); // FIXME HACK
-      create_c_types(types); // FIXME Another HACK
-      frame = new Frame();
-    }
+    Environ(Scope s = TOPLEVEL) 
+      : types(&symbols), scope(s), 
+        top_level_environ(&symbols.front), 
+        deps(), for_ct() 
+      {
+        type_relation = new_c_type_relation(); // FIXME HACK
+        create_c_types(types); // FIXME Another HACK
+        frame = new Frame();
+      }
     Environ(const Environ & other) 
       : type_relation(other.type_relation), symbols(other.symbols),
-        types(&symbols), fun_labels(other.fun_labels), frame(other.frame) {}
+        types(&symbols), fun_labels(other.fun_labels), 
+        scope(other.scope), frame(other.frame), 
+        top(other.top), 
+        top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
+        deps(other.deps), for_ct(other.for_ct) {}
     Environ new_scope() {
       Environ env = *this;
       env.symbols = symbols.new_scope();
@@ -99,10 +137,14 @@ namespace ast {
     }
     Environ new_frame() {
       Environ env = *this;
+      env.scope = LEXICAL;
       env.symbols = symbols.new_scope(env.fun_labels);
       env.frame = new Frame();
+      env.top_level_environ = &symbols.front;
+      env.for_ct = NULL;
       return env;
     }
+  private:
   };
 
 #if 0
@@ -196,11 +238,16 @@ namespace ast {
 
   struct CompileEnviron {};
 
+  struct FinalizeEnviron {
+    SymbolNode * fun_symbols;
+  };
+  
   class CompileWriter : public FStream {
   public:
-    SymbolNode * fun_symbols;
     unsigned indent_level;
-    CompileWriter() : indent_level(0) {}
+    Deps * deps;
+    bool for_compile_time() {return deps;}
+    CompileWriter() : indent_level(0), deps() {}
     void indent() {
       for (int i = 0; i != indent_level; ++i)
         *this << ' ';
@@ -248,10 +295,10 @@ namespace ast {
     virtual AST * parse_self(const Syntax * p, Environ &) = 0;
       // ^^ returns itself, to allow chaining ie 
       //      new Foo(p)->parse(env);
+    virtual void finalize(FinalizeEnviron &) = 0;
     virtual void prep_eval(PrepEvalEnviron &) {abort();}
     virtual void eval(ExecEnviron &) {abort();}
-    virtual void compile(CompileWriter &, CompileEnviron &) = 0;
-    
+    virtual void compile(CompileWriter &, CompileEnviron &) = 0; 
     virtual ~AST() {}
     //void print(OStream & o) const;
 
@@ -338,7 +385,8 @@ namespace ast {
     Cast(String s) : AST(s) {}
     AST * exp;
     void compile(CompileWriter&, CompileEnviron&);
-  };
+    void finalize(FinalizeEnviron &); 
+ };
 
   struct ImplicitCast : public Cast {
     ImplicitCast(AST * e, const Type * t) 
@@ -375,8 +423,10 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env);
     //void resolve(ResolveEnviron & env);
     void eval(ExecEnviron & env);
-    
     void compile(CompileWriter & f, CompileEnviron & env);
+    void finalize(FinalizeEnviron &) {abort();}
+  private:
+    void add_stmt(const Syntax * p, Environ & env);
   };
  
   struct Block;
@@ -386,39 +436,32 @@ namespace ast {
     enum StorageClass {NONE, AUTO, STATIC, EXTERN, REGISTER};
     StorageClass storage_class;
     bool inline_;
-    void parse_flags(const Syntax * p) {
-      storage_class = NONE;
-      if (p->flag("auto")) storage_class = AUTO;
-      else if (p->flag("static")) storage_class = STATIC;
-      else if (p->flag("extern")) storage_class = EXTERN;
-      else if (p->flag("register")) storage_class = REGISTER;
-      inline_ = false;
-      if (p->flag("inline")) inline_ = true;
+    VarSymbol * sym;
+    mutable bool deps_closed;
+    mutable Deps deps_;       // only valid if deps_closed
+    mutable bool for_ct_;     // if false, only valid if deps_closed
+    bool ct_callback;
+    void parse_flags(const Syntax * p);
+    void write_flags(CompileWriter & f) const;
+    virtual void compile(CompileWriter &, bool forward) = 0;
+    void forward_decl(CompileWriter & w) {compile(w, true);}
+    void compile(CompileWriter & w, CompileEnviron &);
+    void calc_deps_closure() const;
+    const Deps & deps() const {
+      if (!deps_closed) calc_deps_closure();
+      return deps_;
     }
-    void write_flags(CompileWriter & f) const {
-      switch (storage_class) {
-      case AUTO: 
-        f << "auto "; break;
-      case STATIC: 
-        f << "static "; break;
-      case EXTERN: 
-        f << "extern "; break;
-      case REGISTER: 
-        f << "register "; break;
-      default:
-        break;
-      }
-      if (inline_)
-        f << "inline ";
+    bool for_ct() const {
+      if (!deps_closed) calc_deps_closure();
+      return for_ct_;
     }
-  };
+ };
 
   struct Fun : public Declaration {
     Fun() : Declaration("fun") {}
     //AST * part(unsigned i);
     SymbolName name;
     SymbolTable symbols;
-    VarSymbol * sym;
     const Tuple * parms;
     const Type * ret_type;
     Block * body;
@@ -427,7 +470,8 @@ namespace ast {
     unsigned frame_size;
     AST * parse_self(const Syntax * p, Environ & env0);
     void eval(ExecEnviron & env);
-    void compile(CompileWriter & f, CompileEnviron & env);
+    void compile(CompileWriter & f, bool forward);
+    void finalize(FinalizeEnviron &);
   };
 
   struct Literal : public AST {
@@ -437,6 +481,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ &);
     //void eval(ExecEnviron & env);
     void compile(CompileWriter & f, CompileEnviron &);
+    void finalize(FinalizeEnviron &) {}
   };
 
   struct FloatC : public AST {
@@ -445,6 +490,7 @@ namespace ast {
     //long double value;
     AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
+    void finalize(FinalizeEnviron &) {}
   };
 
   struct StringC : public AST {
@@ -454,6 +500,7 @@ namespace ast {
     String value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
+    void finalize(FinalizeEnviron &) {}
   };
 
   struct CharC : public AST {
@@ -463,6 +510,7 @@ namespace ast {
     char value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f, CompileEnviron &);
+    void finalize(FinalizeEnviron &) {}
   };
 
   struct Empty : public AST {
@@ -477,6 +525,7 @@ namespace ast {
     void compile(CompileWriter & f, CompileEnviron &) {
       // do absolutely nothing
     }
+    void finalize(FinalizeEnviron &) {}
   };
 
   //
@@ -491,6 +540,7 @@ namespace ast {
   //int ct_value(const Syntax * p, Environ &);
 
   AST * parse_top(const Syntax * p);
+  AST * parse_top(const Syntax * p, Environ & env);
 
   AST * parse_top_level(const Syntax * p, Environ & env);
   AST * parse_member(const Syntax * p, Environ & env);

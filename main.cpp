@@ -50,8 +50,13 @@ int main(int argc, const char *argv[])
     code = new_source_file(STDIN_FILENO);
   }
   try {
-    const Syntax * to_expand = parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
-    ast::AST * ast = expand_top(to_expand, env);
+    //printf("%d\n%s", ast::MACRO_PRELUDE_END - ast::MACRO_PRELUDE, ast::MACRO_PRELUDE);
+    const Syntax * to_expand =
+    // parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
+      new Syntax(new Syntax("top"),
+                 parse_str("SLIST", SourceStr(MACRO_PRELUDE, MACRO_PRELUDE_END)),
+                 parse_str("SLIST", SourceStr(code->entity(), code->begin(), code->end())));
+    ast::AST * ast = parse_top(to_expand, env);
     //printf("\n*************** EXPANDED *********************\n");
     //expanded->print();
     //printf("\n");

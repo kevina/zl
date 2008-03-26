@@ -568,7 +568,7 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
     //printf("\n");
   } else {
     //printf("FAIL\n");
-    throw errors.to_error(str.source->file_, file);
+    throw errors.to_error(str.source, file);
   }
   return dummy[0];
 }
@@ -898,10 +898,10 @@ namespace ParsePeg {
   }
 }
 
-Error * ParseErrors::to_error(const SourceFile * file, const SourceFile * grammer)
+Error * ParseErrors::to_error(const SourceEntity * entity, const SourceFile * grammer)
 {    
   if (empty()) {
-    return error(file->entity(), 0, "Parse Failed (no specific error)\n");
+    return error(entity, 0, "Parse Failed (no specific error)\n");
   } else {
     StringBuf buf;
     //Pos pos = file->get_pos(front()->pos);
@@ -918,7 +918,7 @@ Error * ParseErrors::to_error(const SourceFile * file, const SourceFile * gramme
       if (i == size()) break;
       buf.printf(" or ");
     }
-    return error(file->entity(), front()->pos, ~buf.freeze());
+    return error(entity, front()->pos, ~buf.freeze());
   }
 }
 

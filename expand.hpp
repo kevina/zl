@@ -18,7 +18,6 @@ namespace ast {
 using ast::Environ;
 using ast::SymbolName;
 
-ast::AST * expand_top(const Syntax * p, Environ &);
 void read_macro(const Syntax * p, Environ &);
 
 // misnamed, now replaces and marks
@@ -97,26 +96,16 @@ static inline const Replacements * combine_repl(const Replacements * rs, ReplTab
 
 enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4, 
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32};
-ast::AST * expand(const Syntax * p, Position pos, Environ & env);
-ast::Type * expand_type(const Syntax * p, Environ & env);
 ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
 
-static inline ast::AST * expand_top_level(const Syntax * p, Environ & env) {
-  return expand(p, TopLevel, env);
-}
-static inline ast::AST * expand_member(const Syntax * p, Environ & env) {
-  return expand(p, FieldPos, env);
-}
-static inline ast::AST * expand_stmt(const Syntax * p, Environ & env) {
-  return expand(p, StmtPos, env);
-}
-static inline ast::AST * expand_stmt_decl(const Syntax * p, Environ & env) {
-  return expand(p, StmtDeclPos, env);
-}
-static inline ast::AST * expand_exp(const Syntax * p, Environ & env) {
-  return expand(p, ExpPos, env); 
-}
+const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env);
 
 const Syntax * reparse(String what, const Syntax * p, ReplTable * r = 0);
+
+ast::AST * parse_map(const Syntax * p, Environ & env);
+ast::AST * parse_macro(const Syntax * p, Environ & env);
+
+extern const char * MACRO_PRELUDE;
+extern const char * MACRO_PRELUDE_END;
 
 #endif

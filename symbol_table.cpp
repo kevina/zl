@@ -4,6 +4,7 @@ namespace ast {
 
   void marks_ignored(String name) {
     printf("WARNING: IGNORING MARKS ON \"%s\"\n", ~name);
+    //abort();
   }
 
   unsigned Mark::last_id = 0;
@@ -26,9 +27,10 @@ namespace ast {
       marks->to_string(o);
   }
 
-  void SymbolTable::rename(bool if_marked) {
+  void SymbolTable::rename(bool if_marked, const SymbolNode * stop) {
+    if (!stop) stop = back;
     Vector<SymbolNode *> nodes;
-    for (SymbolNode * cur = front; cur != back; cur = cur->next) {
+    for (SymbolNode * cur = front; cur != stop; cur = cur->next) {
       if (!cur->value) continue;
       nodes.push_back(cur);
     }

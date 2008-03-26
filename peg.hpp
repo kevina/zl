@@ -57,7 +57,7 @@ struct ParseErrors : public Vector<const ParseError *> {
     }
     push_back(err);
   }
-  Error * to_error(const SourceFile * file, const SourceFile * grammer);
+  Error * to_error(const SourceEntity *, const SourceFile * grammer);
   void print(const SourceFile * file, const SourceFile * grammer);
 };
 

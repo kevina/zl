@@ -54,6 +54,17 @@ struct DeclWorking {
   const Syntax * parse_init_exp(Parts::const_iterator & i, 
                                Parts::const_iterator end);
 
+  typedef Vector<const Syntax *> Attributes;
+  Attributes attributes;
+  bool try_attributes(const Syntax * p) {
+    if (*p == "__for_ct" || *p == "__ct_callback") {
+      attributes.push_back(p);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   const Syntax * storage_class;
   enum What {VAR, TYPEDEF} what;
 
@@ -131,12 +142,12 @@ struct DeclWorking {
     else return false;
     return true;
   }
-  String type_name;
+  SymbolName type_name;
   bool try_type_name(const Syntax * p, Environ & env) {
-    SymbolName name = p->what_;
-    if (env.symbols.find<ast::TypeSymbol>(name)) {
+    SymbolName n = p->what_;
+    if (env.symbols.find<ast::TypeSymbol>(n)) {
       if (base_type) ignore();
-      type_name = name;
+      type_name = n;
       return true;
     } else {
       return false;
@@ -264,6 +275,7 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
     if (cur->is_a("id")) {
       const Syntax * p = cur->arg(0);
       bool any = 
+        try_attributes(p) ||
         try_storage_class(p) ||
         try_sign(p) ||
         try_size(p) ||
@@ -392,13 +404,14 @@ bool DeclWorking::try_enum(const Syntax * p, Environ & env) {
 void DeclWorking::make_inner_type(const Syntax * orig) {
   if (!inner_type) {
     inner_type = new Syntax();
+    SymbolName tn;
     StringBuf t;
     switch (base_type) {
     case NO_BT:
       if (!type_name.empty()) {
         if (size != NO_SIZE) ignore();
         if (sign != NO_SIGN) ignore();
-        t = type_name;
+        tn = type_name;
         break;
       } else if (size || sign) {
         goto int_case;
@@ -470,8 +483,9 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
       }
       break;
     }
-    assert(!t.empty());
-    inner_type->add_part(new Syntax(t.freeze()));
+    if (!t.empty()) tn = t.freeze();
+    assert(!tn.empty());
+    inner_type->add_part(new Syntax(tn));
   } else {
     // stuct or union
     // nothing to do
@@ -615,6 +629,9 @@ const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * 
         p->add_part(init);
       if (storage_class)
         p->add_flag(storage_class);
+      for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();
+           i != e; ++i)
+        p->add_flag(*i);
       return p;
     }
   } else if (what == TYPEDEF) {
@@ -635,6 +652,9 @@ const Syntax * DeclWorking::make_function(const Syntax * id, const Syntax * t, c
       p->add_flag(inline_);
     if (storage_class)
       p->add_flag(storage_class);
+    for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();
+         i != e; ++i)
+      p->add_flag(*i);
     p->add_part(id);
     p->add_part(t->arg(0));
     p->add_part(t->arg(1));

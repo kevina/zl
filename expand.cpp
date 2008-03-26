@@ -1,5 +1,8 @@
 #include <set>
 
+#include <stdio.h>
+#include <dlfcn.h>
+
 #include "peg.hpp"
 #include "expand.hpp"
 #include "ast.hpp"
@@ -29,6 +32,40 @@ void assert_pos(const Syntax * p, Position have, unsigned need);
 void assert_num_args(const Syntax * p, unsigned num);
 void assert_num_args(const Syntax * p, unsigned min, unsigned max);
 
+void compile_for_ct(Deps & deps, AST * top);
+
+// the "C" version of the callback functions
+
+char MACRO_PRELUDE_STR[] = 
+  "typedef typedef struct _IO_FILE FILE;\n"
+  "int printf (const char *, ...);"
+  "typedef struct Match Match;\n"
+  "typedef struct Syntax Syntax;\n"
+  "typedef struct Mark Mark;\n"
+  "typedef struct Context Context;\n"
+  "typedef struct Environ Environ;\n"
+  "typedef struct EnvironSnapshot EnvironSnapshot;\n"
+  "__ct_callback Match * match(Match *, Syntax * pattern, Syntax * with);\n"
+  "__ct_callback Match * match_args(Match *, Syntax * pattern, Syntax * with);\n"
+  "__ct_callback Mark * new_mark_f(EnvironSnapshot *);\n"
+  "map new_mark() {new_mark_f(environ_snapshot());}\n"
+  "map new_empty_mark() {new_mark_f(0);}\n"
+  "__ct_callback Syntax * replace(Syntax *, Match *, Mark *);\n"
+  "__ct_callback Context * get_context(Syntax *);\n"
+  "__ct_callback Syntax * replace_context(Syntax *, Context *);\n";
+const char * MACRO_PRELUDE = MACRO_PRELUDE_STR;
+const char * MACRO_PRELUDE_END = MACRO_PRELUDE_STR + sizeof(MACRO_PRELUDE_STR) - 1;
+
+// the slightly diffrent C++ version
+typedef ReplTable::Table Match;
+typedef Marks Context;
+extern "C" Match * match(Match * m, const Syntax * pattern, const Syntax * with);
+extern "C" Match * match_args(Match * m, const Syntax * pattern, const Syntax * with);
+extern "C" Mark * new_mark_f(SymbolNode *);
+extern "C" const Syntax * replace(const Syntax * p, Match * match, Mark * mark);
+extern "C" const Context * get_context(const Syntax * p);
+extern "C" const Syntax * replace_context(const Syntax * p, const Context * context);
+
 String gen_sym() {
   static unsigned uniq_num = 0;
   StringBuf buf;
@@ -38,7 +75,11 @@ String gen_sym() {
 
 const Syntax * replace(const Syntax * p, ReplTable * r);
 
-struct Map : public Symbol {
+struct MacroSymbol : public Symbol {
+  virtual const Syntax * expand(const Syntax *, Environ & env) const = 0;
+};
+
+struct Map : public MacroSymbol {
   SourceEntity entity;
   const Syntax * parse;
   const Syntax * parms;
@@ -60,6 +101,7 @@ struct Map : public Symbol {
     repl = change_src(repl->str(), repl);
     return this;
   }
+  // FIXME: Figure out what this does and document it
   const Syntax * change_src(SourceStr outer_str, const Syntax * orig) {
     Syntax * res = new Syntax(orig->what(), orig->str());
     res->repl = orig->repl;
@@ -81,52 +123,110 @@ struct Map : public Symbol {
     }
     return res;
   }
-  const Syntax * expand(const Syntax * p, Position, Environ &, unsigned shift = 0) const {
-    //printf(">>EXPAND MAP %s\n", ~name);
-    ReplTable * rparms = new ReplTable;
-    rparms->mark = new Mark(env);
-    for (int i = 0; i != parms->num_parts(); ++i) {
-      const Syntax * mp = parms->part(i);
-      if (mp->num_args() > 0) {
-        const Syntax * sp = p->arg(i + shift);
-        assert(mp->what() == sp->what());
-        for (int j = 0; j != mp->num_args(); ++j) {
-          rparms->insert(*mp->arg(j), sp->arg(j));
-        }
-      } else if (mp->is_a("...")) {
-        Syntax * p2 = new Syntax(new Syntax("..."));
-        for (; i != p->num_args(); ++i) {
-          p2->add_part(p->arg(i + shift));
-        }
-        rparms->insert("...", p2);
-        break;
-      }
-      rparms->insert(mp->what(), p->arg(i + shift));
-    }
-    for (int i = 0; i != free->num_parts(); ++i) {
-      const Syntax * mp = free->part(i);
-      rparms->insert(mp->what(), mp);
-    }
-    //printf(">>TO EXPAND %s\n", ~name);
-    //repl->print();
+  const Syntax * expand(const Syntax * p, Environ &) const {
+    Match * m = match_args(NULL, parms, p);
+    m = match(m, free, replace_context(free, get_context(p)));
+    return replace(repl, m, new Mark(env));
+  }
+};
+
+struct Macro : public MacroSymbol {
+  const Syntax * parse;
+  const VarSymbol * fun;
+  typedef const Syntax * (*MacroCall)(const Syntax *, Environ * env);
+  Macro * parse_self(const Syntax * p, Environ & e) {
+    //printf("PARSING MAP %s\n", ~p->arg(0)->name);
+    //p->print();
     //printf("\n");
-    const Syntax * res;
-    if (repl->is_a("{}")) {
-      res = reparse("STMTS", repl->arg(0), rparms);
-      if (res->num_args() == 1)
-	res = res->arg(0);
-    } else {
-      res = replace(repl, rparms);
+    parse = p;
+    assert_num_args(p, 1, 2);
+    name = *p->arg(0);
+    SymbolName fun_name;
+    if (p->num_args() == 1)
+      fun_name = *p->arg(0);
+    else
+      fun_name = *p->arg(1);
+    fun = e.symbols.find<VarSymbol>(fun_name);
+    assert(fun); // FIXME error
+    return this;
+  }
+  const Syntax * expand(const Syntax * p, Environ & env) const {
+    if (!fun->ct_ptr) {
+      Deps deps;
+      deps.push_back(fun);
+      compile_for_ct(deps, env.top);
+      assert(fun->ct_ptr);
     }
-    res->str_ = p->str();
-    //printf(">>>EXPANDED %s\n", ~name);
+    const Syntax * res = ((MacroCall)fun->ct_ptr)(p, &env);
+    //printf("MACRO EXP RES\n");
     //res->print();
     //printf("\n");
     return res;
   }
 };
 
+Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsigned shift) {
+  Match * m = new Match();
+  if (pattern->is_a("()"))
+    pattern = reparse("ID_LIST", pattern->arg(0));
+  //printf("MATCH\n");
+  //pattern->print(); printf("\n");
+  //with->print(); printf("\n");
+  //printf("---\n");
+  for (int i = 0; i != pattern->num_parts(); ++i) {
+    const Syntax * mp = pattern->part(i);
+    if (mp->num_args() > 0) {
+      const Syntax * sp = with->part(i + shift);
+      assert(mp->what() == sp->what());
+      for (int j = 0; j != mp->num_args(); ++j) {
+        m->push_back(Match::value_type(*mp->arg(j), sp->arg(j)));
+      }
+    }
+    //} else if (mp->is_a("...")) {
+    //  Syntax * p2 = new Syntax(new Syntax("..."));
+    //  for (; i != p->num_parts() - shift; ++i) {
+    //    p2->add_part(p->part(i + shift));
+    //  }
+    //  m->insert("...", p2);
+    //  break;
+    //}
+    m->push_back(Match::value_type(mp->what(), with->part(i + shift)));
+  }
+  if (orig_m) 
+    m->insert(m->end(), orig_m->begin(), orig_m->end());
+  return m;
+}
+
+Match * match(Match * m, const Syntax * pattern, const Syntax * with) {
+  return match(m, pattern, with, 0);
+}
+
+Match * match_args(Match * m, const Syntax * pattern, const Syntax * with) {
+  return match(m, pattern, with, 1);
+}
+
+Mark * new_mark_f(SymbolNode * e) {
+  return new Mark(e);
+}
+
+const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
+  ReplTable * rparms = new ReplTable;
+  rparms->table = *match;
+  rparms->mark = mark;
+  const Syntax * res;
+  if (p->is_a("{}")) {
+    res = reparse("STMTS", p->arg(0), rparms);
+    if (res->num_args() == 1)
+      res = res->arg(0);
+  } else {
+    res = replace(p, rparms);
+  }
+  res->str_ = p->str();
+  return res;
+}
+
 const Syntax * reparse(String what, const Syntax * p, ReplTable * r) {
+  //printf("REPARSE AS %s\n", ~what);
   const Replacements * repls = combine_repl(p->repl, r);
   const Syntax * res = parse_str(what, p->str(), repls);
   //printf("PARSED STRING\n");
@@ -160,7 +260,7 @@ const Syntax * replace(const Syntax * p, ReplTable * r) {
       String what = p->arg(1)->as_symbol_name().name;
       if (what == "TOKEN" || what == "EXP" || what == "STMT")
         what = "PARM";
-      if (p0->simple()) {
+      if (p0->simple() && !p0->str().empty()) {
         p0 = reparse(what, p0);
       } else if (p0->is_a("parm")) {
         p0 = reparse(what, p0->arg(0));
@@ -196,6 +296,28 @@ const Syntax * replace(const Syntax * p, ReplTable * r) {
   }
 }
 
+const Context * get_context(const Syntax * p) {
+  return p->what().marks;
+}
+
+const Syntax * replace_context(const Syntax * p, const Context * context) {
+  if (p->simple()) {
+    return new Syntax(p, context);
+  } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
+    return p;
+  } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("parm")) {
+    // raw tokens
+    fprintf(stderr, "Unhandled Case\n");
+    abort();
+  } else {
+    Syntax * res = new Syntax(p->str());
+    for (unsigned i = 0; i != p->num_parts(); ++i) {
+      res->add_part(replace_context(p->part(i), context));
+    }
+    return res;
+  }
+}
+
 // three type of macros, two namespaces
 // syntax macros in there own name space
 //   (m ...) or (m)
@@ -218,15 +340,8 @@ struct BuildIn {
 }
 */
 
-const Syntax * expand_call_parms(const Syntax * parse, Environ & env);
-
-AST * expand_top(const Syntax * p, Environ & env) {
-  assert(p->is_a("top")); // FIXME Error
-  return (new Top())->parse_self(p, env);
-}
-
 void read_macro(const Syntax * p, Environ & env) {
-  expand(p, TopLevel, env);
+  parse_top_level(p, env);
 }
 
 const Syntax * ID = new Syntax("id");
@@ -261,12 +376,8 @@ const Syntax * e_parse_exp(const Syntax * p, Environ & env) {
   return res;
 }
 
-AST * expand(const Syntax * p, Position pos, Environ & env) {
-  if (p->entity()) {
-    AST * ast = dynamic_cast<AST *>(p->entity());
-    assert(ast); // FIXME Error message
-    return ast;
-  }
+const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
+  if (p->entity()) return p;
   SymbolName what = p->what().name;
   //printf("\n>expand>%s//\n", ~what);
   //p->print();
@@ -274,81 +385,79 @@ AST * expand(const Syntax * p, Position pos, Environ & env) {
   if (p->simple()) {
     abort(); // FIXME: Error Message
   } else if (what == "{}") {
-    return expand(reparse("BLOCK", p), pos, env);
+    return partly_expand(reparse("BLOCK", p), pos, env);
   } else if (what == "()") {
-    return expand(reparse("PARAN_EXP", p), pos, env);
+    return partly_expand(reparse("PARAN_EXP", p), pos, env);
   } else if (what == "[]") {
-    return expand(reparse("EXP", p->arg(0)), pos, env);
+    return partly_expand(reparse("EXP", p->arg(0)), pos, env);
+  } else if (what == "parm") {
+    return partly_expand(reparse("EXP", p), pos, env);
   } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
-    p = env.symbols.find<Map>(SymbolKey(what, SYNTAX_NS))->expand(p, pos, env);
-    return expand(p, pos, env);
+    p = env.symbols.find<MacroSymbol>(SymbolKey(what, SYNTAX_NS))->expand(p, env);
+    return partly_expand(p, pos, env);
   } else if (what == "call") { 
     assert_num_args(p, 2);
-    const Syntax * n = p->arg(0); // FIXME: Need to "partly expand"
-    // The parms might already be parsed as something else,
-    // the parameters are just a list of tokens at this point,
-    // we need to turn them into a proper list
-    const Syntax * a = reparse("SPLIT", p->arg(1)->arg(0));
-    const Map * map = NULL;
-    if (n && n->is_a("id"))
-        map = env.symbols.find<Map>(*n->arg(0));
-    if (map) { // function macros
-      //  (call (id fun) (list parm1 parm2 ...))?
-      p = map->expand(a, pos, env);
-      return expand(p, pos, env);
-    } else {
-      Syntax * res = new Syntax(p->str(), p->part(0));
-      res->add_part(p->arg(0));
-      res->add_part(expand_call_parms(a, env));
-      p = res;
+    const Syntax * n = partly_expand(p->arg(0), OtherPos, env);
+    const Syntax * a = p->arg(1);
+    if (a->is_a("()")) a = reparse("SPLIT", p->arg(1)->arg(0));
+    if (n && n->is_a("id")) {
+      const MacroSymbol * m = NULL;
+      SymbolName sn = *n->arg(0);
+      m = env.symbols.find<MacroSymbol>(sn);
+      if (m) { // function macros
+        //  (call (id fun) (list parm1 parm2 ...))?
+        p = m->expand(a, env);
+        return partly_expand(p, pos, env);
+      } else if (sn == "environ_snapshot") {
+        if (a->num_args() > 0)
+          throw error(a, "%s does not take any paramaters", ~sn.name);
+        return new Syntax(n->arg(0));
+      }
     }
-  } else if (what == "smap" || what == "map") {
-    assert_pos(p, pos, TopLevel);
-    Map * m = new Map;
-    m->parse_self(p, env);
-    if (what == "smap") 
-      env.symbols.add(SymbolKey(m->name, SYNTAX_NS), m);
-    else
-      env.symbols.add(m->name, m);
-    return new Empty();
+    Syntax * res = new Syntax(p->str(), p->part(0));
+    res->add_part(p->arg(0));
+    res->add_part(a);
+    p = res;
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
     const Syntax * res = parse_decl_->parse_decl(p, env);
     if (!res)
       res = e_parse_exp(p, env);
-    return expand(res, pos, env);
+    return partly_expand(res, pos, env);
   } else if (what == "exp") {
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env);
-    return expand(p, pos, env);
+    return partly_expand(p, pos, env);
   }
   // we should have a primitive
-  switch (pos) {
-  case TopLevel:
-    return parse_top_level(p, env);
-  case FieldPos:
-    return parse_member(p, env);
-  case StmtDeclPos:
-    return parse_stmt_decl(p, env);
-  case StmtPos:
-    return parse_stmt(p, env);
-  case ExpPos:
-    return parse_exp(p, env);
-  default:
-    abort();
-  }
+  return p;
 }
 
-Type * expand_type(const Syntax * p, Environ & env) {
-  if (p->entity()) {
-    Type * type = dynamic_cast<Type *>(p->entity());
-    assert(type);
-    return type;
-  }
-  return parse_type(p, env);
+AST * parse_map(const Syntax * p, Environ & env) {
+  Map * m = new Map;
+  m->parse_self(p, env);
+  if (p->is_a("smap"))
+    env.symbols.add(SymbolKey(m->name, SYNTAX_NS), m);
+  else
+    env.symbols.add(m->name, m);
+  return new Empty();
+}
+
+AST * parse_macro(const Syntax * p, Environ & env) {
+  Macro * m = new Macro;
+  m->parse_self(p, env);
+  if (p->is_a("syntax_macro"))
+    env.symbols.add(SymbolKey(m->name, SYNTAX_NS), m);
+  else
+    env.symbols.add(m->name, m);
+  return new Empty();
 }
 
 void assert_pos(const Syntax * p, Position have, unsigned need) {
+  //if (!(have & need)) {
+  //  p->print(); printf("\n");
+  //  abort();
+  //}
   // FIXME Better Error Message
   //if (!(have & need)) 
   //  throw error(p, "syntax error");
@@ -366,25 +475,12 @@ void assert_num_args(const Syntax * p, unsigned min, unsigned max) {
     throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->what());
 }
 
-const Syntax * expand_args(const Syntax * p, Position pos, Environ & env, Syntax * res) {
-  res->set_flags(p);
-  for (unsigned i = 0; i != p->num_args(); ++i) {
-    // FIXME need to partly expand it first
-    if (p->arg(i)->is_a("list")) {
-      expand_args(p->arg(i), pos, env, res);
-    } else {
-      res->add_part(new Syntax(expand(p->arg(i), pos, env))); // FIXME: maybe partial expand only?
-    }
-  }
-  return res;
-}
-
 Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
   Syntax * res = new Syntax(parse->part(0));
   for (unsigned i = 0; i != parse->num_args(); ++i) {
     const Syntax * p = parse->arg(i);
     if (!p->is_a("...")) {
-      Syntax * r = new Syntax(expand_type(p->part(0), env));
+      Syntax * r = new Syntax(parse_type(p->part(0), env));
       if (p->num_parts() == 2) 
 	r->add_part(p->part(1));
       res->add_part(r);
@@ -392,23 +488,57 @@ Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
       res->add_part(p);
     }
   }
-  Type * type = expand_type(res, env);
+  Type * type = parse_type(res, env);
   Tuple * tuple = dynamic_cast<Tuple *>(type);
   assert(tuple); // FIXME: Error Message?
   return tuple;
 }
 
-const Syntax * expand_call_parms(const Syntax * p, Environ & env) {
-  if (p->is_a("list"))
-    return expand_args(p, ExpPos, env, new Syntax(p->str(), p->part(0)));
-  assert(p->is_a("(,)"));
+
+
+void compile_for_ct(Deps & deps, AST * top) {
+
+  static unsigned cntr = 0;
   
-  Syntax * res = new Syntax(p->str(), new Syntax("list"));
-  res->set_flags(p);
-  for (unsigned i = 0; i != p->num_args(); ++i) {
-    const Syntax * q = reparse("EXP", p->arg(i));
-    res->add_part(new Syntax(expand(q, ExpPos, env)));
+  for (unsigned i = 0, sz = deps.size(); i != sz; ++i) {
+    deps.merge(deps[i]->decl->deps());
   }
-  return res;
+  
+  printf("COMPILE FOR CT: zlfct%03d\n", cntr);
+  StringBuf buf;
+  buf.printf("./zlfct%03d.c", cntr);
+  String source = buf.freeze();
+  buf.printf("./zlfct%03d.so", cntr);
+  String lib = buf.freeze();
+  buf.printf("gcc -g -shared -fpic -o zlfct%03d.so zlfct%03d.c", cntr, cntr);
+  String cmd = buf.freeze();
+  cntr++;
+  
+  CompileEnviron cenv;
+  CompileWriter cw;
+  cw.open(source, "w");
+  cw.deps = &deps;
+  top->compile(cw, cenv);
+  cw.close();
+  
+  system(cmd);
+  
+  void * lh = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
+  if (!lh) {
+    fprintf(stderr, "ERROR: %s\n", dlerror());
+    abort();
+  }
+  
+  for (Deps::const_iterator i = deps.begin(), e = deps.end(); i != e; ++i) {
+    if (!(*i)->ct_ptr) { // FIXME: I need a better test
+      //printf(">>%s\n", ~(*i)->uniq_name());
+      void * p = dlsym(lh, (*i)->uniq_name());
+      //assert(p);
+      (*i)->ct_ptr = p;
+    }
+  }
 }
+
+
+
 

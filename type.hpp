@@ -446,9 +446,9 @@ namespace ast {
     enum Overflow {UNDEFINED, MODULE, SATURATED, EXCEPTION};
     enum Signed {UNSIGNED = 0, SIGNED = 1};
     Int(int64_t mn, uint64_t mx, Overflow o, unsigned sz)
-      : SimpleTypeInst(INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o) {}
+      : SimpleTypeInst(INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o), rank() {}
     Int(const Int * t) 
-      : SimpleTypeInst(INT_C), size_(t->size_), min(t->min), max(t->max), signed_(t->signed_), overflow(t->overflow) {exact_type = t;}
+      : SimpleTypeInst(INT_C), size_(t->size_), min(t->min), max(t->max), signed_(t->signed_), overflow(t->overflow), rank() {exact_type = t;}
     const Int * exact_type_;
     unsigned size_;
     int64_t  min;

@@ -184,18 +184,24 @@ struct Syntax : public gc {
   }
 
   Syntax() : d(), repl(0), entity_() {}
+  explicit Syntax(const char * n) : what_(n), d(), repl(), entity_() {}
   explicit Syntax(String n) : what_(n), d(), repl(), entity_() {}
-  Syntax(String n, const SourceStr & s) 
+  explicit Syntax(SymbolName n) : what_(n), d(), repl(), entity_() {}
+  Syntax(SymbolName n, const SourceStr & s) 
     : what_(n), str_(s), d(), repl(), entity_() {}
-  Syntax(String n, const SourceStr & s, const char * e)
+  Syntax(SymbolName n, const SourceStr & s, const char * e)
     : what_(n), str_(s.source, s.begin, e), d(), repl(), entity_() {}
-  Syntax(String n, const SourceStr & s, const char * b, const char * e)
+  Syntax(SymbolName n, const SourceStr & s, const char * b, const char * e)
     : what_(n), str_(s.source, b, e), d(), repl(), entity_() {}
   Syntax(const SourceStr & s) 
     : str_(s), d(), repl(0), entity_() {}
 
   Syntax(const Syntax * o, const ast::Mark * m)
     : what_(ast::mark(o->what_, m)), str_(o->str_), d(), repl(), entity_()
+    {assert(o->simple()); /*printf(">>%s %p\n", ~what_, what_.marks);*/}
+
+  Syntax(const Syntax * o, const ast::Marks * m)
+    : what_(o->what_.name, m), str_(o->str_), d(), repl(), entity_()
     {assert(o->simple()); /*printf(">>%s %p\n", ~what_, what_.marks);*/}
 
   Syntax(const SourceStr & s, const Syntax * p) : str_(s), repl(), entity_() {
@@ -350,7 +356,7 @@ static inline bool operator==(const Syntax & p, const char * str) {
 }
 
 inline SourceEntity::SourceEntity(const Syntax * e)
-  : file_(e->str().source->file_), expansion_(e) {}
+  : file_(e->str().source ? e->str().source->file_ : NULL), expansion_(e) {}
 
 inline const Syntax * Flags::lookup(SymbolName d) {
   for (iterator i = begin(); i != end(); ++i) 

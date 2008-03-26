@@ -1,6 +1,8 @@
 
 TOP = <top> SPACING {STMT}+;
 
+SLIST = <slist> SPACING {STMT}+;
+
 #
 # C Statement
 #
@@ -22,6 +24,7 @@ STMT : "statement" =
     / <goto>     "goto" (<id> {ID}) ";"
     / {BLOCK}
     / {MAP}
+    / {MACRO}
     / <noop>   ";"
     / <stmt>   {TOKEN}* ({BRACE} / ";")
    ;
@@ -35,6 +38,10 @@ CASE_EXP = <exp> (!":" {TOKEN})+;
 MAP =
   <map> "map" {ID} "(" {ID_LIST} ")" (":" "(" {ID_LIST} ")" / <>) {BRACE} ;
 
+MACRO  =
+    <macro> "macro" {ID} {ID}? ";"
+  / <syntax_macro> "syntax_macro" {ID} {ID}? ";";
+
 ID_LIST =
   <> ({ID} ",")* {ID}?;
 
@@ -43,7 +50,7 @@ ID_LIST =
 #
 
 TOKEN : "token" =  <<mid>> {MID} / 
-         {STRUCT_UNION} / {ENUM} / {TYPEOF}
+         {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {PARAN} / {BRACK} / {CONST}
          / <id> {ID} / <sym> {SYM};
 
@@ -74,6 +81,13 @@ ENUM_MEMBER = <> {ID} ("=" {ENUM_EXP})?;
 ENUM_EXP = <exp> (!"," {TOKEN})+;
 
 TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
+
+SYNTAX = 
+    <syntax> "syntax" {SYNTAX_P}
+  / <raw_syntax> "raw_syntax" {PARAN};
+
+SYNTAX_P =
+  <<mid>> {MID} / {ID} / {BRACE} / {PARAN};
 
 #
 # Misc
@@ -153,7 +167,7 @@ TOKENS = <(...)> {TOKEN}*;
 STMTS = <slist> {STMT}*;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
-SPLIT = <(,)> ({<parm> {SPLIT_TOKEN*}} ("," {<parm> {SPLIT_TOKEN*}})+/{<parm> {SPLIT_TOKEN+}}/) ;
+SPLIT = <list> ({<parm> {SPLIT_TOKEN*}} ("," {<parm> {SPLIT_TOKEN*}})+/{<parm> {SPLIT_TOKEN+}}/) ;
 PARAN_LIST = "(" {SPLIT} ")";
 
 PARM : "macro paramater" = {STMT} EOF / {TOKEN} EOF / {EXP} EOF;

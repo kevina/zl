@@ -7,4 +7,5 @@ zl_SOURCES=ast.cpp  expand.cpp charset.cpp  main.cpp  parse.cpp  parse_op.cpp  p
 #zl_LDADD=../gc6.8/gc.a
 #zl_LDADD=-lgc
 #zl_LDADD=-lgccpp
-
+zl_LDADD=-ldl
+zl_LDFLAGS=-Wl,--export-dynamic,--version-script=zl.ld
