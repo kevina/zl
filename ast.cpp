@@ -1120,8 +1120,35 @@ namespace ast {
     }
   };
 
-  struct BShift {
-    // NOTE: Resolve sementans are slightly diffrent
+  struct BShift : public BinOp {
+    BShift(String n, String op) : BinOp(n, op) {}
+    void resolve(Environ & env) {
+      // FIXME: Resolve sementans are slightly diffrent from normal
+      // binops...
+      type = resolve_binop(env, INT_C, lhs, rhs);
+    }
+  };
+
+  struct LeftShift : public BShift {
+    LeftShift() : BShift("lshift", "<<") {}
+    template <typename T>
+    struct F : public std::binary_function<T,T,T> {
+      T operator()(T x, T y) {return x << y;}
+    };
+    void make_ct_value(Environ & env) {
+      ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
+    }
+  };
+
+  struct RightShift : public BShift {
+    RightShift() : BShift("rshift", ">>") {}
+    template <typename T>
+    struct F : public std::binary_function<T,T,T> {
+      T operator()(T x, T y) {return x >> y;}
+    };
+    void make_ct_value(Environ & env) {
+      ct_value_ = int_op_ct_value<BinOp_CT_Value, F>(type);
+    }
   };
 
   struct CompOp : public BinOp {
@@ -2034,6 +2061,8 @@ namespace ast {
     if (what == "assign")  return (new Assign)->parse_self(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
+    if (what == "lshift")  return (new LeftShift)->parse_self(p, env);
+    if (what == "rshift")  return (new RightShift)->parse_self(p, env);
     if (what == "times")   return (new Times)->parse_self(p, env);
     if (what == "div")     return (new Div)->parse_self(p, env);
     if (what == "mod")     return (new Mod)->parse_self(p, env);
@@ -2050,6 +2079,7 @@ namespace ast {
     if (what == "le")      return (new Le)->parse_self(p, env);
     if (what == "ge")      return (new Ge)->parse_self(p, env);
     if (what == "not")     return (new Not)->parse_self(p, env);
+    if (what == "complmnt")return (new Compliment)->parse_self(p, env);
     if (what == "addrof")  return (new AddrOf)->parse_self(p, env);
     if (what == "deref")   return (new DeRef)->parse_self(p, env);
     if (what == "member")  return (new MemberAccess)->parse_self(p, env);
