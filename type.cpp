@@ -485,6 +485,7 @@ namespace ast {
     types.add_name(".zero", new ZeroTypeSymbol);
     types.add_name(".typeof", new TypeOfSymbol);
 
+    add_simple_type(types, "__builtin_va_list", new Void());
     //add_simple_type(types, "Match", new Void());
     //add_simple_type(types, "Syntax", new Void());
     //add_simple_type(types, "Mark", new Void());
