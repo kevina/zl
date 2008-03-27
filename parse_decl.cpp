@@ -44,7 +44,10 @@ struct DeclWorking {
 
   bool parse_first_part(Parts::const_iterator & i, 
                         Parts::const_iterator end, 
-                        Environ & env);
+                        Environ & env, 
+                        bool top_level = false); 
+                         // not really top_level, but can't think of
+                         // better name
   const Syntax * parse_outer_type_info(const Syntax * & id, 
                                       Parts::const_iterator & i, 
                                       Parts::const_iterator end,
@@ -210,7 +213,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
   DeclWorking w(res->d->parts);
 
   {
-    bool r = w.parse_first_part(i, end, env);
+    bool r = w.parse_first_part(i, end, env, true);
     if (!r) return NULL;
   }
 
@@ -263,10 +266,11 @@ const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
 
 bool DeclWorking::parse_first_part(Parts::const_iterator & i, 
                                    Parts::const_iterator end,
-                                   Environ & env) 
+                                   Environ & env, 
+                                   bool top_level)
 {
   Parts::const_iterator begin = i;
-  bool by_itself = i + 1 == end;
+  bool by_itself = top_level && i + 1 == end;
   if (i != end && (*i)->is_a("sym", "...")) {
     dots = true;
     inner_type = new Syntax("...", (*i)->str());
@@ -551,7 +555,7 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
     Parts::const_iterator begin = i;
     DeclWorking w(type_scope);
     const Syntax * id = NULL;
-    bool r = w.parse_first_part(i, end, env);
+    bool r = w.parse_first_part(i, end, env, false);
     if (!r) throw error(*i, "Expected type or \"...\".");
     if (w.dots) {
       ps->add_part(w.inner_type); // FIXME: Preserve source info..
