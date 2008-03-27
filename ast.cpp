@@ -1068,7 +1068,7 @@ namespace ast {
 
   struct Times : public SimpleBinOp {
     Times() : SimpleBinOp("times", "*", NUMERIC_C) {}
-    void make_ct_value() {
+    void make_ct_value(Environ & env) {
       ct_value_ = op_ct_value<BinOp_CT_Value, std::multiplies>(type);
     }
   };
@@ -1687,7 +1687,7 @@ namespace ast {
     };
     StructUnion(Which w) : AST(w == STRUCT ? "struct" : "union"), which(w), env(OTHER)  {}
     AST * part(unsigned i) {return 0; /* FIXME */}
-    TypeSymbol * sym;
+    const TypeSymbol * sym;
     Body * body;
     Environ env;
     AST * parse_self(const Syntax * p, Environ & env0) {
@@ -1698,36 +1698,48 @@ namespace ast {
       if (p->num_args() > 1) {
         body = new Body(which);
         body->parse_self(p->arg(1), env);
+      } else {
+        body = NULL;
       }
-      const Type * t0 = env.types.inst(SymbolKey(name, TAG_NS));
       StructUnionT * s;
-      if (t0) s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
-      else if (which == STRUCT) s = new StructT(name.name);
-      else                      s = new UnionT(name.name);
-      for (unsigned i = 0; i != body->members.size(); ++i) {
-	Var * v = dynamic_cast<Var *>(body->members[i]);
-	assert(v);
-	s->members.push_back(Member(v->sym->name,v->sym->type));
+      if (env0.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
+        const Type * t0 = env0.types.inst(SymbolKey(name, TAG_NS));
+        s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
+        sym = s->type_symbol;
+      } else {
+        if (which == STRUCT) s = new StructT(name.name);
+        else                 s = new UnionT(name.name);
+        sym = add_simple_type(env0.types, SymbolKey(name, TAG_NS), s);
       }
+      if (body)
+        for (unsigned i = 0; i != body->members.size(); ++i) {
+          Var * v = dynamic_cast<Var *>(body->members[i]);
+          assert(v);
+          s->members.push_back(Member(v->sym->name,v->sym->type));
+        }
       //StringBuf type_name;
       //type_name << "struct " << what();
       s->env = &env;
       s->finalize();
-      sym = add_simple_type(env0.types, SymbolKey(name, TAG_NS), s);
       return this; 
     }
     void finalize(FinalizeEnviron & e) {
       env.symbols.rename_marked();
-      for (int i = 0; i != body->members.size(); ++i) {
-        body->members[i]->finalize(e);
-      }
+      if (body)
+        for (int i = 0; i != body->members.size(); ++i) {
+          body->members[i]->finalize(e);
+        }
     }
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << indent << what() << " " << sym << " {\n";
-      for (int i = 0; i != body->members.size(); ++i) {
-        f << adj_indent(2) << body->members[i];
-      }
-      f << indent << "};\n";
+      f << indent << what() << " " << sym;
+      if (body) {
+        f << " {\n";
+        for (int i = 0; i != body->members.size(); ++i) {
+          f << adj_indent(2) << body->members[i];
+        }
+        f << indent << "}";
+      } 
+      f << ";\n";
     }
   };
 
@@ -1741,7 +1753,8 @@ namespace ast {
 
   struct Enum : public AST {
     Enum() : AST("enum") {}
-    TypeSymbol * sym;
+    const TypeSymbol * sym;
+    const Syntax * body;
     struct Member {
       const Syntax * parse;
       VarSymbol * sym;
@@ -1752,48 +1765,60 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       SymbolName name = *p->arg(0);
-      EnumT * t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
-                                        (env.types.inst(SymbolKey(name, TAG_NS)))));
-      if (!t0) t0 = new EnumT(name.name);
-      t0->exact_type = env.types.inst("int")->exact_type;
-      sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0);
-      Vector<TypeParm> q_parms;
-      q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
-      q_parms.push_back(TypeParm(t0));
-      const Type * t = env.types.find(".qualified")->inst(q_parms);
-      int val = 0;
-      const Syntax * arg1 = p->arg(1);
-      members.reserve(arg1->num_args());
-      for (unsigned i = 0; i != arg1->num_args(); ++i) {
-        const Syntax * arg = arg1->arg(i);
-        if (arg->num_parts() > 1) {
-          AST * e = parse_exp(arg->part(1), env);
-          resolve_to(env, e, env.types.inst("int"));
-          val = e->ct_value<target_int>();
+      EnumT * t0;
+      if (env.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
+        t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
+                                  (env.types.inst(SymbolKey(name, TAG_NS)))));
+        sym = t0->type_symbol;
+      } else {
+        t0 = new EnumT(name.name);
+        t0->exact_type = env.types.inst("int")->exact_type;
+        sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0);
+      }
+      body = NULL;
+      if (p->num_args() > 1) {
+        Vector<TypeParm> q_parms;
+        q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
+        q_parms.push_back(TypeParm(t0));
+        const Type * t = env.types.find(".qualified")->inst(q_parms);
+        int val = 0;
+        const Syntax * arg1 = body = p->arg(1);
+        members.reserve(arg1->num_args());
+        for (unsigned i = 0; i != arg1->num_args(); ++i) {
+          const Syntax * arg = arg1->arg(i);
+          if (arg->num_parts() > 1) {
+            AST * e = parse_exp(arg->part(1), env);
+            resolve_to(env, e, env.types.inst("int"));
+            val = e->ct_value<target_int>();
+          }
+          SymbolName n = *arg->part(0);
+          Member mem(arg1, new VarSymbol(n), val);
+          VarSymbol * sym = mem.sym;
+          val++;
+          sym->type = t;
+          members.push_back(mem);
+          sym->ct_value = &members.back().ct_value;
+          env.symbols.add(n, sym);
         }
-        SymbolName n = *arg->part(0);
-        Member mem(arg1, new VarSymbol(n), val);
-        VarSymbol * sym = mem.sym;
-        val++;
-        sym->type = t;
-        members.push_back(mem);
-        sym->ct_value = &members.back().ct_value;
-        env.symbols.add(n, sym);
       }
       t0->finalize();
       return this;
     }
     void finalize(FinalizeEnviron &) {}
     void compile(CompileWriter & f, CompileEnviron &) {
-      f << indent << what() << " " << sym << "{\n";
-      for (int i = 0; i != members.size(); ++i) {
-        f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.v;
-        if (i == members.size())
-          f << "\n";
-        else
-          f << ",\n";
+      f << indent << what() << " " << sym;
+      if (body) {
+        f << "{\n";
+        for (int i = 0; i != members.size(); ++i) {
+          f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.v;
+          if (i == members.size())
+            f << "\n";
+          else
+            f << ",\n";
+        }
+        f << indent << "}";
       }
-      f << indent << "};\n";
+      f << ";\n";
     }
   };
 

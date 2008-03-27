@@ -231,6 +231,9 @@ namespace ast {
     bool exists(const SymbolKey & k, MarksStrategy ms = NormalMarksStrategy) {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }
+    bool exists_this_scope(const SymbolKey & k, MarksStrategy ms = NormalMarksStrategy) {
+      return find_symbol<Symbol>(k, front, back, ms);
+    }
     void add(const SymbolKey & k, const Symbol * sym) {
       //if (find_symbol<Symbol>(k, front, back)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);

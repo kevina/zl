@@ -161,8 +161,8 @@ struct DeclWorking {
       return false;
     }
   }
-  bool try_struct_union(const Syntax * p, Environ &);
-  bool try_enum(const Syntax * p, Environ &);
+  bool try_struct_union(const Syntax * p, Environ &, bool by_itself = false);
+  bool try_enum(const Syntax * p, Environ &, bool by_itself = false);
   const Syntax * parse_struct_union_body(const Syntax * p, Environ &);
   bool dots;
   Syntax * inner_type;
@@ -266,6 +266,7 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
                                    Environ & env) 
 {
   Parts::const_iterator begin = i;
+  bool by_itself = i + 1 == end;
   if (i != end && (*i)->is_a("sym", "...")) {
     dots = true;
     inner_type = new Syntax("...", (*i)->str());
@@ -287,9 +288,9 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
       ++i;
     } else if (try_typeof(cur, env)) {
       ++i;
-    } else if (try_struct_union(cur, env)) {
+    } else if (try_struct_union(cur, env, by_itself)) {
       ++i;
-    } else if (try_enum(cur, env)) {
+    } else if (try_enum(cur, env, by_itself)) {
       ++i;
     } else {
       break;
@@ -299,7 +300,7 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
   else return true;
 }
 
-bool DeclWorking::try_struct_union(const Syntax * p, Environ & env) {
+bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itself) {
   const Syntax * name = NULL;
   const Syntax * body = NULL;
   if (p->is_a("struct") || p->is_a("union")) {
@@ -319,10 +320,11 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env) {
     if (name->what().empty())
       name = gen_sym();
     inner_type = new Syntax(p->part(0), name);
-    if (body) {
+    if (body || by_itself) {
       Syntax * struct_union = new Syntax(p->part(0));
       struct_union->add_part(name);
-      struct_union->add_part(parse_struct_union_body(body, env));
+      if (body)
+        struct_union->add_part(parse_struct_union_body(body, env));
       type_scope.push_back(struct_union);
     }
     return true;
@@ -369,7 +371,7 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
   return res;
 }
 
-bool DeclWorking::try_enum(const Syntax * p, Environ & env) {
+bool DeclWorking::try_enum(const Syntax * p, Environ & env, bool by_itself) {
   const Syntax * name = NULL;
   const Syntax * body = NULL;
   if (p->is_a("enum")) {
@@ -389,10 +391,11 @@ bool DeclWorking::try_enum(const Syntax * p, Environ & env) {
     if (name->what().empty())
       name = gen_sym();
     inner_type = new Syntax(p->part(0), name);
-    if (body) {
+    if (body || by_itself) {
       Syntax * enum_ = new Syntax(p->part(0));
       enum_->add_part(name);
-      enum_->add_part(body);
+      if (body)
+        enum_->add_part(body);
       type_scope.push_back(enum_);
     }
     return true;
