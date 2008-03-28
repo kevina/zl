@@ -1,28 +1,30 @@
-(smap while (TEST BODY) (continue)
+(fluid_label continue)
+
+(smap while (TEST BODY) ()
      (loop (block 
-             (local_label (mid continue))
-             (lstmt (mid continue)
+             (local_label (fluid continue))
+             (lstmt continue
                (if (mid TEST) (noop) (break)))
              (mid BODY))))
 
-(smap do (BODY TEST) (continue)
+(smap do (BODY TEST) ()
      (loop (block 
-             (local_label (mid continue))
+             (local_label (fluid continue))
              (mid BODY)
-             (lstmt (mid continue) (mid TEST) (noop) (break)))))
+             (lstmt continue (mid TEST) (noop) (break)))))
 
-(smap for (INIT TEST POST BODY) (continue)
+(smap for (INIT TEST POST BODY) ()
       (block 
                (mid INIT)
                (loop (block
-                 (local_label (mid continue))
+                 (local_label (fluid continue))
                  (if (mid TEST) (noop) (break))
                  (mid BODY)
-                 (lstmt (mid continue)
+                 (lstmt continue
                    (mid POST))))))
 
-(smap continue () (continue)
-       (goto (id (mid continue))))
+(smap continue () ()
+       (goto (id continue)))
 
 #(smap "()" (...)
 #    (exp ...))

@@ -100,7 +100,7 @@ Error * verror(const SourceEntity * s, const char * pos,
 Error * error(const SourceEntity * s, const char * pos, 
               const char * fmt, ...)
   __attribute__ ((format (printf, 3, 4)));
-Error * error(SourceStr str, const char * fmt, ...)
+Error * error(const SourceStr & str, const char * fmt, ...)
   __attribute__ ((format (printf, 2, 3)));
 Error * error(const Syntax *, const char * fmt, ...)
   __attribute__ ((format (printf, 2, 3)));
@@ -372,7 +372,13 @@ inline bool Flags::insert(const Syntax * p) {
 }
 
 namespace ast {
-  inline SymbolKey::SymbolKey(const Syntax & p) : SymbolName(static_cast<const SymbolName &>(p)), ns() {}
+  inline SymbolKey::SymbolKey(const Syntax & p, unsigned ns0) 
+    : SymbolName(static_cast<const SymbolName &>(p)), ns(ns0) {}
+
+  template <typename T> 
+  inline const T * SymbolTable::lookup(const Syntax * p, unsigned ns) {
+    return lookup<T>(SymbolKey(*p, ns), p->str());
+  }
 }
 
 namespace parse_parse {

@@ -29,7 +29,7 @@ Error * error(const SourceEntity * s, const char * pos, const char * fmt, ...) {
   return res;
 }
 
-Error * error(SourceStr str, const char * fmt, ...) {
+Error * error(const SourceStr & str, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   Error * res = verror(str.source, str.begin, fmt, ap);

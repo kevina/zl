@@ -99,13 +99,19 @@ enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4,
 ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
 
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env);
+SymbolName expand_binding(const Syntax * p, unsigned ns, Environ & env);
+static inline SymbolName expand_binding(const Syntax * p, Environ & env) {
+  return expand_binding(p, ast::DEFAULT_NS, env);
+}
 
 const Syntax * reparse(String what, const Syntax * p, ReplTable * r = 0);
 
 ast::AST * parse_map(const Syntax * p, Environ & env);
 ast::AST * parse_macro(const Syntax * p, Environ & env);
+ast::AST * parse_fluid_binding(unsigned ns, const Syntax *, Environ &);
 
 extern const char * MACRO_PRELUDE;
 extern const char * MACRO_PRELUDE_END;
+
 
 #endif

@@ -94,7 +94,7 @@ struct Map : public MacroSymbol {
     entity = SourceEntity(p);
     parse = p;
     assert_num_args(p, 4);
-    name = *p->arg(0);
+    name = expand_binding(p->arg(0), e);
     parms = p->arg(1);
     free = p->arg(2);
     repl = p->arg(3);
@@ -140,14 +140,8 @@ struct Macro : public MacroSymbol {
     //printf("\n");
     parse = p;
     assert_num_args(p, 1, 2);
-    name = *p->arg(0);
-    SymbolName fun_name;
-    if (p->num_args() == 1)
-      fun_name = *p->arg(0);
-    else
-      fun_name = *p->arg(1);
-    fun = e.symbols.find<VarSymbol>(fun_name);
-    assert(fun); // FIXME error
+    name = expand_binding(p->arg(0), e);
+    fun = e.symbols.lookup<VarSymbol>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ & env) const {
@@ -261,7 +255,8 @@ const Syntax * replace(const Syntax * p, ReplTable * r) {
       if (what == "TOKEN" || what == "EXP" || what == "STMT")
         what = "PARM";
       if (p0->simple() && !p0->str().empty()) {
-        p0 = reparse(what, p0);
+        // if p0 has marks, they must be preserved
+        p0 = replace_context(reparse(what, p0), get_context(p0));
       } else if (p0->is_a("parm")) {
         p0 = reparse(what, p0->arg(0));
       }
@@ -274,7 +269,7 @@ const Syntax * replace(const Syntax * p, ReplTable * r) {
     assert(p->num_args() == 1);
     assert(p->arg(0)->simple());
     assert(p->repl == p->arg(0)->repl);
-    Syntax * res = new Syntax(p->str(), p->part(0));
+    Syntax * res = new Syntax(p->str(), new Syntax(p->part(0), r->mark));
     res->repl = combine_repl(p->repl, r);
     Syntax * r0 = new Syntax(String(p->arg(0)->str()), p->arg(0)->str());
     r0->repl = res->repl;
@@ -393,7 +388,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
   } else if (what == "parm") {
     return partly_expand(reparse("EXP", p), pos, env);
   } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
-    p = env.symbols.find<MacroSymbol>(SymbolKey(what, SYNTAX_NS))->expand(p, env);
+    p = env.symbols.lookup<MacroSymbol>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, env);
     return partly_expand(p, pos, env);
   } else if (what == "call") { 
     assert_num_args(p, 2);
@@ -431,6 +426,20 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
   }
   // we should have a primitive
   return p;
+}
+
+SymbolName expand_binding(const Syntax * p, unsigned ns, Environ & env) {
+  if (p->simple()) {
+    return *p;
+  } else if (p->is_a("fluid")) {
+    assert_num_args(p, 1);
+    const FluidBinding * b = env.symbols.lookup<FluidBinding>(p->arg(0), ns);
+    return b->rebind;
+  } else {
+    p->print();
+    printf("\n");
+    abort();
+  }
 }
 
 AST * parse_map(const Syntax * p, Environ & env) {
@@ -540,5 +549,12 @@ void compile_for_ct(Deps & deps, AST * top) {
 }
 
 
+AST * parse_fluid_binding(unsigned ns, const Syntax * p, Environ & env) {
+  assert_num_args(p, 1);
+  SymbolName n = *p->arg(0);
+  FluidBinding * b = new FluidBinding(n.name, mark(n, new Mark(NULL)));
+  env.symbols.add(SymbolKey(n, ns), b);
+  return new Empty();
+}
 
 

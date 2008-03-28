@@ -24,7 +24,10 @@ STMT : "statement" =
     / <goto>     "goto" (<id> {ID}) ";"
     / {BLOCK}
     / {MAP}
-    / {MACRO}
+    / {MACRO}   
+    / <fluid_binding> "fluid_binding" {ID} ";"
+    / <fluid_label>   "fluid_label"   {ID} ";"
+    / <fluid_syntax>  "fluid_syntax"  {ID} ";"
     / <noop>   ";"
     / <stmt>   {TOKEN}* ({BRACE} / ";")
    ;
@@ -114,7 +117,7 @@ RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 #
 
 ID : "identifier" =
-     <<mid>> {MID} / {[\a_]+[\a_\d]*} SPACING;
+     <<mid>> {MID} / <fluid> "fluid" {ID} / {[\a_]+[\a_\d]*} SPACING;
 
 MID : "macro identifier" = 
      {[\a_]+[\a_\d]*} SPACING;

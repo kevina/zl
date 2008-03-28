@@ -138,7 +138,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
-      SymbolName n = *p->arg(0);
+      SymbolName n = expand_binding(p->arg(0), LABEL_NS, env);
       label = env.symbols.find<LabelSymbol>(SymbolKey(n, LABEL_NS));
       if (!label) {
         label = new LabelSymbol(n.name, NormalLabel);
@@ -214,7 +214,8 @@ namespace ast {
     void eval(ExecEnviron&) {abort();}
     void finalize(FinalizeEnviron & env) {
       if (!sym)
-        sym = find_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), env.fun_symbols);
+        sym = lookup_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), 
+                                         parse_->arg(0)->arg(0)->str(), env.fun_symbols);
     }
     void compile(CompileWriter & o, CompileEnviron &) {
       o << indent 
@@ -228,7 +229,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
-      SymbolName n = *p->arg(0);
+      SymbolName n = expand_binding(p->arg(0), LABEL_NS, env);
       label = new LabelSymbol(n.name, LocalLabel);
       env.symbols.add(SymbolKey(n, LABEL_NS), label);
       type = env.void_type();
@@ -390,11 +391,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
-      SymbolName n = *p->arg(0);
-      //printf("<>%s\n", ~n);
-      sym = env.symbols.find<VarSymbol>(n);
-      if (!sym)
-        throw error(parse_->arg(0), "Unknown Identifier: %s", ~n.name);
+      sym = env.symbols.lookup<VarSymbol>(p->arg(0));
       if (env.deps && sym->scope == TOPLEVEL)
         env.deps->insert(sym);
       if (sym->ct_value)
@@ -615,11 +612,11 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(2,3);
-      SymbolName n = *p->arg(0);
+      SymbolName n = expand_binding(p->arg(0), env);
       parse_flags(p);
       sym = new VarSymbol(n.name, env.scope, this);
       sym->type = parse_type(p->arg(1), env);
-      if (storage_class != EXTERN && sym->type->size() == NPOS) 
+      if (storage_class != EXTERN && sym->type->size() == NPOS)
         throw error(p->arg(0), "Size not known");
       env.symbols.add(n, sym);
       if (p->num_args() > 2) {
@@ -2029,8 +2026,11 @@ namespace ast {
     if (what == "local_label") return (new LocalLabelDecl)->parse_self(p, env);
     if (what == "map")     return parse_map(p, env);
     if (what == "smap")    return parse_map(p, env);
-    if (what == "macro")        return parse_macro(p, env);
-    if (what == "syntax_macro") return parse_macro(p, env);
+    if (what == "macro")         return parse_macro(p, env);
+    if (what == "syntax_macro")  return parse_macro(p, env);
+    if (what == "fluid_binding") return parse_fluid_binding(DEFAULT_NS, p, env);
+    if (what == "fluid_label")   return parse_fluid_binding(LABEL_NS, p, env);
+    if (what == "fluid_syntax")  return parse_fluid_binding(SYNTAX_NS, p, env);
     return 0;
   }
 
@@ -2172,7 +2172,7 @@ namespace ast {
       if (d->for_ct_) for_ct_ = true;
     }
   }
-
+  
   //
   //
   //

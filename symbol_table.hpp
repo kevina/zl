@@ -3,12 +3,17 @@
 
 #include <stdio.h>
 
+#include <typeinfo>
 #include <utility>
 #include "ostream.hpp"
 #include "vector.hpp"
 #include "string_buf.hpp"
 
 struct Syntax;
+struct Error;
+struct SourceStr;
+Error * error(const SourceStr & str, const char * fmt, ...)
+  __attribute__ ((format (printf, 2, 3)));
 
 namespace ast {
 
@@ -107,7 +112,7 @@ namespace ast {
       : SymbolName(n), ns(ns0) {}
     SymbolKey(SymbolName n = SymbolName(), unsigned ns0 = 0)
       : SymbolName(n), ns(ns0) {}
-    inline SymbolKey(const Syntax & p);
+    inline SymbolKey(const Syntax & p, unsigned ns0 = 0);
   };
 
   struct Symbol {
@@ -127,6 +132,11 @@ namespace ast {
       return buf.freeze();
     }
     virtual ~Symbol() {}
+  };
+
+  struct FluidBinding : public Symbol {
+    FluidBinding(String n, SymbolName r) : Symbol(n), rebind(r) {}
+    SymbolName rebind;
   };
 
   struct SymbolNode {
@@ -151,30 +161,72 @@ namespace ast {
     return !(x == y);
   }
 
-  enum MarksStrategy {ExactMatch, NormalMarksStrategy, StripMarks};
+  enum Strategy {ThisScope, NormalStrategy, StripMarks};
 
-  template <typename T>
-  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
-                        MarksStrategy ms = ExactMatch) 
+  static inline
+  const Symbol * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+                                Strategy strategy)
   {
     const SymbolNode * cur = start;
-    //printf(">>%s %p\n", ~k, k.marks);
     for (; cur != stop; cur = cur->next) {
       if (k == cur->key) break;
     }
     if (cur == stop) {
-      if (ms == NormalMarksStrategy && k.marks) {
+      if (strategy == NormalStrategy && k.marks) {
         cur = k.marks->mark->env;
         k.marks = k.marks->prev;
-        return find_symbol<T>(k, cur, stop, ms);
-      } else if (ms == StripMarks && k.marks) {
+        return find_symbol_p1(k, cur, stop, strategy);
+      } else if (strategy == StripMarks && k.marks) {
         k.marks = k.marks->prev;
-        return find_symbol<T>(k, start, stop, ms);
+        return find_symbol_p1(k, start, stop, strategy);
       } else {
         return NULL;
       }
     }
-    return dynamic_cast<const T *>(cur->value);
+    return cur->value;
+  }
+
+  template <typename T>
+  const Symbol * find_symbol_p2(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
+                                Strategy strategy = NormalStrategy)
+  {
+    const Symbol * s = find_symbol_p1(k, start, stop, strategy);
+    if (!s) return NULL;
+    if (strategy != ThisScope)
+      if (const FluidBinding * b = dynamic_cast<const FluidBinding *>(s))
+        s = find_symbol_p1(SymbolKey(b->rebind, k.ns), start, stop, strategy);
+    return s;
+  }
+
+  template <>
+  inline
+  const Symbol * find_symbol_p2<FluidBinding>(SymbolKey k, 
+                                              const SymbolNode * start, const SymbolNode * stop,
+                                              Strategy strategy) 
+  {
+    return find_symbol_p1(k, start, stop, strategy);
+  }
+
+  template <typename T>
+  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
+                        Strategy strategy = NormalStrategy) 
+  {
+    const Symbol * s = find_symbol_p2<T>(k, start, stop, strategy);
+    return dynamic_cast<const T *>(s);
+  }
+
+  template <typename T>
+  const T * lookup_symbol(SymbolKey k, const SourceStr & str,
+                          const SymbolNode * start, const SymbolNode * stop = NULL,
+                          Strategy strategy = NormalStrategy)
+  {
+    const Symbol * s1 = find_symbol_p2<T>(k, start, stop, strategy);
+    if (!s1)
+      throw error(str, "Unknown Identifier \"%s\"", ~k.name);
+    const T * s2 = dynamic_cast<const T *>(s1);
+    if (!s2)
+      throw error(str, "Identifier \"%s\" is of the wrong type.", ~k.name);
+    return s2;
   }
 
   class OpenSymbolTable : public gc
@@ -198,7 +250,7 @@ namespace ast {
     }
     template <typename T>
     void add(const SymbolKey & k, const T * sym) {
-      if (find_symbol<Symbol>(k, *front, back)) return; // FIXME: throw error
+      //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
       *front = new SymbolNode(k, sym, *front);
     }
   };
@@ -225,17 +277,23 @@ namespace ast {
       return SymbolTable(placeholder, front);
     }
     template <typename T> 
-    const T * find(const SymbolKey & k, MarksStrategy ms = NormalMarksStrategy) {
+    const T * find(const SymbolKey & k, Strategy ms = NormalStrategy) {
       return find_symbol<T>(k, front, NULL, ms);
     }
-    bool exists(const SymbolKey & k, MarksStrategy ms = NormalMarksStrategy) {
+    template <typename T> 
+    const T * lookup(const SymbolKey & k, const SourceStr & str, Strategy ms = NormalStrategy) {
+      return lookup_symbol<T>(k, str, front, NULL, ms);
+    }
+    template <typename T> 
+    inline const T * lookup(const Syntax * p, unsigned ns = DEFAULT_NS);
+    bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }
-    bool exists_this_scope(const SymbolKey & k, MarksStrategy ms = NormalMarksStrategy) {
-      return find_symbol<Symbol>(k, front, back, ms);
+    bool exists_this_scope(const SymbolKey & k) {
+      return find_symbol<Symbol>(k, front, back, ThisScope);
     }
     void add(const SymbolKey & k, const Symbol * sym) {
-      //if (find_symbol<Symbol>(k, front, back)) return; // FIXME: throw error
+      //if (exists_this_scope(k)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);
     }
     void rename(bool if_marked, const SymbolNode * stop);
