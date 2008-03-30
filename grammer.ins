@@ -38,7 +38,7 @@
 (smap and (x y) ()
     (eif (mid x) (mid y) (literal 0)))
 
-(smap ? (test (":" if_true if_false)) ()
+(smap ? (test (pattern (":" if_true if_false))) ()
     (eif (mid test) (mid if_true) (mid if_false)))
 
 (smap -> (exp id) ()

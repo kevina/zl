@@ -159,32 +159,53 @@ struct Macro : public MacroSymbol {
   }
 };
 
+void match_parm(Match * m, const Syntax * p, const Syntax * repl) {
+  if (p->num_args() > 0) {
+    if (p->is_a("pattern")) {
+      p = p->arg(0);
+      assert(p->what() == repl->what());
+      for (int j = 0; j != p->num_args(); ++j) {
+        m->push_back(Match::value_type(*p->arg(j), repl->arg(j)));
+      }
+    } else if (p->is_a("reparse")) {
+      if (!repl) {
+        if (p->num_args() > 1)
+          repl = p->arg(1);
+        else
+          abort();
+      }
+      p = p->arg(0);
+    } else {
+      p->print();
+      printf("\n");
+      abort();
+    }
+  }
+  m->push_back(Match::value_type(*p, repl));
+}
+
 Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsigned shift) {
   Match * m = new Match();
   if (pattern->is_a("()"))
-    pattern = reparse("ID_LIST", pattern->arg(0));
+    pattern = reparse("MATCH_LIST", pattern->arg(0));
   //printf("MATCH\n");
   //pattern->print(); printf("\n");
   //with->print(); printf("\n");
   //printf("---\n");
-  for (int i = 0; i != pattern->num_parts(); ++i) {
-    const Syntax * mp = pattern->part(i);
-    if (mp->num_args() > 0) {
-      const Syntax * sp = with->part(i + shift);
-      assert(mp->what() == sp->what());
-      for (int j = 0; j != mp->num_args(); ++j) {
-        m->push_back(Match::value_type(*mp->arg(j), sp->arg(j)));
-      }
+  if (pattern->simple()) {
+    if (pattern->what().defined())
+      match_parm(m, pattern, with->part(shift));
+  } else {
+    const Parts & parts = pattern->d->parts;
+    const Flags & flags = pattern->d->flags;
+    for (unsigned i = 0, sz = parts.size(); i < sz; ++i) {
+      unsigned ii = i + shift;
+      match_parm(m, parts[i], with->num_parts() > ii ? with->part(ii) : NULL);
     }
-    //} else if (mp->is_a("...")) {
-    //  Syntax * p2 = new Syntax(new Syntax("..."));
-    //  for (; i != p->num_parts() - shift; ++i) {
-    //    p2->add_part(p->part(i + shift));
-    //  }
-    //  m->insert("...", p2);
-    //  break;
-    //}
-    m->push_back(Match::value_type(mp->what(), with->part(i + shift)));
+    for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
+      const Syntax * w = with->flag((*i)->what());
+      match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL);
+    }
   }
   if (orig_m) 
     m->insert(m->end(), orig_m->begin(), orig_m->end());

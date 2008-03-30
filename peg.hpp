@@ -6,6 +6,9 @@
 #include "hash-t.hpp"
 
 #include <typeinfo>
+#include <utility>
+
+using std::pair;
 
 struct Prod;
 
@@ -64,6 +67,7 @@ struct ParseErrors : public Vector<const ParseError *> {
 struct Res {
   const char * end; // NULL on FALSE
   Parts parts;
+  Flags flags;
   ParseErrors errors;
 };
 
@@ -85,9 +89,19 @@ private:
 
 static const char * FAIL = 0;
 
+struct PartsFlags {
+  Parts * parts;
+  Flags * flags;
+  PartsFlags()
+    : parts(), flags() {}
+  PartsFlags(Parts * p, Flags * f)
+    : parts(p), flags(f) {}
+  operator bool() const {return parts;}
+};
+
 class Prod : public gc_cleanup {
 public:
-  virtual const char * match(SourceStr str, Parts * parts, ParseErrors & errs) = 0;
+  virtual const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) = 0;
   virtual Prod * clone(Prod * = 0) = 0; // the paramater is the new
                                         // prod to use in place of the
                                         // placeholder prod "_self"
@@ -104,7 +118,7 @@ public: // but don't use
 
 class SymProd : public Prod {
 public:
-  const char * match(SourceStr str, Parts * parts, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     return prod->match(str,parts,errs);
   }
   SymProd(const char * s, const char * e, String n, Prod * p = 0) 
@@ -137,19 +151,22 @@ struct PtrLt {
 class NamedProd : public SymProd {
   // named productions are memorized
 public:
-  const char * match(SourceStr str, Parts * parts, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     Lookup::iterator i = lookup.find(str.begin);
     Res * r;
     if (i == lookup.end()) {
       r = &lookup[str];
       r->end = FAIL; // to avoid infinite recursion
-      r->end = prod->match(str, &r->parts, r->errors);
+      r->end = prod->match(str, PartsFlags(&r->parts, &r->flags), r->errors);
       //assert(r->end == FAIL || r->parts.size() == 1);
     } else {
       r = &i->second;
     }
     errs.add(r->errors);
-    if (parts) parts->append(r->parts);
+    if (parts) {
+      parts.parts->append(r->parts);
+      parts.flags->merge(r->flags);
+    } 
     return r->end;
   };
   NamedProd(String n) 

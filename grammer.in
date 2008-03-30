@@ -39,7 +39,7 @@ CASE_LABEL =
 CASE_EXP = <exp> (!":" {TOKEN})+;
 
 MAP =
-  <map> "map" {ID} "(" {ID_LIST} ")" (":" "(" {ID_LIST} ")" / <>) {BRACE} ;
+  <map> "map" {ID} "(" {MATCH_LIST} ")" (":" "(" {ID_LIST} ")" / <>) {BRACE} ;
 
 MACRO  =
     <macro> "macro" {ID} {ID}? ";"
@@ -47,6 +47,12 @@ MACRO  =
 
 ID_LIST =
   <> ({ID} ",")* {ID}?;
+
+MATCH_LIST =
+  <> ({MATCH} ",")* {MATCH}?;
+
+MATCH = 
+  :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
 
 #
 # C Token
@@ -170,10 +176,14 @@ TOKENS = <(...)> {TOKEN}*;
 STMTS = <slist> {STMT}*;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
-SPLIT = <list> ({<parm> {SPLIT_TOKEN*}} ("," {<parm> {SPLIT_TOKEN*}})+/{<parm> {SPLIT_TOKEN+}}/) ;
+SPLIT = <list> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;
+SPLIT_ITEM = SPLIT_FLAG / SPLIT_PARM;
+SPLIT_FLAG = :<> ':'{ID} "="? {SPLIT_PARM};
+SPLIT_PARM = <parm> {SPLIT_TOKEN*};
 PARAN_LIST = "(" {SPLIT} ")";
 
-PARM : "macro paramater" = {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
+PARM : "macro paramater" = 
+   {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
 
 EOF = SPACING !_ ;
 

@@ -50,6 +50,10 @@ int main(int argc, const char *argv[])
     code = new_source_file(STDIN_FILENO);
   }
   try {
+    //const Syntax * res = parse_str("TEST", SourceStr(code->entity(), code->begin(), code->end()));
+    //res->print();
+    //printf("\n");
+    //exit(0);
     //printf("%d\n%s", ast::MACRO_PRELUDE_END - ast::MACRO_PRELUDE, ast::MACRO_PRELUDE);
     const Syntax * to_expand =
     // parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));

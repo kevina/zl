@@ -25,7 +25,7 @@ class Capture;
 
 class AlwaysTrue : public Prod {
 public:
-  const char * match(SourceStr str, Parts * parse, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags, ParseErrors & errs) {
     return str.begin;
   }
   AlwaysTrue(const char * p, const char * e) : Prod(p,e) {}
@@ -35,20 +35,20 @@ public:
 
 class Capture : public Prod {
 public:
-  const char * match(SourceStr str, Parts * parts, ParseErrors & errs) {
-    if (!parts) return prod->match(str, 0, errs);
+  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
+    if (!res) return prod->match(str, PartsFlags(), errs);
     if (prod->capture_type.is_single()) {
       //return prod->match(str, parts, errs);
-      const char * r = prod->match(str, parts, errs);
+      const char * r = prod->match(str, res, errs);
       return r;
     } else if (prod->capture_type.is_multi()) {
-      const char * r = prod->match(str, parts, errs);
+      const char * r = prod->match(str, res, errs);
       return r;
     } else { // type is None
-      const char * s = prod->match(str, 0, errs);
+      const char * s = prod->match(str, PartsFlags(), errs);
       if (!s) return FAIL;
       Syntax * parse = new Syntax(String(str.begin, s), str, s);
-      parts->append(parse);
+      res.parts->append(parse);
       return s;
     }
   }
@@ -109,11 +109,12 @@ private:
     unsigned stop;
   };
 public:
-  const char * match(SourceStr str, Parts * parts, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
-    if (!parts) return prod->match(str, 0, errs); 
+    if (!parts) return prod->match(str, PartsFlags(), errs); 
     Parts lparts;
-    const char * s = prod->match(str, prod->capture_type.is_explicit() ? &lparts : 0, errs);
+    Flags lflags;
+    const char * s = prod->match(str, prod->capture_type.is_explicit() ? PartsFlags(&lparts,&lflags) : PartsFlags(), errs);
     if (!s) return FAIL;
     Syntax * parse;
     if (parms.empty()) {
@@ -122,6 +123,7 @@ public:
       else
         parse = new Syntax();
       parse->add_parts(lparts);
+      parse->set_flags(lflags);
     } else {
       Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
       if (i->start == NPOS) {
@@ -139,17 +141,22 @@ public:
           }
         }
       }
+      parse->set_flags(lflags);
     }
     parse->str_ = str;
     parse->str_.end = s;
-    parts->append(parse);
+    if (capture_as_flag)
+      parts.flags->insert(parse);
+    else
+      parts.parts->append(parse);
     return s;
   }
 
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
-  NamedCapture(const char * s, const char * e, Prod * p, String n)
-    : Prod(s,e), prod(p), name(!n.empty() ? new Syntax(n) : 0) {capture_type.set_to_explicit(); parse_name();}
+  NamedCapture(const char * s, const char * e, Prod * p, String n, bool caf = false)
+    : Prod(s,e), prod(p), name(!n.empty() ? new Syntax(n) : 0), capture_as_flag(caf) 
+    {capture_type.set_to_explicit(); parse_name();}
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : Prod(o), prod(o.prod->clone(p)), name(o.name), parms(o.parms) {}
   virtual Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
@@ -206,11 +213,12 @@ private:
   Prod * prod;
   const Syntax * name;
   Vector<Parm> parms;
+  bool capture_as_flag;
 };
 
 class DescProd : public Prod {
 public:
-  const char * match(SourceStr str, Parts * parts, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     ParseErrors my_errs;
     const char * s = prod->match(str, parts, my_errs);
     if (my_errs.size() > 0 && !desc.empty() && my_errs.front()->pos <= str) {
@@ -236,7 +244,7 @@ private:
 
 class Literal : public Prod {
 public:
-  const char * match(SourceStr str, Parts *, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags, ParseErrors & errs) {
     if (str.size() >= literal.size() && std::equal(literal.begin(), literal.end(), str.begin)) {
       return str + literal.size();
     } else {
@@ -256,7 +264,7 @@ private:
 
 class CharClass : public Prod {
 public:
-  const char * match(SourceStr str, Parts *, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags, ParseErrors & errs) {
     if (!str.empty() && cs[*str]) {
       return str + 1;
     } else {
@@ -274,7 +282,7 @@ private:
 
 class Any : public Prod {
 public:
-  const char * match(SourceStr str, Parts *, ParseErrors & errs)  {
+  const char * match(SourceStr str, PartsFlags, ParseErrors & errs)  {
     if (!str.empty())
       return str+1;
     errs.push_back(new ParseError(pos, str, "<EOF>"));
@@ -287,12 +295,12 @@ public:
 
 class Repeat : public Prod {
 public:
-  const char * match(SourceStr str, Parts * parts, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     const char * s;
     bool matched = false;
     for (;;) {
-      if (end_with_ && end_with_->match(str, 0, errs)) break;
-      s = prod->match(str, prod->capture_type.is_explicit() ? parts : 0, errs);
+      if (end_with_ && end_with_->match(str, PartsFlags(), errs)) break;
+      s = prod->match(str, prod->capture_type.is_explicit() ? parts : PartsFlags(), errs);
       if (s == FAIL) break;
       str.begin = s;
       matched = true;
@@ -326,10 +334,10 @@ private:
 
 class Predicate : public Prod {
 public:
-  const char * match(SourceStr str, Parts *, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags, ParseErrors & errs) {
     // FIXME: Correctly handle errors;
     ParseErrors dummy_errs = errs;
-    const char * s = prod->match(str, 0, dummy_errs);
+    const char * s = prod->match(str, PartsFlags(), dummy_errs);
     if (dont_match_empty && s == str.begin)
       s = FAIL;
     if (s) {
@@ -360,14 +368,16 @@ void Repeat::end_with(Prod * p) {
 class Seq : public Prod {
   // NOTE: A Seq _must_ have more than one element
 public: 
-  const char * match(SourceStr str, Parts * res, ParseErrors & errs) {
-    unsigned orig_sz = res ? res->size() : (unsigned)-1;
+  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
+    unsigned orig_parts_sz, orig_flags_sz;
+    if (res)
+      orig_parts_sz = res.parts->size(), orig_flags_sz = res.flags->data.size();
     Vector<Prod *>::iterator 
       i = prods.begin(), e = prods.end();
     while (i != e) {
-      str.begin = (*i)->match(str, (*i)->capture_type.is_explicit() ? res : 0, errs);
+      str.begin = (*i)->match(str, (*i)->capture_type.is_explicit() ? res : PartsFlags(), errs);
       if (str.begin == FAIL) {
-        if (res) res->resize(orig_sz);
+        if (res) res.parts->resize(orig_parts_sz), res.flags->data.resize(orig_flags_sz);
         return FAIL;
       }
       ++i;
@@ -408,13 +418,13 @@ private:
 
 class Choice : public Prod {
 public:
-  const char * match(SourceStr str, Parts * parts, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     Vector<Prod *>::iterator 
       i = prods.begin(), e = prods.end();
     while (i != e) {
-      Parts * p = parts;
+      PartsFlags p = parts;
       if (capture_type.is_explicit() && !(*i)->capture_type.is_explicit())
-        p = 0;
+        p = PartsFlags();
       const char * s = (*i)->match(str, p, errs);
       if (s) return s;
       ++i;
@@ -469,15 +479,15 @@ String cur_named_prod;
 
 class S_MId : public Prod {
 public:
-  const char * match(SourceStr str, Parts * res, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
     //if (!in_repl) return FAIL;
     Parts prts;
-    const char * r = prod->match(str, &prts, errs);
+    const char * r = prod->match(str, PartsFlags(&prts, NULL), errs);
     if (r == FAIL) return r;
     assert(prts.size() == 1);
     if (mids && mids->anywhere(*prts[0]->arg(0)) > 0) {
       Syntax * p = new Syntax(prts[0]->str(), prts[0]->part(0), prts[0]->arg(0), new Syntax(in_named_prod));
-      if (res) res->append(p);
+      if (res) res.parts->append(p);
       return r;
     } else {
       return FAIL; // FIXME Inject Error
@@ -496,7 +506,7 @@ private:
 #if 0
 class S_Map : public Prod {
 public:
-  const char * match(SourceStr str, Parts * res, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
     const char * r = prod->match(str,res, errs);
     if (r == FAIL) return r;
     mids.clear();
@@ -513,7 +523,7 @@ private:
 
 class S_MParm : public Prod {
 public:
-  const char * match(SourceStr str, Parts * res, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
     Parts prts;
     const char * r = prod->match(str, &prts, errs);
     if (r == FAIL) return r;
@@ -533,7 +543,7 @@ private:
 
 class S_Repl : public Prod {
 public:
-  const char * match(SourceStr str, Parts * res, ParseErrors & errs) {
+  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
     in_repl = true;
     const char * r = prod->match(str, res, errs);
     in_repl = false;
@@ -558,7 +568,7 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
   Parts dummy;
   ParseErrors errors;
   //const char * s = str.begin;
-  const char * e = p->match(str, &dummy, errors);
+  const char * e = p->match(str, PartsFlags(&dummy,NULL), errors);
   mids = 0;
   //assert(s != e);
   //printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
@@ -643,7 +653,7 @@ namespace ParsePeg {
     for (;i != e; ++i) {
       ParseErrors errors;
       SourceStr str(p->name);
-      str.begin = i->to_match->match(str, 0, errors);
+      str.begin = i->to_match->match(str, PartsFlags(), errors);
       if (str.empty()) {
         p->set_prod(i->if_matched->clone(new Capture(p->pos, p->end, 
                                                      new Literal(p->pos, p->end, p->name),
@@ -682,9 +692,15 @@ namespace ParsePeg {
   {
     const char * start = str;
     Vector<Prod *> prods;
+    bool capture_as_flag = false;
     bool named_capture = false;
     SubStr name;
     SubStr special;
+    if (*str == ':') {
+      capture_as_flag = true;
+      named_capture = true;
+      ++str;
+    }
     if (*str == '<') {
       named_capture = true;
       const char * str2 = str + 1;
@@ -719,7 +735,7 @@ namespace ParsePeg {
     else if (!special.empty()) 
       throw error(start, "Unknown special");
     if (named_capture)
-      return Res(new NamedCapture(start, str, prod, name));
+      return Res(new NamedCapture(start, str, prod, name, capture_as_flag));
     else
       return Res(str, prod);
   }

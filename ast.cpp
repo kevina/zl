@@ -1991,6 +1991,7 @@ namespace ast {
     res = try_exp(p, env);
     if (res) return new EStmt(res);
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
+    p->print(); printf("\n");
     throw error (p, "Expected statement or declaration.");
   }
 

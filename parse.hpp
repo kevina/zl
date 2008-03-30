@@ -126,11 +126,17 @@ struct Flags : public gc {
   const_iterator end() const {return data.end();}
   bool empty() const {return data.empty();}
   unsigned size() const {return data.size();}
-  inline const Syntax * lookup(SymbolName d);
-  bool have(String d) {
+  inline const Syntax * lookup(SymbolName d) const;
+  bool have(SymbolName d) const {
     return lookup(d) != NULL;
   }
   inline bool insert(const Syntax * p);
+  void merge(const Flags & others) {
+    for (Vector<const Syntax *>::const_iterator 
+           i = others.data.begin(), e = others.data.end();
+         i != e; ++i)
+      insert(*i);
+  }
   void print() const;
 };
 
@@ -299,7 +305,7 @@ struct Syntax : public gc {
   }
   Parts::const_iterator args_begin() const {return d->parts.begin() + 1;}
   Parts::const_iterator args_end()   const {return d->parts.end();}
-  const Syntax * flag(String n) const {
+  const Syntax * flag(SymbolName n) const {
     if (!d) return NULL;
     else return d->flags.lookup(n);
   }
@@ -358,7 +364,7 @@ static inline bool operator==(const Syntax & p, const char * str) {
 inline SourceEntity::SourceEntity(const Syntax * e)
   : file_(e->str().source ? e->str().source->file_ : NULL), expansion_(e) {}
 
-inline const Syntax * Flags::lookup(SymbolName d) {
+inline const Syntax * Flags::lookup(SymbolName d) const {
   for (iterator i = begin(); i != end(); ++i) 
     if ((*i)->what() == d) return *i;
   return NULL;
