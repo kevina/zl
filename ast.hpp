@@ -1,3 +1,4 @@
+#include "environ.hpp"
 #include "gc.hpp"
 #include "hash-t.hpp" //FIXME
 #include "parse.hpp"
@@ -11,141 +12,6 @@
 #undef NPOS
 
 namespace ast {
-
-  struct AST;
-  struct Declaration;
-  //enum Scope {STATIC, STACK};
-
-  struct VarLoc : public gc {
-    //Scope scope;
-    //unsigned offset; // offset in local block for interpreter
-  };
-
-  enum Scope {OTHER, TOPLEVEL, LEXICAL};
-
-  struct VarSymbol : public Symbol {
-    SourceStr str;
-    const Type * type;
-    const struct CT_Value_Base * ct_value;
-    mutable void * ct_ptr; // ...
-    const Declaration * decl;
-    Scope scope;
-    VarSymbol(String n, Scope s = OTHER, const Declaration * d = NULL)
-      : Symbol(n), ct_value(), ct_ptr(), decl(d), scope(s) {}
-    VarSymbol(SymbolName n, Scope s = OTHER, const Declaration * d = NULL) 
-      : Symbol(n.name), ct_value(), ct_ptr(), decl(d), scope(s) {}
-  };
-
-  enum LabelType {NormalLabel = 0, LocalLabel = 1};
-
-  struct LabelSymbol : public Symbol {
-    LabelType type;
-    LabelSymbol() : type() {}
-    LabelSymbol(String n, LabelType t)
-      : Symbol(n), type(t) {}
-  };
-  
-  struct Frame : public gc {
-    const TypeInst * return_type;
-#if 0
-    unsigned cur_frame_size;
-    unsigned max_frame_size;
-    unsigned frame_size_last_var; // safety measure
-    Frame() : return_type(), cur_frame_size(), max_frame_size(), frame_size_last_var() {}
-    unsigned alloc_tmp(const Type * t) {
-      unsigned diff = cur_frame_size % t->align;
-      if (diff != 0) cur_frame_size += t->align - diff;
-      unsigned loc = cur_frame_size;
-      cur_frame_size += t->size;
-      if (cur_frame_size > max_frame_size) 
-        max_frame_size = cur_frame_size;
-      return loc;
-    }
-    unsigned alloc_var(const Type * t) {
-      unsigned loc = alloc_tmp(t);
-      frame_size_last_var = cur_frame_size;
-      return loc;
-    }
-    //unsigned reserve(const Type * t) {
-    //  unsigned loc = alloc_tmp(t);
-    //  pop_tmp(t);
-    //  return loc;
-    //}
-    void pop_tmp(const Type * t) {
-      //cur_frame_size -= t->size;
-      //assert(cur_frame_size >= frame_size_last_var);
-    }
-    void pop_to(unsigned sz) {
-      //cur_frame_size = sz;
-      //assert(cur_frame_size >= frame_size_last_var);
-    }
-#endif
-  };
-
-  struct Deps : public Vector<const VarSymbol *> {
-    void insert(const VarSymbol * sym) {
-      for (iterator i = begin(), e = end(); i != e; ++i)
-        if (*i == sym) return;
-      push_back(sym);
-    }
-    void merge(const Deps & other) {
-      for (const_iterator i = other.begin(), e = other.end(); i != e; ++i)
-        insert(*i);
-    }
-    bool have(const VarSymbol * sym) {
-      for (const_iterator i = begin(), e = end(); i != e; ++i)
-        if (*i == sym) return true;
-      return false;
-    }
-  };
-
-  struct Environ : public gc {
-    TypeRelation * type_relation;
-    SymbolTable symbols;
-    TypeSymbolTable types;
-    OpenSymbolTable fun_labels;
-    Scope scope;
-    Frame * frame;
-    AST * top;
-    SymbolNode * const * top_level_environ;
-    Deps * deps;
-    bool * for_ct; // set if this function uses a ct primitive such as syntax
-    Type * void_type() {return types.inst("<void>");}
-    Type * bool_type() {return types.inst("<bool>");}
-    const FunctionPtrSymbol * function_sym() 
-      {return static_cast<const FunctionPtrSymbol *>(types.find(".fun"));}
-    Environ(Scope s = TOPLEVEL) 
-      : types(&symbols), scope(s), 
-        top_level_environ(&symbols.front), 
-        deps(), for_ct() 
-      {
-        type_relation = new_c_type_relation(); // FIXME HACK
-        create_c_types(types); // FIXME Another HACK
-        frame = new Frame();
-      }
-    Environ(const Environ & other) 
-      : type_relation(other.type_relation), symbols(other.symbols),
-        types(&symbols), fun_labels(other.fun_labels), 
-        scope(other.scope), frame(other.frame), 
-        top(other.top), 
-        top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
-        deps(other.deps), for_ct(other.for_ct) {}
-    Environ new_scope() {
-      Environ env = *this;
-      env.symbols = symbols.new_scope();
-      return env;
-    }
-    Environ new_frame() {
-      Environ env = *this;
-      env.scope = LEXICAL;
-      env.symbols = symbols.new_scope(env.fun_labels);
-      env.frame = new Frame();
-      env.top_level_environ = &symbols.front;
-      env.for_ct = NULL;
-      return env;
-    }
-  private:
-  };
 
 #if 0
   struct Scope {
@@ -430,9 +296,20 @@ namespace ast {
   };
  
   struct Block;
+  struct VarSymbol;
+
+  //struct Declaration : public AST {
+  //};
 
   struct Declaration : public AST {
+    enum Phase {Normal, Forward, Body};
+    virtual void compile(CompileWriter &, Phase) const = 0;
+    void compile(CompileWriter & cw, CompileEnviron &) {compile(cw, Normal);}
     Declaration(String n) : AST(n) {}
+  };
+
+  struct VarDeclaration : public Declaration {
+    VarDeclaration(String n) : Declaration(n) {}
     enum StorageClass {NONE, AUTO, STATIC, EXTERN, REGISTER};
     StorageClass storage_class;
     bool inline_;
@@ -443,9 +320,7 @@ namespace ast {
     bool ct_callback;
     void parse_flags(const Syntax * p);
     void write_flags(CompileWriter & f) const;
-    virtual void compile(CompileWriter &, bool forward) = 0;
-    void forward_decl(CompileWriter & w) {compile(w, true);}
-    void compile(CompileWriter & w, CompileEnviron &);
+    //void forward_decl(CompileWriter & w) {compile(w, true);}
     void calc_deps_closure() const;
     const Deps & deps() const {
       if (!deps_closed) calc_deps_closure();
@@ -457,8 +332,8 @@ namespace ast {
     }
  };
 
-  struct Fun : public Declaration {
-    Fun() : Declaration("fun") {}
+  struct Fun : public VarDeclaration {
+    Fun() : VarDeclaration("fun") {}
     //AST * part(unsigned i);
     SymbolName name;
     SymbolTable symbols;
@@ -470,7 +345,7 @@ namespace ast {
     unsigned frame_size;
     AST * parse_self(const Syntax * p, Environ & env0);
     void eval(ExecEnviron & env);
-    void compile(CompileWriter & f, bool forward);
+    void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
   };
 
@@ -532,6 +407,64 @@ namespace ast {
   //
   //
 
+  struct VarSymbol : virtual public Symbol {
+    //SourceStr str;
+    const Type * type;
+    const struct CT_Value_Base * ct_value;
+    mutable void * ct_ptr; // ...
+  protected:
+    friend VarSymbol * new_var_symbol(SymbolName n, Scope s);
+    VarSymbol(String n) : ct_value(), ct_ptr() {name = n;}
+  };
+
+  struct OtherVarSymbol : public VarSymbol {
+    OtherVarSymbol(String n) : VarSymbol(n) {}
+  };
+
+  struct TopLevelVarSymbol : public VarSymbol, public TopLevelSymbol {
+    const VarDeclaration * decl;
+    TopLevelVarSymbol(String n, const VarDeclaration * d, 
+                      bool mangle, TopLevelSymbol * w) 
+      : VarSymbol(n), TopLevelSymbol(mangle ? NPOS : 0, d, w), decl(d) {}
+  };
+
+  struct LexicalVarSymbol : public VarSymbol, public LexicalSymbol {
+    LexicalVarSymbol(String n) : VarSymbol(n) {}
+  };
+
+  VarSymbol * new_var_symbol(SymbolName n, Scope s = OTHER, 
+                             const VarDeclaration * d = NULL, 
+                             TopLevelSymbol * w = NULL);
+
+  struct LabelSymbol : public Symbol {};
+
+  struct NormalLabelSymbol : public LabelSymbol {
+    mutable unsigned num;
+    NormalLabelSymbol(String n) : num() {name = n;}
+    void uniq_name(OStream & o) const {
+      o.printf("%s$$%u", ~name, num);
+    }
+    void add_to_env(const SymbolKey & k, Environ &) const;
+    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
+      assign_uniq_num<NormalLabelSymbol>(self, stop);
+    }
+  };
+  
+  struct LocalLabelSymbol : public LabelSymbol {
+    mutable unsigned num;
+    LocalLabelSymbol(String n) : num() {name = n;}
+    void uniq_name(OStream & o) const {
+      o.printf("%s$%u", ~name, num);
+    }
+    void make_unique(SymbolNode * self, SymbolNode * stop) const {
+      assign_uniq_num<LocalLabelSymbol>(self, stop);
+    }
+  };
+
+  //
+  //
+  //
+
   template <typename T>
   void resolve_to(Environ & env, T * & exp, const Type * type) {
     exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type));
@@ -548,4 +481,11 @@ namespace ast {
   AST * parse_stmt_decl(const Syntax * p, Environ & env);
   AST * parse_exp(const Syntax * p, Environ & env);
 
+  void compile(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
+
 }
+
+#if 0
+
+
+#endif

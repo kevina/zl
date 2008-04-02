@@ -91,6 +91,53 @@ namespace ast {
     return op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
+  //
+  //
+  //
+
+  VarSymbol * new_var_symbol(SymbolName n, Scope s, 
+                             const VarDeclaration * d, TopLevelSymbol * w) 
+  {
+    if (s == OTHER)
+      return new OtherVarSymbol(n.name);
+    if (s == LEXICAL && (!d || 
+                         d->storage_class == VarDeclaration::NONE || 
+                         d->storage_class == VarDeclaration::AUTO || 
+                         d->storage_class == VarDeclaration::REGISTER)) 
+    {
+      return new LexicalVarSymbol(n.name);
+    } else {
+      assert(d);
+      bool mangle = s == LEXICAL || n.marks || w || d->storage_class == VarDeclaration::STATIC;
+      return new TopLevelVarSymbol(n.name,d,mangle,w);
+    }
+  }
+  
+  //
+  //
+  //
+
+  void Symbol::add_to_env(const SymbolKey & k, Environ & env) const {
+    env.symbols.add(k, this);
+    make_unique(env.symbols.front);
+  }
+
+  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
+    env.top_level_symbols->push_back(this);
+    if (num == NPOS)
+      assign_uniq_num<TopLevelSymbol>(*env.top_level_symbols);
+    env.symbols.add(k, this);
+  }
+
+  void NormalLabelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
+    env.fun_labels.add(k, this);
+    make_unique(*env.fun_labels.front);
+  }
+
+  //
+  //
+  //
+
   struct NoOp : public AST {
     NoOp() : AST("noop") {}
     AST * parse_self(const Syntax * p, Environ & env) {
@@ -141,8 +188,8 @@ namespace ast {
       SymbolName n = expand_binding(p->arg(0), LABEL_NS, env);
       label = env.symbols.find<LabelSymbol>(SymbolKey(n, LABEL_NS));
       if (!label) {
-        label = new LabelSymbol(n.name, NormalLabel);
-        env.fun_labels.add(SymbolKey(n, LABEL_NS), label);
+        label = new NormalLabelSymbol(n.name);
+        env.add(SymbolKey(n, LABEL_NS), label);
       }
       stmt = parse_stmt(p->arg(1), env);
       type = stmt->type;
@@ -230,8 +277,8 @@ namespace ast {
       parse_ = p;
       assert_num_args(1);
       SymbolName n = expand_binding(p->arg(0), LABEL_NS, env);
-      label = new LabelSymbol(n.name, LocalLabel);
-      env.symbols.add(SymbolKey(n, LABEL_NS), label);
+      label = new LocalLabelSymbol(n.name);
+      env.add(SymbolKey(n, LABEL_NS), label);
       type = env.void_type();
       return this;
     }
@@ -392,8 +439,9 @@ namespace ast {
       parse_ = p;
       assert_num_args(1);
       sym = env.symbols.lookup<VarSymbol>(p->arg(0));
-      if (env.deps && sym->scope == TOPLEVEL)
-        env.deps->insert(sym);
+      const TopLevelVarSymbol * tl = NULL;
+      if (env.deps && (tl = dynamic_cast<const TopLevelVarSymbol *>(sym)))
+        env.deps->insert(tl);
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
@@ -605,8 +653,8 @@ namespace ast {
     }
   };
 
-  struct Var : public Declaration {
-    Var() : Declaration("var"), init() {}
+  struct Var : public VarDeclaration {
+    Var() : VarDeclaration("var"), init() {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     AST * init;
     AST * parse_self(const Syntax * p, Environ & env) {
@@ -614,11 +662,11 @@ namespace ast {
       assert_num_args(2,3);
       SymbolName n = expand_binding(p->arg(0), env);
       parse_flags(p);
-      sym = new VarSymbol(n.name, env.scope, this);
+      sym = new_var_symbol(n, env.scope, this);
       sym->type = parse_type(p->arg(1), env);
       if (storage_class != EXTERN && sym->type->size() == NPOS)
         throw error(p->arg(0), "Size not known");
-      env.symbols.add(n, sym);
+      env.add(n, sym);
       if (p->num_args() > 2) {
         init = parse_exp(p->arg(2), env);
         resolve_to(env, init, sym->type);
@@ -632,13 +680,13 @@ namespace ast {
       if (init)
         init->finalize(env);
     }
-    void compile(CompileWriter & f, bool forward) {
+    void compile(CompileWriter & f, Phase phase) const {
       f << indent;
       write_flags(f);
       StringBuf buf;
       c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
       f << buf.freeze();
-      if (init && !forward)
+      if (init && phase != Forward)
         f << " = " << init;
       f << ";\n";
     }
@@ -697,7 +745,6 @@ namespace ast {
       }
     };
     void finalize(FinalizeEnviron & env) {
-      symbols.rename();
       for (int i = 0; i != stmts.size(); ++i) {
         stmts[i]->finalize(env);
       }
@@ -1276,11 +1323,9 @@ namespace ast {
         add_stmt(p->arg(j), env);
     } else {
       FinalizeEnviron fenv;
-      const SymbolNode * n = env.symbols.front;
       AST * a = parse_top_level(p, env);
       stmts.push_back(a);
       a->finalize(fenv);
-      env.symbols.rename_marked(n);
     }
   }
 
@@ -1446,10 +1491,11 @@ namespace ast {
 
     parse_flags(p);
 
-    sym = new VarSymbol(name, env0.scope, this);
-    env0.symbols.add(name, sym);
+    sym = new_var_symbol(name, env0.scope, this);
+    env0.add(name, sym);
 
     Environ env = env0.new_frame();
+    env.where = dynamic_cast<TopLevelSymbol *>(sym);
     env.deps = &deps_;
     env.for_ct = &for_ct_;
 
@@ -1465,10 +1511,11 @@ namespace ast {
            i != e; ++i)
       {
         SymbolName n = i->name;
-        VarSymbol * sym = new VarSymbol(n);
+        VarSymbol * sym = new_var_symbol(n);
         i->sym = sym;
         sym->type = i->type;
-        env.symbols.add(n, sym);
+        env.add(n, sym);
+        //env.symbols.add(n, sym);
       }
 
       body = dynamic_cast<Block *>(parse_stmt(p->arg(3), env));
@@ -1534,7 +1581,6 @@ namespace ast {
 
   void Fun::finalize(FinalizeEnviron & env0) {
     if (body) {
-      symbols.rename();
       FinalizeEnviron env = env0;
       env.fun_symbols = symbols.front;
       body->finalize(env);
@@ -1542,12 +1588,14 @@ namespace ast {
   }
 
 
-  void Fun::compile(CompileWriter & f, bool forward) {
+  void Fun::compile(CompileWriter & f, Phase phase) const {
+    if (!body && phase == Body)
+      return;
     write_flags(f);
     StringBuf buf;
     c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
     f << buf.freeze();
-    if (body && !forward)
+    if (body && phase != Forward)
       f << "\n" << body;
     else
       f << ";\n";
@@ -1671,8 +1719,12 @@ namespace ast {
     }
   };
 
-  struct TypeAlias : public AST {
-    TypeAlias() : AST("talias") {}
+  struct TypeDeclaration : public Declaration {
+    TypeDeclaration(String n) : Declaration(n) {}
+  };
+
+  struct TypeAlias : public TypeDeclaration {
+    TypeAlias() : TypeDeclaration("talias") {}
     TypeSymbol * name_sym;
     const Type * type;
     AST * part(unsigned i) {abort();}
@@ -1681,11 +1733,12 @@ namespace ast {
       assert_num_args(2);
       SymbolName n = *p->arg(0);
       type = parse_type(p->arg(1), env);
-      name_sym = add_simple_type(env.types, n, new AliasT(type));
+      name_sym = add_simple_type(env.types, n, new AliasT(type), this, env.where);
       return this;
     }
     void finalize(FinalizeEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
+    void compile(CompileWriter & f, Phase phase) const {
+      if (phase == Body) return;
       f << indent << "typedef ";
       StringBuf buf;
       c_print_inst->declaration(name_sym->uniq_name(), *type, buf);
@@ -1694,7 +1747,7 @@ namespace ast {
     }
   };
 
-  struct StructUnion : public AST {
+  struct StructUnion : public TypeDeclaration {
     enum Which {STRUCT, UNION} which;
     struct Body : public AST {
       Body(Which w) : AST(w == STRUCT ? "struct_body" : "union_body") {}
@@ -1709,7 +1762,7 @@ namespace ast {
       void finalize(FinalizeEnviron & env) {abort();}
       void compile(CompileWriter &, CompileEnviron &) {abort();}
     };
-    StructUnion(Which w) : AST(w == STRUCT ? "struct" : "union"), which(w), env(OTHER)  {}
+    StructUnion(Which w) : TypeDeclaration(w == STRUCT ? "struct" : "union"), which(w), env(OTHER)  {}
     AST * part(unsigned i) {return 0; /* FIXME */}
     const TypeSymbol * sym;
     Body * body;
@@ -1733,7 +1786,7 @@ namespace ast {
       } else {
         if (which == STRUCT) s = new StructT(name.name);
         else                 s = new UnionT(name.name);
-        sym = add_simple_type(env0.types, SymbolKey(name, TAG_NS), s);
+        sym = add_simple_type(env0.types, SymbolKey(name, TAG_NS), s, this, env.where);
       }
       if (body)
         for (unsigned i = 0; i != body->members.size(); ++i) {
@@ -1743,20 +1796,21 @@ namespace ast {
         }
       //StringBuf type_name;
       //type_name << "struct " << what();
+      sym->decl = this;
       s->env = &env;
       s->finalize();
       return this; 
     }
     void finalize(FinalizeEnviron & e) {
-      env.symbols.rename_marked();
       if (body)
         for (int i = 0; i != body->members.size(); ++i) {
           body->members[i]->finalize(e);
         }
     }
-    void compile(CompileWriter & f, CompileEnviron &) {
+    void compile(CompileWriter & f, Phase phase) const {
+      if (!body && phase == Declaration::Body) return;
       f << indent << what() << " " << sym;
-      if (body) {
+      if (body && phase != Forward) {
         f << " {\n";
         for (int i = 0; i != body->members.size(); ++i) {
           f << adj_indent(2) << body->members[i];
@@ -1775,8 +1829,8 @@ namespace ast {
     Union() : StructUnion(UNION) {}
   };
 
-  struct Enum : public AST {
-    Enum() : AST("enum") {}
+  struct Enum : public TypeDeclaration {
+    Enum() : TypeDeclaration("enum") {}
     const TypeSymbol * sym;
     const Syntax * body;
     struct Member {
@@ -1797,7 +1851,7 @@ namespace ast {
       } else {
         t0 = new EnumT(name.name);
         t0->exact_type = env.types.inst("int")->exact_type;
-        sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0);
+        sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0, this, env.where);
       }
       body = NULL;
       if (p->num_args() > 1) {
@@ -1816,22 +1870,24 @@ namespace ast {
             val = e->ct_value<target_int>();
           }
           SymbolName n = *arg->part(0);
-          Member mem(arg1, new VarSymbol(n), val);
+          Member mem(arg1, new_var_symbol(n), val);
           VarSymbol * sym = mem.sym;
           val++;
           sym->type = t;
           members.push_back(mem);
           sym->ct_value = &members.back().ct_value;
-          env.symbols.add(n, sym);
+          sym->add_to_env(n, env);
         }
       }
+      sym->decl = this;
       t0->finalize();
       return this;
     }
     void finalize(FinalizeEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
+    void compile(CompileWriter & f, Phase phase) const {
+      if (!body && phase == Body) return;
       f << indent << what() << " " << sym;
-      if (body) {
+      if (body && phase != Forward) {
         f << "{\n";
         for (int i = 0; i != members.size(); ++i) {
           f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.v;
@@ -2106,10 +2162,10 @@ namespace ast {
   }
 
   //
-  // Declaration methods
+  // VarDeclaration methods
   //
 
-  void Declaration::parse_flags(const Syntax * p) {
+  void VarDeclaration::parse_flags(const Syntax * p) {
     storage_class = NONE;
     if (p->flag("auto")) storage_class = AUTO;
     else if (p->flag("static")) storage_class = STATIC;
@@ -2124,9 +2180,9 @@ namespace ast {
     deps_closed = ct_callback;
   }
   
-  void Declaration::write_flags(CompileWriter & f) const {
+  void VarDeclaration::write_flags(CompileWriter & f) const {
     StorageClass sc = storage_class;
-    if (f.for_compile_time() && sym->scope == TOPLEVEL) {
+    if (f.for_compile_time() && dynamic_cast<TopLevelVarSymbol *>(sym)) {
       if (sym->ct_ptr)
         sc = EXTERN;
       else if (sc == STATIC)
@@ -2148,30 +2204,60 @@ namespace ast {
         f << "inline ";
   }
   
-  void Declaration::compile(CompileWriter & w, CompileEnviron &) {
-    if (w.for_compile_time() && sym->scope == TOPLEVEL) {
-      if (w.deps->have(sym)) {
-        if (sym->ct_ptr)
-          compile(w, true);
-        else
-          compile (w, false);
-      } else {
-        // nothing to do
-        }
-    } else if (!for_ct()) {
-      compile(w, false);
-    }
-  }
-  
-  void Declaration::calc_deps_closure() const {  
+  void VarDeclaration::calc_deps_closure() const {  
     deps_closed = true;
     for (unsigned i = 0, sz = deps_.size(); i < sz; ++i) {
-      const Declaration * d = deps_[i]->decl;
+      const VarDeclaration * d = deps_[i]->decl;
       if (!d->deps_closed) d->calc_deps_closure();
       deps_.merge(d->deps_);
       if (!d->deps_closed) deps_closed = false;
       if (d->for_ct_) for_ct_ = true;
     }
+  }
+
+  //
+  //
+  //
+
+  void compile(const Vector<const TopLevelSymbol *> & syms, CompileWriter & cw) {
+
+    Vector<const TopLevelSymbol *>::const_iterator i, e = syms.end();
+    const TopLevelVarSymbol * tl = NULL;
+
+    for (i = syms.begin(); i != e; ++i) {
+      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
+        d->compile(cw, Declaration::Forward);
+    }
+
+    for (i = syms.begin(); i != e; ++i) {
+      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
+        d->compile(cw, Declaration::Body);
+    }
+
+    for (i = syms.begin(); i != e; ++i) {
+      if (const Fun * d = dynamic_cast<const Fun *>((*i)->decl)) {
+        if (cw.for_compile_time()) {
+          tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
+          if (cw.deps->have(tl))
+            d->compile(cw, Declaration::Forward);
+        } else if (!d->for_ct()) {
+          d->compile(cw, Declaration::Forward);
+        }
+      }
+    }
+
+    for (i = syms.begin(); i != e; ++i) {
+      if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
+        if (cw.for_compile_time()) {
+          tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
+          if (cw.deps->have(tl) && !d->sym->ct_ptr)
+            d->compile(cw, Declaration::Body);
+        } else if (!d->for_ct()) {
+          d->compile(cw, Declaration::Body);
+        }
+      }
+    }
+
   }
   
   //

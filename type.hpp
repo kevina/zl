@@ -74,11 +74,9 @@ namespace ast {
   };
 
   struct TypeSymbolTable {
-    SymbolTable * symbols;
-    TypeSymbolTable(SymbolTable * s) : symbols(s) {}
-    const TypeSymbol * find(const SymbolKey & k) {
-      return symbols->find<TypeSymbol>(k);
-    }
+    Environ * env;
+    TypeSymbolTable(Environ * s) : env(s) {}
+    inline const TypeSymbol * find(const SymbolKey & k);
     Type * inst(SymbolKey n, Vector<TypeParm> &);
     Type * inst(SymbolKey n) {
       Vector<TypeParm> dummy;
@@ -157,20 +155,19 @@ namespace ast {
 
   class TypeInst;
   
-  class TypeSymbol : public Symbol {
+  class TypeSymbol : public TopLevelSymbol {
   public:
     Syntax * parse;
     String what() const {return name;}
     const PrintInst * print_inst;
-    TypeSymbol() : parse(), print_inst(c_print_inst) {}
+    TypeSymbol() 
+      : TopLevelSymbol(), parse(), print_inst(c_print_inst) {}
     virtual Type * inst(Vector<TypeParm> & d) const = 0;
     //virtual Type * inst(const Syntax *) const = 0;
     virtual unsigned required_parms() const = 0;
     virtual TypeParm::What parm(unsigned i) const = 0; // return TypeParm::NONE if off end
     virtual ~TypeSymbol() {}
   };
-
-  inline void TypeSymbolTable::add(const SymbolKey & k, const TypeSymbol * t) {symbols->add(k, t);}
 
   static inline bool category_in(const TypeCategory * x, const TypeCategory * y) {
     if (x == y) return true;
@@ -263,8 +260,16 @@ namespace ast {
   };
 
   static inline SimpleTypeSymbol *  
-  add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleTypeInst * type) {
+  add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleTypeInst * type, 
+                  const Declaration * decl = NULL, TopLevelSymbol * where = NULL)
+  {
     SimpleTypeSymbol * t = new SimpleTypeSymbol(type);
+    if (decl) 
+      t->decl = decl;
+    if (where) {
+      t->where = where;
+      t->num = NPOS;
+    }
     sym.add_name(name, t);
     return t;
   }

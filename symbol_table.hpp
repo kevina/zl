@@ -17,6 +17,8 @@ Error * error(const SourceStr & str, const char * fmt, ...)
 
 namespace ast {
 
+  struct AST;
+
   struct Mark;
   struct SymbolNode;
 
@@ -115,28 +117,66 @@ namespace ast {
     inline SymbolKey(const Syntax & p, unsigned ns0 = 0);
   };
 
-  struct Symbol {
+  struct SymbolNode;
+
+  struct Environ;
+
+  struct Symbol : public gc {
     String name;
-    mutable unsigned num;
-    Symbol() : num() {}
-    Symbol(String n) : name(n), num() {}
+    Symbol() {}
     virtual void uniq_name(OStream & o) const {
-      if (num > 0)
-        o.printf("%s$%u", ~name, num);
-      else
-        o << name;
+      o << name;
     }
     String uniq_name() const {
       StringBuf buf;
       uniq_name(buf);
       return buf.freeze();
     }
+    virtual void add_to_env(const SymbolKey & k, Environ &) const;
+    virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
   };
 
-  struct FluidBinding : public Symbol {
-    FluidBinding(String n, SymbolName r) : Symbol(n), rebind(r) {}
+  // This if for any symbol which is not lexical and _might_
+  // need to made externally visible, they are not necessary
+  // global
+  struct Declaration;
+  struct TopLevelSymbol : virtual public Symbol {
+    TopLevelSymbol(unsigned n = 0, const Declaration * d = NULL, TopLevelSymbol * w = NULL) 
+      : num(n), decl(d), where(w) {}
+    mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
+    mutable const Declaration * decl; // NULL if internal
+    TopLevelSymbol * where;           // NULL if global
+    using Symbol::uniq_name;
+    void uniq_name(OStream & o) const {
+      if (num == 0)
+        o << name;
+      else
+        o.printf("%s$$%u", ~name, num);
+    }
+    // if num is zero than leave alone, if NPOS assign uniq num.
+    void add_to_env(const SymbolKey & k, Environ &) const;
+    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
+  };
+
+  struct LexicalSymbol : virtual public Symbol {
+    LexicalSymbol() : num () {}
+    mutable unsigned num;
+    using Symbol::uniq_name;
+    void uniq_name(OStream & o) const {
+      o.printf("%s$%u", ~name, num);
+    }
+    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
+  };
+
+  struct FluidBinding : public TopLevelSymbol {
+    FluidBinding(String n, SymbolName r) : rebind(r) {name = n;}
     SymbolName rebind;
+  };
+
+  struct Module : public TopLevelSymbol {
+    Module() : syms() {}
+    SymbolNode * syms;
   };
 
   struct SymbolNode {
@@ -296,11 +336,38 @@ namespace ast {
       //if (exists_this_scope(k)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);
     }
-    void rename(bool if_marked, const SymbolNode * stop);
-    void rename(const SymbolNode * stop = NULL) {rename(false, stop);}
-    void rename_marked(const SymbolNode * stop = NULL) {rename(true, stop);}
   };
 
+  template <typename T>
+  void assign_uniq_num(SymbolNode * cur, SymbolNode * stop = NULL) {
+    const T * t = NULL;
+    // we need to compare the actual symbol name, since it may be
+    // aliases as a different name
+    String name = cur->value->name;
+    for (SymbolNode * p = cur->next; p != stop; p = p->next) {
+      if (p->value && p->value->name == name && (t = dynamic_cast<const T *>(p->value))) 
+        break;
+    }
+    unsigned num = 1;
+    assert(!t || t->num != NPOS);
+    if (t) num = t->num + 1;
+    dynamic_cast<const T *>(cur->value)->num = num;
+  }
+
+  template <typename T>
+  void assign_uniq_num(Vector<const TopLevelSymbol *> & syms) {
+    const T * t = NULL;
+    const T * cur = dynamic_cast<const T *>(syms.back());
+    String name = cur->name;
+    for (int i = syms.size() - 2; i >= 0; --i) {
+      if (syms[i]->name == name && (t = dynamic_cast<const T *>(syms[i]))) 
+        break;
+    }
+    unsigned num = 1;
+    assert(!t || t->num != NPOS);
+    if (t) num = t->num + 1;
+    cur->num = num;
+  }
 }
 
 #endif

@@ -32,7 +32,7 @@ void assert_pos(const Syntax * p, Position have, unsigned need);
 void assert_num_args(const Syntax * p, unsigned num);
 void assert_num_args(const Syntax * p, unsigned min, unsigned max);
 
-void compile_for_ct(Deps & deps, AST * top);
+void compile_for_ct(Deps & deps, Environ & env);
 
 // the "C" version of the callback functions
 
@@ -147,8 +147,8 @@ struct Macro : public MacroSymbol {
   const Syntax * expand(const Syntax * p, Environ & env) const {
     if (!fun->ct_ptr) {
       Deps deps;
-      deps.push_back(fun);
-      compile_for_ct(deps, env.top);
+      deps.push_back(static_cast<const TopLevelVarSymbol *>(fun));
+      compile_for_ct(deps, env);
       assert(fun->ct_ptr);
     }
     const Syntax * res = ((MacroCall)fun->ct_ptr)(p, &env);
@@ -467,9 +467,9 @@ AST * parse_map(const Syntax * p, Environ & env) {
   Map * m = new Map;
   m->parse_self(p, env);
   if (p->is_a("smap"))
-    env.symbols.add(SymbolKey(m->name, SYNTAX_NS), m);
+    env.add(SymbolKey(m->name, SYNTAX_NS), m);
   else
-    env.symbols.add(m->name, m);
+    env.add(m->name, m);
   return new Empty();
 }
 
@@ -477,9 +477,9 @@ AST * parse_macro(const Syntax * p, Environ & env) {
   Macro * m = new Macro;
   m->parse_self(p, env);
   if (p->is_a("syntax_macro"))
-    env.symbols.add(SymbolKey(m->name, SYNTAX_NS), m);
+    env.add(SymbolKey(m->name, SYNTAX_NS), m);
   else
-    env.symbols.add(m->name, m);
+    env.add(m->name, m);
   return new Empty();
 }
 
@@ -526,7 +526,7 @@ Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
 
 
 
-void compile_for_ct(Deps & deps, AST * top) {
+void compile_for_ct(Deps & deps, Environ & env) {
 
   static unsigned cntr = 0;
   
@@ -544,15 +544,14 @@ void compile_for_ct(Deps & deps, AST * top) {
   String cmd = buf.freeze();
   cntr++;
   
-  CompileEnviron cenv;
   CompileWriter cw;
   cw.open(source, "w");
   cw.deps = &deps;
-  top->compile(cw, cenv);
+  compile(*env.top_level_symbols, cw);
   cw.close();
   
   system(cmd);
-  
+ 
   void * lh = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
   if (!lh) {
     fprintf(stderr, "ERROR: %s\n", dlerror());
@@ -574,7 +573,7 @@ AST * parse_fluid_binding(unsigned ns, const Syntax * p, Environ & env) {
   assert_num_args(p, 1);
   SymbolName n = *p->arg(0);
   FluidBinding * b = new FluidBinding(n.name, mark(n, new Mark(NULL)));
-  env.symbols.add(SymbolKey(n, ns), b);
+  env.add(SymbolKey(n, ns), b);
   return new Empty();
 }
 

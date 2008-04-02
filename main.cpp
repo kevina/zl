@@ -9,6 +9,8 @@
 #include "peg.hpp"
 #include "expand.hpp"
 
+//#include "symbol_table.hpp"
+
 void parse_maps(ast::Environ & env) {
   SourceFile * code = new_source_file("grammer.ins");
   const char * s = code->begin();
@@ -65,10 +67,12 @@ int main(int argc, const char *argv[])
     //expanded->print();
     //printf("\n");
     //exit(0);
-    ast::CompileEnviron cenv;
+
+    //ast::CompileEnviron cenv;
     ast::CompileWriter out;
     out.open("a.out.c", "w");
-    ast->compile(out, cenv);
+    //ast->compile(out, cenv);
+    ast::compile(*env.top_level_symbols, out);
     //AST::ExecEnviron env;
     //ast->eval(env);
   } catch (Error * err) {

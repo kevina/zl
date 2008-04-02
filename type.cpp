@@ -44,7 +44,7 @@ namespace ast {
 
   void TypeSymbolTable::add_name(const SymbolKey & k, TypeSymbol * t) {
     t->name = k.name;
-    symbols->add(k, t);
+    env->add(k, t);
   }
 
   PrintInst const * const generic_print_inst = new GenericPrintInst();
@@ -237,7 +237,7 @@ namespace ast {
         else if (tag == "union") ti = new UnionT(name);
         else if (tag == "enum")  ti = new EnumT(name);
         else abort();
-        add_simple_type(types, SymbolKey(name, TAG_NS), ti);
+        add_simple_type(types, SymbolKey(name, TAG_NS), ti, NULL, env.where);
         t = types.find(SymbolKey(name, TAG_NS));
         assert(t);
       }
