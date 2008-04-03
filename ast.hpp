@@ -417,8 +417,8 @@ namespace ast {
     VarSymbol(String n) : ct_value(), ct_ptr() {name = n;}
   };
 
-  struct OtherVarSymbol : public VarSymbol {
-    OtherVarSymbol(String n) : VarSymbol(n) {}
+  struct OtherVarSymbol : public VarSymbol, public OtherSymbol {
+    OtherVarSymbol(String n, bool mangle) : VarSymbol(n), OtherSymbol(mangle ? NPOS : 0) {}
   };
 
   struct TopLevelVarSymbol : public VarSymbol, public TopLevelSymbol {

@@ -100,7 +100,7 @@ namespace ast {
     const FunctionPtrSymbol * function_sym() 
       {return static_cast<const FunctionPtrSymbol *>(types.find(".fun"));}
     Environ(Scope s = TOPLEVEL) 
-      : types(this), scope(s), where(),
+      : types(this), scope(s), top(), where(),
         top_level_environ(&symbols.front), 
         deps(), for_ct() 
       {

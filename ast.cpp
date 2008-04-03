@@ -98,12 +98,13 @@ namespace ast {
   VarSymbol * new_var_symbol(SymbolName n, Scope s, 
                              const VarDeclaration * d, TopLevelSymbol * w) 
   {
-    if (s == OTHER)
-      return new OtherVarSymbol(n.name);
-    if (s == LEXICAL && (!d || 
-                         d->storage_class == VarDeclaration::NONE || 
-                         d->storage_class == VarDeclaration::AUTO || 
-                         d->storage_class == VarDeclaration::REGISTER)) 
+    if (s == OTHER) {
+      bool mangle = n.marks;
+      return new OtherVarSymbol(n.name, mangle);
+    } else if (s == LEXICAL && (!d || 
+                                d->storage_class == VarDeclaration::NONE || 
+                                d->storage_class == VarDeclaration::AUTO || 
+                                d->storage_class == VarDeclaration::REGISTER)) 
     {
       return new LexicalVarSymbol(n.name);
     } else {
@@ -122,11 +123,19 @@ namespace ast {
     make_unique(env.symbols.front);
   }
 
-  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
+  void TopLevelSymbol::add_to_local_env(const SymbolKey & k, Environ & env) const {
+    env.symbols.add(k, this);
+  }
+  
+  void TopLevelSymbol::add_to_top_level_env(const SymbolKey & k, Environ & env) const {
     env.top_level_symbols->push_back(this);
     if (num == NPOS)
       assign_uniq_num<TopLevelSymbol>(*env.top_level_symbols);
-    env.symbols.add(k, this);
+  }
+  
+  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
+    add_to_local_env(k, env);
+    add_to_top_level_env(k, env);
   }
 
   void NormalLabelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
@@ -662,7 +671,7 @@ namespace ast {
       assert_num_args(2,3);
       SymbolName n = expand_binding(p->arg(0), env);
       parse_flags(p);
-      sym = new_var_symbol(n, env.scope, this);
+      sym = new_var_symbol(n, env.scope, this, env.where);
       sym->type = parse_type(p->arg(1), env);
       if (storage_class != EXTERN && sym->type->size() == NPOS)
         throw error(p->arg(0), "Size not known");
@@ -672,7 +681,10 @@ namespace ast {
         resolve_to(env, init, sym->type);
       }
       deps_closed = true;
-      return this;
+      if (dynamic_cast<TopLevelVarSymbol *>(sym))
+        return new Empty();
+      else
+        return this;
       type = env.void_type();
     }
     void eval(ExecEnviron &) {}
@@ -1314,19 +1326,44 @@ namespace ast {
     }
   };
 
-  void Top::add_stmt(const Syntax * p, Environ & env) {
+  //
+  //
+  //
+
+  static void parse_stmts(const Syntax * parse, Environ & env) {
+    // Possible TODO: partly_expand will also, unnecessary, be called
+    //                when I call parse_top_level, somehow avoid this
+    for (unsigned i = 0; i < parse->num_args(); ++i) {
+      const Syntax * p = parse->arg(i);
+      //printf(">>"); p->print(); printf("\n");
+      p = partly_expand(p, TopLevel, env);
+      if (p->is_a("slist")) {
+        parse_stmts(p, env);
+      } else {
+        FinalizeEnviron fenv;
+        AST * a = parse_top_level(p, env);
+        a->finalize(fenv);
+      }
+    }
+  }
+
+  static void add_stmts(Vector<AST *> & stmts, const Syntax * p, Environ & env) {
     // Possible TODO: partly_expand will also, unnecessary, be called
     //                when I call parse_top_level, somehow avoid this
     p = partly_expand(p, TopLevel, env);
     if (p->is_a("slist")) {
       for (unsigned j = 0; j < p->num_args(); ++j)
-        add_stmt(p->arg(j), env);
+        add_stmts(stmts, p->arg(j), env);
     } else {
       FinalizeEnviron fenv;
       AST * a = parse_top_level(p, env);
       stmts.push_back(a);
       a->finalize(fenv);
     }
+  }
+
+  void Top::add_stmt(const Syntax * p, Environ & env) {
+    add_stmts(stmts, p, env);
   }
 
   AST * Top::parse_self(const Syntax * p, Environ & env) {
@@ -1371,6 +1408,45 @@ namespace ast {
       stmts[i]->compile(f, env);
     }
   }
+
+  //
+  //
+  //
+
+
+  AST * parse_module(const Syntax * p, Environ & env0) {
+    assert_num_args(p, 3);
+    SymbolName n = *p->arg(0);
+    Module * m = new Module();
+    m->name = n;
+    m->where = env0.where;
+    env0.add(SymbolKey(n, MODULE_NS), m);
+    Environ env = env0.new_scope();
+    env.scope = TOPLEVEL;
+    env.where = m;
+    parse_stmts(p->arg(2), env);
+    const Syntax * to_export = p->arg(1);
+    for (unsigned i = 0, sz = to_export->num_parts(); i != sz; ++i) {
+      SymbolName n = *to_export->part(i);
+      m->syms = new SymbolNode(n, env.symbols.lookup<Symbol>(n, to_export->str()), m->syms);
+    }
+    return new Empty();
+  }
+  
+  AST * parse_import(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    SymbolName n = *p->arg(0);
+    const Module * m = env.symbols.lookup<Module>(SymbolKey(n, MODULE_NS), p->arg(0)->str());
+    for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
+      // FIXME: Neet to properly mark
+      env.symbols.front = new SymbolNode(cur->key, cur->value, env.symbols.front);
+    }
+    return new Empty();
+  }
+
+  //
+  //
+  //
 
   template <typename From, typename To>
   struct Cast_CT_Value : public CT_Value<To> {
@@ -1491,11 +1567,12 @@ namespace ast {
 
     parse_flags(p);
 
-    sym = new_var_symbol(name, env0.scope, this);
-    env0.add(name, sym);
+    sym = new_var_symbol(name, env0.scope, this, env0.where);
+    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);
+    tlsym->add_to_local_env(name, env0);
 
     Environ env = env0.new_frame();
-    env.where = dynamic_cast<TopLevelSymbol *>(sym);
+    env.where = tlsym;
     env.deps = &deps_;
     env.for_ct = &for_ct_;
 
@@ -1522,6 +1599,7 @@ namespace ast {
       assert(body); // FiXME
     }
 
+    tlsym->add_to_top_level_env(name, env0);
     symbols = env.symbols;
 
     //printf("FUN DEPS: %s %d\n", ~name, deps.size());
@@ -1734,7 +1812,7 @@ namespace ast {
       SymbolName n = *p->arg(0);
       type = parse_type(p->arg(1), env);
       name_sym = add_simple_type(env.types, n, new AliasT(type), this, env.where);
-      return this;
+      return new Empty();
     }
     void finalize(FinalizeEnviron &) {}
     void compile(CompileWriter & f, Phase phase) const {
@@ -1772,6 +1850,7 @@ namespace ast {
       assert(p->is_a(what()));
       SymbolName name = *p->arg(0);
       env = env0.new_scope();
+      env.scope = OTHER;
       if (p->num_args() > 1) {
         body = new Body(which);
         body->parse_self(p->arg(1), env);
@@ -1799,7 +1878,7 @@ namespace ast {
       sym->decl = this;
       s->env = &env;
       s->finalize();
-      return this; 
+      return new Empty();
     }
     void finalize(FinalizeEnviron & e) {
       if (body)
@@ -1881,7 +1960,7 @@ namespace ast {
       }
       sym->decl = this;
       t0->finalize();
-      return this;
+      return new Empty();
     }
     void finalize(FinalizeEnviron &) {}
     void compile(CompileWriter & f, Phase phase) const {
@@ -2088,6 +2167,8 @@ namespace ast {
     if (what == "fluid_binding") return parse_fluid_binding(DEFAULT_NS, p, env);
     if (what == "fluid_label")   return parse_fluid_binding(LABEL_NS, p, env);
     if (what == "fluid_syntax")  return parse_fluid_binding(SYNTAX_NS, p, env);
+    if (what == "module")        return parse_module(p, env);
+    if (what == "import")        return parse_import(p, env);
     return 0;
   }
 
@@ -2263,6 +2344,7 @@ namespace ast {
   //
   //
   //
+  
 
   template <>
   void CT_Value<uint8_t>::to_string(const AST * a, OStream & o) const {

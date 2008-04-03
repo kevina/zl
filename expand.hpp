@@ -110,6 +110,9 @@ ast::AST * parse_map(const Syntax * p, Environ & env);
 ast::AST * parse_macro(const Syntax * p, Environ & env);
 ast::AST * parse_fluid_binding(unsigned ns, const Syntax *, Environ &);
 
+void assert_num_args(const Syntax * p, unsigned num);
+void assert_num_args(const Syntax * p, unsigned min, unsigned max);
+
 extern const char * MACRO_PRELUDE;
 extern const char * MACRO_PRELUDE_END;
 

@@ -29,8 +29,6 @@
 using namespace ast;
 
 void assert_pos(const Syntax * p, Position have, unsigned need);
-void assert_num_args(const Syntax * p, unsigned num);
-void assert_num_args(const Syntax * p, unsigned min, unsigned max);
 
 void compile_for_ct(Deps & deps, Environ & env);
 

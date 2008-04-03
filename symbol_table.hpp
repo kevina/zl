@@ -105,6 +105,8 @@ namespace ast {
   static const unsigned TAG_NS = 2;
   static const unsigned LABEL_NS = 3;
   static const unsigned SYNTAX_NS = 4;
+  static const unsigned MODULE_NS = 5;
+  static const unsigned INNERNS_NS = 6;
 
   struct SymbolKey : public SymbolName {
     unsigned ns;
@@ -156,6 +158,8 @@ namespace ast {
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
     void add_to_env(const SymbolKey & k, Environ &) const;
+    void add_to_local_env(const SymbolKey & k, Environ &) const;
+    void add_to_top_level_env(const SymbolKey & k, Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
   };
 
@@ -169,9 +173,26 @@ namespace ast {
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
   };
 
+  struct OtherSymbol : virtual public Symbol {
+    OtherSymbol(unsigned n = 0) : num(n) {}
+    mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
+    using Symbol::uniq_name;
+    void uniq_name(OStream & o) const {
+      if (num == 0)
+        o << name;
+      else
+        o.printf("%s$%u", ~name, num);
+    }
+    // if num is zero than leave alone, if NPOS assign uniq num.
+    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
+  };
+
   struct FluidBinding : public TopLevelSymbol {
     FluidBinding(String n, SymbolName r) : rebind(r) {name = n;}
     SymbolName rebind;
+  };
+  
+  struct InnerNS : public Symbol {
   };
 
   struct Module : public TopLevelSymbol {

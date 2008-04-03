@@ -35,4 +35,10 @@ namespace ast {
   void LexicalSymbol::make_unique(SymbolNode * self, SymbolNode * stop) const {
     assign_uniq_num<LexicalSymbol>(self, stop);
   }
+
+  void OtherSymbol::make_unique(SymbolNode * self, SymbolNode * stop) const {
+    if (num == NPOS)
+      assign_uniq_num<OtherSymbol>(self, stop);
+  }
+
 }
