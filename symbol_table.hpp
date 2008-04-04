@@ -240,9 +240,24 @@ namespace ast {
 
   enum Strategy {ThisScope, NormalStrategy, StripMarks};
 
+  struct NoOpGather {
+    void stripped_mark(const Mark * m) {}
+  };
+
+  template <typename Gather>
+  const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+                                    Strategy strategy, Gather & gather);
   static inline
-  const Symbol * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
-                                Strategy strategy)
+  const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+                                    Strategy strategy) 
+  {
+    NoOpGather gather;
+    return find_symbol_p1(k, start, stop, strategy, gather);
+  }
+  
+  template <typename Gather>
+  const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+                                    Strategy strategy, Gather & gather)
   {
     const SymbolNode * cur = start;
     for (; cur != stop; cur = cur->next) {
@@ -251,60 +266,92 @@ namespace ast {
     if (cur == stop) {
       if (strategy == NormalStrategy && k.marks) {
         cur = k.marks->mark->env;
+        gather.stripped_mark(k.marks->mark); 
         k.marks = k.marks->prev;
         return find_symbol_p1(k, cur, stop, strategy);
       } else if (strategy == StripMarks && k.marks) {
+        gather.stripped_mark(k.marks->mark); 
         k.marks = k.marks->prev;
         return find_symbol_p1(k, start, stop, strategy);
       } else {
         return NULL;
       }
     }
-    return cur->value;
+    return cur;
   }
 
   template <typename T>
-  const Symbol * find_symbol_p2(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
-                                Strategy strategy = NormalStrategy)
+  static inline
+  const SymbolNode * find_symbol_p2(const SymbolNode * s, SymbolKey k, 
+                                    const SymbolNode * start, const SymbolNode * stop,
+                                    Strategy strategy)
   {
-    const Symbol * s = find_symbol_p1(k, start, stop, strategy);
     if (!s) return NULL;
     if (strategy != ThisScope)
-      if (const FluidBinding * b = dynamic_cast<const FluidBinding *>(s))
+      if (const FluidBinding * b = dynamic_cast<const FluidBinding *>(s->value))
         s = find_symbol_p1(SymbolKey(b->rebind, k.ns), start, stop, strategy);
     return s;
   }
-
   template <>
-  inline
-  const Symbol * find_symbol_p2<FluidBinding>(SymbolKey k, 
-                                              const SymbolNode * start, const SymbolNode * stop,
-                                              Strategy strategy) 
+  static inline
+  const SymbolNode * find_symbol_p2<FluidBinding>(const SymbolNode * s, SymbolKey, 
+                                                  const SymbolNode *, const SymbolNode *,
+                                                  Strategy)
   {
-    return find_symbol_p1(k, start, stop, strategy);
+    return s;
+  }
+ 
+  template <typename T, typename Gather>
+  const SymbolNode * find_symbol_p3(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+                                    Strategy strategy, Gather & gather)
+  {
+    const SymbolNode * s = find_symbol_p1(k, start, stop, strategy, gather);
+    return find_symbol_p2<T>(s, k, start, stop, strategy);
   }
 
-  template <typename T>
-  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
-                        Strategy strategy = NormalStrategy) 
+  template <typename T, typename Gather>
+  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+                        Strategy strategy, Gather & gather) 
   {
-    const Symbol * s = find_symbol_p2<T>(k, start, stop, strategy);
-    return dynamic_cast<const T *>(s);
+    const SymbolNode * s = find_symbol_p3<T>(k, start, stop, strategy, gather);
+    if (!s) return NULL;
+    return dynamic_cast<const T *>(s->value);
   }
 
-  template <typename T>
+  template <typename T, typename Gather>
   const T * lookup_symbol(SymbolKey k, const SourceStr & str,
-                          const SymbolNode * start, const SymbolNode * stop = NULL,
-                          Strategy strategy = NormalStrategy)
+                          const SymbolNode * start, const SymbolNode * stop,
+                          Strategy strategy, Gather & gather)
   {
-    const Symbol * s1 = find_symbol_p2<T>(k, start, stop, strategy);
+    const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather);
     if (!s1)
       throw error(str, "Unknown Identifier \"%s\"", ~k.name);
-    const T * s2 = dynamic_cast<const T *>(s1);
+    const T * s2 = dynamic_cast<const T *>(s1->value);
     if (!s2)
       throw error(str, "Identifier \"%s\" is of the wrong type.", ~k.name);
     return s2;
   }
+
+
+  template <typename T>
+  static inline
+  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
+                        Strategy strategy = NormalStrategy) 
+  {
+    NoOpGather gather; 
+    return find_symbol<T>(k, start, stop, strategy, gather);
+  }
+
+  template <typename T>
+  static inline
+  const T * lookup_symbol(SymbolKey k, const SourceStr & str,
+                          const SymbolNode * start, const SymbolNode * stop = NULL,
+                          Strategy strategy = NormalStrategy)
+  {
+    NoOpGather gather;
+    return lookup_symbol<T>(k, str, start, stop, strategy, gather);
+  }
+
 
   class OpenSymbolTable : public gc
   {

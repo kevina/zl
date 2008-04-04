@@ -1375,13 +1375,26 @@ namespace ast {
     }
     return new Empty();
   }
+
+  struct GatherMarks {
+    Vector<const Mark *> marks;
+    void stripped_mark(const Mark * m) {marks.push_back(m);}
+  };
   
   AST * parse_import(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     SymbolName n = *p->arg(0);
-    const Module * m = env.symbols.lookup<Module>(SymbolKey(n, MODULE_NS), p->arg(0)->str());
+    GatherMarks gather;
+    const Module * m = lookup_symbol<Module>(p->arg(0), MODULE_NS, env.symbols.front, NULL, 
+                                             NormalStrategy, gather);
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
-      env.symbols.front = new SymbolNode(cur->key, cur->value, env.symbols.front);
+      // now add marks back in reverse order;
+      SymbolKey k = cur->key;
+      for (Vector<const Mark *>::reverse_iterator 
+             i = gather.marks.rbegin(), e = gather.marks.rend();
+           i != e; ++i)
+        k.marks = mark(k.marks, *i);
+      env.symbols.front = new SymbolNode(k, cur->value, env.symbols.front);
     }
     return new Empty();
   }
