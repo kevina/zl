@@ -90,7 +90,6 @@ namespace ast {
     OpenSymbolTable fun_labels;
     Scope scope;
     Frame * frame;
-    AST * top;
     TopLevelSymbol * where;
     SymbolNode * const * top_level_environ;
     Deps * deps;
@@ -100,7 +99,7 @@ namespace ast {
     const FunctionPtrSymbol * function_sym() 
       {return static_cast<const FunctionPtrSymbol *>(types.find(".fun"));}
     Environ(Scope s = TOPLEVEL) 
-      : types(this), scope(s), top(), where(),
+      : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
         deps(), for_ct() 
       {
@@ -114,7 +113,7 @@ namespace ast {
         top_level_symbols(other.top_level_symbols), symbols(other.symbols),
         types(this), fun_labels(other.fun_labels), 
         scope(other.scope), frame(other.frame), 
-        top(other.top), where(other.where),
+        where(other.where),
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
         deps(other.deps), for_ct(other.for_ct) {}
     Environ new_scope() {

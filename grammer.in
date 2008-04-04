@@ -128,8 +128,17 @@ RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 # Lex Like Tokens
 #
 
-ID : "identifier" =
-     <<mid>> {MID} / <fluid> "fluid" {ID} / {[\a_]+[\a_\d]*} SPACING;
+RAW_ID : "identifier" =
+  <<mid>> {MID} / {[\a_]+[\a_\d]*} SPACING;
+
+ID_W_INNER : "identifier" =
+  <w/inner> {RAW_ID} "`" {RAW_ID} / {RAW_ID};
+
+ID_W_NS =
+  <w/outer> ({ID_W_INNER} "::")+ {ID_W_INNER} / {ID_W_INNER};
+
+ID =
+     <<mid>> {MID} / <fluid> "fluid" {ID} / {ID_W_NS};
 
 MID : "macro identifier" = 
      {[\a_]+[\a_\d]*} SPACING;

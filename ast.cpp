@@ -194,8 +194,8 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
-      SymbolName n = expand_binding(p->arg(0), LABEL_NS, env);
-      label = env.symbols.find<LabelSymbol>(SymbolKey(n, LABEL_NS));
+      SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
+      label = env.symbols.find<LabelSymbol>(n);
       if (!label) {
         label = new NormalLabelSymbol(n.name);
         env.add(SymbolKey(n, LABEL_NS), label);
@@ -285,9 +285,9 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
-      SymbolName n = expand_binding(p->arg(0), LABEL_NS, env);
+      SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
       label = new LocalLabelSymbol(n.name);
-      env.add(SymbolKey(n, LABEL_NS), label);
+      env.add(n, label);
       type = env.void_type();
       return this;
     }
@@ -669,7 +669,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(2,3);
-      SymbolName n = expand_binding(p->arg(0), env);
+      SymbolKey n = expand_binding(p->arg(0), env);
       parse_flags(p);
       sym = new_var_symbol(n, env.scope, this, env.where);
       sym->type = parse_type(p->arg(1), env);
@@ -1347,78 +1347,21 @@ namespace ast {
     }
   }
 
-  static void add_stmts(Vector<AST *> & stmts, const Syntax * p, Environ & env) {
-    // Possible TODO: partly_expand will also, unnecessary, be called
-    //                when I call parse_top_level, somehow avoid this
-    p = partly_expand(p, TopLevel, env);
-    if (p->is_a("slist")) {
-      for (unsigned j = 0; j < p->num_args(); ++j)
-        add_stmts(stmts, p->arg(j), env);
-    } else {
-      FinalizeEnviron fenv;
-      AST * a = parse_top_level(p, env);
-      stmts.push_back(a);
-      a->finalize(fenv);
-    }
-  }
-
-  void Top::add_stmt(const Syntax * p, Environ & env) {
-    add_stmts(stmts, p, env);
-  }
-
-  AST * Top::parse_self(const Syntax * p, Environ & env) {
-    env.top = this;
-    parse_ = p;
-    if (p->num_args() > 0) {
-      for (int i = 0; i < p->num_args(); ++i) {
-        add_stmt(p->arg(i), env);
-      }
-    } else {
-      stmts.push_back(new NoOp());
-    }
-    //types = env.types;
-    //vars = env.vars;
-    symbols = env.symbols;
-    type = env.void_type();
-
-    return this;
-  }
-    //void resolve(Environ & env) {
-    //  printf("***TOP RESOLVE %p***\n", this);
-    //  types = env.types;
-    //  vars = env.vars;
-    //  type = env.void_type();
-    //  printf(">>%d\n", stmts.size());
-    //  for (int i = 0; i != stmts.size(); ++i) {
-    //    resolve_to_void(env, stmts[i]);
-    //  }
-    //  frame_size = env.frame->max_frame_size;
-    //}
-  void Top::eval(ExecEnviron & env) {
-    for (int i = 0; i != stmts.size(); ++i) {
-      stmts[i]->eval(env);
-    }
-  }
-  void Top::compile(CompileWriter & f, CompileEnviron & env) {
-    static const char * prelude = 
-      "static inline void noop() {}\n"
-      "\n";
-    f << prelude;
-    for (int i = 0; i != stmts.size(); ++i) {
-      stmts[i]->compile(f, env);
-    }
+  AST * parse_top(const Syntax * p, Environ & env) {
+    assert(p->is_a("top")); // FIXME Error
+    parse_stmts(p, env);
+    return new Empty();
   }
 
   //
   //
   //
-
 
   AST * parse_module(const Syntax * p, Environ & env0) {
     assert_num_args(p, 3);
     SymbolName n = *p->arg(0);
     Module * m = new Module();
-    m->name = n;
+    m->name = n.name;
     m->where = env0.where;
     env0.add(SymbolKey(n, MODULE_NS), m);
     Environ env = env0.new_scope();
@@ -1438,7 +1381,6 @@ namespace ast {
     SymbolName n = *p->arg(0);
     const Module * m = env.symbols.lookup<Module>(SymbolKey(n, MODULE_NS), p->arg(0)->str());
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
-      // FIXME: Neet to properly mark
       env.symbols.front = new SymbolNode(cur->key, cur->value, env.symbols.front);
     }
     return new Empty();
@@ -2064,11 +2006,6 @@ namespace ast {
 
   //
 
-  AST * parse_top(const Syntax * p, Environ & env) {
-    assert(p->is_a("top")); // FIXME Error
-    return (new Top)->parse_self(p, env);
-  }
-
   AST * parse_top(const Syntax * p) {
     Environ env(TOPLEVEL);
     return parse_top(p, env);
@@ -2301,6 +2238,11 @@ namespace ast {
   //
 
   void compile(const Vector<const TopLevelSymbol *> & syms, CompileWriter & cw) {
+
+    static const char * prelude = 
+      "static inline void noop() {}\n"
+      "\n";
+    cw << prelude;
 
     Vector<const TopLevelSymbol *>::const_iterator i, e = syms.end();
     const TopLevelVarSymbol * tl = NULL;

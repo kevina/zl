@@ -447,16 +447,21 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
   return p;
 }
 
-SymbolName expand_binding(const Syntax * p, unsigned ns, Environ & env) {
+SymbolKey expand_binding(const Syntax * p, unsigned ns, Environ & env) {
   if (p->simple()) {
-    return *p;
+    return SymbolKey(*p, ns);
   } else if (p->is_a("fluid")) {
     assert_num_args(p, 1);
     const FluidBinding * b = env.symbols.lookup<FluidBinding>(p->arg(0), ns);
-    return b->rebind;
+    return SymbolKey(b->rebind, ns);
+  } else if (p->is_a("w/inner")) {
+    assert_num_args(p, 2);
+    // FIXME: Write me
+    abort();
+  } else if (p->is_a("w/outer")) {
+    // FIXME: Error message
+    abort();
   } else {
-    p->print();
-    printf("\n");
     abort();
   }
 }

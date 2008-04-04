@@ -62,7 +62,7 @@ int main(int argc, const char *argv[])
       new Syntax(new Syntax("top"),
                  parse_str("SLIST", SourceStr(MACRO_PRELUDE, MACRO_PRELUDE_END)),
                  parse_str("SLIST", SourceStr(code->entity(), code->begin(), code->end())));
-    ast::AST * ast = parse_top(to_expand, env);
+    parse_top(to_expand, env);
     //printf("\n*************** EXPANDED *********************\n");
     //expanded->print();
     //printf("\n");

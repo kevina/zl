@@ -61,6 +61,22 @@ namespace ast {
     return tmp;
   }
 
+  static inline const Marks * merge_marks(const Marks * a, const Marks * b) {
+    Vector<const Mark *> to_add;
+    for (; b; b = b->prev) 
+      to_add.push_back(b->mark);
+    for (Vector<const Mark *>::iterator i = to_add.begin(), e = to_add.end(); i != e; ++i)
+      a = mark(a, *i);
+    return a;
+  }
+
+  template <typename T>
+  static inline T merge_marks(const T & orig, const Marks * ms) {
+    T tmp = orig;
+    tmp.marks = merge_marks(tmp.marks, ms);
+    return tmp;
+  }
+
   void marks_ignored(String name);
 
   struct SymbolName {

@@ -278,28 +278,8 @@ namespace ast {
   };
   */
 
-  struct Top : public AST {
-    Top() : AST("top") {}
-    AST * part(unsigned i) {return stmts[i];}
-    SymbolTable symbols;
-    Vector<AST *> stmts;
-    unsigned frame_size;
-    //TypeSymbolTable * types;
-    //VarSymbolTable * vars;
-    AST * parse_self(const Syntax * p, Environ & env);
-    //void resolve(ResolveEnviron & env);
-    void eval(ExecEnviron & env);
-    void compile(CompileWriter & f, CompileEnviron & env);
-    void finalize(FinalizeEnviron &) {abort();}
-  private:
-    void add_stmt(const Syntax * p, Environ & env);
-  };
- 
   struct Block;
   struct VarSymbol;
-
-  //struct Declaration : public AST {
-  //};
 
   struct Declaration : public AST {
     enum Phase {Normal, Forward, Body};
@@ -482,6 +462,42 @@ namespace ast {
   AST * parse_exp(const Syntax * p, Environ & env);
 
   void compile(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
+
+  //
+  // For lack of a better place
+  //
+
+  template <typename T>
+  const T * lookup_symbol(const Syntax * p, unsigned ns,
+                          const SymbolNode * start, const SymbolNode * stop = NULL,
+                          Strategy strategy = NormalStrategy)
+  {
+    if (p->simple()) {
+      return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy);
+    } else if (p->is_a("fluid")) {
+      assert_num_args(p, 1);
+      const FluidBinding * b = lookup_symbol<FluidBinding>(p->arg(0), ns, start, stop, strategy);
+      return lookup_symbol<T>(SymbolKey(b->rebind, ns), p->arg(0)->str(), start, stop, strategy);
+    } else if (p->is_a("w/inner")) {
+      assert_num_args(p, 2);
+      // FIXME: Write me
+      abort();
+    } else if (p->is_a("w/outer")) {
+      const Module * m = lookup_symbol<Module>(p->arg(0), MODULE_NS, start, stop, strategy);
+      unsigned last = p->num_args() - 1;
+      for (unsigned i = 1; i < last; ++i) {
+        m = lookup_symbol<Module>(p->arg(1), MODULE_NS, m->syms, NULL, StripMarks);
+      }
+      return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks);
+    } else {
+      abort();
+    }
+  }
+
+  template <typename T> 
+  inline const T * SymbolTable::lookup(const Syntax * p, unsigned ns) {
+    return lookup_symbol<T>(p, ns, front);
+  }
 
 }
 

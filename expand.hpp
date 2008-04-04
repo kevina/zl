@@ -99,8 +99,8 @@ enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4,
 ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
 
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env);
-SymbolName expand_binding(const Syntax * p, unsigned ns, Environ & env);
-static inline SymbolName expand_binding(const Syntax * p, Environ & env) {
+ast::SymbolKey expand_binding(const Syntax * p, unsigned ns, Environ & env);
+static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
   return expand_binding(p, ast::DEFAULT_NS, env);
 }
 

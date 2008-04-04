@@ -381,10 +381,6 @@ namespace ast {
   inline SymbolKey::SymbolKey(const Syntax & p, unsigned ns0) 
     : SymbolName(static_cast<const SymbolName &>(p)), ns(ns0) {}
 
-  template <typename T> 
-  inline const T * SymbolTable::lookup(const Syntax * p, unsigned ns) {
-    return lookup<T>(SymbolKey(*p, ns), p->str());
-  }
 }
 
 namespace parse_parse {
