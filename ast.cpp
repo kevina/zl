@@ -1401,7 +1401,7 @@ namespace ast {
 
   extern "C" Syntax * module_imports(const Syntax * p, Environ * env) {
     assert_num_args(p, 1);
-    Syntax * res;
+    Syntax * res = new Syntax;
     SymbolName n = *p->arg(0);
     GatherMarks gather;
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env->symbols.front, NULL, 
