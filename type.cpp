@@ -205,7 +205,7 @@ namespace ast {
     }
     TypeSymbolTable types = env.types;
     unsigned sz = p->num_args();
-    unsigned ns = DEFAULT_NS;
+    const InnerNS * ns = DEFAULT_NS;
     SymbolName name = p->what();
     SymbolName full_name = name;
     String tag;

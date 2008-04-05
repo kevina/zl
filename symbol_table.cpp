@@ -2,6 +2,29 @@
 
 namespace ast {
 
+  InnerNS DEFAULT_NS_OBJ("default");
+  InnerNS TAG_NS_OBJ("tag");
+  InnerNS LABEL_NS_OBJ("label");
+  InnerNS SYNTAX_NS_OBJ("syntax");
+  InnerNS OUTER_NS_OBJ("outer");
+  InnerNS INNER_NS_OBJ("inner");
+
+  const InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
+  const InnerNS * const TAG_NS = &TAG_NS_OBJ;
+  const InnerNS * const LABEL_NS = &LABEL_NS_OBJ;
+  const InnerNS * const SYNTAX_NS = &SYNTAX_NS_OBJ;
+  const InnerNS * const OUTER_NS = &OUTER_NS_OBJ;
+  const InnerNS * const INNER_NS = &INNER_NS_OBJ;
+
+  void add_inner_nss(SymbolTable & syms) {
+    syms.add(SymbolKey("default", INNER_NS), DEFAULT_NS);
+    syms.add(SymbolKey("tag", INNER_NS), TAG_NS);
+    syms.add(SymbolKey("label", INNER_NS), LABEL_NS);
+    syms.add(SymbolKey("syntax", INNER_NS), SYNTAX_NS);
+    syms.add(SymbolKey("outer", INNER_NS), OUTER_NS);
+    syms.add(SymbolKey("inner", INNER_NS), INNER_NS);
+  }
+
   void marks_ignored(String name) {
     printf("WARNING: IGNORING MARKS ON \"%s\"\n", ~name);
     //abort();

@@ -681,6 +681,36 @@ namespace ast {
   //
   //
 
+  class UserTypeInst : public TypeInst {
+    //UserTypeInst(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {}
+    //UserTypeInst(const Type * p) : TypeInst(p) {}
+    UserTypeInst() : type(), module() {}
+    Type   * type;
+    Module * module;
+    unsigned num_parms() const {return 0;}
+    TypeParm parm(unsigned i) const {abort();}
+    unsigned size() const {return type->size();}
+    unsigned align() const {return type->align();}
+  };
+  
+  class UserTypeSymbol : public TypeSymbol {
+    UserTypeSymbol(UserTypeInst * t) : type(t) {
+      t->type_symbol = this;
+      t->finalize();
+    }
+    UserTypeInst * type;
+    UserTypeInst * inst(Vector<TypeParm> & d) const {
+      assert(d.empty());
+      return type;
+    }
+    unsigned required_parms() const {return 0;}
+    TypeParm::What parm(unsigned i) const {return TypeParm::NONE;}
+  };
+
+  //
+  //
+  //
+
   class AliasT : public SimpleTypeInst {
   public:
     AliasT(const Type * st) : SimpleTypeInst(st), of(st) {}

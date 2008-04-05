@@ -468,12 +468,12 @@ namespace ast {
   //
 
   template <typename T, typename Gather>
-  const T * lookup_symbol(const Syntax * p, unsigned ns,
+  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                           const SymbolNode * start, const SymbolNode * stop,
                           Strategy strategy, Gather & gather);
   template <typename T>
   static inline
-  const T * lookup_symbol(const Syntax * p, unsigned ns,
+  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                           const SymbolNode * start, const SymbolNode * stop = NULL,
                           Strategy strategy = NormalStrategy) 
   {
@@ -481,7 +481,7 @@ namespace ast {
     return lookup_symbol<T>(p, ns, start, stop, strategy, gather);
   }
   template <typename T, typename Gather>
-  const T * lookup_symbol(const Syntax * p, unsigned ns,
+  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                           const SymbolNode * start, const SymbolNode * stop,
                           Strategy strategy, Gather & gather)
   {
@@ -493,13 +493,13 @@ namespace ast {
       return lookup_symbol<T>(SymbolKey(b->rebind, ns), p->arg(0)->str(), start, stop, strategy);
     } else if (p->is_a("w/inner")) {
       assert_num_args(p, 2);
-      // FIXME: Write me
-      abort();
+      const InnerNS * ns = lookup_symbol<InnerNS>(p->arg(1), INNER_NS, start);
+      return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy);
     } else if (p->is_a("w/outer")) {
-      const Module * m = lookup_symbol<Module>(p->arg(0), MODULE_NS, start, stop, strategy);
+      const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, start, stop, strategy);
       unsigned last = p->num_args() - 1;
       for (unsigned i = 1; i < last; ++i) {
-        m = lookup_symbol<Module>(p->arg(1), MODULE_NS, m->syms, NULL, StripMarks);
+        m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);
       }
       return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather);
     } else {
@@ -508,7 +508,7 @@ namespace ast {
   }
 
   template <typename T> 
-  inline const T * SymbolTable::lookup(const Syntax * p, unsigned ns) {
+  inline const T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns) {
     return lookup_symbol<T>(p, ns, front);
   }
 

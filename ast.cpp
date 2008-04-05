@@ -1363,7 +1363,7 @@ namespace ast {
     Module * m = new Module();
     m->name = n.name;
     m->where = env0.where;
-    env0.add(SymbolKey(n, MODULE_NS), m);
+    env0.add(SymbolKey(n, OUTER_NS), m);
     Environ env = env0.new_scope();
     env.scope = TOPLEVEL;
     env.where = m;
@@ -1385,7 +1385,7 @@ namespace ast {
     assert_num_args(p, 1);
     SymbolName n = *p->arg(0);
     GatherMarks gather;
-    const Module * m = lookup_symbol<Module>(p->arg(0), MODULE_NS, env.symbols.front, NULL, 
+    const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env.symbols.front, NULL, 
                                              NormalStrategy, gather);
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
       // now add marks back in reverse order;
@@ -1396,6 +1396,33 @@ namespace ast {
         k.marks = mark(k.marks, *i);
       env.symbols.front = new SymbolNode(k, cur->value, env.symbols.front);
     }
+    return new Empty();
+  }
+
+  extern "C" Syntax * module_imports(const Syntax * p, Environ * env) {
+    assert_num_args(p, 1);
+    Syntax * res;
+    SymbolName n = *p->arg(0);
+    GatherMarks gather;
+    const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env->symbols.front, NULL, 
+                                             NormalStrategy, gather);
+    for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
+      // now add marks back in reverse order;
+      SymbolKey k = cur->key;
+      for (Vector<const Mark *>::reverse_iterator 
+             i = gather.marks.rbegin(), e = gather.marks.rend();
+           i != e; ++i)
+        k.marks = mark(k.marks, *i);
+      res->add_part(new Syntax(k)); // FIXME not quite right
+    }
+    return res;
+  }
+
+  AST * parse_make_inner_ns(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    SymbolName n = *p->arg(0);
+    const InnerNS * ns = new InnerNS(n.name);
+    env.add(SymbolKey(n, INNER_NS), ns);
     return new Empty();
   }
 
@@ -2114,11 +2141,10 @@ namespace ast {
     if (what == "smap")    return parse_map(p, env);
     if (what == "macro")         return parse_macro(p, env);
     if (what == "syntax_macro")  return parse_macro(p, env);
-    if (what == "fluid_binding") return parse_fluid_binding(DEFAULT_NS, p, env);
-    if (what == "fluid_label")   return parse_fluid_binding(LABEL_NS, p, env);
-    if (what == "fluid_syntax")  return parse_fluid_binding(SYNTAX_NS, p, env);
+    if (what == "fluid_binding") return parse_fluid_binding(p, env);
     if (what == "module")        return parse_module(p, env);
     if (what == "import")        return parse_import(p, env);
+    if (what == "make_inner_ns") return parse_make_inner_ns(p, env);
     return 0;
   }
 

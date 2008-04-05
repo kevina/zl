@@ -106,6 +106,7 @@ namespace ast {
         top_level_symbols = new Vector<const TopLevelSymbol *>();
         type_relation = new_c_type_relation(); // FIXME HACK
         create_c_types(types); // FIXME Another HACK
+        add_inner_nss(symbols);
         frame = new Frame();
       }
     Environ(const Environ & other) 

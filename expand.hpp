@@ -13,6 +13,7 @@ namespace ast {
   class TypeInst;
   typedef TypeInst Type;
   class Tuple;
+  struct InnerNS;
 };
 
 using ast::Environ;
@@ -99,7 +100,7 @@ enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4,
 ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
 
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env);
-ast::SymbolKey expand_binding(const Syntax * p, unsigned ns, Environ & env);
+ast::SymbolKey expand_binding(const Syntax * p, const ast::InnerNS * ns, Environ & env);
 static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
   return expand_binding(p, ast::DEFAULT_NS, env);
 }
@@ -108,7 +109,7 @@ const Syntax * reparse(String what, const Syntax * p, ReplTable * r = 0);
 
 ast::AST * parse_map(const Syntax * p, Environ & env);
 ast::AST * parse_macro(const Syntax * p, Environ & env);
-ast::AST * parse_fluid_binding(unsigned ns, const Syntax *, Environ &);
+ast::AST * parse_fluid_binding(const Syntax *, Environ &);
 
 void assert_num_args(const Syntax * p, unsigned num);
 void assert_num_args(const Syntax * p, unsigned min, unsigned max);

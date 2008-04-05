@@ -447,7 +447,8 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
   return p;
 }
 
-SymbolKey expand_binding(const Syntax * p, unsigned ns, Environ & env) {
+SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
+  //printf("EB::"); p->print(); printf("\n");
   if (p->simple()) {
     return SymbolKey(*p, ns);
   } else if (p->is_a("fluid")) {
@@ -456,8 +457,8 @@ SymbolKey expand_binding(const Syntax * p, unsigned ns, Environ & env) {
     return SymbolKey(b->rebind, ns);
   } else if (p->is_a("w/inner")) {
     assert_num_args(p, 2);
-    // FIXME: Write me
-    abort();
+    const InnerNS * ns = env.symbols.lookup<InnerNS>(p->arg(1), INNER_NS);
+    return expand_binding(p->arg(0), ns, env);
   } else if (p->is_a("w/outer")) {
     // FIXME: Error message
     abort();
@@ -572,11 +573,11 @@ void compile_for_ct(Deps & deps, Environ & env) {
 }
 
 
-AST * parse_fluid_binding(unsigned ns, const Syntax * p, Environ & env) {
+AST * parse_fluid_binding(const Syntax * p, Environ & env) {
   assert_num_args(p, 1);
-  SymbolName n = *p->arg(0);
+  SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
   FluidBinding * b = new FluidBinding(n.name, mark(n, new Mark(NULL)));
-  env.add(SymbolKey(n, ns), b);
+  env.add(n, b);
   return new Empty();
 }
 

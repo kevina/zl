@@ -21,6 +21,7 @@ namespace ast {
 
   struct Mark;
   struct SymbolNode;
+  struct SymbolTable;
 
   struct Marks {
     const Mark * mark;
@@ -117,22 +118,23 @@ namespace ast {
     return rhs.name == lhs;
   }
 
-  static const unsigned DEFAULT_NS = 0;
-  static const unsigned TAG_NS = 2;
-  static const unsigned LABEL_NS = 3;
-  static const unsigned SYNTAX_NS = 4;
-  static const unsigned MODULE_NS = 5;
-  static const unsigned INNERNS_NS = 6;
+  struct InnerNS;
+  extern const InnerNS * const DEFAULT_NS;
+  extern const InnerNS * const TAG_NS;
+  extern const InnerNS * const LABEL_NS;
+  extern const InnerNS * const SYNTAX_NS;
+  extern const InnerNS * const OUTER_NS;
+  extern const InnerNS * const INNER_NS;
 
   struct SymbolKey : public SymbolName {
-    unsigned ns;
-    SymbolKey(const char * n, unsigned ns0 = 0)
-      : SymbolName(n), ns(ns0) {}
-    SymbolKey(String n, unsigned ns0 = 0)
-      : SymbolName(n), ns(ns0) {}
-    SymbolKey(SymbolName n = SymbolName(), unsigned ns0 = 0)
-      : SymbolName(n), ns(ns0) {}
-    inline SymbolKey(const Syntax & p, unsigned ns0 = 0);
+    const InnerNS * ns;
+    SymbolKey(const char * n, const InnerNS * ns0 = 0)
+      : SymbolName(n), ns(ns0 ? ns0 : DEFAULT_NS) {}
+    SymbolKey(String n, const InnerNS * ns0 = 0)
+      : SymbolName(n), ns(ns0 ? ns0 : DEFAULT_NS) {}
+    SymbolKey(SymbolName n = SymbolName(), const InnerNS * ns0 = 0)
+      : SymbolName(n), ns(ns0 ? ns0 : DEFAULT_NS) {}
+    inline SymbolKey(const Syntax & p, const InnerNS * ns0 = 0);
   };
 
   struct SymbolNode;
@@ -209,7 +211,10 @@ namespace ast {
   };
   
   struct InnerNS : public Symbol {
+    InnerNS(String n) {name = n;}
   };
+
+  void add_inner_nss(SymbolTable & sym);
 
   struct Module : public TopLevelSymbol {
     Module() : syms() {}
@@ -409,7 +414,7 @@ namespace ast {
       return lookup_symbol<T>(k, str, front, NULL, ms);
     }
     template <typename T> 
-    inline const T * lookup(const Syntax * p, unsigned ns = DEFAULT_NS);
+    inline const T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS);
     bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }

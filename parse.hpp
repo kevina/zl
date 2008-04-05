@@ -378,7 +378,7 @@ inline bool Flags::insert(const Syntax * p) {
 }
 
 namespace ast {
-  inline SymbolKey::SymbolKey(const Syntax & p, unsigned ns0) 
+  inline SymbolKey::SymbolKey(const Syntax & p, const InnerNS * ns0) 
     : SymbolName(static_cast<const SymbolName &>(p)), ns(ns0) {}
 
 }
