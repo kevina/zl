@@ -1443,6 +1443,7 @@ namespace ast {
       s->type = parse_type(p->arg(1), env);
     } else {
       s->type = env.types.inst(SymbolKey(name, TAG_NS));
+      //parse_stmt_decl(new Syntax(new Syntax("talias"), p->arg(0), new Syntax(s->type)), env);
     }
     s->module = env.symbols.lookup<Module>(p->arg(0), OUTER_NS);
     s->defined = true; // FIXME: hack...

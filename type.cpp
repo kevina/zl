@@ -133,6 +133,8 @@ namespace ast {
         type = t->subtype;
       } else if (const TypeOf * t = dynamic_cast<const TypeOf *>(type)) {
         type = t->of;
+      } else if (const UserType * t = dynamic_cast<const UserType *>(type)) {
+        type = t->type;
       } else {
         break;
       }
