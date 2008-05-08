@@ -954,6 +954,7 @@ namespace ast {
       parse_ = p;
       assert_num_args(2);
       exp = parse_exp(p->arg(0), env);
+      //printf("::"); p->arg(1)->print(); printf("\n");
       if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected identifier");
       SymbolName id = *p->arg(1)->arg(0);
       const StructUnionT * t = dynamic_cast<const StructUnionT *>(exp->type->unqualified);
@@ -1425,6 +1426,89 @@ namespace ast {
     env.add(SymbolKey(n, INNER_NS), ns);
     return new Empty();
   }
+
+  AST * parse_make_user_type(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1, 2);
+    SymbolName name = *p->arg(0);
+    UserType * s;
+    if (env.symbols.exists_this_scope(SymbolKey(name))) {
+      const Type * t0 = env.types.inst(SymbolKey(name));
+      s = const_cast<UserType *>(dynamic_cast<const UserType *>(t0));
+      //sym = s->type_symbol;
+    } else {
+      s = new UserType;
+      /*sym = */add_simple_type(env.types, SymbolKey(name), s);
+    }
+    if (p->num_args() > 1) {
+      s->type = parse_type(p->arg(1), env);
+    } else {
+      s->type = env.types.inst(SymbolKey(name, TAG_NS));
+    }
+    s->module = env.symbols.lookup<Module>(p->arg(0), OUTER_NS);
+    s->defined = true; // FIXME: hack...
+    s->finalize();
+    return new Empty();
+  }
+
+  AST * parse_member_access(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    AST * exp = parse_exp(p->arg(0), env);
+    if (dynamic_cast<const StructUnionT *>(exp->type->unqualified)) {
+      const Syntax * np = new Syntax(p->str(), p->part(0), new Syntax(exp), p->arg(1));
+      return (new MemberAccess)->parse_self(np, env);
+    } else if (const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified)) {
+      const Syntax * arg1 = p->arg(1);
+      const Syntax * call;
+      // FIXME: Am I calling partly_expand in the right scope here
+      if (arg1->is_a("call")) {
+        assert_num_args(arg1, 2);
+        const Syntax * n = partly_expand(arg1->arg(0), OtherPos, env);
+        assert(n && n->is_a("id")); // FIXME Error Message
+        const Syntax * a = arg1->arg(1);
+        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms);
+        call = new Syntax(arg1->part(0), new Syntax(new Syntax("id"), new Syntax(sym)), a);
+      } else {
+        const Syntax * n = partly_expand(arg1, OtherPos, env);
+        assert(n && n->is_a("id")); // FIXME Error Message
+        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms);
+        call = new Syntax(new Syntax("id"), new Syntax(sym));
+      }
+      Syntax * res = 
+        new Syntax(new Syntax("eblock"),
+                   new Syntax(new Syntax("var"), 
+                              new Syntax(new Syntax("fluid"), new Syntax("this")),
+                              new Syntax(new Syntax(".pointer"), new Syntax(exp->type)), 
+                              new Syntax(new Syntax("addrof"), new Syntax(exp))),
+                   call);
+      return parse_exp(res, env);
+    } else {
+      abort();
+    }
+  }
+
+  const Type * change_unqualified(const Type * from, const Type * to) {
+    return to;
+  }
+
+  AST * parse_imember_access(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    AST * exp = parse_exp(p->arg(0), env);
+    //printf("::"); p->arg(1)->print(); printf("\n");
+    if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected identifier");
+    SymbolName id = *p->arg(1)->arg(0);
+    const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified);
+    if (!t) throw error(p->arg(0), "Expected user type");
+    if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
+    exp->type = change_unqualified(exp->type, t->type);
+    if (id == "this") {
+      return exp;
+    } else {
+      Syntax * res = new Syntax(new Syntax("member"),
+                                new Syntax(exp),
+                                p->arg(1));
+      return (new MemberAccess)->parse_self(res, env);
+    }
+  };
 
   //
   //
@@ -2145,6 +2229,7 @@ namespace ast {
     if (what == "module")        return parse_module(p, env);
     if (what == "import")        return parse_import(p, env);
     if (what == "make_inner_ns") return parse_make_inner_ns(p, env);
+    if (what == "make_user_type")return parse_make_user_type(p, env);
     return 0;
   }
 
@@ -2196,7 +2281,8 @@ namespace ast {
     if (what == "complmnt")return (new Compliment)->parse_self(p, env);
     if (what == "addrof")  return (new AddrOf)->parse_self(p, env);
     if (what == "deref")   return (new DeRef)->parse_self(p, env);
-    if (what == "member")  return (new MemberAccess)->parse_self(p, env);
+    if (what == "member")  return parse_member_access(p, env);
+    if (what == "imember") return parse_imember_access(p, env);
     if (what == "call")    return (new Call)->parse_self(p, env);
     if (what == "eblock")  return (new EBlock)->parse_self(p, env);
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);

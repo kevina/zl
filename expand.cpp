@@ -415,9 +415,16 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
     const Syntax * a = p->arg(1);
     if (a->is_a("()")) a = reparse("SPLIT", p->arg(1)->arg(0));
     if (n && n->is_a("id")) {
+      // FIXME: This needs to use lookup(Syntax *), but that throws an
+      // error need find(Syntax *)
       const MacroSymbol * m = NULL;
-      SymbolName sn = *n->arg(0);
-      m = env.symbols.find<MacroSymbol>(sn);
+      SymbolName sn;
+      if (n->arg(0)->entity()) {
+        m = dynamic_cast<const MacroSymbol *>(n->arg(0)->entity());
+      } else {
+        sn = *n->arg(0);
+        m = env.symbols.find<MacroSymbol>(sn);
+      }
       if (m) { // function macros
         //  (call (id fun) (list parm1 parm2 ...))?
         p = m->expand(a, env);

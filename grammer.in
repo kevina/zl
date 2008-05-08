@@ -29,7 +29,7 @@ STMT : "statement" =
     / <fluid_label>   "fluid_label"   {ID} ";"
     / <fluid_syntax>  "fluid_syntax"  {ID} ";"
     / <make_inner_ns> "make_inner_ns" {ID} ";"
-    / <make_user_type> "make_user_type" {ID} {<type> {TOKEN}+}*
+    / <make_user_type> "make_user_type" {ID} ";"
     / <noop>   ";"
     / <stmt>   {TOKEN}* ({BRACE} / ";")
    ;
@@ -156,7 +156,7 @@ CHAR   = '\'' ('\\'_/[^'])+ '\'' SPACING;
 #    {[\y+^,;`]+/','} SPACING;
 
 SYM : "symbol" =
-   {'...' / '>>=' / '<<=' / '>>' / '<<' / '&&' / '||' / 
+   {'...' / '>>=' / '<<=' / '..' / '>>' / '<<' / '&&' / '||' / 
    '<=' / '>=' / '==' / '!=' / '++' / '--' / '->' /
    '+=' / '-=' / '*=' / '/=' / '%=' / '/=' / '&=' / '^=' / '|=' /
    '+'  / '-'  / '*'  / '/'  / '%'  / '/'  / '&'  / '^'  / '|' /

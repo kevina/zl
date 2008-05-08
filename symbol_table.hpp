@@ -8,6 +8,7 @@
 #include "ostream.hpp"
 #include "vector.hpp"
 #include "string_buf.hpp"
+#include "entity.hpp"
 
 struct Syntax;
 struct Error;
@@ -141,7 +142,7 @@ namespace ast {
 
   struct Environ;
 
-  struct Symbol : public gc {
+  struct Symbol : public Entity {
     String name;
     Symbol() {}
     virtual void uniq_name(OStream & o) const {

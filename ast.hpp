@@ -7,6 +7,7 @@
 #include "type.hpp"
 #include "expand.hpp"
 
+#include <typeinfo>
 #include <map>
 
 #undef NPOS
@@ -487,6 +488,11 @@ namespace ast {
   {
     if (p->simple()) {
       return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy, gather);
+    } else if (p->entity()) {
+      printf(">%s\n", typeid(*p->entity()).name());
+      const T * s = dynamic_cast<const T *>(p->entity());
+      if (!s) abort(); // FIXME Error Message
+      return s;
     } else if (p->is_a("fluid")) {
       assert_num_args(p, 1);
       const FluidBinding * b = lookup_symbol<FluidBinding>(p->arg(0), ns, start, stop, strategy, gather);
@@ -503,6 +509,7 @@ namespace ast {
       }
       return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather);
     } else {
+      p->print(); printf("?\n");
       abort();
     }
   }

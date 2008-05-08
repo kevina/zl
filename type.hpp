@@ -681,14 +681,16 @@ namespace ast {
   //
   //
 
-  class UserTypeInst : public TypeInst {
+  typedef class UserTypeInst UserType;
+
+  class UserTypeInst : public SimpleTypeInst {
+  public:
     //UserTypeInst(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {}
     //UserTypeInst(const Type * p) : TypeInst(p) {}
-    UserTypeInst() : type(), module() {}
-    Type   * type;
-    Module * module;
-    unsigned num_parms() const {return 0;}
-    TypeParm parm(unsigned i) const {abort();}
+    UserTypeInst() : type(), module(), defined() {}
+    const Type * type;
+    const Module * module;
+    bool defined;
     unsigned size() const {return type->size();}
     unsigned align() const {return type->align();}
   };

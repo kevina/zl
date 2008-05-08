@@ -3,7 +3,7 @@
   (left (postfix call (category "()"))
         (postfix ".[]" (category "[]"))
         (postfix postinc (sym ++)) (postfix postdec (sym --)))
-  (left (bin member (sym .)) (bin -> (sym ->)))
+  (left (bin member (sym .)) (bin imember (sym ..)) (bin -> (sym ->)))
   (right (prefix not (sym !)) (prefix complmnt (sym ~))
          (prefix neg (sym -)) (prefix uplus (sym +))
          (prefix addrof (sym &)) (prefix deref (sym *))
