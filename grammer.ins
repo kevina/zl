@@ -39,6 +39,9 @@
 #(smap "{}" (...)
 #    (block ...))
 
+(map m (x y) ()
+ (call f (list (mid x) (mid y))))
+
 (smap or (x y) ()
     (eif (mid x) (literal 1) (mid y)))
 
@@ -64,4 +67,6 @@
 #    (block (stmt (id int) (id `x) (sym =) (id x))
 #           (stmt (sym ++) (id x))
 #           (stmt (id `x))))
+
+(make_inner_ns internal)
 

@@ -253,10 +253,10 @@ namespace ast {
     parms.reserve(sz);
     for (int i = 0; i != sz; ++i) {
       const Syntax * p0 = p->arg(i);
-      SymbolName n;
+      SymbolKey n;
       if (name == ".tuple" && !p0->part(0)->simple()) { // HACK!
 	if (p0->num_parts() > 1)
-	  n = *p0->part(1);
+	  n = expand_binding(p0->part(1), env);
 	p0 = p0->part(0);
       }
       switch(t->parm(i)) {

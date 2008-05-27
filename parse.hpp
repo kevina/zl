@@ -115,7 +115,7 @@ struct Parts : public Vector<const Syntax *> {
   void append(const Parts & other) {
     insert(end(), other.begin(), other.end());
   }
-  void print() const;
+  void to_string(OStream & o) const;
 };
 
 struct Flags : public gc {
@@ -137,7 +137,7 @@ struct Flags : public gc {
          i != e; ++i)
       insert(*i);
   }
-  void print() const;
+  void to_string(OStream & o) const;
 };
 
 
@@ -241,6 +241,25 @@ struct Syntax : public gc {
     d->parts.push_back(y);
     d->parts.push_back(z);
   }
+  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a) : repl(0), entity_() {
+    d = new D;
+    what_ = p->string_if_simple();
+    d->parts.push_back(p); 
+    d->parts.push_back(x);
+    d->parts.push_back(y);
+    d->parts.push_back(z);
+    d->parts.push_back(a);
+  }
+  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a, const Syntax * b) : repl(0), entity_() {
+    d = new D;
+    what_ = p->string_if_simple();
+    d->parts.push_back(p); 
+    d->parts.push_back(x);
+    d->parts.push_back(y);
+    d->parts.push_back(z);
+    d->parts.push_back(a);
+    d->parts.push_back(b);
+  }
   Syntax(const SourceStr & s, const Syntax * p, const Syntax * x) : str_(s), repl(0), entity_() {
     d = new D;
     what_ = p->string_if_simple();
@@ -303,6 +322,8 @@ struct Syntax : public gc {
   const Syntax * & arg(unsigned i) {
     return d->parts[i+1];
   }
+  Parts::const_iterator parts_begin() const {return d->parts.begin();}
+  Parts::const_iterator parts_end()   const {return d->parts.end();}
   Parts::const_iterator args_begin() const {return d->parts.begin() + 1;}
   Parts::const_iterator args_end()   const {return d->parts.end();}
   const Syntax * flag(SymbolName n) const {
@@ -347,6 +368,8 @@ struct Syntax : public gc {
   void set_src_from_parts() const; // const is a lie
 
   void print() const;
+  void to_string(OStream & o) const;
+  String to_string() const;
   bool is_a(const char * n) const {return what_.name == n;}
   bool is_a(String n) const {return what_.name == n;}
   bool is_a(SymbolName n) const {return what_ == n;}

@@ -307,7 +307,7 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
 bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itself) {
   const Syntax * name = NULL;
   const Syntax * body = NULL;
-  if (p->is_a("struct") || p->is_a("union")) {
+  if (p->is_a("struct") || p->is_a("union") || p->is_a("class")) {
     unsigned i = 0;
     if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
                                         "Expected indentifer or \"{\" after \"%s\".",
@@ -361,7 +361,20 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
       const Syntax * id;
       const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
       
-      const Syntax * decl = w.make_declaration(id, t);
+      //const Syntax * decl = w.make_declaration(id, t);
+      // FIXME: Duplicate code from parse_decl, also...
+      const Syntax * decl;
+      if (i != end && (*i)->is_a("sym", "=")) {
+	++i;
+	const Syntax * init = w.parse_init_exp(i, end);
+	decl = w.make_declaration(id, t, init);
+      } else if (i != end && (*i)->is_a("{}")) {
+	const Syntax * body = *i;
+	++i;
+	decl = w.make_function(id, t, body);
+      } else {
+	decl = w.make_declaration(id, t);
+      }
       
       res->add_part(decl);
       

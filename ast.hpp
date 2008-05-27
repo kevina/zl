@@ -311,12 +311,15 @@ namespace ast {
       if (!deps_closed) calc_deps_closure();
       return for_ct_;
     }
- };
+    virtual void parse_body(Environ & env) {abort();}
+  };
+  
+  typedef Vector<VarDeclaration *> Collect;
 
   struct Fun : public VarDeclaration {
     Fun() : VarDeclaration("fun") {}
     //AST * part(unsigned i);
-    SymbolName name;
+    SymbolKey name;
     SymbolTable symbols;
     const Tuple * parms;
     const Type * ret_type;
@@ -324,7 +327,9 @@ namespace ast {
     //LabelSymbolTable * labels;
     unsigned frame_offset;
     unsigned frame_size;
-    AST * parse_self(const Syntax * p, Environ & env0);
+    AST * parse_self(const Syntax * p, Environ &);
+    AST * parse_forward(const Syntax * p, Environ &, Collect &);
+    void parse_body(Environ &);
     void eval(ExecEnviron & env);
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
@@ -425,7 +430,7 @@ namespace ast {
     void uniq_name(OStream & o) const {
       o.printf("%s$$%u", ~name, num);
     }
-    void add_to_env(const SymbolKey & k, Environ &) const;
+    void add_to_env(const SymbolKey & k, Environ &, Pass pass) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
       assign_uniq_num<NormalLabelSymbol>(self, stop);
     }
@@ -457,6 +462,7 @@ namespace ast {
   AST * parse_top(const Syntax * p, Environ & env);
 
   AST * parse_top_level(const Syntax * p, Environ & env);
+  AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect);
   AST * parse_member(const Syntax * p, Environ & env);
   AST * parse_stmt(const Syntax * p, Environ & env);
   AST * parse_stmt_decl(const Syntax * p, Environ & env);
@@ -503,10 +509,11 @@ namespace ast {
       return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy);
     } else if (p->is_a("w/outer")) {
       const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, start, stop, strategy);
+      printf("DIRECT %p %p\n", m, m->syms);
       unsigned last = p->num_args() - 1;
-      for (unsigned i = 1; i < last; ++i) {
-        m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);
-      }
+      //for (unsigned i = 1; i < last; ++i) {
+      //  m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);
+      //}
       return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather);
     } else {
       p->print(); printf("?\n");

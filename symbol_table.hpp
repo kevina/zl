@@ -142,6 +142,8 @@ namespace ast {
 
   struct Environ;
 
+  enum Pass {AllPasses, FirstPass, SecondPass};
+
   struct Symbol : public Entity {
     String name;
     Symbol() {}
@@ -153,7 +155,7 @@ namespace ast {
       uniq_name(buf);
       return buf.freeze();
     }
-    virtual void add_to_env(const SymbolKey & k, Environ &) const;
+    virtual void add_to_env(const SymbolKey & k, Environ &, Pass = AllPasses) const;
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
   };
@@ -176,7 +178,7 @@ namespace ast {
         o.printf("%s$$%u", ~name, num);
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
-    void add_to_env(const SymbolKey & k, Environ &) const;
+    void add_to_env(const SymbolKey & k, Environ &, Pass = AllPasses) const;
     void add_to_local_env(const SymbolKey & k, Environ &) const;
     void add_to_top_level_env(const SymbolKey & k, Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
@@ -265,10 +267,15 @@ namespace ast {
   const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
                                     Strategy strategy, Gather & gather)
   {
+    //printf("p1: %p %p\n", start, stop);
     const SymbolNode * cur = start;
+    //printf ("*** %s`%s\n", ~k.to_string(), ~k.ns->name);
     for (; cur != stop; cur = cur->next) {
+      //if (k.ns->name == "internal") 
+      //printf ("--- %s`%s\n", ~cur->key.to_string(), ~cur->key.ns->name);
       if (k == cur->key) break;
     }
+    //printf("^^^\n");
     if (cur == stop) {
       if (strategy == NormalStrategy && k.marks) {
         cur = k.marks->mark->env;
@@ -311,6 +318,7 @@ namespace ast {
   const SymbolNode * find_symbol_p3(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
                                     Strategy strategy, Gather & gather)
   {
+    //printf("p3: %p %p\n", start, stop);
     const SymbolNode * s = find_symbol_p1(k, start, stop, strategy, gather);
     return find_symbol_p2<T>(s, k, start, stop, strategy);
   }
@@ -330,11 +338,15 @@ namespace ast {
                           Strategy strategy, Gather & gather)
   {
     const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather);
-    if (!s1)
+    if (!s1) {
+      fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
       throw error(str, "Unknown Identifier \"%s\"", ~k.name);
+    }
     const T * s2 = dynamic_cast<const T *>(s1->value);
-    if (!s2)
+    if (!s2) {
+      fprintf(stderr, "Identifier \"%s\" is of the wrong type.", ~k.name); abort();
       throw error(str, "Identifier \"%s\" is of the wrong type.", ~k.name);
+    }
     return s2;
   }
 

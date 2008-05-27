@@ -85,9 +85,7 @@ struct Map : public MacroSymbol {
   const Syntax * repl;
   const SymbolNode * env;
   Map * parse_self(const Syntax * p, Environ & e) {
-    //printf("PARSING MAP %s\n", ~p->arg(0)->name);
-    //p->print();
-    //printf("\n");
+    //printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what(), ~p->to_string());
     env = e.symbols.front;
     entity = SourceEntity(p);
     parse = p;
@@ -409,6 +407,25 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
   } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
     p = env.symbols.lookup<MacroSymbol>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, env);
     return partly_expand(p, pos, env);
+  } else if (what == "id" && pos != OtherPos) { // FIXME: pos != OtherPos hack to avoid inf. loop
+    assert_num_args(p, 1);
+    const Syntax * n = p;
+    const Syntax * a = new Syntax(new Syntax("list"));
+    // FIXME: This needs to use lookup(Syntax *), but that throws an
+    // error need find(Syntax *)
+    const MacroSymbol * m = NULL;
+    SymbolName sn;
+    if (n->arg(0)->entity()) {
+      m = dynamic_cast<const MacroSymbol *>(n->arg(0)->entity());
+    } else {
+      sn = *n->arg(0);
+      m = env.symbols.find<MacroSymbol>(sn);
+    }
+    if (m) { // function macros
+      //  (call (id fun) (list parm1 parm2 ...))?
+      p = m->expand(a, env);
+      return partly_expand(p, pos, env);
+    }
   } else if (what == "call") { 
     assert_num_args(p, 2);
     const Syntax * n = partly_expand(p->arg(0), OtherPos, env);

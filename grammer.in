@@ -48,7 +48,7 @@ MACRO  =
   / <syntax_macro> "syntax_macro" {ID} {ID}? ";";
 
 MODULE = 
-    <module> "module" {ID} "(" {ID_LIST} ")" {<{...}> "{" {STMT}* "}" };
+    <module> "module" {ID} ("(" {ID_LIST} ")" {<{...}> "{" {STMT}* "}" } / ";");
 
 IMPORT = 
     <import> "import" {ID} ";";
@@ -90,7 +90,7 @@ INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
 
 FLOATING_SUFFIX = <float> [fF] / <"long double"> [lL] / <double>;
 
-STRUCT_UNION = <%> {"struct"/"union"} {ID/} {<{...}> "{" {STMT}* "}" }?;
+STRUCT_UNION = <%> {"struct"/"union"/"class"} {ID/} {<{...}> "{" {STMT}* "}" }?;
 
 ENUM = <enum> "enum" {ID/} 
               {<{,}> "{" ({ENUM_MEMBER} ",")* ({ENUM_MEMBER} ","?)? "}" }?;

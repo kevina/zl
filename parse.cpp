@@ -7,6 +7,7 @@
 #include "asc_ctype.hpp"
 #include "expand.hpp"     // FIXME: elim dep
 #include "asc_ctype.hpp"
+#include "iostream.hpp"
 
 using namespace parse_common;
 
@@ -76,30 +77,30 @@ void Syntax::set_src_from_parts() const {
   }
   if (s.source) {
     str_ = s;
-  } else {
+  } else if (d->parts.size() > 0) { // FIXME: Is this check really necessary ...
     str_ = d->parts[0]->str();
   }
 }
 
 
-void Parts::print() const {
+void Parts::to_string(OStream & o) const {
   const_iterator i = begin(), e = end(); 
   if (i == e) return;
-  (*i)->print();
+  (*i)->to_string(o);
   ++i;
   while (i != e) {
-    printf(" ");
-    (*i)->print();
+    o.printf(" ");
+    (*i)->to_string(o);
     ++i;
   }
 }
 
-void Flags::print() const {
+void Flags::to_string(OStream & o) const {
   const_iterator i = begin(), e = end();
   if (i == e) return;
   while (i != e) {
-    printf(" :");
-    (*i)->print();
+    o.printf(" :");
+    (*i)->to_string(o);
     ++i;
   }
 }
@@ -128,23 +129,33 @@ String escape(String n) {
 }
 
 void Syntax::print() const {
+  to_string(COUT);
+}
+
+void Syntax::to_string(OStream & o) const {
   if (!d) { 
     if (entity_)
-      printf("(%s)", ~escape(what_.to_string()));
+      o.printf("(%s)", ~escape(what_.to_string()));
     else if (!what_.defined()) 
-      printf("()");
+      o.printf("()");
     else if (what_.empty()) 
-      printf("\"\"");
+      o.printf("\"\"");
     else
-      printf("%s", ~escape(what_.to_string()));
+      o.printf("%s", ~escape(what_.to_string()));
   } else {
-    printf("(");
-    d->parts.print();
-    d->flags.print();
-    printf(")");
+    o.printf("(");
+    d->parts.to_string(o);
+    d->flags.to_string(o);
+    o.printf(")");
     if (repl)
-      repl->print();
+      repl->to_string(o);
   }
+}
+
+String Syntax::to_string() const {
+  StringBuf buf;
+  to_string(buf);
+  return buf.freeze();
 }
 
 static const char * s_id(SourceStr str, String & res) {

@@ -60,13 +60,13 @@ namespace ast {
       int          as_int;
       AST        * as_exp;
     };
-    SymbolName name;
+    SymbolKey name;
     bool is_type() {return what == TYPE || what == TUPLE;}
     explicit TypeParm() : what(NONE) {}
-    explicit TypeParm(const Type * t, SymbolName n = SymbolName()) : what(TYPE), as_type(t), name(n) {}
-    explicit TypeParm(What w, const Type * t, SymbolName n = SymbolName()) : what(w), as_type(t), name(n) {}
-    explicit TypeParm(int i, SymbolName n = SymbolName()) : what(INT), as_int(i), name(n) {}
-    explicit TypeParm(AST * exp, SymbolName n = SymbolName()) : what(EXP), as_exp(exp), name(n) {}
+    explicit TypeParm(const Type * t, SymbolKey n = SymbolKey()) : what(TYPE), as_type(t), name(n) {}
+    explicit TypeParm(What w, const Type * t, SymbolKey n = SymbolKey()) : what(w), as_type(t), name(n) {}
+    explicit TypeParm(int i, SymbolKey n = SymbolKey()) : what(INT), as_int(i), name(n) {}
+    explicit TypeParm(AST * exp, SymbolKey n = SymbolKey()) : what(EXP), as_exp(exp), name(n) {}
     void to_string(StringBuf & buf) const;
     static TypeParm dots() {return TypeParm(DOTS);}
   private:
@@ -373,10 +373,10 @@ namespace ast {
   public:
     struct Parm {
       const Type * type;
-      SymbolName name;
+      SymbolKey name;
       mutable const Symbol * sym; // evil I know, but necessary
       Parm() {}
-      Parm(const Type * t, SymbolName n) : type(t), name(n), sym() {}
+      Parm(const Type * t, SymbolKey n) : type(t), name(n), sym() {}
     };
     typedef Vector<Parm> Parms;
     Parms parms;

@@ -38,3 +38,5 @@ test40.c
 test41.c
 test42.c
 test43.c
+test44.c
+test45.c

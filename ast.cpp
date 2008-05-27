@@ -118,9 +118,11 @@ namespace ast {
   //
   //
 
-  void Symbol::add_to_env(const SymbolKey & k, Environ & env) const {
-    env.symbols.add(k, this);
-    make_unique(env.symbols.front);
+  void Symbol::add_to_env(const SymbolKey & k, Environ & env, Pass pass) const {
+    if (pass == AllPasses || pass == FirstPass) {
+      env.symbols.add(k, this);
+      make_unique(env.symbols.front);
+    }
   }
 
   void TopLevelSymbol::add_to_local_env(const SymbolKey & k, Environ & env) const {
@@ -133,12 +135,14 @@ namespace ast {
       assign_uniq_num<TopLevelSymbol>(*env.top_level_symbols);
   }
   
-  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
-    add_to_local_env(k, env);
-    add_to_top_level_env(k, env);
+  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, Pass pass) const {
+    if (pass == AllPasses || pass == FirstPass)
+      add_to_local_env(k, env);
+    if (pass == AllPasses || pass == SecondPass)
+      add_to_top_level_env(k, env);
   }
 
-  void NormalLabelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
+  void NormalLabelSymbol::add_to_env(const SymbolKey & k, Environ & env, Pass) const {
     env.fun_labels.add(k, this);
     make_unique(*env.fun_labels.front);
   }
@@ -427,7 +431,7 @@ namespace ast {
   void StringC::compile(CompileWriter & f, CompileEnviron &) {
     f << orig;
   }
-
+  
   AST * CharC::parse_self(const Syntax * p, Environ & env) {
     parse_ = p;
     assert_num_args(1, 2);
@@ -665,27 +669,40 @@ namespace ast {
   struct Var : public VarDeclaration {
     Var() : VarDeclaration("var"), init() {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
+    SymbolKey name;
     AST * init;
-    AST * parse_self(const Syntax * p, Environ & env) {
+    AST * parse_forward(const Syntax * p, Environ & env, Collect & collect) {
       parse_ = p;
       assert_num_args(2,3);
-      SymbolKey n = expand_binding(p->arg(0), env);
+      SymbolKey name = expand_binding(p->arg(0), env);
       parse_flags(p);
-      sym = new_var_symbol(n, env.scope, this, env.where);
+      sym = new_var_symbol(name, env.scope, this, env.where);
       sym->type = parse_type(p->arg(1), env);
       if (storage_class != EXTERN && sym->type->size() == NPOS)
         throw error(p->arg(0), "Size not known");
-      env.add(n, sym);
+      env.add(name, sym);
       if (p->num_args() > 2) {
-        init = parse_exp(p->arg(2), env);
-        resolve_to(env, init, sym->type);
+        collect.push_back(this);
       }
       deps_closed = true;
+      type = env.void_type();
       if (dynamic_cast<TopLevelVarSymbol *>(sym))
         return new Empty();
       else
         return this;
-      type = env.void_type();
+    }
+    void parse_body(Environ & env) {
+      assert(parse_->num_args() > 2);
+      //env.add(name, sym, SecondPass);
+      init = parse_exp(parse_->arg(2), env);
+      resolve_to(env, init, sym->type);
+    }
+    AST * parse_self(const Syntax * p, Environ & env) {
+      Collect collect;
+      AST * res = parse_forward(p, env, collect);
+      if (!collect.empty())
+        parse_body(env);
+      return res;
     }
     void eval(ExecEnviron &) {}
     void finalize(FinalizeEnviron & env) {
@@ -748,7 +765,7 @@ namespace ast {
         type = stmts.back()->type;
       else
         type = env.void_type();
-      
+
       return this;
     }
     void eval(ExecEnviron & env) {
@@ -1348,6 +1365,31 @@ namespace ast {
     }
   }
 
+  static void parse_stmts_first_pass(const Syntax * parse, Environ & env, Collect & collect) {
+    // Possible TODO: partly_expand will also, unnecessary, be called
+    //                when I call parse_top_level, somehow avoid this
+    for (unsigned i = 0; i < parse->num_args(); ++i) {
+      const Syntax * p = parse->arg(i);
+      //printf(">>"); p->print(); printf("\n");
+      p = partly_expand(p, TopLevel, env);
+      if (p->is_a("slist")) {
+        parse_stmts_first_pass(p, env, collect);
+      } else {
+        FinalizeEnviron fenv;
+        AST * a = parse_top_level_first_pass(p, env, collect);
+        a->finalize(fenv);
+      }
+    }
+  }
+
+  static void parse_stmts_two_pass(const Syntax * parse, Environ & env) {
+    Collect collect;
+    parse_stmts_first_pass(parse, env, collect);
+    for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
+      (*i)->parse_body(env);
+    }
+  }
+
   AST * parse_top(const Syntax * p, Environ & env) {
     assert(p->is_a("top")); // FIXME Error
     parse_stmts(p, env);
@@ -1359,20 +1401,35 @@ namespace ast {
   //
 
   AST * parse_module(const Syntax * p, Environ & env0) {
-    assert_num_args(p, 3);
+    assert_num_args(p, 1, 3);
     SymbolName n = *p->arg(0);
-    Module * m = new Module();
-    m->name = n.name;
-    m->where = env0.where;
-    env0.add(SymbolKey(n, OUTER_NS), m);
-    Environ env = env0.new_scope();
-    env.scope = TOPLEVEL;
-    env.where = m;
-    parse_stmts(p->arg(2), env);
-    const Syntax * to_export = p->arg(1);
-    for (unsigned i = 0, sz = to_export->num_parts(); i != sz; ++i) {
-      SymbolName n = *to_export->part(i);
-      m->syms = new SymbolNode(n, env.symbols.lookup<Symbol>(n, to_export->str()), m->syms);
+    Module * m = NULL;
+    if (env0.symbols.exists_this_scope(SymbolKey(n, OUTER_NS))) {
+      m = const_cast<Module *>(env0.symbols.lookup<Module>(p->arg(0), OUTER_NS));
+    } else {
+      m = new Module();
+      m->name = n.name;
+      m->where = env0.where;
+      env0.add(SymbolKey(n, OUTER_NS), m);
+    }
+    if (p->num_args() > 1) {
+      assert_num_args(p, 3);
+      Environ env = env0.new_scope();
+      env.scope = TOPLEVEL;
+      env.where = m;
+
+      Collect collect;
+      parse_stmts_first_pass(p->arg(2), env, collect);
+
+      const Syntax * to_export = p->arg(1);
+      for (unsigned i = 0, sz = to_export->num_parts(); i != sz; ++i) {
+        SymbolName n = *to_export->part(i);
+        m->syms = new SymbolNode(n, env.symbols.lookup<Symbol>(n, to_export->str()), m->syms);
+      }
+
+      for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
+        (*i)->parse_body(env);
+      }
     }
     return new Empty();
   }
@@ -1388,6 +1445,7 @@ namespace ast {
     GatherMarks gather;
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env.symbols.front, NULL, 
                                              NormalStrategy, gather);
+    printf("IMPORT %p %p\n", m, m->syms);
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
       // now add marks back in reverse order;
       SymbolKey k = cur->key;
@@ -1427,6 +1485,15 @@ namespace ast {
     return new Empty();
   }
 
+  AST * parse_declare_user_type(const Syntax * p, Environ & env) {
+    SymbolName name = *p->arg(0);
+    if (!env.symbols.exists_this_scope(SymbolKey(name))) {
+      UserType * s = new UserType;
+      add_simple_type(env.types, SymbolKey(name), s);
+    }
+    return new Empty();
+  }
+
   AST * parse_make_user_type(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, 2);
     SymbolName name = *p->arg(0);
@@ -1446,7 +1513,7 @@ namespace ast {
       //parse_stmt_decl(new Syntax(new Syntax("talias"), p->arg(0), new Syntax(s->type)), env);
     }
     s->module = env.symbols.lookup<Module>(p->arg(0), OUTER_NS);
-    s->defined = true; // FIXME: hack...
+    s->defined = true;
     s->finalize();
     return new Empty();
   }
@@ -1495,7 +1562,7 @@ namespace ast {
     assert_num_args(p, 2);
     AST * exp = parse_exp(p->arg(0), env);
     //printf("::"); p->arg(1)->print(); printf("\n");
-    if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected identifier");
+    if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected Identifier");
     SymbolName id = *p->arg(1)->arg(0);
     const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified);
     if (!t) throw error(p->arg(0), "Expected user type");
@@ -1511,6 +1578,122 @@ namespace ast {
     }
   };
 
+  void parse_class_var(const Syntax * p, const Syntax * type_name, 
+                       Syntax * struct_b, Syntax * module_b);
+  void parse_class_fun(const Syntax * p, const Syntax * type_name, 
+                       Syntax * struct_b, Syntax * module_b);
+
+  AST * parse_class(const Syntax * p, Environ & env) {
+
+    const Syntax * name = p->arg(0);
+    printf("parse_class %s\n", ~name->what());
+    p->print(); printf("\n"); 
+
+    Syntax * struct_b = new Syntax();
+    Syntax * exports = new Syntax();
+    Syntax * module_b = new Syntax(new Syntax("{...}"));
+    
+    const Syntax * body = p->arg(1);
+    for (int i = 0; i != body->num_parts(); ++i) {
+      const Syntax * member = partly_expand(body->part(i), FieldPos, env);
+      String what = member->what().name;
+      if      (what == "var")  parse_class_var(member, name, struct_b, module_b);
+      else if (what == "fun" ) parse_class_fun(member, name, struct_b, module_b);
+      else                     module_b->add_part(member);
+      exports->add_part(member->arg(0));
+    }
+
+    
+    parse_stmt_decl(new Syntax(new Syntax("struct"),
+                               name),
+                    env);
+    
+    parse_stmt_decl(new Syntax(new Syntax("module"),
+                               name),
+                    env);
+    
+    parse_stmt_decl(new Syntax(new Syntax("make_user_type"),
+                               name),
+                    env);
+    
+    const Syntax * struct_ = new Syntax(new Syntax("struct"),
+                                        name,
+                                        struct_b);
+    printf("\n"); struct_->print(); printf("\n");
+    parse_stmt_decl(struct_, env);
+
+    const Syntax * module_ = new Syntax(new Syntax("module"),
+                                        name,
+                                        exports,
+                                        module_b);
+    printf("\n"); module_->print(); printf("\n");
+    parse_stmt_decl(module_, env);
+
+    return new Empty();
+  }
+
+  void parse_class_var(const Syntax * p, const Syntax * type_name, 
+                       Syntax * struct_b, Syntax * module_b)
+  {
+    assert_num_args(p, 2, 3);
+    const Syntax * n = p->arg(0);
+    // FIXME: handle flags
+    struct_b->add_part(p);
+    module_b->add_part(new Syntax(new Syntax("map"), 
+                                  n, 
+                                  new Syntax, 
+                                  new Syntax,
+                                  new Syntax(new Syntax("imember"), 
+                                             new Syntax(new Syntax("deref"), 
+                                                        new Syntax(new Syntax("id"), new Syntax("this"))), 
+                                             new Syntax(new Syntax("id"), n))));
+  }
+  
+  void parse_class_fun(const Syntax * p, const Syntax * type_name, 
+                       Syntax * struct_b, Syntax * module_b)
+  {
+    assert_num_args(p, 4);
+    const Syntax * name = p->arg(0);
+    const Syntax * parms = p->arg(1);
+    const Syntax * ret_type = p->arg(2);
+    const Syntax * body = p->arg(3);
+    // FIXME: handle flags
+
+    Syntax * fun_name = new Syntax(new Syntax("w/inner"), name, new Syntax("internal"));
+    Syntax * fun_id   = new Syntax(new Syntax("id"), fun_name);
+    //new Syntax(new Syntax("w/outer"), type_name, fun_name));
+
+    Syntax * new_parms = new Syntax(parms->part(0));
+    new_parms->add_part(new Syntax(new Syntax(new Syntax(".pointer"), type_name), 
+                                   new Syntax(new Syntax("fluid"), new Syntax("this"))));
+    new_parms->add_parts(parms->args_begin(), parms->args_end());
+
+    Syntax * macro_parms = new Syntax();
+    macro_parms->make_branch();
+    Syntax * call_parms = new Syntax("list"); 
+    call_parms->add_part(new Syntax(new Syntax("id"), new Syntax("this")));
+    for (unsigned i = 0; i != parms->num_args(); ++i) {
+      StringBuf sbuf;
+      sbuf.printf("arg%d", i);
+      Syntax * arg = new Syntax(sbuf.freeze());
+      macro_parms->add_part(arg);
+      call_parms->add_part(new Syntax(new Syntax("mid"), arg));
+    }
+
+    module_b->add_part(new Syntax(new Syntax("fun"),
+                                  fun_name, 
+                                  new_parms, 
+                                  ret_type, 
+                                  body));
+    module_b->add_part(new Syntax(new Syntax("map"), 
+                                  name,
+                                  macro_parms,
+                                  new Syntax,
+                                  new Syntax(new Syntax("call"),
+                                             fun_id,
+                                             call_parms)));
+  }
+
   //
   //
   //
@@ -1522,7 +1705,6 @@ namespace ast {
       return static_cast<To>(c->exp->ct_value<From>());
     }
   };
-
   struct Cast_CT_Value_Inner_Map {
     String to;
     const CT_Value_Base * cast;
@@ -1627,6 +1809,79 @@ namespace ast {
   }
 #endif
 
+  AST * Fun::parse_forward(const Syntax * p, Environ & env0, Collect & collect) {
+    parse_ = p;
+    assert_num_args(3,4);
+    name = expand_binding(p->arg(0), env0);
+
+    parse_flags(p);
+
+    sym = new_var_symbol(name, env0.scope, this, env0.where);
+    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);
+    tlsym->add_to_local_env(name, env0);
+
+    // FIXME: is this necessary/correct for a new frame to be created
+    //        to expand/parse the _paramaters_.  Of cource is needed for
+    //        the body that that is done in parse_body.
+    Environ env = env0.new_frame();
+    env.where = tlsym;
+    env.deps = &deps_;
+    env.for_ct = &for_ct_;
+
+    parms = expand_fun_parms(p->arg(1), env);
+
+    ret_type = parse_type(p->arg(2), env);
+    type = ret_type;
+    sym->type = env.function_sym()->inst(env.types, this);
+
+    body = 0;
+    if (p->num_args() > 3) {
+      collect.push_back(this);
+    } else {
+      tlsym->add_to_top_level_env(name, env0);
+      symbols = env.symbols;
+    }
+
+    //printf("FUN DEPS: %s %d\n", ~name, deps.size());
+    //for (Deps::iterator i = deps.begin(), e = deps.end(); i != e; ++i)
+    //  printf("  %s\n", ~(*i)->name);
+    //printf("---\n");
+
+    //sym->value = this;
+
+    return this;
+  }
+
+  void Fun::parse_body(Environ & env0) {
+    assert(parse_->num_args() > 3);
+
+    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);
+
+    Environ env = env0.new_frame();
+    env.where = tlsym;
+    env.deps = &deps_;
+    env.for_ct = &for_ct_;
+    env.frame->return_type = ret_type;
+
+    for (Tuple::Parms::const_iterator i = parms->parms.begin(), e = parms->parms.end();
+         i != e; ++i)
+    {
+      SymbolName n = i->name;
+      VarSymbol * sym = new_var_symbol(n);
+      i->sym = sym;
+      sym->type = i->type;
+      env.add(n, sym);
+      //env.symbols.add(n, sym);
+    }
+
+    body = dynamic_cast<Block *>(parse_stmt(parse_->arg(3), env));
+    assert(body); // FiXME
+
+    tlsym->add_to_top_level_env(name, env0);
+    symbols = env.symbols;
+  }
+
+#if 0
   AST * Fun::parse_self(const Syntax * p, Environ & env0) {
     parse_ = p;
     assert_num_args(3,4);
@@ -1678,6 +1933,16 @@ namespace ast {
 
     return this;
   }
+#endif 
+
+  AST * Fun::parse_self(const Syntax * p, Environ & env) {
+    Collect collect;
+    AST * res = parse_forward(p, env, collect);
+    if (!collect.empty())
+      parse_body(env);
+    return res;
+  }
+
 
 //   void Fun::resolve(Environ & env0) {
 //     printf("RESOLVE FUN %s\n", name.c_str());
@@ -1803,9 +2068,9 @@ namespace ast {
                     "Wrong number of parameters, expected %u but got %u",
                     ftype->parms->parms.size(), parms.size());
       else if (ftype->parms->vararg && parms.size() < ftype->parms->parms.size())
-	throw error(parse_->arg(1),
-		    "Not enough parameters, expected at least %u but got %u",
-		    ftype->parms->parms.size(), parms.size());
+        throw error(parse_->arg(1),
+                    "Not enough parameters, expected at least %u but got %u",
+                    ftype->parms->parms.size(), parms.size());
       const int typed_parms = ftype->parms->parms.size();
       for (int i = 0; i != typed_parms; ++i) {
         resolve_to(env, parms[i], ftype->parms->parms[i].type);
@@ -2138,6 +2403,7 @@ namespace ast {
 
   AST * try_ast(const Syntax * p, Environ & env);
   AST * try_decl(const Syntax * p, Environ & env);
+  AST * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect);
   AST * try_stmt(const Syntax * p, Environ & env);
   AST * try_exp(const Syntax * p, Environ & env);
 
@@ -2150,6 +2416,17 @@ namespace ast {
     if (res) return res;
     //throw error (p, "Unsupported primative at top level: %s", ~p->name);
     throw error (p, "Expected top level expression.");
+  }
+
+  AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect) {
+    AST * res;
+    res = try_ast(p, env);
+    if (res) return res;
+    p = partly_expand(p, TopLevel, env);
+    res = try_decl_first_pass(p, env, collect);
+    if (res) return res;
+    //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
+    throw error (p, "Expected struct or union member.");
   }
 
   AST * parse_member(const Syntax * p, Environ & env) {
@@ -2199,8 +2476,8 @@ namespace ast {
     p = partly_expand(p, ExpPos, env);
     res = try_exp(p, env);
     if (res) return res;
-    //throw error (p, "Unsupported primative at expression position: %s", ~p->name);
-    throw error (p, "Expected expression.");
+    throw error (p, "Unsupported primative at expression position: %s", ~p->what());
+    //throw error (p, "Expected expression.");
   }
 
   AST * try_ast(const Syntax * p, Environ & env) {
@@ -2212,7 +2489,7 @@ namespace ast {
     return 0;
   }
 
-  AST * try_decl(const Syntax * p, Environ & env) {
+  AST * try_decl_common(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "var")     return (new Var)->parse_self(p, env);
     if (what == "fun" )    return (new Fun)->parse_self(p, env);
@@ -2230,8 +2507,24 @@ namespace ast {
     if (what == "module")        return parse_module(p, env);
     if (what == "import")        return parse_import(p, env);
     if (what == "make_inner_ns") return parse_make_inner_ns(p, env);
-    if (what == "make_user_type")return parse_make_user_type(p, env);
+    if (what == "make_user_type") return parse_make_user_type(p, env);
+    if (what == "declare_user_type") return parse_declare_user_type(p, env);
+    if (what == "class")         return parse_class(p, env);
     return 0;
+  }
+
+  AST * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect) {
+    String what = p->what().name;
+    if (what == "var")     return (new Var)->parse_forward(p, env, collect);
+    if (what == "fun" )    return (new Fun)->parse_forward(p, env, collect);
+    return try_decl_common(p, env);
+  }
+
+  AST * try_decl(const Syntax * p, Environ & env) {
+    String what = p->what().name;
+    if (what == "var")     return (new Var)->parse_self(p, env);
+    if (what == "fun" )    return (new Fun)->parse_self(p, env);
+    return try_decl_common(p, env);
   }
 
   AST * try_stmt(const Syntax * p, Environ & env) {

@@ -123,8 +123,8 @@ namespace ast {
       return env;
     }
 
-    void add(const SymbolKey & k, const Symbol * sym) {
-      sym->add_to_env(k, *this);
+    void add(const SymbolKey & k, const Symbol * sym, Pass pass = AllPasses) {
+      sym->add_to_env(k, *this, pass);
     }
 
     Environ new_frame() {
