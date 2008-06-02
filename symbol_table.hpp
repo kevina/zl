@@ -339,13 +339,15 @@ namespace ast {
   {
     const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather);
     if (!s1) {
-      fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
+      //fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
       throw error(str, "Unknown Identifier \"%s\"", ~k.name);
     }
     const T * s2 = dynamic_cast<const T *>(s1->value);
     if (!s2) {
-      fprintf(stderr, "Identifier \"%s\" is of the wrong type.", ~k.name); abort();
-      throw error(str, "Identifier \"%s\" is of the wrong type.", ~k.name);
+      //fprintf(stderr, "Identifier \"%s\" is of the wrong type.", ~k.name); abort();
+      //throw error(str, "Identifier \"%s\" is of the wrong type.", ~k.name);
+      throw error(str, "Identifier \"%s\" is of the wrong type (expected %s got %s).", 
+                  ~k.name, typeid(const T).name(), typeid(*s1->value).name());
     }
     return s2;
   }
@@ -428,6 +430,8 @@ namespace ast {
     }
     template <typename T> 
     inline const T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS);
+    template <typename T> 
+    inline const T * find(const Syntax * p, const InnerNS * = DEFAULT_NS);
     bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }

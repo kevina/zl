@@ -417,14 +417,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     const Syntax * n = p;
     // FIXME: This needs to use lookup(Syntax *), but that throws an
     // error need find(Syntax *)
-    const MacroSymbol * m = NULL;
-    SymbolName sn;
-    if (n->arg(0)->entity()) {
-      m = dynamic_cast<const MacroSymbol *>(n->arg(0)->entity());
-    } else {
-      sn = *n->arg(0);
-      m = env.symbols.find<MacroSymbol>(sn);
-    }
+    const MacroSymbol * m = env.symbols.find<MacroSymbol>(n->arg(0));
     if (m) { // id macro
       Syntax * a = new Syntax(new Syntax("list"));
       a->set_flags(p);
@@ -439,24 +432,17 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     if (n && n->is_a("id")) {
       // FIXME: This needs to use lookup(Syntax *), but that throws an
       // error need find(Syntax *)
-      const MacroSymbol * m = NULL;
-      SymbolName sn;
       if (!(flags & EXPAND_NO_FUN_MACRO_CALL)) {
-        if (n->arg(0)->entity()) {
-          m = dynamic_cast<const MacroSymbol *>(n->arg(0)->entity());
-        } else {
-          sn = *n->arg(0);
-          m = env.symbols.find<MacroSymbol>(sn);
+        const MacroSymbol * m = env.symbols.find<MacroSymbol>(n->arg(0));
+        if (m) { // function macros
+          //  (call (id fun) (list parm1 parm2 ...))?
+          p = m->expand(a, env);
+          return partly_expand(p, pos, env, flags);
+        } else if (*n->arg(0) == "environ_snapshot") {
+          if (a->num_args() > 0)
+            throw error(a, "environ_snapshot does not take any paramaters");
+          return new Syntax(n->arg(0));
         }
-      }
-      if (m) { // function macros
-        //  (call (id fun) (list parm1 parm2 ...))?
-        p = m->expand(a, env);
-        return partly_expand(p, pos, env, flags);
-      } else if (sn == "environ_snapshot") {
-        if (a->num_args() > 0)
-          throw error(a, "%s does not take any paramaters", ~sn.name);
-        return new Syntax(n->arg(0));
       }
     }
     Syntax * res = new Syntax(p->str(), p->part(0));

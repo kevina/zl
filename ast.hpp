@@ -526,6 +526,24 @@ namespace ast {
     return lookup_symbol<T>(p, ns, front);
   }
 
+  template <typename T>
+  static inline
+  const T * find_symbol(const Syntax * p, const InnerNS * ns,
+                        const SymbolNode * start, const SymbolNode * stop = NULL,
+                        Strategy strategy = NormalStrategy) 
+  {
+    try {
+      return lookup_symbol<T>(p, ns, start, stop, strategy);
+    } catch (const Error *) {
+      return NULL;
+    }
+  }
+
+  template <typename T> 
+  inline const T * SymbolTable::find(const Syntax * p, const InnerNS * ns) {
+    return find_symbol<T>(p, ns, front);
+  }
+
 }
 
 #if 0
