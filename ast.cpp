@@ -1518,37 +1518,43 @@ namespace ast {
     return new Empty();
   }
 
+  static const Syntax * ID = new Syntax("id");
+  static const Syntax * THIS = new Syntax("this");
+  static const Syntax * THIS_ID = new Syntax(ID, THIS);
+  static const Syntax * THIS_MID = new Syntax(new Syntax("mid"), THIS);
+  static const Syntax * THIS_FLAG = new Syntax(THIS, new Syntax(new Syntax("reparse"),
+                                                                THIS,
+                                                                new Syntax(ID, THIS)));
+
   AST * parse_member_access(const Syntax * p, Environ & env) {
     assert_num_args(p, 2);
     AST * exp = parse_exp(p->arg(0), env);
+    Syntax * ptr_exp = new Syntax(new Syntax("addrof"), new Syntax(exp));
     if (dynamic_cast<const StructUnionT *>(exp->type->unqualified)) {
       const Syntax * np = new Syntax(p->str(), p->part(0), new Syntax(exp), p->arg(1));
       return (new MemberAccess)->parse_self(np, env);
     } else if (const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified)) {
-      const Syntax * arg1 = p->arg(1);
+      // FIXME: Am I calling partly_expand in the right scope here, or correctly at all
+      const Syntax * arg1 = partly_expand(p->arg(1), OtherPos, env, EXPAND_NO_MACRO_CALL);
       const Syntax * call;
-      // FIXME: Am I calling partly_expand in the right scope here
       if (arg1->is_a("call")) {
         assert_num_args(arg1, 2);
-        const Syntax * n = partly_expand(arg1->arg(0), OtherPos, env);
+        const Syntax * n = arg1->arg(0);
         assert(n && n->is_a("id")); // FIXME Error Message
-        const Syntax * a = arg1->arg(1);
+        Syntax * a = new Syntax(*arg1->arg(1));
+        a->add_flag(new Syntax(THIS, ptr_exp));
         const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms);
-        call = new Syntax(arg1->part(0), new Syntax(new Syntax("id"), new Syntax(sym)), a);
+        call = new Syntax(arg1->part(0), new Syntax(ID, new Syntax(sym)), a);
       } else {
-        const Syntax * n = partly_expand(arg1, OtherPos, env);
+        const Syntax * n = arg1;
         assert(n && n->is_a("id")); // FIXME Error Message
         const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms);
-        call = new Syntax(new Syntax("id"), new Syntax(sym));
+        Syntax * c = new Syntax(ID, new Syntax(sym));
+        c->add_flag(new Syntax(THIS, ptr_exp));
+        call = c;
       }
-      Syntax * res = 
-        new Syntax(new Syntax("eblock"),
-                   new Syntax(new Syntax("var"), 
-                              new Syntax(new Syntax("fluid"), new Syntax("this")),
-                              new Syntax(new Syntax(".pointer"), new Syntax(exp->type)), 
-                              new Syntax(new Syntax("addrof"), new Syntax(exp))),
-                   call);
-      return parse_exp(res, env);
+      //printf("member: %s\n", ~call->to_string());
+      return parse_exp(call, env);
     } else {
       abort();
     }
@@ -1632,21 +1638,23 @@ namespace ast {
     return new Empty();
   }
 
+
   void parse_class_var(const Syntax * p, const Syntax * type_name, 
                        Syntax * struct_b, Syntax * module_b)
   {
     assert_num_args(p, 2, 3);
     const Syntax * n = p->arg(0);
+    Syntax * macro_parms = new Syntax();
+    macro_parms->add_flag(THIS_FLAG);
     // FIXME: handle flags
     struct_b->add_part(p);
     module_b->add_part(new Syntax(new Syntax("map"), 
                                   n, 
-                                  new Syntax, 
+                                  macro_parms,
                                   new Syntax,
                                   new Syntax(new Syntax("imember"), 
-                                             new Syntax(new Syntax("deref"), 
-                                                        new Syntax(new Syntax("id"), new Syntax("this"))), 
-                                             new Syntax(new Syntax("id"), n))));
+                                             new Syntax(new Syntax("deref"), THIS_MID), 
+                                             new Syntax(ID, n))));
   }
   
   void parse_class_fun(const Syntax * p, const Syntax * type_name, 
@@ -1660,18 +1668,18 @@ namespace ast {
     // FIXME: handle flags
 
     Syntax * fun_name = new Syntax(new Syntax("w/inner"), name, new Syntax("internal"));
-    Syntax * fun_id   = new Syntax(new Syntax("id"), fun_name);
+    Syntax * fun_id   = new Syntax(ID, fun_name);
     //new Syntax(new Syntax("w/outer"), type_name, fun_name));
 
     Syntax * new_parms = new Syntax(parms->part(0));
     new_parms->add_part(new Syntax(new Syntax(new Syntax(".pointer"), type_name), 
-                                   new Syntax(new Syntax("fluid"), new Syntax("this"))));
+                                   new Syntax(new Syntax("fluid"), THIS)));
     new_parms->add_parts(parms->args_begin(), parms->args_end());
 
     Syntax * macro_parms = new Syntax();
     macro_parms->make_branch();
     Syntax * call_parms = new Syntax("list"); 
-    call_parms->add_part(new Syntax(new Syntax("id"), new Syntax("this")));
+    call_parms->add_part(THIS_MID);
     for (unsigned i = 0; i != parms->num_args(); ++i) {
       StringBuf sbuf;
       sbuf.printf("arg%d", i);
@@ -1679,6 +1687,7 @@ namespace ast {
       macro_parms->add_part(arg);
       call_parms->add_part(new Syntax(new Syntax("mid"), arg));
     }
+    macro_parms->add_flag(THIS_FLAG);
 
     module_b->add_part(new Syntax(new Syntax("fun"),
                                   fun_name, 
@@ -1880,60 +1889,6 @@ namespace ast {
     tlsym->add_to_top_level_env(name, env0);
     symbols = env.symbols;
   }
-
-#if 0
-  AST * Fun::parse_self(const Syntax * p, Environ & env0) {
-    parse_ = p;
-    assert_num_args(3,4);
-    name = *p->arg(0);
-
-    parse_flags(p);
-
-    sym = new_var_symbol(name, env0.scope, this, env0.where);
-    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);
-    tlsym->add_to_local_env(name, env0);
-
-    Environ env = env0.new_frame();
-    env.where = tlsym;
-    env.deps = &deps_;
-    env.for_ct = &for_ct_;
-
-    parms = expand_fun_parms(p->arg(1), env);
-
-    ret_type = env.frame->return_type = parse_type(p->arg(2), env);
-    type = ret_type;
-    sym->type = env.function_sym()->inst(env.types, this);
-
-    body = 0;
-    if (p->num_args() > 3) {
-      for (Tuple::Parms::const_iterator i = parms->parms.begin(), e = parms->parms.end();
-           i != e; ++i)
-      {
-        SymbolName n = i->name;
-        VarSymbol * sym = new_var_symbol(n);
-        i->sym = sym;
-        sym->type = i->type;
-        env.add(n, sym);
-        //env.symbols.add(n, sym);
-      }
-
-      body = dynamic_cast<Block *>(parse_stmt(p->arg(3), env));
-      assert(body); // FiXME
-    }
-
-    tlsym->add_to_top_level_env(name, env0);
-    symbols = env.symbols;
-
-    //printf("FUN DEPS: %s %d\n", ~name, deps.size());
-    //for (Deps::iterator i = deps.begin(), e = deps.end(); i != e; ++i)
-    //  printf("  %s\n", ~(*i)->name);
-    //printf("---\n");
-
-    //sym->value = this;
-
-    return this;
-  }
-#endif 
 
   AST * Fun::parse_self(const Syntax * p, Environ & env) {
     Collect collect;
@@ -2412,6 +2367,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, TopLevel, env);
+    //printf("Parsing top level:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primative at top level: %s", ~p->name);
@@ -2423,6 +2379,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, TopLevel, env);
+    //printf("Parsing top level fp:\n  %s\n", ~p->to_string());
     res = try_decl_first_pass(p, env, collect);
     if (res) return res;
     //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
@@ -2434,6 +2391,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, FieldPos, env);
+    //printf("Parsing member:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
@@ -2445,6 +2403,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, StmtPos, env);
+    //printf("Parsing stmt:\n  %s\n", ~p->to_string());
     res = try_stmt(p, env);
     if (res) return res;
     res = try_exp(p, env);
@@ -2458,6 +2417,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, StmtDeclPos, env);
+    //printf("Parsing stmt decl:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     res = try_stmt(p, env);
@@ -2474,6 +2434,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, ExpPos, env);
+    //printf("parsing expression: %s\n", ~p->to_string());
     res = try_exp(p, env);
     if (res) return res;
     throw error (p, "Unsupported primative at expression position: %s", ~p->what());

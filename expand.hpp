@@ -99,7 +99,11 @@ enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4,
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32};
 ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
 
-const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env);
+static const unsigned EXPAND_NO_ID_MACRO_CALL = 1;
+static const unsigned EXPAND_NO_FUN_MACRO_CALL = 2;
+static const unsigned EXPAND_NO_MACRO_CALL = 1 | 2;
+const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags = 0);
+
 ast::SymbolKey expand_binding(const Syntax * p, const ast::InnerNS * ns, Environ & env);
 static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
   return expand_binding(p, ast::DEFAULT_NS, env);

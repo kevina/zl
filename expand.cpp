@@ -122,7 +122,8 @@ struct Map : public MacroSymbol {
   const Syntax * expand(const Syntax * p, Environ &) const {
     Match * m = match_args(NULL, parms, p);
     m = match(m, free, replace_context(free, get_context(p)));
-    return replace(repl, m, new Mark(env));
+    const Syntax * res = replace(repl, m, new Mark(env));
+    return res;
   }
 };
 
@@ -156,6 +157,7 @@ struct Macro : public MacroSymbol {
 };
 
 void match_parm(Match * m, const Syntax * p, const Syntax * repl) {
+  //printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   if (p->num_args() > 0) {
     if (p->is_a("pattern")) {
       p = p->arg(0);
@@ -177,6 +179,7 @@ void match_parm(Match * m, const Syntax * p, const Syntax * repl) {
       abort();
     }
   }
+  //printf("match_parm >>: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   m->push_back(Match::value_type(*p, repl));
 }
 
@@ -388,7 +391,7 @@ const Syntax * e_parse_exp(const Syntax * p, Environ & env) {
   return res;
 }
 
-const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
+const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags) {
   if (p->entity()) return p;
   SymbolName what = p->what().name;
   //printf("\n>expand>%s//\n", ~what);
@@ -397,20 +400,21 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
   if (p->simple()) {
     abort(); // FIXME: Error Message
   } else if (what == "{}") {
-    return partly_expand(reparse("BLOCK", p), pos, env);
+    return partly_expand(reparse("BLOCK", p), pos, env, flags);
   } else if (what == "()") {
-    return partly_expand(reparse("PARAN_EXP", p), pos, env);
+    return partly_expand(reparse("PARAN_EXP", p), pos, env, flags);
   } else if (what == "[]") {
-    return partly_expand(reparse("EXP", p->arg(0)), pos, env);
+    return partly_expand(reparse("EXP", p->arg(0)), pos, env, flags);
   } else if (what == "parm") {
-    return partly_expand(reparse("EXP", p), pos, env);
+    return partly_expand(reparse("EXP", p), pos, env, flags);
   } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
     p = env.symbols.lookup<MacroSymbol>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, env);
-    return partly_expand(p, pos, env);
-  } else if (what == "id" && pos != OtherPos) { // FIXME: pos != OtherPos hack to avoid inf. loop
+    return partly_expand(p, pos, env, flags);
+  } else if (what == "id" && !(flags & EXPAND_NO_ID_MACRO_CALL)) { 
+    // NOTE: ID macros can have flags, since there is no parameter list
+    //       they are passed in as flags as (id <id> :(flag1 val1))
     assert_num_args(p, 1);
     const Syntax * n = p;
-    const Syntax * a = new Syntax(new Syntax("list"));
     // FIXME: This needs to use lookup(Syntax *), but that throws an
     // error need find(Syntax *)
     const MacroSymbol * m = NULL;
@@ -421,14 +425,15 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
       sn = *n->arg(0);
       m = env.symbols.find<MacroSymbol>(sn);
     }
-    if (m) { // function macros
-      //  (call (id fun) (list parm1 parm2 ...))?
+    if (m) { // id macro
+      Syntax * a = new Syntax(new Syntax("list"));
+      a->set_flags(p);
       p = m->expand(a, env);
-      return partly_expand(p, pos, env);
+      return partly_expand(p, pos, env, flags);
     }
   } else if (what == "call") { 
     assert_num_args(p, 2);
-    const Syntax * n = partly_expand(p->arg(0), OtherPos, env);
+    const Syntax * n = partly_expand(p->arg(0), OtherPos, env, flags | EXPAND_NO_ID_MACRO_CALL);
     const Syntax * a = p->arg(1);
     if (a->is_a("()")) a = reparse("SPLIT", p->arg(1)->arg(0));
     if (n && n->is_a("id")) {
@@ -436,16 +441,18 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
       // error need find(Syntax *)
       const MacroSymbol * m = NULL;
       SymbolName sn;
-      if (n->arg(0)->entity()) {
-        m = dynamic_cast<const MacroSymbol *>(n->arg(0)->entity());
-      } else {
-        sn = *n->arg(0);
-        m = env.symbols.find<MacroSymbol>(sn);
+      if (!(flags & EXPAND_NO_FUN_MACRO_CALL)) {
+        if (n->arg(0)->entity()) {
+          m = dynamic_cast<const MacroSymbol *>(n->arg(0)->entity());
+        } else {
+          sn = *n->arg(0);
+          m = env.symbols.find<MacroSymbol>(sn);
+        }
       }
       if (m) { // function macros
         //  (call (id fun) (list parm1 parm2 ...))?
         p = m->expand(a, env);
-        return partly_expand(p, pos, env);
+        return partly_expand(p, pos, env, flags);
       } else if (sn == "environ_snapshot") {
         if (a->num_args() > 0)
           throw error(a, "%s does not take any paramaters", ~sn.name);
@@ -461,11 +468,11 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env) {
     const Syntax * res = parse_decl_->parse_decl(p, env);
     if (!res)
       res = e_parse_exp(p, env);
-    return partly_expand(res, pos, env);
+    return partly_expand(res, pos, env, flags);
   } else if (what == "exp") {
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env);
-    return partly_expand(p, pos, env);
+    return partly_expand(p, pos, env, flags);
   }
   // we should have a primitive
   return p;

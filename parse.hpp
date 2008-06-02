@@ -178,7 +178,7 @@ struct Syntax : public gc {
   Entity * entity() const {return entity_;}
 
   Syntax(const Syntax & other) 
-    : what_(other.what_), str_(other.str_), d(other.d ? new D(*d) : 0), repl(other.repl), entity_(other.entity_)
+    : what_(other.what_), str_(other.str_), d(other.d ? new D(*other.d) : 0), repl(other.repl), entity_(other.entity_)
   {}
   Syntax & operator= (const Syntax & other) {
     what_ = other.what_;

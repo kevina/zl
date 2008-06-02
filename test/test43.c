@@ -3,7 +3,7 @@ struct Foo {
 };
 
 module Foo (x) {
-  map x() {(*this)..x;}
+  map x(:this this = this) {(*this)..x;}
 }
 
 make_user_type Foo;
