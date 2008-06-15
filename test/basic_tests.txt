@@ -40,3 +40,4 @@ test42.c
 test43.c
 test44.c
 test45.c
+test46.c

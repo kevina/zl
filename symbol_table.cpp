@@ -8,6 +8,7 @@ namespace ast {
   InnerNS SYNTAX_NS_OBJ("syntax");
   InnerNS OUTER_NS_OBJ("outer");
   InnerNS INNER_NS_OBJ("inner");
+  InnerNS CAST_NS_OBJ("cast");
 
   const InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
   const InnerNS * const TAG_NS = &TAG_NS_OBJ;
@@ -15,6 +16,7 @@ namespace ast {
   const InnerNS * const SYNTAX_NS = &SYNTAX_NS_OBJ;
   const InnerNS * const OUTER_NS = &OUTER_NS_OBJ;
   const InnerNS * const INNER_NS = &INNER_NS_OBJ;
+  const InnerNS * const CAST_NS = &CAST_NS_OBJ;
 
   void add_inner_nss(SymbolTable & syms) {
     syms.add(SymbolKey("default", INNER_NS), DEFAULT_NS);
@@ -23,6 +25,7 @@ namespace ast {
     syms.add(SymbolKey("syntax", INNER_NS), SYNTAX_NS);
     syms.add(SymbolKey("outer", INNER_NS), OUTER_NS);
     syms.add(SymbolKey("inner", INNER_NS), INNER_NS);
+    syms.add(SymbolKey("cast", INNER_NS), CAST_NS);
   }
 
   void marks_ignored(String name) {

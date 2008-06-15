@@ -16,6 +16,7 @@ namespace ast {
   static TypeCategory FUN_C_OBJ("function", ANY_C); // FIXME: Is this right?
   static TypeCategory UNKNOWN_C_OBJ("?", ANY_C);
   static TypeCategory ZERO_C_OBJ("zero", INT_C, POINTER_C);
+  static TypeCategory USER_C_OBJ("user", ANY_C);
 
   TypeCategory * const ANY_C = &ANY_C_OBJ;
   TypeCategory * const SCALAR_C = &SCALAR_C_OBJ;
@@ -29,7 +30,8 @@ namespace ast {
   TypeCategory * const FUN_C = &FUN_C_OBJ;
   TypeCategory * const UNKNOWN_C = &UNKNOWN_C_OBJ;
   TypeCategory * const ZERO_C = &ZERO_C_OBJ;
-
+  TypeCategory * const USER_C = &USER_C_OBJ;
+  
   Type * VOID_T = 0;
 
   const char * type_name(const Type * t) {
@@ -344,12 +346,12 @@ namespace ast {
 
   class C_TypeRelation : public TypeRelation {
   public:
-    AST * resolve_to(AST * exp, const Type * type) const;
+    AST * resolve_to(AST * exp, const Type * type, Environ & env) const;
     const Type * unify(int rule, const Type *, const Type *) const;
     AST * cast(int rule, AST * exp, const Type * type) const;
   };
 
-  AST * C_TypeRelation::resolve_to(AST * exp, const Type * type) const {
+  AST * C_TypeRelation::resolve_to(AST * exp, const Type * type, Environ & env) const {
     static int i = -1;
     ++i;
     const Type * have = exp->type->unqualified;
@@ -364,6 +366,16 @@ namespace ast {
 
     if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
       return new ImplicitCast(exp, type); 
+
+#if 0
+    // FIXME: This is not really C...
+    if (have->is(USER_C) && need->is(USER_C)) {
+      if (have->is(need->category))
+        return new ImplicitCast(exp, type);
+      else
+        goto fail;
+    }
+#endif
 
     // deal with pointer types
     {
@@ -384,6 +396,12 @@ namespace ast {
                       ~have->to_string(), ~need->to_string());
         else
           return exp;
+      } else if (h_subtype->is(n_subtype->category)) {
+        if (h_subtype->read_only && !n_subtype->read_only)
+          throw error(exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+                      ~have->to_string(), ~need->to_string());
+        else
+          return cast_up(exp, n_subtype, env);
       } else {
         goto fail;
       }
@@ -495,10 +513,7 @@ namespace ast {
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {
-    Vector<TypeParm> parms;
-    parms.push_back(TypeParm(QualifiedType::CT_CONST));
-    parms.push_back(TypeParm(t));
-    return inst(".qualified", parms);
+    return inst(".qualified", TypeParm(QualifiedType::CT_CONST), TypeParm(t));
   }
 
   void StructT::finalize_hook() {

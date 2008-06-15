@@ -14,7 +14,7 @@ struct Syntax;
 namespace ast {
 
   // NOTE: In order to avoid expensive compressions between types each
-  // type object must only be allocated once, this way an cheap pointer
+  // type object must only be allocated once, this way a cheap pointer
   // comparison can be used EXCEPT for Tuple which are "special" since
   // they are used as function parameters and have lots of special 
   // properties
@@ -51,6 +51,7 @@ namespace ast {
   extern TypeCategory * const FUN_C;
   extern TypeCategory * const UNKNOWN_C;
   extern TypeCategory * const ZERO_C;
+  extern TypeCategory * const USER_C;
 
   struct TypeParm : public gc {
     enum What {NONE, TYPE, INT, TUPLE, EXP, DOTS};
@@ -85,6 +86,17 @@ namespace ast {
     Type * inst(SymbolKey n, const Type * t) {
       Vector<TypeParm> parms;
       parms.push_back(TypeParm(t));
+      return inst(n, parms);
+    }
+    Type * inst(SymbolKey n, const TypeParm & p1) {
+      Vector<TypeParm> parms;
+      parms.push_back(p1);
+      return inst(n, parms);
+    }
+    Type * inst(SymbolKey n, const TypeParm & p1, const TypeParm & p2) {
+      Vector<TypeParm> parms;
+      parms.push_back(p1);
+      parms.push_back(p2);
       return inst(n, parms);
     }
     Type * ct_const(const Type * t);
@@ -145,7 +157,7 @@ namespace ast {
 
   class TypeRelation : public gc_cleanup {
   public:
-    virtual AST * resolve_to(AST * exp, const Type * type) const = 0;
+    virtual AST * resolve_to(AST * exp, const Type * type, Environ & env) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
     const Type * unify(int rule, AST * &, AST * &);
     virtual AST * cast(int rule, AST * exp, const Type * type) const = 0;
@@ -687,7 +699,8 @@ namespace ast {
   public:
     //UserTypeInst(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {}
     //UserTypeInst(const Type * p) : TypeInst(p) {}
-    UserTypeInst() : type(), module(), defined() {}
+    UserTypeInst() : SimpleTypeInst(USER_C), parent(), type(), module(), defined() {}
+    const Type * parent;
     const Type * type;
     const Module * module;
     bool defined;

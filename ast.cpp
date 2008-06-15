@@ -1504,6 +1504,7 @@ namespace ast {
       //sym = s->type_symbol;
     } else {
       s = new UserType;
+      s->category = new TypeCategory(name.name, USER_C);
       /*sym = */add_simple_type(env.types, SymbolKey(name), s);
     }
     if (p->num_args() > 1) {
@@ -1515,6 +1516,44 @@ namespace ast {
     s->module = env.symbols.lookup<Module>(p->arg(0), OUTER_NS);
     s->defined = true;
     s->finalize();
+    return new Empty();
+  }
+
+  struct UserCast : public Symbol {
+    const Type * from;
+    const Type * to;
+    const Symbol * cast_macro;
+  };
+
+  struct UserCastCompare {
+    const Type * from;
+    const Type * to;
+    UserCastCompare(const Type * f, const Type * t)
+      : from(f), to(t) {}
+    bool operator() (SymbolKey, const Symbol * s) {
+      const UserCast * ut = dynamic_cast<const UserCast *>(s);
+      if (!ut) return false;
+      return ut->from == from && ut->to == to;
+    }
+  };
+
+  AST * parse_make_subtype(const Syntax * p, Environ & env) {
+    assert_num_args(p, 3, 4);
+    SymbolName parent = *p->arg(0);
+    SymbolName child = *p->arg(1);
+    const Syntax * up_cast = p->arg(2);
+    UserType * parent_t = const_cast<UserType *>
+      (dynamic_cast<const UserType *>(env.types.inst(SymbolKey(parent))));
+    UserType * child_t  = const_cast<UserType *>
+      (dynamic_cast<const UserType *>(env.types.inst(SymbolKey(child))));
+    UserCast * user_cast = new UserCast;
+    user_cast->from = child_t;
+    user_cast->to = parent_t;
+    user_cast->cast_macro = env.symbols.lookup<Symbol>(up_cast);
+    assert(!child_t->parent);
+    child_t->parent = parent_t;
+    child_t->category = new TypeCategory(child_t->what(), parent_t->category);
+    env.symbols.add(SymbolKey("up_cast", CAST_NS), user_cast);
     return new Empty();
   }
 
@@ -1543,12 +1582,12 @@ namespace ast {
         assert(n && n->is_a("id")); // FIXME Error Message
         Syntax * a = new Syntax(*arg1->arg(1));
         a->add_flag(new Syntax(THIS, ptr_exp));
-        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms);
+        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms, NULL, StripMarks);
         call = new Syntax(arg1->part(0), new Syntax(ID, new Syntax(sym)), a);
       } else {
         const Syntax * n = arg1;
         assert(n && n->is_a("id")); // FIXME Error Message
-        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms);
+        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms, NULL, StripMarks);
         Syntax * c = new Syntax(ID, new Syntax(sym));
         c->add_flag(new Syntax(THIS, ptr_exp));
         call = c;
@@ -1785,6 +1824,52 @@ namespace ast {
       }
     }
     return NULL;
+  }
+
+  AST * cast_up(AST * exp, const Type * type, Environ & env) {
+    const PointerLike * from_ptr = dynamic_cast<const PointerLike *>(exp->type->unqualified);
+    const QualifiedType * from_qualified = dynamic_cast<const QualifiedType *>(from_ptr->subtype->root);
+    const UserType * from_base = dynamic_cast<const UserType *>(from_ptr->subtype->unqualified);
+    if (from_base == type) return exp;
+    //const Type * to_base = from_base->parent;
+    const Type * to_qualified = from_qualified
+      ? env.types.inst(".qualified", TypeParm(from_qualified->qualifiers), TypeParm(from_base->parent))
+      : from_base->parent;
+    assert(to_qualified); // FIXME: Maybe Error Message
+    const Type * to_ptr = env.types.inst(".pointer", to_qualified);
+    NoOpGather gather;
+    UserCastCompare cmp(from_base, from_base->parent);
+    const UserCast * cast = lookup_symbol<UserCast>(SymbolKey("up_cast", CAST_NS), exp->parse_->str(), 
+                                                    env.symbols.front, NULL, NormalStrategy, gather, cmp);
+    const Syntax * p = new Syntax(new Syntax("call"), 
+                                  new Syntax(new Syntax("id"), new Syntax(cast->cast_macro)),
+                                  new Syntax(new Syntax("list"), new Syntax(exp)));
+    AST * res = parse_exp(p, env);
+    resolve_to(env, res, to_ptr);
+    return cast_up(res, type, env);
+  }
+
+  AST * cast_down(AST * exp, const Type * type, Environ & env) {
+    abort();
+    //if (exp->type == type)
+    //  return exp;
+    //const UserType * ?? = dynamic_cast<const UserType *>(type);
+    //const Type * ???_unqualified = ??->parent;
+    //call cast macro;
+    //compile to ast;
+    //return it;
+  }
+
+  AST * subtype_cast(AST * exp, const UserType * type, Environ & env) {
+    const Type * have = exp->type->unqualified;
+    const Type * need = type->unqualified;
+    if (have->is(need->category))
+      return cast_up(exp, type, env);
+    else if (need->is(have->category))
+      return cast_down(exp, type, env);
+    else
+      throw error(exp->parse_, "Invalid cast from \"%s\" to \"%s\"",
+                  ~have->to_string(), ~need->to_string());
   }
 
   void Cast::finalize(FinalizeEnviron & env) {
@@ -2469,6 +2554,7 @@ namespace ast {
     if (what == "import")        return parse_import(p, env);
     if (what == "make_inner_ns") return parse_make_inner_ns(p, env);
     if (what == "make_user_type") return parse_make_user_type(p, env);
+    if (what == "make_subtype") return parse_make_subtype(p, env);
     if (what == "declare_user_type") return parse_declare_user_type(p, env);
     if (what == "class")         return parse_class(p, env);
     return 0;

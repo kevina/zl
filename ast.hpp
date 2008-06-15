@@ -453,7 +453,7 @@ namespace ast {
 
   template <typename T>
   void resolve_to(Environ & env, T * & exp, const Type * type) {
-    exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type));
+    exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type, env));
   }
 
   //int ct_value(const Syntax * p, Environ &);
@@ -470,14 +470,25 @@ namespace ast {
 
   void compile(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
 
+  AST * cast_up(AST * exp, const Type * type, Environ & env);
+
+
   //
   // For lack of a better place
   //
 
+  template <typename T, typename Gather, typename ExtraCmp>
+  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
+                          const SymbolNode * start, const SymbolNode * stop,
+                          Strategy strategy, Gather & gather, ExtraCmp & cmp);
   template <typename T, typename Gather>
   const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                           const SymbolNode * start, const SymbolNode * stop,
-                          Strategy strategy, Gather & gather);
+                          Strategy strategy, Gather & gather) 
+  {
+    AlwaysTrueExtraCmp cmp;
+    return lookup_symbol<T>(p, ns, start, stop, strategy, gather, cmp);
+  }
   template <typename T>
   static inline
   const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
@@ -487,15 +498,15 @@ namespace ast {
     NoOpGather gather;
     return lookup_symbol<T>(p, ns, start, stop, strategy, gather);
   }
-  template <typename T, typename Gather>
+  template <typename T, typename Gather, typename ExtraCmp>
   const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                           const SymbolNode * start, const SymbolNode * stop,
-                          Strategy strategy, Gather & gather)
+                          Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
     if (p->simple()) {
-      return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy, gather);
+      return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy, gather, cmp);
     } else if (p->entity()) {
-      printf(">%s\n", typeid(*p->entity()).name());
+      //printf(">%s\n", typeid(*p->entity()).name());
       const T * s = dynamic_cast<const T *>(p->entity());
       if (!s) abort(); // FIXME Error Message
       return s;

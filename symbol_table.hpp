@@ -126,6 +126,7 @@ namespace ast {
   extern const InnerNS * const SYNTAX_NS;
   extern const InnerNS * const OUTER_NS;
   extern const InnerNS * const INNER_NS;
+  extern const InnerNS * const CAST_NS;
 
   struct SymbolKey : public SymbolName {
     const InnerNS * ns;
@@ -252,20 +253,32 @@ namespace ast {
     void stripped_mark(const Mark * m) {}
   };
 
-  template <typename Gather>
+  struct AlwaysTrueExtraCmp {
+    bool operator() (SymbolKey, const Symbol *) {return true;}
+  };
+
+  template <typename Gather, typename ExtraCmp>
   const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
-                                    Strategy strategy, Gather & gather);
+                                    Strategy strategy, Gather & gather, ExtraCmp & cmp);
+  template <typename Gather>
+  static inline
+  const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+                                    Strategy strategy, Gather & gather) {
+    AlwaysTrueExtraCmp cmp;
+    return find_symbol_p1(k, start, stop, strategy, gather, cmp);
+  }
   static inline
   const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
                                     Strategy strategy) 
   {
     NoOpGather gather;
-    return find_symbol_p1(k, start, stop, strategy, gather);
+    AlwaysTrueExtraCmp cmp;
+    return find_symbol_p1(k, start, stop, strategy, gather, cmp);
   }
   
-  template <typename Gather>
+  template <typename Gather, typename ExtraCmp>
   const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
-                                    Strategy strategy, Gather & gather)
+                                    Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
     //printf("p1: %p %p\n", start, stop);
     const SymbolNode * cur = start;
@@ -273,7 +286,7 @@ namespace ast {
     for (; cur != stop; cur = cur->next) {
       //if (k.ns->name == "internal") 
       //printf ("--- %s`%s\n", ~cur->key.to_string(), ~cur->key.ns->name);
-      if (k == cur->key) break;
+      if (k == cur->key && cmp(cur->key, cur->value)) break;
     }
     //printf("^^^\n");
     if (cur == stop) {
@@ -281,11 +294,11 @@ namespace ast {
         cur = k.marks->mark->env;
         gather.stripped_mark(k.marks->mark); 
         k.marks = k.marks->prev;
-        return find_symbol_p1(k, cur, stop, strategy);
+        return find_symbol_p1(k, cur, stop, strategy, gather, cmp);
       } else if (strategy == StripMarks && k.marks) {
         gather.stripped_mark(k.marks->mark); 
         k.marks = k.marks->prev;
-        return find_symbol_p1(k, start, stop, strategy);
+        return find_symbol_p1(k, start, stop, strategy, gather, cmp);
       } else {
         return NULL;
       }
@@ -293,7 +306,7 @@ namespace ast {
     return cur;
   }
 
-  template <typename T>
+  template <typename T/*, typename ExtraCmp*/>
   static inline
   const SymbolNode * find_symbol_p2(const SymbolNode * s, SymbolKey k, 
                                     const SymbolNode * start, const SymbolNode * stop,
@@ -314,30 +327,30 @@ namespace ast {
     return s;
   }
  
-  template <typename T, typename Gather>
+  template <typename T, typename Gather, typename ExtraCmp>
   const SymbolNode * find_symbol_p3(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
-                                    Strategy strategy, Gather & gather)
+                                    Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
     //printf("p3: %p %p\n", start, stop);
-    const SymbolNode * s = find_symbol_p1(k, start, stop, strategy, gather);
+    const SymbolNode * s = find_symbol_p1(k, start, stop, strategy, gather, cmp);
     return find_symbol_p2<T>(s, k, start, stop, strategy);
   }
 
-  template <typename T, typename Gather>
+  template <typename T, typename Gather, typename ExtraCmp>
   const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
-                        Strategy strategy, Gather & gather) 
+                        Strategy strategy, Gather & gather, ExtraCmp & cmp) 
   {
-    const SymbolNode * s = find_symbol_p3<T>(k, start, stop, strategy, gather);
+    const SymbolNode * s = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s) return NULL;
     return dynamic_cast<const T *>(s->value);
   }
 
-  template <typename T, typename Gather>
+  template <typename T, typename Gather, typename ExtraCmp>
   const T * lookup_symbol(SymbolKey k, const SourceStr & str,
                           const SymbolNode * start, const SymbolNode * stop,
-                          Strategy strategy, Gather & gather)
+                          Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
-    const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather);
+    const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s1) {
       //fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
       throw error(str, "Unknown Identifier \"%s\"", ~k.name);
@@ -359,7 +372,8 @@ namespace ast {
                         Strategy strategy = NormalStrategy) 
   {
     NoOpGather gather; 
-    return find_symbol<T>(k, start, stop, strategy, gather);
+    AlwaysTrueExtraCmp cmp;
+    return find_symbol<T>(k, start, stop, strategy, gather, cmp);
   }
 
   template <typename T>
@@ -369,7 +383,8 @@ namespace ast {
                           Strategy strategy = NormalStrategy)
   {
     NoOpGather gather;
-    return lookup_symbol<T>(k, str, start, stop, strategy, gather);
+    AlwaysTrueExtraCmp cmp;
+    return lookup_symbol<T>(k, str, start, stop, strategy, gather, cmp);
   }
 
 
