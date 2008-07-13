@@ -15,6 +15,8 @@
 // each AST node pushes the result on the top of the stack
 //   unless the type is void
 
+#define SYN new Syntax
+
 namespace ast {
 
   typedef int target_bool;
@@ -1445,7 +1447,7 @@ namespace ast {
     GatherMarks gather;
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env.symbols.front, NULL, 
                                              NormalStrategy, gather);
-    printf("IMPORT %p %p\n", m, m->syms);
+    //printf("IMPORT %p %p\n", m, m->syms);
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
       // now add marks back in reverse order;
       SymbolKey k = cur->key;
@@ -1538,6 +1540,7 @@ namespace ast {
   };
 
   AST * parse_make_subtype(const Syntax * p, Environ & env) {
+    //printf(">>%s\n", ~p->to_string());
     assert_num_args(p, 3, 4);
     SymbolName parent = *p->arg(0);
     SymbolName child = *p->arg(1);
@@ -1610,7 +1613,7 @@ namespace ast {
     if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected Identifier");
     SymbolName id = *p->arg(1)->arg(0);
     const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified);
-    if (!t) throw error(p->arg(0), "Expected user type");
+    if (!t) throw error(p->arg(0), "Expected user type but got ??");
     if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
     exp->type = change_unqualified(exp->type, t->type);
     if (id == "this") {
@@ -1629,14 +1632,45 @@ namespace ast {
                        Syntax * struct_b, Syntax * module_b);
 
   AST * parse_class(const Syntax * p, Environ & env) {
-
     const Syntax * name = p->arg(0);
-    printf("parse_class %s\n", ~name->what());
-    p->print(); printf("\n"); 
+    const Syntax * parent_s = p->flag("public");
+    const Type * parent = NULL;
+    if (parent_s) {
+      //printf(">>parent_s = %s\n", ~parent_s->to_string());
+      parent_s = partly_expand(parent_s->arg(0), OtherPos, env);
+      assert(parent_s->is_a("id"));
+      parent = env.types.inst(parent_s->arg(0));
+    }
+    //printf("parse_class %s %p\n", ~name->what(), parent);
+    //p->print(); printf("\n"); 
+
+    Syntax * cast = new Syntax(gen_sym());
+    if (parent) {
+      parse_stmt_decl(SYN(SYN("map"),
+                          cast,
+                          SYN(SYN("child")),
+                          SYN,
+                          SYN(SYN("addrof"),
+                              SYN(SYN("imember"),
+                                  SYN(SYN("deref"),SYN(SYN("mid"),SYN("child"))),
+                                  SYN(SYN("id"),SYN("parent"))))),
+                      env);
+    }
 
     Syntax * struct_b = new Syntax();
     Syntax * exports = new Syntax();
     Syntax * module_b = new Syntax(new Syntax("{...}"));
+
+    if (parent) {
+      struct_b->add_part(new Syntax(new Syntax("var"),
+                                    new Syntax("parent"),
+                                    parent_s->arg(0)));
+      const Module * m = env.symbols.lookup<Module>(parent_s->arg(0), OUTER_NS);
+      for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
+        exports->add_part(new Syntax(cur->key));
+      }
+      module_b->add_part(SYN(SYN("import"), parent_s->arg(0)));
+    }
     
     const Syntax * body = p->arg(1);
     for (int i = 0; i != body->num_parts(); ++i) {
@@ -1674,6 +1708,15 @@ namespace ast {
     printf("\n"); module_->print(); printf("\n");
     parse_stmt_decl(module_, env);
 
+    if (parent) {
+      parse_stmt_decl
+        (new Syntax(new Syntax("make_subtype"),
+                    parent_s->arg(0),
+                    name,
+                    cast), 
+         env);
+    }
+
     return new Empty();
   }
 
@@ -1683,17 +1726,19 @@ namespace ast {
   {
     assert_num_args(p, 2, 3);
     const Syntax * n = p->arg(0);
-    Syntax * macro_parms = new Syntax();
+    Syntax * macro_parms = SYN;
     macro_parms->add_flag(THIS_FLAG);
     // FIXME: handle flags
     struct_b->add_part(p);
-    module_b->add_part(new Syntax(new Syntax("map"), 
-                                  n, 
-                                  macro_parms,
-                                  new Syntax,
-                                  new Syntax(new Syntax("imember"), 
-                                             new Syntax(new Syntax("deref"), THIS_MID), 
-                                             new Syntax(ID, n))));
+    module_b->add_part(SYN(SYN("map"), 
+                           n, 
+                           macro_parms,
+                           SYN,
+                           SYN(SYN("imember"), 
+                               SYN(SYN("deref"), SYN(SYN("icast"), 
+                                                     SYN(SYN(".pointer"), type_name), 
+                                                     THIS_MID)), 
+                               SYN(ID, n))));
   }
   
   void parse_class_fun(const Syntax * p, const Syntax * type_name, 
@@ -1880,15 +1925,26 @@ namespace ast {
     f << "((" << type->to_string() << ")" << "(" << exp << "))";
   };
 
-  AST * ExplicitCast::parse_self(const Syntax * p, Environ & env) {
-    parse_ = p;
-    assert_num_args(2);
+  AST * parse_implicit_cast(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
     const Syntax * t = p->arg(0);
     if (t->is_a("(type)"))
       t = t->arg(0);
-    type = parse_type(t, env);
-    exp = parse_exp(p->arg(1), env);
-    return this;
+    Type * type = parse_type(t, env);
+    AST * exp = parse_exp(p->arg(1), env);
+    return env.type_relation->resolve_to(exp, type, env);
+  }
+
+  AST * parse_explicit_cast(const Syntax * p, Environ & env) {
+    Cast * cast = new Cast("cast");
+    cast->parse_ = p;
+    assert_num_args(p, 2);
+    const Syntax * t = p->arg(0);
+    if (t->is_a("(type)"))
+      t = t->arg(0);
+    cast->type = parse_type(t, env);
+    cast->exp = parse_exp(p->arg(1), env);
+    return cast;
   }
   
 #if 0
@@ -2627,7 +2683,8 @@ namespace ast {
     if (what == "call")    return (new Call)->parse_self(p, env);
     if (what == "eblock")  return (new EBlock)->parse_self(p, env);
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
-    if (what == "cast")    return (new ExplicitCast)->parse_self(p, env);
+    if (what == "cast")    return parse_explicit_cast(p, env);
+    if (what == "icast")   return parse_implicit_cast(p, env);
     if (what == "empty")   return (new Empty)->parse_self(p, env);
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);

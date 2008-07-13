@@ -145,9 +145,10 @@ public:
     }
     parse->str_ = str;
     parse->str_.end = s;
-    if (capture_as_flag)
+    if (capture_as_flag) {
       parts.flags->insert(parse);
-    else
+      //printf("FLAG! %s\n", ~parse->to_string());
+    } else
       parts.parts->append(parse);
     return s;
   }

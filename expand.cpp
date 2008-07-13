@@ -485,6 +485,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
 }
 
 AST * parse_map(const Syntax * p, Environ & env) {
+  //printf("MAP>>%s\n", ~p->to_string());
   Map * m = new Map;
   m->parse_self(p, env);
   if (p->is_a("smap"))

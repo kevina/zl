@@ -44,6 +44,12 @@ namespace ast {
     return s->inst(p);
   }
 
+  Type * TypeSymbolTable::inst(const Syntax * n, Vector<TypeParm> & p) {
+    const TypeSymbol * s = env->symbols.find<TypeSymbol>(n);
+    if (!s) return NULL;
+    return s->inst(p);
+  }
+
   void TypeSymbolTable::add_name(const SymbolKey & k, TypeSymbol * t) {
     t->name = k.name;
     env->add(k, t);
@@ -339,8 +345,8 @@ namespace ast {
     const Type * yt = y->type->unqualified;
     const Type * t = unify(rule, xt, yt);
     //printf("UNIFY %d to \"\%s\"\n", x->parse_->str().source->get_pos(x->parse_->str().begin).line, ~t->to_string());
-    if (t != xt) {x = new ImplicitCast(x, t);}
-    if (t != yt) {y = new ImplicitCast(y, t);}
+    if (t != xt) {x = new Cast(x, t);}
+    if (t != yt) {y = new Cast(y, t);}
     return t;
   }
 
@@ -365,13 +371,13 @@ namespace ast {
       return exp;
 
     if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
-      return new ImplicitCast(exp, type); 
+      return new Cast(exp, type); 
 
 #if 0
     // FIXME: This is not really C...
     if (have->is(USER_C) && need->is(USER_C)) {
       if (have->is(need->category))
-        return new ImplicitCast(exp, type);
+        return new Cast(exp, type);
       else
         goto fail;
     }

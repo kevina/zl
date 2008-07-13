@@ -250,20 +250,12 @@ namespace ast {
 
   struct Cast : public AST {
     Cast(String s) : AST(s) {}
+    Cast(AST * e, const Type * t) 
+      : AST("<cast>") {exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
     AST * exp;
     void compile(CompileWriter&, CompileEnviron&);
     void finalize(FinalizeEnviron &); 
- };
-
-  struct ImplicitCast : public Cast {
-    ImplicitCast(AST * e, const Type * t) 
-      : Cast("<cast>") {exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
-    AST * parse_self(const Syntax * p, Environ & env0) {abort();}
-  };
-
-  struct ExplicitCast : public Cast {
-    ExplicitCast() : Cast("cast") {}
-    AST * parse_self(const Syntax * p, Environ & env0);
+    AST * parse_self(const Syntax * p, Environ &) {abort();}
   };
 
   //
@@ -520,7 +512,7 @@ namespace ast {
       return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy);
     } else if (p->is_a("w/outer")) {
       const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, start, stop, strategy);
-      printf("DIRECT %p %p\n", m, m->syms);
+      //printf("DIRECT %p %p\n", m, m->syms);
       unsigned last = p->num_args() - 1;
       //for (unsigned i = 1; i < last; ++i) {
       //  m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);

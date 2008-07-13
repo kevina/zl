@@ -79,7 +79,12 @@ namespace ast {
     TypeSymbolTable(Environ * s) : env(s) {}
     inline const TypeSymbol * find(const SymbolKey & k);
     Type * inst(SymbolKey n, Vector<TypeParm> &);
+    Type * inst(const Syntax * n, Vector<TypeParm> &);
     Type * inst(SymbolKey n) {
+      Vector<TypeParm> dummy;
+      return inst(n, dummy);
+    }
+    Type * inst(const Syntax * n) {
       Vector<TypeParm> dummy;
       return inst(n, dummy);
     }

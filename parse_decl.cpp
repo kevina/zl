@@ -327,6 +327,7 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
     if (body || by_itself) {
       Syntax * struct_union = new Syntax(p->part(0));
       struct_union->add_part(name);
+      struct_union->set_flags(p);
       if (body)
         struct_union->add_part(parse_struct_union_body(body, env));
       type_scope.push_back(struct_union);
