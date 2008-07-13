@@ -1646,6 +1646,8 @@ namespace ast {
 
     Syntax * cast = new Syntax(gen_sym());
     if (parent) {
+      // FIXME: No need to generate a unique macro for each class,
+      //        at least not yet...
       parse_stmt_decl(SYN(SYN("map"),
                           cast,
                           SYN(SYN("child")),
@@ -1694,7 +1696,15 @@ namespace ast {
     parse_stmt_decl(new Syntax(new Syntax("make_user_type"),
                                name),
                     env);
-    
+
+    if (parent) {
+      parse_stmt_decl(new Syntax(new Syntax("make_subtype"),
+                                 parent_s->arg(0),
+                                 name,
+                                 cast), 
+                      env);
+    }
+
     const Syntax * struct_ = new Syntax(new Syntax("struct"),
                                         name,
                                         struct_b);
@@ -1707,15 +1717,6 @@ namespace ast {
                                         module_b);
     printf("\n"); module_->print(); printf("\n");
     parse_stmt_decl(module_, env);
-
-    if (parent) {
-      parse_stmt_decl
-        (new Syntax(new Syntax("make_subtype"),
-                    parent_s->arg(0),
-                    name,
-                    cast), 
-         env);
-    }
 
     return new Empty();
   }
@@ -1751,40 +1752,42 @@ namespace ast {
     const Syntax * body = p->arg(3);
     // FIXME: handle flags
 
-    Syntax * fun_name = new Syntax(new Syntax("w/inner"), name, new Syntax("internal"));
-    Syntax * fun_id   = new Syntax(ID, fun_name);
-    //new Syntax(new Syntax("w/outer"), type_name, fun_name));
+    Syntax * fun_name = SYN(SYN("w/inner"), name, SYN("internal"));
+    Syntax * fun_id   = SYN(ID, fun_name);
+    //SYN(SYN("w/outer"), type_name, fun_name));
 
-    Syntax * new_parms = new Syntax(parms->part(0));
-    new_parms->add_part(new Syntax(new Syntax(new Syntax(".pointer"), type_name), 
-                                   new Syntax(new Syntax("fluid"), THIS)));
+    Syntax * new_parms = SYN(parms->part(0));
+    new_parms->add_part(SYN(SYN(SYN(".pointer"), type_name), 
+                            SYN(SYN("fluid"), THIS)));
     new_parms->add_parts(parms->args_begin(), parms->args_end());
-
-    Syntax * macro_parms = new Syntax();
+    
+    Syntax * macro_parms = SYN();
     macro_parms->make_branch();
-    Syntax * call_parms = new Syntax("list"); 
-    call_parms->add_part(THIS_MID);
+    Syntax * call_parms = SYN("list"); 
+    call_parms->add_part(SYN(SYN("icast"), 
+                             SYN(SYN(".pointer"), type_name), 
+                             THIS_MID));
     for (unsigned i = 0; i != parms->num_args(); ++i) {
       StringBuf sbuf;
       sbuf.printf("arg%d", i);
-      Syntax * arg = new Syntax(sbuf.freeze());
+      Syntax * arg = SYN(sbuf.freeze());
       macro_parms->add_part(arg);
-      call_parms->add_part(new Syntax(new Syntax("mid"), arg));
+      call_parms->add_part(SYN(SYN("mid"), arg));
     }
     macro_parms->add_flag(THIS_FLAG);
 
-    module_b->add_part(new Syntax(new Syntax("fun"),
-                                  fun_name, 
-                                  new_parms, 
-                                  ret_type, 
-                                  body));
-    module_b->add_part(new Syntax(new Syntax("map"), 
-                                  name,
-                                  macro_parms,
-                                  new Syntax,
-                                  new Syntax(new Syntax("call"),
-                                             fun_id,
-                                             call_parms)));
+    module_b->add_part(SYN(SYN("fun"),
+                           fun_name, 
+                           new_parms, 
+                           ret_type, 
+                           body));
+    module_b->add_part(SYN(SYN("map"), 
+                           name,
+                           macro_parms,
+                           SYN,
+                           SYN(SYN("call"),
+                               fun_id,
+                               call_parms)));
   }
 
   //
