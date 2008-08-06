@@ -1796,7 +1796,7 @@ namespace ast {
     // FIXME: handle flags
     bool is_static = p->flag("static");
     bool is_virtual = p->flag("virtual");
-    assert(is_static || is_virtual); // FIXME: Error
+    assert(!(is_static && is_virtual)); // FIXME Error message
     printf("IS VIRTUAL %s\n", ~*name);
 
     Syntax * fun_name = SYN(SYN("w/inner"), name, SYN("internal"));
