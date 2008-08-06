@@ -166,6 +166,10 @@ namespace ast {
     virtual void prep_eval(PrepEvalEnviron &) {abort();}
     virtual void eval(ExecEnviron &) {abort();}
     virtual void compile(CompileWriter &, CompileEnviron &) = 0; 
+    virtual AST * resolve_to(const Type * type, Environ & env, 
+                             TypeRelation::CastType rule = TypeRelation::Implicit) {
+      return env.type_relation->resolve_to(this, type, env, rule);
+    }
     virtual ~AST() {}
     //void print(OStream & o) const;
 
@@ -443,10 +447,11 @@ namespace ast {
   //
   //
 
-  template <typename T>
-  void resolve_to(Environ & env, T * & exp, const Type * type) {
-    exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type, env));
-  }
+  //template <typename T>
+  //static inline void resolve_to(Environ & env, AST * & exp, const Type * type) {
+  //exp = exp->resolve_to(type, env);
+    //exp = static_cast<T *>(env.type_relation->resolve_to(static_cast<AST *>(exp), type, env));
+  //}
 
   //int ct_value(const Syntax * p, Environ &);
 

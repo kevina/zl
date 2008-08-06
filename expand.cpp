@@ -381,13 +381,15 @@ const Syntax * handle_paran(const Syntax * p, Environ & env) {
 }
 
 const Syntax * e_parse_exp(const Syntax * p, Environ & env) {
-  Syntax * tmp = new Syntax("exp");
+  Syntax * tmp = new Syntax(p->part(0));
   for (unsigned i = 0; i != p->num_args(); ++i) {
     const Syntax * t = p->arg(i);
     if (t->is_a("()")) t = handle_paran(t, env);
     tmp->add_part(t);
   }
   const Syntax * res = parse_exp_->parse(tmp);
+  // FIXME: if really an expression than "list" needs to become the
+  //        comma operator
   return res;
 }
 
@@ -400,7 +402,10 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   if (p->simple()) {
     abort(); // FIXME: Error Message
   } else if (what == "{}") {
-    return partly_expand(reparse("BLOCK", p), pos, env, flags);
+    if (pos == ExpPos)
+      return partly_expand(reparse("INIT", p->arg(0)), pos, env, flags);
+    else
+      return partly_expand(reparse("BLOCK", p), pos, env, flags);
   } else if (what == "()") {
     return partly_expand(reparse("PARAN_EXP", p), pos, env, flags);
   } else if (what == "[]") {
@@ -455,7 +460,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     if (!res)
       res = e_parse_exp(p, env);
     return partly_expand(res, pos, env, flags);
-  } else if (what == "exp") {
+  } else if (what == "exp" || what == "init") {
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env);
     return partly_expand(p, pos, env, flags);

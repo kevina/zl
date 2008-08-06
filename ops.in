@@ -1,5 +1,5 @@
 (ops
-  (none (exp _ (category "()")))
+  (none (exp _ (category "()")) (exp _ (category "{}")))
   (left (postfix call (category "()"))
         (postfix ".[]" (category "[]"))
         (postfix postinc (sym ++)) (postfix postdec (sym --)))

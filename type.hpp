@@ -159,13 +159,13 @@ namespace ast {
   extern PrintInst const * const c_print_inst;
 
   struct AST;
-
+  
   class TypeRelation : public gc_cleanup {
   public:
-    virtual AST * resolve_to(AST * exp, const Type * type, Environ & env) const = 0;
+    enum CastType {Implicit, Explicit};
+    virtual AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
     const Type * unify(int rule, AST * &, AST * &);
-    virtual AST * cast(int rule, AST * exp, const Type * type) const = 0;
     //virtual const Type * promote(AST * exp) const = 0;
     virtual ~TypeRelation() {}
   };

@@ -505,7 +505,7 @@ namespace ast {
         if_false = new NoOp;
       }
       type = env.void_type();
-      resolve_to(env, exp, env.bool_type());
+      exp = exp->resolve_to(env.bool_type(), env);
       return this;
     }
     //void resolve(Environ & env) {
@@ -579,10 +579,10 @@ namespace ast {
     parse_ = p;
     assert_num_args(3);
     exp = parse_exp(p->arg(0), env);
-    resolve_to(env, exp, env.bool_type());
+    exp = exp->resolve_to(env.bool_type(), env);
     if_true = parse_exp(p->arg(1), env);
     if_false = parse_exp(p->arg(2), env);
-    resolve_to(env, if_false, if_true->type);
+    if_false = if_false->resolve_to(if_true->type, env);
     type = if_true->type;
     ct_value_ = op_ct_value<EIf_CT_Value>(type);
     return this;
@@ -597,7 +597,7 @@ namespace ast {
       parse_ = p;
       assert_num_args(2);
       exp = parse_exp(p->arg(0), env);
-      resolve_to(env, exp, env.bool_type());  
+      exp = exp->resolve_to(env.bool_type(), env);  
       body = parse_stmt(p->arg(1), env);
       type = env.void_type();
       return this;
@@ -697,7 +697,7 @@ namespace ast {
       assert(parse_->num_args() > 2);
       //env.add(name, sym, SecondPass);
       init = parse_exp(parse_->arg(2), env);
-      resolve_to(env, init, sym->type);
+      init = init->resolve_to(sym->type, env);
     }
     AST * parse_self(const Syntax * p, Environ & env) {
       Collect collect;
@@ -811,7 +811,7 @@ namespace ast {
       parse_ = p;
       assert_num_args(1);
       exp = parse_exp(p->arg(0), env);
-      resolve_to(env, exp, env.types.inst("int"));
+      exp = exp->resolve_to(env.types.inst("int"), env);
       type = env.void_type();
       return this;
     }
@@ -1078,7 +1078,7 @@ namespace ast {
         throw error(lhs->parse_, "Can not be used as lvalue");
       if (lhs->type->read_only) 
         throw error (lhs->parse_, "Assignment to read-only location");
-      resolve_to(env, rhs, lhs->type);
+      rhs = rhs->resolve_to(lhs->type, env);
       type = lhs->type;
     }
   };
@@ -1311,6 +1311,35 @@ namespace ast {
 
   struct PostDec : public PostIncDec {
     PostDec() : PostIncDec("postdec", "--") {}
+  };
+
+  struct InitList : public AST {
+    InitList() : AST("list") {}
+    AST * part(unsigned i) {return parts[i];}
+    Vector<AST *> parts;
+    AST * parse_self(const Syntax * p, Environ & env) {
+      parse_ = p;
+      unsigned num_args = p->num_args();
+      parts.reserve(num_args);
+      for (unsigned i = 0; i != num_args; ++i)
+        parts.push_back(parse_exp(p->arg(i), env));
+      type = VOID_T;
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      for (unsigned i = 0; i != parts.size(); ++i)
+        parts[i]->finalize(env);
+    }
+    void compile(CompileWriter & f, CompileEnviron & env) {
+      f << "{";
+      for (unsigned i = 0; i != parts.size(); ++i)
+        f << parts[i] << ",";
+      f << "}";
+    }
+    virtual AST * resolve_to(const Type * type, Environ & env, TypeRelation::CastType rule) {
+      // FIXME: resolve individual components of list first...
+      return new Cast(this, type); 
+    }
   };
 
   struct ASTList : public AST {
@@ -1727,23 +1756,37 @@ namespace ast {
   {
     assert_num_args(p, 2, 3);
     const Syntax * n = p->arg(0);
-    Syntax * macro_parms = SYN;
-    macro_parms->add_flag(THIS_FLAG);
+    bool is_static = p->flag("static");
     // FIXME: handle flags
-    struct_b->add_part(p);
-    module_b->add_part(SYN(SYN("map"), 
-                           n, 
-                           macro_parms,
-                           SYN,
-                           SYN(SYN("imember"), 
-                               SYN(SYN("deref"), SYN(SYN("icast"), 
-                                                     SYN(SYN(".pointer"), type_name), 
-                                                     THIS_MID)), 
-                               SYN(ID, n))));
+    if (is_static) {
+      Syntax * m = new Syntax(*p);
+      Syntax * n_i = SYN(SYN("w/inner"), n, SYN("internal"));
+      m->arg(0) = n_i;
+      module_b->add_part(m);
+      module_b->add_part(SYN(SYN("map"), 
+                             n,
+                             SYN,
+                             SYN,
+                             SYN(ID, n_i)));
+    } else {
+      Syntax * macro_parms = SYN;
+      macro_parms->add_flag(THIS_FLAG);
+      struct_b->add_part(p);
+      module_b->add_part(SYN(SYN("map"), 
+                             n, 
+                             macro_parms,
+                             SYN,
+                             SYN(SYN("imember"), 
+                                 SYN(SYN("deref"), SYN(SYN("icast"), 
+                                                       SYN(SYN(".pointer"), type_name), 
+                                                       THIS_MID)), 
+                                 SYN(ID, n))));
+    }
   }
   
   void parse_class_fun(const Syntax * p, const Syntax * type_name, 
-                       Syntax * struct_b, Syntax * module_b)
+                       Syntax * struct_b, Syntax * module_b
+                       /*Syntax * vtable_b, Syntax * vtable_i*/)
   {
     assert_num_args(p, 4);
     const Syntax * name = p->arg(0);
@@ -1751,22 +1794,32 @@ namespace ast {
     const Syntax * ret_type = p->arg(2);
     const Syntax * body = p->arg(3);
     // FIXME: handle flags
+    bool is_static = p->flag("static");
+    bool is_virtual = p->flag("virtual");
+    assert(is_static || is_virtual); // FIXME: Error
+    printf("IS VIRTUAL %s\n", ~*name);
 
     Syntax * fun_name = SYN(SYN("w/inner"), name, SYN("internal"));
     Syntax * fun_id   = SYN(ID, fun_name);
     //SYN(SYN("w/outer"), type_name, fun_name));
 
+    const Syntax * nv_name  = name;
+    if (is_virtual)
+      nv_name = SYN(SYN("w/inner"), name, SYN("non_virtual"));
+
     Syntax * new_parms = SYN(parms->part(0));
-    new_parms->add_part(SYN(SYN(SYN(".pointer"), type_name), 
-                            SYN(SYN("fluid"), THIS)));
+    if (!is_static)
+      new_parms->add_part(SYN(SYN(SYN(".pointer"), type_name), 
+                              SYN(SYN("fluid"), THIS)));
     new_parms->add_parts(parms->args_begin(), parms->args_end());
     
     Syntax * macro_parms = SYN();
     macro_parms->make_branch();
     Syntax * call_parms = SYN("list"); 
-    call_parms->add_part(SYN(SYN("icast"), 
-                             SYN(SYN(".pointer"), type_name), 
-                             THIS_MID));
+    if (!is_static) 
+      call_parms->add_part(SYN(SYN("icast"), 
+                               SYN(SYN(".pointer"), type_name), 
+                               THIS_MID));
     for (unsigned i = 0; i != parms->num_args(); ++i) {
       StringBuf sbuf;
       sbuf.printf("arg%d", i);
@@ -1774,20 +1827,23 @@ namespace ast {
       macro_parms->add_part(arg);
       call_parms->add_part(SYN(SYN("mid"), arg));
     }
-    macro_parms->add_flag(THIS_FLAG);
+    if (!is_static)
+      macro_parms->add_flag(THIS_FLAG);
 
-    module_b->add_part(SYN(SYN("fun"),
-                           fun_name, 
-                           new_parms, 
-                           ret_type, 
-                           body));
-    module_b->add_part(SYN(SYN("map"), 
-                           name,
-                           macro_parms,
-                           SYN,
-                           SYN(SYN("call"),
-                               fun_id,
-                               call_parms)));
+    module_b->add_part(SYN(SYN("fun"), fun_name, new_parms, ret_type, body));
+    module_b->add_part(SYN(SYN("map"), nv_name, macro_parms, SYN,
+                           SYN(SYN("call"), fun_id, call_parms)));
+
+    if (is_virtual) {
+      //module_b->add_part(SYN(SYN("map"), name, macro_parms, SYN,
+      //                       SYN(SYN("call"), 
+      //                           SYN(SYN("member"), SYN("_vptr"), name),
+      //                           call_parms)));
+      //if (!exists...) {
+      //  vtable_b->add_part(SYN("var"), fun_name, SYN(SYN(".fun"), new_parms, ret_type))
+      //}
+      
+    }
   }
 
   //
@@ -1893,7 +1949,7 @@ namespace ast {
                                   new Syntax(new Syntax("id"), new Syntax(cast->cast_macro)),
                                   new Syntax(new Syntax("list"), new Syntax(exp)));
     AST * res = parse_exp(p, env);
-    resolve_to(env, res, to_ptr);
+    res = res->resolve_to(to_ptr, env);
     return cast_up(res, type, env);
   }
 
@@ -1925,31 +1981,24 @@ namespace ast {
   }
 
   void Cast::compile(CompileWriter & f, CompileEnviron & env) {
-    f << "((" << type->to_string() << ")" << "(" << exp << "))";
+    f << "((" << type->to_string() << ")";
+    if (dynamic_cast<const InitList *>(exp)) 
+      f << exp;
+    else
+      f << "(" << exp << ")";
+    f << ")";
   };
 
-  AST * parse_implicit_cast(const Syntax * p, Environ & env) {
+  AST * parse_cast(const Syntax * p, Environ & env, TypeRelation::CastType ctype) {
     assert_num_args(p, 2);
     const Syntax * t = p->arg(0);
     if (t->is_a("(type)"))
       t = t->arg(0);
     Type * type = parse_type(t, env);
     AST * exp = parse_exp(p->arg(1), env);
-    return env.type_relation->resolve_to(exp, type, env);
+    return env.type_relation->resolve_to(exp, type, env, ctype);
   }
 
-  AST * parse_explicit_cast(const Syntax * p, Environ & env) {
-    Cast * cast = new Cast("cast");
-    cast->parse_ = p;
-    assert_num_args(p, 2);
-    const Syntax * t = p->arg(0);
-    if (t->is_a("(type)"))
-      t = t->arg(0);
-    cast->type = parse_type(t, env);
-    cast->exp = parse_exp(p->arg(1), env);
-    return cast;
-  }
-  
 #if 0
   AST * Fun::part(unsigned i) {
     if (i == 0) {
@@ -2118,7 +2167,7 @@ namespace ast {
       parse_ = p;
       assert_num_args(1);
       what = parse_exp(p->arg(0), env);
-      resolve_to(env, what, env.frame->return_type);
+      what = what->resolve_to(env.frame->return_type, env);
       type = env.void_type();
       return this;
     }
@@ -2172,7 +2221,7 @@ namespace ast {
                     ftype->parms->parms.size(), parms.size());
       const int typed_parms = ftype->parms->parms.size();
       for (int i = 0; i != typed_parms; ++i) {
-        resolve_to(env, parms[i], ftype->parms->parms[i].type);
+        parms[i] = parms[i]->resolve_to(ftype->parms->parms[i].type, env);
       }
       return this;
     }
@@ -2376,7 +2425,7 @@ namespace ast {
           const Syntax * arg = arg1->arg(i);
           if (arg->num_parts() > 1) {
             AST * e = parse_exp(arg->part(1), env);
-            resolve_to(env, e, env.types.inst("int"));
+            e = e->resolve_to(env.types.inst("int"), env);
             val = e->ct_value<target_int>();
           }
           SymbolName n = *arg->part(0);
@@ -2511,7 +2560,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, TopLevel, env);
-    //printf("Parsing top level:\n  %s\n", ~p->to_string());
+    printf("Parsing top level:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primative at top level: %s", ~p->name);
@@ -2523,7 +2572,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, TopLevel, env);
-    //printf("Parsing top level fp:\n  %s\n", ~p->to_string());
+    printf("Parsing top level fp:\n  %s\n", ~p->to_string());
     res = try_decl_first_pass(p, env, collect);
     if (res) return res;
     //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
@@ -2535,7 +2584,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, FieldPos, env);
-    //printf("Parsing member:\n  %s\n", ~p->to_string());
+    printf("Parsing member:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
@@ -2547,7 +2596,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, StmtPos, env);
-    //printf("Parsing stmt:\n  %s\n", ~p->to_string());
+    printf("Parsing stmt:\n  %s\n", ~p->to_string());
     res = try_stmt(p, env);
     if (res) return res;
     res = try_exp(p, env);
@@ -2561,7 +2610,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, StmtDeclPos, env);
-    //printf("Parsing stmt decl:\n  %s\n", ~p->to_string());
+    printf("Parsing stmt decl:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     res = try_stmt(p, env);
@@ -2578,7 +2627,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, ExpPos, env);
-    //printf("parsing expression: %s\n", ~p->to_string());
+    printf("parsing expression: %s\n", ~p->to_string());
     res = try_exp(p, env);
     if (res) return res;
     throw error (p, "Unsupported primative at expression position: %s", ~p->what());
@@ -2686,8 +2735,9 @@ namespace ast {
     if (what == "call")    return (new Call)->parse_self(p, env);
     if (what == "eblock")  return (new EBlock)->parse_self(p, env);
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
-    if (what == "cast")    return parse_explicit_cast(p, env);
-    if (what == "icast")   return parse_implicit_cast(p, env);
+    if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
+    if (what == "icast")   return parse_cast(p, env, TypeRelation::Implicit);
+    if (what == "list")    return (new InitList)->parse_self(p, env);
     if (what == "empty")   return (new Empty)->parse_self(p, env);
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);

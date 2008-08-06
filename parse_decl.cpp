@@ -140,11 +140,16 @@ struct DeclWorking {
   bool try_qualifier(const Syntax * p) {return try_qualifier(p, qualifiers);}
 
   const Syntax * inline_;
+  const Syntax * virtual_;
+  bool pure_virtual;
   bool try_function_specifier(const Syntax * p) {
-    if (*p == "inline") inline_ = p;
+    if      (*p == "inline") inline_ = p;
+    else if (*p == "virtual") virtual_ = p;
     else return false;
     return true;
   }
+
+
   SymbolName type_name;
   bool try_type_name(const Syntax * p, Environ & env) {
     SymbolName n = p->what_;
@@ -197,7 +202,8 @@ ParseDecl * parse_decl_ = new ParseDeclImpl();
 DeclWorking::DeclWorking(Parts & p)
   : type_scope(p), storage_class(NULL), what(VAR),
     sign(NO_SIGN), size(NO_SIZE), base_type(NO_BT),
-    inline_(NULL), dots(false), inner_type(NULL) {}
+    inline_(NULL), virtual_(NULL), pure_virtual(false),
+    dots(false), inner_type(NULL) {}
 
 //
 // The real code....
@@ -671,6 +677,8 @@ const Syntax * DeclWorking::make_function(const Syntax * id, const Syntax * t, c
     Syntax * p = new Syntax(new Syntax("fun"));
     if (inline_)
       p->add_flag(inline_);
+    if (virtual_)
+      p->add_flag(virtual_);
     if (storage_class)
       p->add_flag(storage_class);
     for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();

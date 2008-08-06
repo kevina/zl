@@ -32,7 +32,7 @@ STMT : "statement" =
     / <make_user_type> "make_user_type" {ID} ";"
     / <make_subtype> "make_subtype" {ID} {ID} {ID} {ID}? ";"
     / <noop>   ";"
-    / <stmt>   {TOKEN}* ({BRACE} / ";")
+    / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
    ;
 
 CASE_LABEL =
@@ -67,10 +67,18 @@ MATCH =
 # C Token
 #
 
+TOKEN_ : "token_" =  <<mid>> {MID} / 
+         {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
+         / {BRACK} / {CONST}
+         / <id> {ID} / <sym> {SYM};
+
 TOKEN : "token" =  <<mid>> {MID} / 
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
-         / {PARAN} / {BRACK} / {CONST}
-         / <id> {ID} / <sym> {SYM};
+         / {BRACK} / {CONST}
+         / <id> {ID} / <sym> {SYM} 
+         / {PARAN} / {BRACE};
+
+#TOKEN : "token" = TOKEN_ / PARAN;
 
 # FIXME: Add support for hex-floats
 CONST = <float> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SPACING
@@ -115,6 +123,8 @@ SYNTAX_P =
 #
 
 EXP = <<mid>> {MID} / <exp> {TOKEN}+;
+
+INIT = <<mid>> {MID} / <init> {TOKEN}+;
 
 BLOCK = <block> "{" {STMT}* "}";
 

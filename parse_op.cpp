@@ -233,7 +233,7 @@ class ParseExpImpl : public ParseExp {
       : op(o), parse(p) {}
   };
   Vector<const Syntax *> val_s;
-  Vector<OpInfo>        opr_s;
+  Vector<OpInfo>         opr_s;
 public:
 
   void init() {

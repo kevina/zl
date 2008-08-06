@@ -279,7 +279,7 @@ namespace ast {
       }
       case TypeParm::INT: {
         AST * exp = parse_exp(p0, env);
-        resolve_to(env, exp, types.inst("int"));
+        exp = exp->resolve_to(types.inst("int"), env);
         parms.push_back(TypeParm(exp->ct_value<int>()));
         break;
       }
@@ -352,12 +352,11 @@ namespace ast {
 
   class C_TypeRelation : public TypeRelation {
   public:
-    AST * resolve_to(AST * exp, const Type * type, Environ & env) const;
+    AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule) const;
     const Type * unify(int rule, const Type *, const Type *) const;
-    AST * cast(int rule, AST * exp, const Type * type) const;
   };
 
-  AST * C_TypeRelation::resolve_to(AST * exp, const Type * type, Environ & env) const {
+  AST * C_TypeRelation::resolve_to(AST * exp, const Type * type, Environ & env, CastType rule) const {
     static int i = -1;
     ++i;
     const Type * have = exp->type->unqualified;
@@ -366,8 +365,11 @@ namespace ast {
     if (have == need) return exp;
     // FIXME: Is this right?
 
+    if (rule == Explicit) // FIXME: This isn't always legal
+      return new Cast(exp, type);
+
     if (dynamic_cast<const FunctionPtr *>(have) 
-             && dynamic_cast<const FunctionPtr *>(need))
+        && dynamic_cast<const FunctionPtr *>(need))
       return exp;
 
     if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
@@ -445,10 +447,6 @@ namespace ast {
                // to the type of the operand with signed integer type.
 
     }
-  }
-
-  AST * C_TypeRelation::cast(int rule, AST * exp, const Type * type) const {
-    return exp; // FIXME
   }
 
   TypeRelation * new_c_type_relation() {
