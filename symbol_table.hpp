@@ -137,6 +137,13 @@ namespace ast {
     SymbolKey(SymbolName n = SymbolName(), const InnerNS * ns0 = 0)
       : SymbolName(n), ns(ns0 ? ns0 : DEFAULT_NS) {}
     inline SymbolKey(const Syntax & p, const InnerNS * ns0 = 0);
+
+    void to_string(OStream & o) const;
+    String to_string() const {
+      StringBuf buf;
+      to_string(buf);
+      return buf.freeze();
+    }
   };
 
   struct SymbolNode;
@@ -282,10 +289,11 @@ namespace ast {
   {
     //printf("p1: %p %p\n", start, stop);
     const SymbolNode * cur = start;
-    //printf ("*** %s`%s\n", ~k.to_string(), ~k.ns->name);
+    //printf ("*** %s\n", ~k.to_string());
     for (; cur != stop; cur = cur->next) {
       //if (k.ns->name == "internal") 
       //printf ("--- %s`%s\n", ~cur->key.to_string(), ~cur->key.ns->name);
+      //printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
       if (k == cur->key && cmp(cur->key, cur->value)) break;
     }
     //printf("^^^\n");
@@ -355,6 +363,7 @@ namespace ast {
       //fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
       throw error(str, "Unknown Identifier \"%s\"", ~k.name);
     }
+
     const T * s2 = dynamic_cast<const T *>(s1->value);
     if (!s2) {
       //fprintf(stderr, "Identifier \"%s\" is of the wrong type.", ~k.name); abort();

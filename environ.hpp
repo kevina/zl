@@ -143,6 +143,10 @@ namespace ast {
     return env->symbols.find<TypeSymbol>(k);
   }
 
+  inline const TypeSymbol * TypeSymbolTable::find(const Syntax * p, const InnerNS * ns) {
+    return env->symbols.find<TypeSymbol>(p, ns);
+  }
+
   inline void TypeSymbolTable::add(const SymbolKey & k, const TypeSymbol * t) {
     env->add(k, t);
   }

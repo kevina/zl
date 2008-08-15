@@ -78,6 +78,7 @@ namespace ast {
     Environ * env;
     TypeSymbolTable(Environ * s) : env(s) {}
     inline const TypeSymbol * find(const SymbolKey & k);
+    inline const TypeSymbol * find(const Syntax * p, const InnerNS * ns);
     Type * inst(SymbolKey n, Vector<TypeParm> &);
     Type * inst(const Syntax * n, Vector<TypeParm> &);
     Type * inst(SymbolKey n) {
@@ -709,8 +710,8 @@ namespace ast {
     const Type * type;
     const Module * module;
     bool defined;
-    unsigned size() const {return type->size();}
-    unsigned align() const {return type->align();}
+    unsigned size() const {return type ? type->size() : NPOS;}
+    unsigned align() const {return type ? type->align() : NPOS;}
   };
   
   class UserTypeSymbol : public TypeSymbol {
@@ -803,8 +804,8 @@ namespace ast {
 //       buf += " -> ";
 //       ret->to_string_(buf);
 //     }
-    unsigned size() const {return 0;}
-    unsigned align() const {return 0;}
+    unsigned size() const {return POINTER_SIZE;}
+    unsigned align() const {return POINTER_SIZE;}
   };
 
   class FunctionPtrSymbol : public ParmTypeSymbol {

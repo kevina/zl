@@ -159,7 +159,7 @@ namespace ast {
       if (parse_->num_args() < min || parse_->num_args() > max) 
         throw error(0, parse_->str(), "%s: Wrong Number of Arguments", ~what_);
     };
-    virtual AST * parse_self(const Syntax * p, Environ &) = 0;
+    //virtual AST * parse_self(const Syntax * p, Environ &) = 0;
       // ^^ returns itself, to allow chaining ie 
       //      new Foo(p)->parse(env);
     virtual void finalize(FinalizeEnviron &) = 0;
@@ -295,6 +295,7 @@ namespace ast {
     mutable Deps deps_;       // only valid if deps_closed
     mutable bool for_ct_;     // if false, only valid if deps_closed
     bool ct_callback;
+    bool static_constructor;
     void parse_flags(const Syntax * p);
     void write_flags(CompileWriter & f) const;
     //void forward_decl(CompileWriter & w) {compile(w, true);}
@@ -505,7 +506,8 @@ namespace ast {
     } else if (p->entity()) {
       //printf(">%s\n", typeid(*p->entity()).name());
       const T * s = dynamic_cast<const T *>(p->entity());
-      if (!s) abort(); // FIXME Error Message
+      if (!s) throw error(p, "Wrong type of symbol found...");
+      //abort(); // FIXME Error Message
       return s;
     } else if (p->is_a("fluid")) {
       assert_num_args(p, 1);
@@ -525,7 +527,7 @@ namespace ast {
       return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather);
     } else {
       p->print(); printf("?\n");
-      abort();
+      return NULL;
     }
   }
 
@@ -542,7 +544,8 @@ namespace ast {
   {
     try {
       return lookup_symbol<T>(p, ns, start, stop, strategy);
-    } catch (const Error *) {
+    } catch (Error * err) {
+      //printf("note: %s\n", err->message().c_str());
       return NULL;
     }
   }

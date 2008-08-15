@@ -23,7 +23,7 @@ public:
   explicit SourceEntity(const SourceFile * f = 0)
     : file_(f), expansion_(0) {}
   explicit inline SourceEntity(const Syntax * e);
-  String file_name() const {return file_->file_name();}
+  String file_name() const {return file_ ? file_->file_name() : String();} // FIXME: Is check really needed
   const Syntax * expansion() const {return expansion_;}
   Pos get_pos(const char * s) const {return file_->get_pos(s);}
   char * get_pos_str(const char * s, char * buf) const {
@@ -283,6 +283,28 @@ struct Syntax : public gc {
   }
   Syntax(const Entity * e) : what_("<entity>"), str_(), d(), repl(), entity_(const_cast<Entity*>(e)) 
     {}
+  Syntax(const Parts & ps) : repl(0), entity_() {
+    d = new D;
+    d->parts.append(ps);
+  }
+  Syntax(const Syntax * p, const Parts & ps) : repl(0), entity_() {
+    d = new D;
+    what_ = p->string_if_simple();
+    d->parts.push_back(p);
+    d->parts.append(ps);
+  }
+  Syntax(const Parts & ps, const Parts & ps2) : repl(0), entity_() {
+    d = new D;
+    d->parts.append(ps);
+    d->parts.append(ps2);
+  }
+  Syntax(const Syntax * p, const Parts & ps, const Parts & ps2) : repl(0), entity_() {
+    d = new D;
+    what_ = p->string_if_simple();
+    d->parts.push_back(p);
+    d->parts.append(ps);
+    d->parts.append(ps2);
+  }
 
   bool simple() const {return !d && !entity_;}
   void make_branch() {
@@ -307,6 +329,7 @@ struct Syntax : public gc {
     else return d->parts.size();
   }
   unsigned num_args() const {
+    assert(num_parts() > 0);
     return num_parts() - 1;
   }
   const Syntax * part(unsigned i) const {
@@ -402,7 +425,8 @@ inline bool Flags::insert(const Syntax * p) {
 
 namespace ast {
   inline SymbolKey::SymbolKey(const Syntax & p, const InnerNS * ns0) 
-    : SymbolName(static_cast<const SymbolName &>(p)), ns(ns0) {}
+    : SymbolName(static_cast<const SymbolName &>(p)), ns(ns0 ? ns0 : DEFAULT_NS) {}
+
 
 }
 

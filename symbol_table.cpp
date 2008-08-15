@@ -53,6 +53,12 @@ namespace ast {
       marks->to_string(o);
   }
 
+  void SymbolKey::to_string(OStream & o) const {
+    SymbolName::to_string(o);
+    if (ns)
+      o << "`" << ns->name;
+  }
+
   void TopLevelSymbol::make_unique(SymbolNode * self, SymbolNode * stop) const {
     if (num == NPOS)
       assign_uniq_num<TopLevelSymbol>(self, stop);

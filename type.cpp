@@ -1,3 +1,5 @@
+#include <typeinfo>
+
 #include "type.hpp"
 #include "parse.hpp"
 #include "ast.hpp"
@@ -216,6 +218,8 @@ namespace ast {
     TypeSymbolTable types = env.types;
     unsigned sz = p->num_args();
     const InnerNS * ns = DEFAULT_NS;
+    //printf("TYPE: %s %s\n", ~p->what(), ~p->to_string());
+    const Syntax * name_s = p->part(0);
     SymbolName name = p->what();
     SymbolName full_name = name;
     String tag;
@@ -224,7 +228,8 @@ namespace ast {
       assert(sz == 1);
       // FIXME: Add check for wrong type of tag
       ns = TAG_NS;
-      name = *p->arg(0);
+      name_s = p->arg(0);
+      name = *name_s;
       StringBuf buf;
       buf << tag << " " << name.name;
       full_name.name = buf.freeze();
@@ -237,7 +242,7 @@ namespace ast {
       t->finalize();
       return t;
     }
-    const TypeSymbol * t = types.find(SymbolKey(name, ns));
+    const TypeSymbol * t = name_s->simple() ? types.find(SymbolKey(name, ns)) : types.find(name_s, ns);
     if (!t) {
       if (tag.empty()) {
         throw error(p, "Unknown type: %s", ~full_name);
@@ -368,9 +373,9 @@ namespace ast {
     if (rule == Explicit) // FIXME: This isn't always legal
       return new Cast(exp, type);
 
-    if (dynamic_cast<const FunctionPtr *>(have) 
-        && dynamic_cast<const FunctionPtr *>(need))
-      return exp;
+    //if (dynamic_cast<const FunctionPtr *>(have) // FIXME: Hack
+    //    && dynamic_cast<const FunctionPtr *>(need))
+    //  return exp;
 
     if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
       return new Cast(exp, type); 
@@ -391,10 +396,17 @@ namespace ast {
       const Type * n_subtype = n_p ? n_p->subtype : 0;
       if (!n_subtype) goto fail;
       if (exp->type->is_null) return exp;
+      // FIXME: This probably isn't right
+      if (dynamic_cast<const FunctionPtr *>(have)) {
+        return exp;
+      }
       const Pointer * h_p = dynamic_cast<const Pointer *>(have);
       const Array   * h_a = dynamic_cast<const Array *>(have);
       const Type * h_subtype = h_p ? h_p->subtype : h_a ? h_a->subtype : 0;
       if (!h_subtype) goto fail;
+      if (dynamic_cast<const FunctionPtr *>(h_subtype->unqualified) // FIXME: Hack
+          && dynamic_cast<const FunctionPtr *>(n_subtype->unqualified))
+        return new Cast(exp, type);
       if (h_subtype->unqualified == n_subtype->unqualified ||
           dynamic_cast<const Void *>(h_subtype->unqualified) ||
           dynamic_cast<const Void *>(n_subtype->unqualified) /* this one is C only */)  
@@ -404,11 +416,14 @@ namespace ast {
                       ~have->to_string(), ~need->to_string());
         else
           return exp;
-      } else if (h_subtype->is(n_subtype->category)) {
+      } else if (dynamic_cast<const UserType *>(h_subtype->unqualified) &&
+                 dynamic_cast<const UserType *>(n_subtype->unqualified) &&
+                 h_subtype->is(n_subtype->category)) 
+      { // this is C++ only
         if (h_subtype->read_only && !n_subtype->read_only)
           throw error(exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
-        else
+        else 
           return cast_up(exp, n_subtype, env);
       } else {
         goto fail;

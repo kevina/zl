@@ -19,6 +19,8 @@
 
 namespace ast {
 
+  static const Syntax * ID = new Syntax("id");
+
   typedef int target_bool;
   typedef int target_int;
   typedef size_t target_size_t;
@@ -669,10 +671,11 @@ namespace ast {
   };
 
   struct Var : public VarDeclaration {
-    Var() : VarDeclaration("var"), init() {}
+    Var() : VarDeclaration("var"), init(), constructor() {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     SymbolKey name;
     AST * init;
+    AST * constructor;
     AST * parse_forward(const Syntax * p, Environ & env, Collect & collect) {
       parse_ = p;
       assert_num_args(2,3);
@@ -699,11 +702,24 @@ namespace ast {
       init = parse_exp(parse_->arg(2), env);
       init = init->resolve_to(sym->type, env);
     }
+    AST * parse_self_as_member(const Syntax * p, Environ & env) {
+      Collect collect;
+      AST * res = parse_forward(p, env, collect);
+      assert(collect.empty());
+      return res;
+    }
     AST * parse_self(const Syntax * p, Environ & env) {
       Collect collect;
       AST * res = parse_forward(p, env, collect);
       if (!collect.empty())
         parse_body(env);
+      if (const UserType * ut = dynamic_cast<const UserType *>(sym->type))
+        if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
+          constructor = parse_stmt(SYN(SYN("member"), 
+                                       SYN(ID, SYN(sym)),
+                                       SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN("list")))),
+                                   env);
+        }
       return res;
     }
     void eval(ExecEnviron &) {}
@@ -720,6 +736,8 @@ namespace ast {
       if (init && phase != Forward)
         f << " = " << init;
       f << ";\n";
+      if (constructor)
+        f << constructor;
     }
   };
 
@@ -1074,6 +1092,8 @@ namespace ast {
   struct Assign : public BinOp {
     Assign() : BinOp("assign", "=") {}
     void resolve(Environ & env) {
+      //printf("RESOLVE ASSIGN:: %p %s\n", lhs, ~parse_->to_string());
+      //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->to_string());
       if (!lhs->lvalue)
         throw error(lhs->parse_, "Can not be used as lvalue");
       if (lhs->type->read_only) 
@@ -1454,8 +1474,9 @@ namespace ast {
 
       const Syntax * to_export = p->arg(1);
       for (unsigned i = 0, sz = to_export->num_parts(); i != sz; ++i) {
-        SymbolName n = *to_export->part(i);
-        m->syms = new SymbolNode(n, env.symbols.lookup<Symbol>(n, to_export->str()), m->syms);
+        //SymbolName n = *to_export->part(i);
+        m->syms = new SymbolNode(expand_binding(to_export->part(i), env), 
+                                 env.symbols.lookup<Symbol>(to_export->part(i)), m->syms);
       }
 
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
@@ -1518,8 +1539,10 @@ namespace ast {
 
   AST * parse_declare_user_type(const Syntax * p, Environ & env) {
     SymbolName name = *p->arg(0);
-    if (!env.symbols.exists_this_scope(SymbolKey(name))) {
+    UserType * t = dynamic_cast<UserType *>(env.types.inst(SymbolKey(name)));
+    if (!(env.symbols.exists_this_scope(SymbolKey(name)) && (t && !t->defined /* FIXME: hack */))) {
       UserType * s = new UserType;
+      s->category = new TypeCategory(name.name, USER_C);
       add_simple_type(env.types, SymbolKey(name), s);
     }
     return new Empty();
@@ -1550,6 +1573,29 @@ namespace ast {
     return new Empty();
   }
 
+  AST * parse_user_type(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1, 3);
+    SymbolName name = *p->arg(0);
+    if (!env.symbols.exists_this_scope(SymbolKey(name))) {
+      UserType * s = new UserType;
+      s->category = new TypeCategory(name.name, USER_C);
+      add_simple_type(env.types, SymbolKey(name), s);
+    } 
+    return parse_module(p, env);
+  }
+
+  AST * parse_finalize_user_type(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    Module * m = dynamic_cast<Module *>(env.where);
+    const Type * t0 = env.types.inst(SymbolKey(m->name));
+    UserType * s = const_cast<UserType *>(dynamic_cast<const UserType *>(t0));
+    s->module = m;
+    s->type = parse_type(p->arg(0), env);
+    s->defined = true;
+    s->finalize();
+    return new Empty();
+  }
+
   struct UserCast : public Symbol {
     const Type * from;
     const Type * to;
@@ -1571,13 +1617,14 @@ namespace ast {
   AST * parse_make_subtype(const Syntax * p, Environ & env) {
     //printf(">>%s\n", ~p->to_string());
     assert_num_args(p, 3, 4);
-    SymbolName parent = *p->arg(0);
-    SymbolName child = *p->arg(1);
+    const Syntax * parent = p->arg(0);
+    const Syntax * child = p->arg(1);
     const Syntax * up_cast = p->arg(2);
+
     UserType * parent_t = const_cast<UserType *>
-      (dynamic_cast<const UserType *>(env.types.inst(SymbolKey(parent))));
+      (dynamic_cast<const UserType *>(env.types.inst(parent)));
     UserType * child_t  = const_cast<UserType *>
-      (dynamic_cast<const UserType *>(env.types.inst(SymbolKey(child))));
+      (dynamic_cast<const UserType *>(env.types.inst(child)));
     UserCast * user_cast = new UserCast;
     user_cast->from = child_t;
     user_cast->to = parent_t;
@@ -1589,7 +1636,6 @@ namespace ast {
     return new Empty();
   }
 
-  static const Syntax * ID = new Syntax("id");
   static const Syntax * THIS = new Syntax("this");
   static const Syntax * THIS_ID = new Syntax(ID, THIS);
   static const Syntax * THIS_MID = new Syntax(new Syntax("mid"), THIS);
@@ -1656,22 +1702,45 @@ namespace ast {
   };
 
   void parse_class_var(const Syntax * p, const Syntax * type_name, 
-                       Syntax * struct_b, Syntax * module_b);
+                       Parts & struct_b, Parts & module_b);
   void parse_class_fun(const Syntax * p, const Syntax * type_name, 
-                       Syntax * struct_b, Syntax * module_b);
+                       Parts & struct_b, Parts & module_b,
+                       const UserType * parent_vtable,
+                       Parts & vtable_b, Parts & vtable_i);
 
   AST * parse_class(const Syntax * p, Environ & env) {
     const Syntax * name = p->arg(0);
+
+    if (p->num_args() == 1) {
+      parse_stmt_decl(new Syntax(new Syntax("declare_user_type"),
+                                 name),
+                      env);
+      return new Empty();
+    }
+
+    StringBuf buf;
+
     const Syntax * parent_s = p->flag("public");
-    const Type * parent = NULL;
+    const UserType * parent = NULL;
+    const Module * parent_m = NULL;
+    const Syntax * vtable_n = SYN((buf << "_" << name->what() << "_VTable").freeze());
+    const Syntax * parent_vtable_n = NULL;
+    const UserType * parent_vtable = NULL;
+    
     if (parent_s) {
-      //printf(">>parent_s = %s\n", ~parent_s->to_string());
       parent_s = partly_expand(parent_s->arg(0), OtherPos, env);
       assert(parent_s->is_a("id"));
-      parent = env.types.inst(parent_s->arg(0));
+      parent_s = parent_s->arg(0);
+      //printf(">>parent_s = %s\n", ~parent_s->to_string());
+      //const Type * p = env.types.inst(parent_s->arg(0));
+      parent = dynamic_cast<const UserType *>(env.types.inst(parent_s));
+      parent_m = parent->module;
+      parent_vtable_n = SYN((buf << "_" << parent_s->what() << "_VTable").freeze());
+      parent_vtable = dynamic_cast<const UserType *>(env.types.inst(parent_vtable_n));
     }
-    //printf("parse_class %s %p\n", ~name->what(), parent);
+    //printf("parse_class %s %s\n", ~name->what(), ~parent_s->to_string());
     //p->print(); printf("\n"); 
+   
 
     Syntax * cast = new Syntax(gen_sym());
     if (parent) {
@@ -1684,36 +1753,106 @@ namespace ast {
                           SYN(SYN("addrof"),
                               SYN(SYN("imember"),
                                   SYN(SYN("deref"),SYN(SYN("mid"),SYN("child"))),
-                                  SYN(SYN("id"),SYN("parent"))))),
-                      env);
+                                  SYN(ID,SYN("parent"))))), env);
+      //parse_stmt_decl(SYN(SYN("declare_user_type"), name), env);
+      //parse_stmt_decl(SYN(SYN("make_subtype"), parent_s, name, cast),
+      //                env);
     }
 
-    Syntax * struct_b = new Syntax();
+    Syntax * vtable = NULL;
+    Parts struct_p, struct_b, module_p, module_b, vtable_b, vtable_i;
     Syntax * exports = new Syntax();
-    Syntax * module_b = new Syntax(new Syntax("{...}"));
 
     if (parent) {
-      struct_b->add_part(new Syntax(new Syntax("var"),
+      struct_p.push_back(new Syntax(new Syntax("var"),
                                     new Syntax("parent"),
-                                    parent_s->arg(0)));
-      const Module * m = env.symbols.lookup<Module>(parent_s->arg(0), OUTER_NS);
+                                    SYN(parent_s)));
+      const Module * m = parent_m;/*env.symbols.lookup<Module>(parent_s, OUTER_NS);*/
       for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
         exports->add_part(new Syntax(cur->key));
       }
-      module_b->add_part(SYN(SYN("import"), parent_s->arg(0)));
+      module_p.push_back(SYN(SYN("import"), parent_s));
     }
-    
+
     const Syntax * body = p->arg(1);
     for (int i = 0; i != body->num_parts(); ++i) {
       const Syntax * member = partly_expand(body->part(i), FieldPos, env);
       String what = member->what().name;
       if      (what == "var")  parse_class_var(member, name, struct_b, module_b);
-      else if (what == "fun" ) parse_class_fun(member, name, struct_b, module_b);
-      else                     module_b->add_part(member);
+      else if (what == "fun" ) parse_class_fun(member, name, struct_b, module_b,
+                                               parent_vtable,
+                                               vtable_b, vtable_i);
+      else                     module_p.push_back(member);
       exports->add_part(member->arg(0));
     }
 
+    //const bool need_vtable = !vtable_b.empty();
+    const bool need_vtable = !vtable_i.empty();
+
+    if (need_vtable) {
+      // create new vtable class, inherit parent vtable if one
+      vtable = SYN(SYN("class"), vtable_n, SYN(vtable_b));
+      if (parent_vtable) {
+        vtable->add_flag(SYN(SYN("public"),
+                             SYN(ID, parent_vtable_n)));
+      }
+      //module_p.push_back(vtable);
+      module_p.push_back(SYN(SYN("var"), SYN("_vtable"), vtable_n));
+    }
     
+    if (need_vtable) {
+      // create static vtable obj
+      // create init function
+      //   and add init code
+      Syntax * init = SYN(SYN("fun"), SYN("init"), SYN(SYN(".tuple")), SYN("void"),
+                          SYN(SYN("block"), vtable_i));
+      init->add_flag(SYN("static_constructor"));
+      module_p.push_back(init);
+    }
+
+    // FIXME: Add vtable pointer
+    if (need_vtable) {
+      //printf("Adding _vptr\n");
+      if (parent_vtable) {
+        Syntax * macro_parms = SYN;
+        macro_parms->add_flag(THIS_FLAG);
+        module_p.push_back(SYN(SYN("map"),
+                               SYN("_vptr"),
+                               macro_parms,
+                               SYN,
+                               SYN(SYN("deref"),
+                                   SYN(SYN("cast"),
+                                       SYN(SYN(".pointer"), SYN(SYN(".pointer"), vtable_n)),
+                                       SYN(SYN("addrof"),
+                                           SYN(SYN("->"),
+                                               SYN(SYN("icast"), 
+                                                   SYN(SYN(".pointer"), SYN(parent_s)),
+                                                   THIS_MID),
+                                               SYN(ID, SYN("_vptr"))))))));
+      } else {
+        Syntax * v = SYN(SYN("var"), SYN("_vptr"), SYN(SYN(".pointer"), vtable_n));
+        parse_class_var(v, name, struct_p, module_p);
+      }
+      exports->add_part(SYN("_vptr"));
+      Syntax * f = SYN(SYN("fun"), 
+                       SYN("_constructor"), 
+                       SYN(SYN(".tuple")), SYN("void"), 
+                       SYN(SYN("block"), 
+                           SYN(SYN("assign"), 
+                               SYN(ID, SYN("_vptr")), 
+                               SYN(SYN("addrof"), SYN(ID, SYN("_vtable"))))));
+      parse_class_fun(f, name, struct_p, module_p, NULL, vtable_b, vtable_i);
+      exports->add_part(SYN("_constructor"));
+    }
+
+    if (need_vtable || parent_vtable) {
+      //exports->add_part(SYN("_VTable"));
+      //exports->add_part(SYN(SYN("w/inner"), SYN("_VTable"), SYN("outer")));
+    }
+    
+    //module_p.push_back(SYN(SYN("struct"), SYN("_Data")));
+    //module_p.push_back(SYN(SYN("finalize_user_type"), SYN(SYN("struct"), SYN("_Data"))));
+
     parse_stmt_decl(new Syntax(new Syntax("struct"),
                                name),
                     env);
@@ -1728,31 +1867,40 @@ namespace ast {
 
     if (parent) {
       parse_stmt_decl(new Syntax(new Syntax("make_subtype"),
-                                 parent_s->arg(0),
+                                 parent_s,
                                  name,
                                  cast), 
                       env);
     }
 
-    const Syntax * struct_ = new Syntax(new Syntax("struct"),
-                                        name,
-                                        struct_b);
+    if (vtable) {
+      parse_stmt_decl(SYN(SYN("class"), vtable_n), env);
+    }
+    
+    const Syntax * struct_ = SYN(SYN("struct"), SYN(name), 
+                                 SYN(struct_p, struct_b));
+
     printf("\n"); struct_->print(); printf("\n");
     parse_stmt_decl(struct_, env);
+    //module_p.push_back(struct_);
+    
+    if (vtable) {
+      parse_stmt_decl(vtable, env);
+    }
 
-    const Syntax * module_ = new Syntax(new Syntax("module"),
+    const Syntax * module_ = new Syntax(new Syntax("user_type"),
                                         name,
                                         exports,
-                                        module_b);
+                                        SYN(SYN("{...}"), module_p, module_b));
+
     printf("\n"); module_->print(); printf("\n");
     parse_stmt_decl(module_, env);
 
     return new Empty();
   }
 
-
   void parse_class_var(const Syntax * p, const Syntax * type_name, 
-                       Syntax * struct_b, Syntax * module_b)
+                       Parts & struct_b, Parts & module_b)
   {
     assert_num_args(p, 2, 3);
     const Syntax * n = p->arg(0);
@@ -1762,8 +1910,8 @@ namespace ast {
       Syntax * m = new Syntax(*p);
       Syntax * n_i = SYN(SYN("w/inner"), n, SYN("internal"));
       m->arg(0) = n_i;
-      module_b->add_part(m);
-      module_b->add_part(SYN(SYN("map"), 
+      module_b.push_back(m);
+      module_b.push_back(SYN(SYN("map"), 
                              n,
                              SYN,
                              SYN,
@@ -1771,8 +1919,8 @@ namespace ast {
     } else {
       Syntax * macro_parms = SYN;
       macro_parms->add_flag(THIS_FLAG);
-      struct_b->add_part(p);
-      module_b->add_part(SYN(SYN("map"), 
+      struct_b.push_back(p);
+      module_b.push_back(SYN(SYN("map"), 
                              n, 
                              macro_parms,
                              SYN,
@@ -1785,8 +1933,9 @@ namespace ast {
   }
   
   void parse_class_fun(const Syntax * p, const Syntax * type_name, 
-                       Syntax * struct_b, Syntax * module_b
-                       /*Syntax * vtable_b, Syntax * vtable_i*/)
+                       Parts & struct_b, Parts & module_b,
+                       const UserType * parent_vtable,
+                       Parts & vtable_b, Parts & vtable_i)
   {
     assert_num_args(p, 4);
     const Syntax * name = p->arg(0);
@@ -1797,7 +1946,7 @@ namespace ast {
     bool is_static = p->flag("static");
     bool is_virtual = p->flag("virtual");
     assert(!(is_static && is_virtual)); // FIXME Error message
-    printf("IS VIRTUAL %s\n", ~*name);
+    //printf("IS VIRTUAL %s\n", ~*name);
 
     Syntax * fun_name = SYN(SYN("w/inner"), name, SYN("internal"));
     Syntax * fun_id   = SYN(ID, fun_name);
@@ -1830,19 +1979,24 @@ namespace ast {
     if (!is_static)
       macro_parms->add_flag(THIS_FLAG);
 
-    module_b->add_part(SYN(SYN("fun"), fun_name, new_parms, ret_type, body));
-    module_b->add_part(SYN(SYN("map"), nv_name, macro_parms, SYN,
+    module_b.push_back(SYN(SYN("fun"), fun_name, new_parms, ret_type, body));
+    module_b.push_back(SYN(SYN("map"), nv_name, macro_parms, SYN,
                            SYN(SYN("call"), fun_id, call_parms)));
 
     if (is_virtual) {
-      //module_b->add_part(SYN(SYN("map"), name, macro_parms, SYN,
-      //                       SYN(SYN("call"), 
-      //                           SYN(SYN("member"), SYN("_vptr"), name),
-      //                           call_parms)));
-      //if (!exists...) {
-      //  vtable_b->add_part(SYN("var"), fun_name, SYN(SYN(".fun"), new_parms, ret_type))
-      //}
-      
+      module_b.push_back(SYN(SYN("map"), name, macro_parms, SYN,
+                             SYN(SYN("call"), 
+                                 SYN(SYN("->"), 
+                                     SYN(SYN("->"), THIS_MID, SYN(ID, SYN("_vptr"))),
+                                     SYN(ID, name)),
+                                 call_parms)));
+      Syntax * pfun = SYN(SYN(".pointer"), SYN(SYN(".fun"), new_parms, ret_type));
+      if (!(parent_vtable && find_symbol<Symbol>(*name, parent_vtable->module->syms))) {
+        vtable_b.push_back(SYN(SYN("var"), name, pfun));
+      }
+      vtable_i.push_back(SYN(SYN("assign"),
+                             SYN(SYN("member"), SYN(ID, SYN("_vtable")), SYN(ID, name)),
+                             SYN(SYN("cast"), pfun, SYN(ID, fun_name))));
     }
   }
 
@@ -2145,7 +2299,6 @@ namespace ast {
     }
   }
 
-
   void Fun::compile(CompileWriter & f, Phase phase) const {
     if (!body && phase == Body)
       return;
@@ -2153,10 +2306,13 @@ namespace ast {
     StringBuf buf;
     c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
     f << buf.freeze();
-    if (body && phase != Forward)
+    if (body && phase != Forward) {
       f << "\n" << body;
-    else
+    } else {
+      if (static_constructor)
+        f << " __attribute__((constructor))";
       f << ";\n";
+    }
   }
   
   struct Return : public AST {
@@ -2560,7 +2716,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, TopLevel, env);
-    printf("Parsing top level:\n  %s\n", ~p->to_string());
+    //printf("Parsing top level:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primative at top level: %s", ~p->name);
@@ -2572,7 +2728,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, TopLevel, env);
-    printf("Parsing top level fp:\n  %s\n", ~p->to_string());
+    //printf("Parsing top level fp:\n  %s\n", ~p->to_string());
     res = try_decl_first_pass(p, env, collect);
     if (res) return res;
     //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
@@ -2584,9 +2740,10 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, FieldPos, env);
-    printf("Parsing member:\n  %s\n", ~p->to_string());
-    res = try_decl(p, env);
-    if (res) return res;
+    //printf("Parsing member:\n  %s\n", ~p->to_string());
+    //res = try_decl(p, env);
+    if (p->what().name == "var") return (new Var)->parse_self_as_member(p, env);
+    //if (res) return res;
     //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
     throw error (p, "Expected struct or union member.");
   }
@@ -2596,7 +2753,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, StmtPos, env);
-    printf("Parsing stmt:\n  %s\n", ~p->to_string());
+    //printf("Parsing stmt:\n  %s\n", ~p->to_string());
     res = try_stmt(p, env);
     if (res) return res;
     res = try_exp(p, env);
@@ -2610,7 +2767,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, StmtDeclPos, env);
-    printf("Parsing stmt decl:\n  %s\n", ~p->to_string());
+    //printf("Parsing stmt decl:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
     res = try_stmt(p, env);
@@ -2627,7 +2784,7 @@ namespace ast {
     res = try_ast(p, env);
     if (res) return res;
     p = partly_expand(p, ExpPos, env);
-    printf("parsing expression: %s\n", ~p->to_string());
+    //printf("parsing expression: %s\n", ~p->to_string());
     res = try_exp(p, env);
     if (res) return res;
     throw error (p, "Unsupported primative at expression position: %s", ~p->what());
@@ -2662,6 +2819,8 @@ namespace ast {
     if (what == "import")        return parse_import(p, env);
     if (what == "make_inner_ns") return parse_make_inner_ns(p, env);
     if (what == "make_user_type") return parse_make_user_type(p, env);
+    if (what == "user_type")          return parse_user_type(p, env);
+    if (what == "finalize_user_type") return parse_finalize_user_type(p, env);
     if (what == "make_subtype") return parse_make_subtype(p, env);
     if (what == "declare_user_type") return parse_declare_user_type(p, env);
     if (what == "class")         return parse_class(p, env);
@@ -2772,6 +2931,8 @@ namespace ast {
     for_ct_ = ct_callback;
     if (p->flag("__for_ct")) for_ct_ = true;
     deps_closed = ct_callback;
+    static_constructor = false;
+    if (p->flag("static_constructor")) static_constructor = true;
   }
   
   void VarDeclaration::write_flags(CompileWriter & f) const {

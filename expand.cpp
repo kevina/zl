@@ -175,7 +175,7 @@ void match_parm(Match * m, const Syntax * p, const Syntax * repl) {
       p = p->arg(0);
     } else {
       p->print();
-      printf("\n");
+      //printf("\n");
       abort();
     }
   }
@@ -400,6 +400,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   //p->print();
   //printf("\n////\n");
   if (p->simple()) {
+    fprintf(stderr, "partly_expand can't be simple: %s\n", ~p->to_string());
     abort(); // FIXME: Error Message
   } else if (what == "{}") {
     if (pos == ExpPos)
@@ -533,6 +534,7 @@ void assert_num_args(const Syntax * p, unsigned min, unsigned max) {
 }
 
 Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
+  //printf("FUN_PARMS: %s\n", ~parse->to_string());
   Syntax * res = new Syntax(parse->part(0));
   for (unsigned i = 0; i != parse->num_args(); ++i) {
     const Syntax * p = parse->arg(i);

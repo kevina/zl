@@ -29,8 +29,9 @@ STMT : "statement" =
     / <fluid_label>   "fluid_label"   {ID} ";"
     / <fluid_syntax>  "fluid_syntax"  {ID} ";"
     / <make_inner_ns> "make_inner_ns" {ID} ";"
-    / <make_user_type> "make_user_type" {ID} ";"
+    / <make_user_type> "make_user_type" {ID} {TOKEN}? ";" # FIXME: TOKEN not right...
     / <make_subtype> "make_subtype" {ID} {ID} {ID} {ID}? ";"
+    / <finalize_user_type> "finalize_user_type" {TOKEN} ";"
     / <noop>   ";"
     / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
    ;
@@ -49,7 +50,7 @@ MACRO  =
   / <syntax_macro> "syntax_macro" {ID} {ID}? ";";
 
 MODULE = 
-    <module> "module" {ID} ("(" {ID_LIST} ")" {<{...}> "{" {STMT}* "}" } / ";");
+    <%> {"module"/"user_type"} {ID} ("(" {ID_LIST} ")" {<{...}> "{" {STMT}* "}" } / ";");
 
 IMPORT = 
     <import> "import" {ID} ";";
