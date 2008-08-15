@@ -96,8 +96,8 @@ namespace ast {
     bool * for_ct; // set if this function uses a ct primitive such as syntax
     Type * void_type() {return types.inst("<void>");}
     Type * bool_type() {return types.inst("<bool>");}
-    const FunctionPtrSymbol * function_sym() 
-      {return static_cast<const FunctionPtrSymbol *>(types.find(".fun"));}
+    const FunctionSymbol * function_sym() 
+      {return static_cast<const FunctionSymbol *>(types.find(".fun"));}
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 

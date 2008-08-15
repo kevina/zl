@@ -777,9 +777,9 @@ namespace ast {
 
   class Fun;
 
-  class FunctionPtr : public ParmTypeInst {
+  class Function : public ParmTypeInst {
   public:
-    FunctionPtr(const Tuple * p, const Type * r)
+    Function(const Tuple * p, const Type * r)
       : ParmTypeInst(FUN_C), parms(p), ret(r) {}
     const Tuple * parms;
     const Type * ret;
@@ -808,7 +808,7 @@ namespace ast {
     unsigned align() const {return POINTER_SIZE;}
   };
 
-  class FunctionPtrSymbol : public ParmTypeSymbol {
+  class FunctionSymbol : public ParmTypeSymbol {
   public:
     virtual unsigned required_parms() const {return 2;}
     virtual TypeParm::What parm(unsigned i) const {
@@ -823,10 +823,10 @@ namespace ast {
       assert(p[0].what == TypeParm::TUPLE);
       assert(p[0].as_type);
       assert(p[1].what == TypeParm::TYPE);
-      return new FunctionPtr(static_cast<const Tuple *>(p[0].as_type), p[1].as_type);
+      return new Function(static_cast<const Tuple *>(p[0].as_type), p[1].as_type);
     }
     using ParmTypeSymbol::inst;
-    FunctionPtr * inst(TypeSymbolTable types, Fun * f) const;
+    Function * inst(TypeSymbolTable types, Fun * f) const;
   };
 
 

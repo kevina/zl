@@ -2359,10 +2359,10 @@ namespace ast {
       for (int i = 0; i != num_parms; ++i) {
         parms.push_back(parse_exp(p->arg(i), env));
       }
-      const FunctionPtr * ftype = dynamic_cast<const FunctionPtr *>(lhs->type);
+      const Function * ftype = dynamic_cast<const Function *>(lhs->type);
       if (!ftype) {
         if (const Pointer * t = dynamic_cast<const Pointer *>(lhs->type))
-          ftype = dynamic_cast<const FunctionPtr *>(t->subtype);
+          ftype = dynamic_cast<const Function *>(t->subtype);
       }
       if (!ftype)
         throw error (lhs->parse_, "Expected function type");
@@ -2384,10 +2384,10 @@ namespace ast {
     //void resolve(Environ & env) {
     //  lhs->resolve(env);
     //  env.frame->pop_tmp(lhs->type);
-    //  const FunctionPtr * ftype = dynamic_cast<const FunctionPtr *>(lhs->type);
+    //  const Function * ftype = dynamic_cast<const Function *>(lhs->type);
     //  if (!ftype) {
     //    if (const Pointer * t = dynamic_cast<const Pointer *>(lhs->type))
-    //      ftype = dynamic_cast<const FunctionPtr *>(t->subtype);
+    //      ftype = dynamic_cast<const Function *>(t->subtype);
     //  }
     //  if (!ftype)
     //    throw error (lhs->parse_, "Expected function type");

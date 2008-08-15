@@ -178,7 +178,7 @@ namespace ast {
       else             lbuf << var;
       lbuf.printf("[%d]", t->length);
       declaration(lbuf.freeze(), *t->subtype, buf);
-    } else if (const FunctionPtr * t = dynamic_cast<const FunctionPtr *>(type)) {
+    } else if (const Function * t = dynamic_cast<const Function *>(type)) {
       assert(qualifiers.empty());
       StringBuf lbuf;
       if (parentheses) lbuf << "(" << var << ")";
@@ -323,17 +323,17 @@ namespace ast {
     }
   }
   
-  FunctionPtr * FunctionPtrSymbol::inst(TypeSymbolTable types, Fun * f) const {
+  Function * FunctionSymbol::inst(TypeSymbolTable types, Fun * f) const {
     Vector<TypeParm> p;
     p.clear();
     p.push_back(TypeParm(TypeParm::TUPLE, f->parms));
     p.push_back(TypeParm(f->type));
-    return static_cast<FunctionPtr *>(inst(p));
+    return static_cast<Function *>(inst(p));
   }
   
 
 #if 0
-  FunctionPtr::FunctionPtr(Fun * f) 
+  Function::Function(Fun * f) 
     : ParmTypeInst(POINTER_SIZE)
   {
     ret = f->type;
@@ -373,10 +373,6 @@ namespace ast {
     if (rule == Explicit) // FIXME: This isn't always legal
       return new Cast(exp, type);
 
-    //if (dynamic_cast<const FunctionPtr *>(have) // FIXME: Hack
-    //    && dynamic_cast<const FunctionPtr *>(need))
-    //  return exp;
-
     if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
       return new Cast(exp, type); 
 
@@ -397,15 +393,15 @@ namespace ast {
       if (!n_subtype) goto fail;
       if (exp->type->is_null) return exp;
       // FIXME: This probably isn't right
-      if (dynamic_cast<const FunctionPtr *>(have)) {
+      if (dynamic_cast<const Function *>(have)) {
         return exp;
       }
       const Pointer * h_p = dynamic_cast<const Pointer *>(have);
       const Array   * h_a = dynamic_cast<const Array *>(have);
       const Type * h_subtype = h_p ? h_p->subtype : h_a ? h_a->subtype : 0;
       if (!h_subtype) goto fail;
-      if (dynamic_cast<const FunctionPtr *>(h_subtype->unqualified) // FIXME: Hack
-          && dynamic_cast<const FunctionPtr *>(n_subtype->unqualified))
+      if (dynamic_cast<const Function *>(h_subtype->unqualified) // FIXME: Hack
+          && dynamic_cast<const Function *>(n_subtype->unqualified))
         return new Cast(exp, type);
       if (h_subtype->unqualified == n_subtype->unqualified ||
           dynamic_cast<const Void *>(h_subtype->unqualified) ||
@@ -518,7 +514,7 @@ namespace ast {
     types.add_name(".pointer", new PointerSymbol);
     //types.add_name("<const>", new ConstSymbol);
     types.add_name(".array", new ArraySymbol);
-    types.add_name(".fun", new FunctionPtrSymbol);
+    types.add_name(".fun", new FunctionSymbol);
     types.add_name(".tuple", new TupleSymbol);
     types.add_name(".qualified", new QualifiedTypeSymbol);
     types.add_name(".zero", new ZeroTypeSymbol);
