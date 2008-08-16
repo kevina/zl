@@ -1,0 +1,77 @@
+//
+// Note: sligtly out of date ...
+//
+
+// functions link back to the compiler
+
+typedef struct Match Match;
+typedef struct Syntax Syntax;
+typedef struct Mark Mark;
+typedef struct Context Context;
+Match * match(Match *, Syntax * pattern, Syntax * with);
+Match * match_args(Match *, Syntax * pattern, Syntax * with);
+Syntax * replace(Syntax *, Match *, Mark *);
+Syntax * replace_context(Syntax *, Context *);
+Context * get_context(Syntax *);
+
+// primatives
+
+new_empty_mark();
+new_mark();
+
+syntax_macro [ID] [ID];
+macro ID [ID];
+
+syntax ID;
+syntax {...};
+syntax (...);
+raw_syntax (...);
+
+// example
+
+Syntax * map(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(NULL, syntax (name, parms, free, repl), syn);
+  Syntax * res = replace(syntax {
+      Syntax * name(Syntax * syn, Environ * env) {
+        Mark * mark = new_mark();
+        Match * m = match_args(NULL, syntax parms, syn);
+        m = match(m, syntax free, replace_context(syntax free, get_context(syn)));
+        Syntax * res = replace(syntax repl, m, mark);
+        return res;
+      }
+      macro name;
+    }, m, mark);
+}
+
+syntax_macro map;
+
+// also see test36.c
+
+// helper functions
+
+Match * match_args(Match * m, Syntax * pattern, Syntax * with) {
+  return match(m, prepend(replace(NULL, syntax rest, new_empty_mark()), pattern), with);
+}
+
+Context * get_context(Syntax * id, Match * m) {
+  return get_context(replace(id, m));
+}
+
+Syntax * prepend(Syntax * id, Syntax * syn) {
+  Match * m = match(NULL, syntax id, id);
+  m = match(m, syntax rest, sym);
+  return replace(raw_syntax ((mid id) (smid rest)), m, NULL);
+}
+
+Syntax * head(Syntax * syn) {
+  Match * m = match(NULL, raw_syntax (head *rest) syn);
+  return replace(syntax head, m, NULL);
+}
+
+Syntax * tail(Syntax * syn) {
+  Match * m = match(NULL, raw_syntax (head *rest), syn);
+  return replace(syntax rest, m, NULL);
+}
+
+

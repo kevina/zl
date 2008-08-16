@@ -1,0 +1,215 @@
+A simplified version of the ZL macro expander.
+
+In ZL parsing and expanding are intertwined.  That is macros are
+expanded as they parsed rather than as a separate pass.  The final
+result in an AST rather than expanded syntax.
+
+This paper will present a simplified view of the ZL parser and macro
+expander.  In this view the number of primitives is trimmed down to
+the bare number necessary to explain the process.  In addition, it is
+assumed that the input is is easy to parse parentized expressions
+(much like list S-expressions).  ZL supports arbitrary syntax via a
+PEG grammar which greatly complicated things.
+
+THE GRAMMER
+
+The simplified ZL grammar consists of:
+
+TOP :=
+  (top DECL+)
+
+DECL := 
+  (var ID EXP)
+  (map ID (ID*) (ID*) SYNTAX+) -- Macro mappings
+  (fun ID (ID*) (block STMT*))
+
+STMT := 
+  (var ID EXP)
+  (block STMT*)
+  (return EXP)
+  EXP
+
+EXP :=
+  ID
+  NUM
+  ('+' EXP+)
+  (ID SYNTAX*) -- function or macro application
+
+ID := 
+  [A-Za-z0-9]+
+
+NUM :=
+  [0-9]+
+
+SYNTAX :=
+  <any of the above>
+
+AN EXAMPLE ZL PROGRAM:
+
+(top
+   (var y 2)
+   (map foo (v x) ()
+     (var z (+ x y))
+     (var v (+ x z)))
+   (fun main () 
+     (block
+       (var y 4)
+       (foo z y)
+       (return z))))
+
+Which, when main in evaluated, returns 10.  This example will be
+explained latter.
+
+THE ALGORITHM:
+
+In ZL syntax is represented as syntax objects.  During parsing an
+environment is maintained as a list which is a mapping of symbol names
+to symbol objects.  Every symbol name, in both syntax objects and in
+the environment, has a set of marks associated with it.  Marks are
+used to keep track of where a symbol came from.
+
+The initial environment is empty, when a binding form is encountered
+the form is added to the front of a list.  Functions create a new
+environment whose tail is the current environment from the top level.
+The environment is then populated with the function parameters.
+Blocks create they own local environment whose tail is the current
+environment where the block was defined. Macro maps also capture the
+environment where the macro is defined, which is latter used when the
+macro is expanded.
+
+When a macro application is encountered is is expanded.  During
+expansion each symbol is either replaced if it is a macro parameter
+or marked.  The mark has an environment associated with it which is
+simply the environment captured when the macro was defined.  For
+example given:
+
+  (top
+    (var x 10)
+    (map foo (y) () (+ x y)))
+
+(foo x) will be expanded to:
+
+  (+'0 x'0 x)
+  '0 := [x => 10]
+
+Where [x => 10] is the environment associated with the mark.  For
+simplicity we will assume that variables are constant and the symbol
+object is simply the associated value.
+
+The 3rd parameter to "map" will be explained latter.
+
+Each expansion of a macro gets a fresh set of marks for example,
+"(+ (foo x) (foo y))" will expand to:
+
+  (+ (+'0 x'0 x) (+'1 x'1 y))
+  '0 := [x => 10]
+  '1 := [x => 10]
+
+If a symbol has marks associated with it in a binding form those marks
+are preserved in the environment.
+
+When looking up a binding the current environment is first checked.  If
+a symbol with the same set of marks is not found in the current
+environment than the outermost mark is stripped and the symbol is
+looked up in the environment associated with the mark stripped.  This
+process continues until no more marks are left.  If the symbol is
+still not found then it is assumed to be associated with a primitive
+form, otherwise it's an error.
+
+For example in the above example "(+'0 x'0 x)", "+'0" will bind to the
+the "+" primitive, while the "x'0" will bind to "10".
+
+AN ILLUSTRATIVE EXAMPLE:
+
+We will parse and expand the following code:
+
+(top
+   (var y 2)
+   (map foo (v x) ()
+     (var z (+ x y))
+     (var v (+ x z))) 
+   (fun main () 
+     (block
+       (var y 4)
+       (foo z y)
+       (return z))))
+
+When the first binding form "(var y 2)" is encountered the mapping "y
+=> 2" is added to the current environment.  Then when the Macro
+mapping "foo" in encountered, it is added to the environment, in
+addition the current environment is remebered for latter.
+
+Now the body of main is parsed.  A new local environment is created
+and the binding mapping "y => 4" is added at this point we have.
+
+(top
+   [foo => ..., y => 2]
+   (fun main () 
+     (block
+       [y => 4, foo => ..., y => 2]
+       (foo z y)
+       (return z))))
+
+where [] represents the current scope.  Since the local environment
+inside the block includes the environment from the outer scope, y is
+listed twise since the local y shadows the top level y, however this
+is not a problem since lookup started from the head of the list.
+
+Now foo is expanded and we have:
+
+       [y => 4, foo => ..., y => 2]
+       (var'0 z'0 (+'0 y y'0))
+       (var'0 z (+'0 y z'0))
+       (return z)
+       '0 => [y => 2]
+
+Inside the block.  The marks keep the duplicate y and z's distinct.
+
+Now the statement "(var'0 z'0 ...)" is evaluated.  Since the symbol
+"var'0" is not in the local environment or the environment for the
+mark, it assumed to be the "var" primitive.  Thus the expression
+"(+'0 y y'0)" is evaluated.  The "+'0" binds to the primitive "+".
+The first y binds to 4 since it has no marks.  The second y is not in
+the local environment since it has a mark associated with it so the
+mark is stripped and the stripped symbol is looked up in the
+environment for the mark, thus "y'0" binds to 2.  Thus we have "(+ 4
+2")", and the mapping "z'0 => 6" is added to the local environment.
+We now have:
+
+       [z'0 => 6, y => 4, foo => ..., y => 2]
+       (var'0 z (+'0 y z'0))
+       (return z)
+       '0 => [y => 2]
+
+Now the variable "z" is evaluated.  "z'0" is found in the local
+environment since it has the same set of marks as the one in the
+local environment and we have:
+
+       [z => 10, z'0 => 6, y => 4, foo => ..., y => 2]
+       (return z)
+       '0 => [y => 2]
+
+And finally the function main will returns 10.
+
+BENDING LEXICAL SCOPE:
+
+The 3rd parameter to "map" is used to bend lexical scoping.
+Identifiers mentioned in this list are in context of where the macro
+was called as opposed to where it was defined.  For example in the
+macro map:
+
+  (var z 30)
+  (map foo (x y) (z) 
+    (+ x y z))
+
+"z" will be in the context of where the macro was called so that:
+
+  (var z 3)
+  (return (+ (foo 1 2)))
+
+will evaluate to 6 instead of 33.  It is as if the macro was
+written as (map foo (x y z) ...) and always called as (foo ... z).
+
+<>
+
+
