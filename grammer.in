@@ -152,7 +152,7 @@ ID_W_INNER : "identifier" =
   <w/inner> {RAW_ID} "`" {RAW_ID} / {RAW_ID};
 
 ID_W_NS =
-  <w/outer> ({ID_W_INNER} "::")+ {ID_W_INNER} / {ID_W_INNER};
+  <w/outer> ({ID_W_INNER} "::") {ID_W_NS} / {ID_W_INNER};
 
 ID =
      <<mid>> {MID} / <fluid> "fluid" {ID} / {ID_W_NS};

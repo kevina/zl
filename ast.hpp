@@ -555,6 +555,11 @@ namespace ast {
     return find_symbol<T>(p, ns, front);
   }
 
+  inline bool SymbolTable::exists_this_scope(const Syntax * p, const InnerNS * ns) {
+    return find_symbol<Symbol>(p, ns, front, back, ThisScope);
+  }
+  
+
 }
 
 #if 0

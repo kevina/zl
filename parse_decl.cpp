@@ -126,7 +126,7 @@ struct DeclWorking {
   }
   void set_base_type(BaseType v) {
     if (base_type && base_type != v) ignore();
-    if (!type_name.empty()) ignore();
+    if (type_symbol) ignore();
     else base_type = v;
   }
 
@@ -149,13 +149,14 @@ struct DeclWorking {
     return true;
   }
 
-
-  SymbolName type_name;
+  const ast::TypeSymbol * type_symbol;
   bool try_type_name(const Syntax * p, Environ & env) {
-    SymbolName n = p->what_;
-    if (env.symbols.find<ast::TypeSymbol>(n)) {
-      if (base_type) ignore();
-      type_name = n;
+    // doesn't make sense to have two types, so if we already have a
+    // type, fail
+    if (base_type || type_symbol || inner_type) return false;
+    const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
+    if (ts) {
+      type_symbol = ts;
       return true;
     } else {
       return false;
@@ -202,8 +203,8 @@ ParseDecl * parse_decl_ = new ParseDeclImpl();
 DeclWorking::DeclWorking(Parts & p)
   : type_scope(p), storage_class(NULL), what(VAR),
     sign(NO_SIGN), size(NO_SIZE), base_type(NO_BT),
-    inline_(NULL), virtual_(NULL), pure_virtual(false),
-    dots(false), inner_type(NULL) {}
+    inline_(NULL), virtual_(NULL), pure_virtual(false), 
+    type_symbol(NULL), dots(false), inner_type(NULL) {}
 
 //
 // The real code....
@@ -431,14 +432,12 @@ bool DeclWorking::try_enum(const Syntax * p, Environ & env, bool by_itself) {
 void DeclWorking::make_inner_type(const Syntax * orig) {
   if (!inner_type) {
     inner_type = new Syntax();
-    SymbolName tn;
     StringBuf t;
     switch (base_type) {
     case NO_BT:
-      if (!type_name.empty()) {
+      if (type_symbol) {
         if (size != NO_SIZE) ignore();
         if (sign != NO_SIGN) ignore();
-        tn = type_name;
         break;
       } else if (size || sign) {
         goto int_case;
@@ -510,9 +509,7 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
       }
       break;
     }
-    if (!t.empty()) tn = t.freeze();
-    assert(!tn.empty());
-    inner_type->add_part(new Syntax(tn));
+    inner_type->add_part(type_symbol ? new Syntax(type_symbol) : new Syntax(t.freeze()));
   } else {
     // stuct or union
     // nothing to do

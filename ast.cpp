@@ -1479,6 +1479,20 @@ namespace ast {
                                  env.symbols.lookup<Symbol>(to_export->part(i)), m->syms);
       }
 
+      //printf("INTERNAL\n");
+      //for (SymbolNode * c = env.symbols.front; c != env.symbols.back; c = c->next)
+      //  printf("  %s %p %s %s\n", ~c->key.to_string(), 
+      //         c->value,
+      //         c->value ? ~c->value->name : "", 
+      //         c->value ? ~c->value->uniq_name() : "");
+
+      //printf("EXPORTED\n");
+      //for (SymbolNode * c = m->syms; c; c = c->next)
+      //  printf("  %s %p %s %s\n", ~c->key.to_string(), 
+      //         c->value,
+      //         c->value ? ~c->value->name : "", 
+      //         c->value ? ~c->value->uniq_name() : "");
+
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
         (*i)->parse_body(env);
       }
@@ -1877,7 +1891,7 @@ namespace ast {
       parse_stmt_decl(SYN(SYN("class"), vtable_n), env);
     }
     
-    const Syntax * struct_ = SYN(SYN("struct"), SYN(name), 
+    const Syntax * struct_ = SYN(SYN("struct"), name, 
                                  SYN(struct_p, struct_b));
 
     printf("\n"); struct_->print(); printf("\n");
@@ -2445,7 +2459,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(2);
-      SymbolName n = *p->arg(0);
+      SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
       type = parse_type(p->arg(1), env);
       name_sym = add_simple_type(env.types, n, new AliasT(type), this, env.where);
       return new Empty();
@@ -2484,7 +2498,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env0) {
       parse_ = p;
       assert(p->is_a(what()));
-      SymbolName name = *p->arg(0);
+      const Syntax * name = p->arg(0);
       env = env0.new_scope();
       env.scope = OTHER;
       if (p->num_args() > 1) {
@@ -2494,14 +2508,15 @@ namespace ast {
         body = NULL;
       }
       StructUnionT * s;
-      if (env0.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
-        const Type * t0 = env0.types.inst(SymbolKey(name, TAG_NS));
+      if (env0.symbols.exists_this_scope(name, TAG_NS)) {
+        const Type * t0 = env0.types.inst(name, TAG_NS);
         s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
         sym = s->type_symbol;
       } else {
-        if (which == STRUCT) s = new StructT(name.name);
-        else                 s = new UnionT(name.name);
-        sym = add_simple_type(env0.types, SymbolKey(name, TAG_NS), s, this, env.where);
+        SymbolKey n = expand_binding(name, TAG_NS, env);
+        if (which == STRUCT) s = new StructT(n);
+        else                 s = new UnionT(n);
+        sym = add_simple_type(env0.types, n, s, this, env.where);
       }
       if (body)
         for (unsigned i = 0; i != body->members.size(); ++i) {

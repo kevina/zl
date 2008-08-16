@@ -46,3 +46,5 @@ test48.c
 test49.c
 test50.c
 test51.c
+test52.c
+test53.c

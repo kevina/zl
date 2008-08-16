@@ -46,8 +46,8 @@ namespace ast {
     return s->inst(p);
   }
 
-  Type * TypeSymbolTable::inst(const Syntax * n, Vector<TypeParm> & p) {
-    const TypeSymbol * s = env->symbols.find<TypeSymbol>(n);
+  Type * TypeSymbolTable::inst(const Syntax * n, const InnerNS * ns, Vector<TypeParm> & p) {
+    const TypeSymbol * s = env->symbols.find<TypeSymbol>(n, ns);
     if (!s) return NULL;
     return s->inst(p);
   }
@@ -219,55 +219,52 @@ namespace ast {
     unsigned sz = p->num_args();
     const InnerNS * ns = DEFAULT_NS;
     //printf("TYPE: %s %s\n", ~p->what(), ~p->to_string());
-    const Syntax * name_s = p->part(0);
-    SymbolName name = p->what();
-    SymbolName full_name = name;
+    const Syntax * name = p->part(0);
+    String name_str = name->what().name;
     String tag;
-    if (name == "struct" || name == "union" || name == "enum") {
-      tag = name.name;
+    if (name_str == "struct" || name_str == "union" || name_str == "enum") {
+      tag = name_str;
       assert(sz == 1);
       // FIXME: Add check for wrong type of tag
       ns = TAG_NS;
-      name_s = p->arg(0);
-      name = *name_s;
+      name = p->arg(0);
       StringBuf buf;
-      buf << tag << " " << name.name;
-      full_name.name = buf.freeze();
-      full_name.marks = name.marks;
+      buf << tag << " " << name_str;
+      name_str = buf.freeze();
       --sz;
-    }
-    if (name == ".typeof") {
+    } else if (name_str == ".typeof") {
       AST * ast = parse_exp(p->arg(0), env);
       Type * t = new TypeOf(ast);
       t->finalize();
       return t;
     }
-    const TypeSymbol * t = name_s->simple() ? types.find(SymbolKey(name, ns)) : types.find(name_s, ns);
+    const TypeSymbol * t = types.find(name, ns);
     if (!t) {
       if (tag.empty()) {
-        throw error(p, "Unknown type: %s", ~full_name);
+        throw error(p, "Unknown type: %s", ~name_str);
       } else {
         SimpleTypeInst * ti;
-        if (tag == "struct")     ti = new StructT(name);
-        else if (tag == "union") ti = new UnionT(name);
-        else if (tag == "enum")  ti = new EnumT(name);
+        SymbolKey n = expand_binding(name, TAG_NS, env);
+        if (tag == "struct")     ti = new StructT(n);
+        else if (tag == "union") ti = new UnionT(n);
+        else if (tag == "enum")  ti = new EnumT(n);
         else abort();
-        add_simple_type(types, SymbolKey(name, TAG_NS), ti, NULL, env.where);
-        t = types.find(SymbolKey(name, TAG_NS));
+        add_simple_type(types, n, ti, NULL, env.where);
+        t = types.find(n);
         assert(t);
       }
     }
-    if (t->required_parms() == 0 && sz != 0 && name != ".tuple" /* HACK! */)
-      throw error(p, "Type \"%s\" is not a paramatized type.", ~full_name);
+    if (t->required_parms() == 0 && sz != 0 && name_str != ".tuple" /* HACK! */)
+      throw error(p, "Type \"%s\" is not a paramatized type.", ~name_str);
     if (t->required_parms() > sz) 
       throw error(p, "Not enough paramaters for \"%s\" type, %d required, but got %d",
-                  ~full_name, t->required_parms(), sz);
+                  ~name_str, t->required_parms(), sz);
     Vector<TypeParm> parms;
     parms.reserve(sz);
     for (int i = 0; i != sz; ++i) {
       const Syntax * p0 = p->arg(i);
       SymbolKey n;
-      if (name == ".tuple" && !p0->part(0)->simple()) { // HACK!
+      if (name_str == ".tuple" && !p0->part(0)->simple()) { // HACK!
 	if (p0->num_parts() > 1)
 	  n = expand_binding(p0->part(1), env);
 	p0 = p0->part(0);

@@ -80,14 +80,14 @@ namespace ast {
     inline const TypeSymbol * find(const SymbolKey & k);
     inline const TypeSymbol * find(const Syntax * p, const InnerNS * ns);
     Type * inst(SymbolKey n, Vector<TypeParm> &);
-    Type * inst(const Syntax * n, Vector<TypeParm> &);
+    Type * inst(const Syntax * n, const InnerNS * ns, Vector<TypeParm> &);
     Type * inst(SymbolKey n) {
       Vector<TypeParm> dummy;
       return inst(n, dummy);
     }
-    Type * inst(const Syntax * n) {
+    Type * inst(const Syntax * n, const InnerNS * ns = DEFAULT_NS) {
       Vector<TypeParm> dummy;
-      return inst(n, dummy);
+      return inst(n, ns, dummy);
     }
     Type * inst(SymbolKey n, const Type * t) {
       Vector<TypeParm> parms;

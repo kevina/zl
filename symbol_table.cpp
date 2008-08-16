@@ -29,7 +29,7 @@ namespace ast {
   }
 
   void marks_ignored(String name) {
-    printf("WARNING: IGNORING MARKS ON \"%s\"\n", ~name);
+    fprintf(stderr, "WARNING: IGNORING MARKS ON \"%s\"\n", ~name);
     //abort();
   }
 
@@ -71,6 +71,14 @@ namespace ast {
   void OtherSymbol::make_unique(SymbolNode * self, SymbolNode * stop) const {
     if (num == NPOS)
       assign_uniq_num<OtherSymbol>(self, stop);
+  }
+
+  void SymbolTable::dump_this_scope() {
+    for (SymbolNode * c = front; c != back; c = c->next)
+      printf("  %s %p %s %s\n", ~c->key.to_string(), 
+             c->value,
+             c->value ? ~c->value->name : "", 
+             c->value ? ~c->value->uniq_name() : "");
   }
 
 }

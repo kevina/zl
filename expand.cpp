@@ -483,8 +483,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     const InnerNS * ns = env.symbols.lookup<InnerNS>(p->arg(1), INNER_NS);
     return expand_binding(p->arg(0), ns, env);
   } else if (p->is_a("w/outer")) {
-    // FIXME: Error message
-    abort();
+    throw error(p, "Can not use outer namespaces in binding form");
   } else {
     abort();
   }
