@@ -1742,10 +1742,11 @@ namespace ast {
     const UserType * parent_vtable = NULL;
     
     if (parent_s) {
-      parent_s = partly_expand(parent_s->arg(0), OtherPos, env);
-      assert(parent_s->is_a("id"));
       parent_s = parent_s->arg(0);
       //printf(">>parent_s = %s\n", ~parent_s->to_string());
+      //parent_s = partly_expand(parent_s->arg(0), OtherPos, env);
+      //assert(parent_s->is_a("id"));
+      //parent_s = parent_s->arg(0);
       //const Type * p = env.types.inst(parent_s->arg(0));
       parent = dynamic_cast<const UserType *>(env.types.inst(parent_s));
       parent_m = parent->module;
@@ -1807,8 +1808,7 @@ namespace ast {
       // create new vtable class, inherit parent vtable if one
       vtable = SYN(SYN("class"), vtable_n, SYN(vtable_b));
       if (parent_vtable) {
-        vtable->add_flag(SYN(SYN("public"),
-                             SYN(ID, parent_vtable_n)));
+        vtable->add_flag(SYN(SYN("public"), parent_vtable_n));
       }
       //module_p.push_back(vtable);
       module_p.push_back(SYN(SYN("var"), SYN("_vtable"), vtable_n));

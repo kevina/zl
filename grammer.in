@@ -102,7 +102,7 @@ FLOATING_SUFFIX = <float> [fF] / <"long double"> [lL] / <double>;
 
 STRUCT_UNION = <%> {"struct"/"union"/"class"} 
                    {ID/}
-                   (:<public> ":" "public" {<id> {ID}})?
+                   (:<public> ":" "public" {ID})?
                    {<{...}> "{" {STMT}* "}" }?;
 
 ENUM = <enum> "enum" {ID/} 
@@ -113,7 +113,7 @@ ENUM_EXP = <exp> (!"," {TOKEN})+;
 TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 
 SYNTAX = 
-    <syntax> "syntax" {SYNTAX_P}
+    <syntax> "syntax" {SYNTAX_P}?
   / <raw_syntax> "raw_syntax" {PARAN};
 
 SYNTAX_P =
