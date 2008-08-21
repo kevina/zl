@@ -23,6 +23,19 @@ map foo (v,z) {
   z = x * x;
 }
 
+/* Expands to (ignoring marks):
+ *
+ * Syntax * foo(Syntax * syn, Environ * env) {
+ *   Mark * mark = new_mark();
+ *   Match * m = match_args(0, syntax (v, z), syn);
+ *   m = match(m, syntax, replace_context(syntax, get_context(syn)));
+ *   Syntax * res = replace(syntax {int x = v + y; z = x * x;}, m, mark);
+ *   return res;
+ * }
+ * 
+ * Which is the same as foo2:
+ */
+
 Syntax * foo2(Syntax * syn, Environ * env) {
   Match * m = match_args(0, syntax (v, z), syn);
   Syntax * res = replace( syntax {int x = v + y; z = x * x;}, m, new_mark());
