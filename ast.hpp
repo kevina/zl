@@ -505,10 +505,14 @@ namespace ast {
       return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy, gather, cmp);
     } else if (p->entity()) {
       //printf(">%s\n", typeid(*p->entity()).name());
-      const T * s = dynamic_cast<const T *>(p->entity());
-      if (!s) throw error(p, "Wrong type of symbol found...");
-      //abort(); // FIXME Error Message
-      return s;
+      if (const T * s = dynamic_cast<const T *>(p->entity())) {
+        return s;
+      } else if (const SymbolKeyEntity * s = dynamic_cast<const SymbolKeyEntity *>(p->entity())) {
+        return lookup_symbol<T>(s->name, p->str(), start, stop, strategy, gather, cmp);
+      } else {
+        throw error(p, "Wrong type of symbol found...");
+        //abort(); // FIXME Error Message
+      }
     } else if (p->is_a("fluid")) {
       assert_num_args(p, 1);
       const FluidBinding * b = lookup_symbol<FluidBinding>(p->arg(0), ns, start, stop, strategy, gather);

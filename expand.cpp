@@ -264,6 +264,7 @@ const Syntax * reparse(String what, const Syntax * p, ReplTable * r) {
 }
 
 const Syntax * replace(const Syntax * p, ReplTable * r) {
+  // FIXME: Do I need to handle the case where the entity is a symbol name?
   if (p->simple()) {
     //return p;
     //printf("MARK %s %p\n", ~p->what(), r->mark);
@@ -484,6 +485,8 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     return expand_binding(p->arg(0), ns, env);
   } else if (p->is_a("w/outer")) {
     throw error(p, "Can not use outer namespaces in binding form");
+  } else if (const SymbolKeyEntity * s = dynamic_cast<const SymbolKeyEntity *>(p->entity())) {
+    return s->name;
   } else {
     abort();
   }

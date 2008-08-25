@@ -146,6 +146,11 @@ namespace ast {
     }
   };
 
+  struct SymbolKeyEntity : public Entity {
+    SymbolKeyEntity(const SymbolKey n) : name(n) {}
+    SymbolKey name;
+  };
+
   struct SymbolNode;
 
   struct Environ;
