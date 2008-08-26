@@ -1,10 +1,12 @@
 
-module N (z) {
+module N {
+  export z;
   int z = 20;
 }
 
 map foo(var) {
-  module M (var, priv) {
+  module M {
+    export var, priv;
     int var = 20;
     int priv = 30;
   }

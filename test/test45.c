@@ -10,5 +10,5 @@ class X {
 
 int main() {
   X v;
-  return v.x + v.h(20) + v.y() + v.z();
+  return /*v.x + */v.h(20) + v.y() + v.z();
 }

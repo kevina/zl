@@ -1,4 +1,5 @@
-module M (x, foo, INT) {
+module M {
+  export x, foo, INT;
   int x = 10;
   int foo() {return x;}
   typedef int INT;
@@ -7,7 +8,8 @@ module M (x, foo, INT) {
 int main() {
   import M;
   static INT y;
-  module N (x0, foo0, INT0) {
+  module N {
+    export x0, foo0, INT0;
     int x0 = 20;
     int foo0() {return y;}
     typedef int INT0;

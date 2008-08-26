@@ -2,7 +2,8 @@ struct Foo {
   int x;
 };
 
-module Foo (x) {
+module Foo {
+  export x;
   map x(:this this = this) {(*this)..x;}
 }
 

@@ -235,6 +235,7 @@ namespace ast {
   struct Module : public TopLevelSymbol {
     Module() : syms() {}
     SymbolNode * syms;
+    Vector<const Syntax *> exports; // \...
   };
 
   struct SymbolNode {

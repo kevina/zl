@@ -696,7 +696,7 @@ namespace ast {
       else
         return this;
     }
-    void parse_body(Environ & env) {
+    void finish_parse(Environ & env) {
       assert(parse_->num_args() > 2);
       //env.add(name, sym, SecondPass);
       init = parse_exp(parse_->arg(2), env);
@@ -712,7 +712,7 @@ namespace ast {
       Collect collect;
       AST * res = parse_forward(p, env, collect);
       if (!collect.empty())
-        parse_body(env);
+        finish_parse(env);
       if (const UserType * ut = dynamic_cast<const UserType *>(sym->type))
         if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
           constructor = parse_stmt(SYN(SYN("member"), 
@@ -1437,7 +1437,7 @@ namespace ast {
     Collect collect;
     parse_stmts_first_pass(parse, env, collect);
     for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-      (*i)->parse_body(env);
+      (*i)->finish_parse(env);
     }
   }
 
@@ -1452,7 +1452,7 @@ namespace ast {
   //
 
   AST * parse_module(const Syntax * p, Environ & env0) {
-    assert_num_args(p, 1, 3);
+    assert_num_args(p, 1, 2);
     SymbolName n = *p->arg(0);
     Module * m = NULL;
     if (env0.symbols.exists_this_scope(SymbolKey(n, OUTER_NS))) {
@@ -1464,26 +1464,24 @@ namespace ast {
       env0.add(SymbolKey(n, OUTER_NS), m);
     }
     if (p->num_args() > 1) {
-      assert_num_args(p, 3);
+      assert_num_args(p, 2);
       Environ env = env0.new_scope();
       env.scope = TOPLEVEL;
       env.where = m;
 
       Collect collect;
-      parse_stmts_first_pass(p->arg(2), env, collect);
+      parse_stmts_first_pass(p->arg(1), env, collect);
 
-      const Syntax * to_export = p->arg(1);
-      for (unsigned i = 0, sz = to_export->num_parts(); i != sz; ++i) {
-        //SymbolName n = *to_export->part(i);
-        m->syms = new SymbolNode(expand_binding(to_export->part(i), env), 
-                                 env.symbols.lookup<Symbol>(to_export->part(i)), m->syms);
+      for (unsigned i = 0; i != m->exports.size(); ++i) {
+        const Syntax * p = m->exports[i];
+        for (unsigned i = 0, sz = p->num_args(); i != sz; ++i) {
+          //SymbolName n = *to_export->part(i);
+          m->syms = new SymbolNode(expand_binding(p->arg(i), env), 
+                                   env.symbols.lookup<Symbol>(p->arg(i)), m->syms);
+        }
       }
-      if (env.symbols.find<Symbol>(SymbolKey("up_cast", CAST_NS)))
-          m->syms = new SymbolNode(SymbolKey("up_cast", CAST_NS),
-                                   env.symbols.find<Symbol>(SymbolKey("up_cast", CAST_NS)), 
-                                   m->syms);
 
-      //printf("MODULE %s\n", ~n);
+     //printf("MODULE %s\n", ~n);
 
       //printf("INTERNAL\n");
       //for (SymbolNode * c = env.symbols.front; c != env.symbols.back; c = c->next)
@@ -1500,7 +1498,7 @@ namespace ast {
       //         c->value ? ~c->value->uniq_name() : "");
 
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-        (*i)->parse_body(env);
+        (*i)->finish_parse(env);
       }
     }
     return new Empty();
@@ -1510,7 +1508,13 @@ namespace ast {
     Vector<const Mark *> marks;
     void stripped_mark(const Mark * m) {marks.push_back(m);}
   };
-  
+
+  AST * parse_export(const Syntax * p, Environ & env) {
+    Module * m = dynamic_cast<Module *>(env.where);
+    m->exports.push_back(p);
+    return new Empty();
+  }
+
   AST * parse_import(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     SymbolName n = *p->arg(0);
@@ -1654,6 +1658,7 @@ namespace ast {
     child_t->parent = parent_t;
     child_t->category = new TypeCategory(child_t->what(), parent_t->category);
     env.symbols.add(SymbolKey("up_cast", CAST_NS), user_cast);
+    m->syms = new SymbolNode(SymbolKey("up_cast", CAST_NS), user_cast, m->syms);
     return new Empty();
   }
 
@@ -1764,7 +1769,6 @@ namespace ast {
       init() : static_constructor ...;
       map _vptr ...;
       void _constructor() ..;
-      
     }
    */
 
@@ -1798,15 +1802,9 @@ namespace ast {
     //p->print(); printf("\n"); 
    
 
-    if (parent) {
-      //parse_stmt_decl(SYN(SYN("declare_user_type"), name), env);
-      //parse_stmt_decl(SYN(SYN("make_subtype"), parent_s, name, cast),
-      //                env);
-    }
-
     Syntax * vtable = NULL;
     Parts struct_p, struct_b, module_p, module_b, vtable_b, vtable_i;
-    Syntax * exports = new Syntax();
+    Syntax * exports = SYN(SYN("export"));
 
     if (parent) {
       // FIXME: No need to generate a unique macro for each class,
@@ -1851,7 +1849,6 @@ namespace ast {
       exports->add_part(member->arg(0));
     }
 
-    //const bool need_vtable = !vtable_b.empty();
     const bool need_vtable = !vtable_i.empty();
 
     if (need_vtable) {
@@ -1918,11 +1915,12 @@ namespace ast {
       module_p.push_back(SYN(SYN("var"), SYN("_vtable"), vtable_n));
     }
 
+    module_b.push_back(exports);
+
     // Now parse module
 
     const Syntax * module_ = new Syntax(new Syntax("user_type"),
                                         name,
-                                        exports,
                                         SYN(SYN("{...}"), module_p, module_b));
 
     printf("\n"); module_->print(); printf("\n");
@@ -2241,7 +2239,7 @@ namespace ast {
     return this;
   }
 
-  void Fun::parse_body(Environ & env0) {
+  void Fun::finish_parse(Environ & env0) {
     assert(parse_->num_args() > 3);
 
     TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);
@@ -2274,7 +2272,7 @@ namespace ast {
     Collect collect;
     AST * res = parse_forward(p, env, collect);
     if (!collect.empty())
-      parse_body(env);
+      finish_parse(env);
     return res;
   }
 
@@ -2858,6 +2856,7 @@ namespace ast {
     if (what == "make_subtype") return parse_make_subtype(p, env);
     if (what == "declare_user_type") return parse_declare_user_type(p, env);
     if (what == "class")         return parse_class(p, env);
+    if (what == "export")  return parse_export(p, env);
     return 0;
   }
 

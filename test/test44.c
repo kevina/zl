@@ -1,4 +1,5 @@
-module M (g,h) {
+module M {
+  export g, h;
   void g() {
     import M;
     f();

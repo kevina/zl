@@ -275,6 +275,11 @@ namespace ast {
   };
   */
 
+  struct ForSecondPass {
+    virtual void finish_parse(Environ & env) = 0;
+    virtual ~ForSecondPass() {}
+  };
+
   struct Block;
   struct VarSymbol;
 
@@ -285,7 +290,7 @@ namespace ast {
     Declaration(String n) : AST(n) {}
   };
 
-  struct VarDeclaration : public Declaration {
+  struct VarDeclaration : public Declaration, public ForSecondPass {
     VarDeclaration(String n) : Declaration(n) {}
     enum StorageClass {NONE, AUTO, STATIC, EXTERN, REGISTER};
     StorageClass storage_class;
@@ -308,10 +313,10 @@ namespace ast {
       if (!deps_closed) calc_deps_closure();
       return for_ct_;
     }
-    virtual void parse_body(Environ & env) {abort();}
+    void finish_parse(Environ & env) {abort();}
   };
   
-  typedef Vector<VarDeclaration *> Collect;
+  typedef Vector<ForSecondPass *> Collect;
 
   struct Fun : public VarDeclaration {
     Fun() : VarDeclaration("fun") {}
@@ -326,7 +331,7 @@ namespace ast {
     unsigned frame_size;
     AST * parse_self(const Syntax * p, Environ &);
     AST * parse_forward(const Syntax * p, Environ &, Collect &);
-    void parse_body(Environ &);
+    void finish_parse(Environ &);
     void eval(ExecEnviron & env);
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
