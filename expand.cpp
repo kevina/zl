@@ -39,18 +39,20 @@ char MACRO_PRELUDE_STR[] =
   "int printf (const char *, ...);"
   "typedef struct Match Match;\n"
   "typedef struct Syntax Syntax;\n"
+  "typedef struct UnmarkedSyntax UnmarkedSyntax;\n"
   "typedef struct Mark Mark;\n"
   "typedef struct Context Context;\n"
   "typedef struct Environ Environ;\n"
   "typedef struct EnvironSnapshot EnvironSnapshot;\n"
-  "__ct_callback Match * match(Match *, Syntax * pattern, Syntax * with);\n"
-  "__ct_callback Match * match_args(Match *, Syntax * pattern, Syntax * with);\n"
+  "__ct_callback Match * match(Match *, UnmarkedSyntax * pattern, Syntax * with);\n"
+  "__ct_callback Match * match_args(Match *, UnmarkedSyntax * pattern, Syntax * with);\n"
   "__ct_callback Mark * new_mark_f(EnvironSnapshot *);\n"
   "map new_mark() {new_mark_f(environ_snapshot());}\n"
   "map new_empty_mark() {new_mark_f(0);}\n"
-  "__ct_callback Syntax * replace(Syntax *, Match *, Mark *);\n"
+  "__ct_callback Syntax * replace(UnmarkedSyntax *, Match *, Mark *);\n"
+  "__ct_callback Syntax * match_var(const char *, Match *);\n"
   "__ct_callback Context * get_context(Syntax *);\n"
-  "__ct_callback Syntax * replace_context(Syntax *, Context *);\n";
+  "__ct_callback Syntax * replace_context(UnmarkedSyntax *, Context *);\n";
 const char * MACRO_PRELUDE = MACRO_PRELUDE_STR;
 const char * MACRO_PRELUDE_END = MACRO_PRELUDE_STR + sizeof(MACRO_PRELUDE_STR) - 1;
 

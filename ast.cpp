@@ -2695,7 +2695,7 @@ namespace ast {
         Res r = parse(p->arg(0)->str());
         syn = r.parse;
       }
-      type = env.types.inst(".pointer", env.types.inst("Syntax"));
+      type = env.types.inst(".pointer", env.types.inst("UnmarkedSyntax"));
       type = env.types.ct_const(type);
       *env.for_ct = true;
       return this;
@@ -2703,9 +2703,9 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {}
     void compile(CompileWriter & f, CompileEnviron &) {
       if (f.for_compile_time()) 
-        f.printf("(Syntax *)%p", syn); 
+        f.printf("(UnmarkedSyntax *)%p", syn); 
       else
-        f.printf("(Syntax *)0");
+        f.printf("(UnmarkedSyntax *)0");
     }
   };
 
