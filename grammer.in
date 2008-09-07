@@ -30,7 +30,7 @@ STMT : "statement" =
     / <fluid_syntax>  "fluid_syntax"  {ID} ";"
     / <make_inner_ns> "make_inner_ns" {ID} ";"
     / <make_user_type> "make_user_type" {ID} {TOKEN}? ";" # FIXME: TOKEN not right...
-    / <make_subtype> "make_subtype" {ID} {ID} {ID} {ID}? ";"
+    / <make_subtype> "make_subtype" {ID} {ID} {ID}? ";"
     / <finalize_user_type> "finalize_user_type" {TOKEN} ";"
     / <export> "export" {ID} ("," {ID})* ";"
     / <noop>   ";"

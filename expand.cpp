@@ -32,39 +32,38 @@ void assert_pos(const Syntax * p, Position have, unsigned need);
 
 void compile_for_ct(Deps & deps, Environ & env);
 
-// the "C" version of the callback functions
-
-char MACRO_PRELUDE_STR[] = 
-  "typedef typedef struct _IO_FILE FILE;\n"
-  "int printf (const char *, ...);"
-  "typedef struct Match Match;\n"
-  "typedef struct Syntax Syntax;\n"
-  "typedef struct UnmarkedSyntax UnmarkedSyntax;\n"
-  "typedef struct Mark Mark;\n"
-  "typedef struct Context Context;\n"
-  "typedef struct Environ Environ;\n"
-  "typedef struct EnvironSnapshot EnvironSnapshot;\n"
-  "__ct_callback Match * match(Match *, UnmarkedSyntax * pattern, Syntax * with);\n"
-  "__ct_callback Match * match_args(Match *, UnmarkedSyntax * pattern, Syntax * with);\n"
-  "__ct_callback Mark * new_mark_f(EnvironSnapshot *);\n"
-  "map new_mark() {new_mark_f(environ_snapshot());}\n"
-  "map new_empty_mark() {new_mark_f(0);}\n"
-  "__ct_callback Syntax * replace(UnmarkedSyntax *, Match *, Mark *);\n"
-  "__ct_callback Syntax * match_var(const char *, Match *);\n"
-  "__ct_callback Context * get_context(Syntax *);\n"
-  "__ct_callback Syntax * replace_context(UnmarkedSyntax *, Context *);\n";
-const char * MACRO_PRELUDE = MACRO_PRELUDE_STR;
-const char * MACRO_PRELUDE_END = MACRO_PRELUDE_STR + sizeof(MACRO_PRELUDE_STR) - 1;
+// see prelude.zlh
 
 // the slightly diffrent C++ version
 typedef ReplTable::Table Match;
 typedef Marks Context;
-extern "C" Match * match(Match * m, const Syntax * pattern, const Syntax * with);
-extern "C" Match * match_args(Match * m, const Syntax * pattern, const Syntax * with);
+typedef Syntax SyntaxList;
+typedef Syntax UnmarkedSyntax;
+struct SyntaxEnum;
 extern "C" Mark * new_mark_f(SymbolNode *);
-extern "C" const Syntax * replace(const Syntax * p, Match * match, Mark * mark);
+extern "C" const Syntax * syntax_flag(const Syntax *, const char *);
+extern "C" SyntaxList * new_syntax_list();
+extern "C" int syntax_list_empty(const SyntaxList *);
+extern "C" void syntax_list_append(SyntaxList *, const Syntax *);
+extern "C" const Syntax * syntax_enum_next(SyntaxEnum *);
+extern "C" Match * match(Match * m, const UnmarkedSyntax * pattern, const Syntax * with);
+extern "C" Match * match_args(Match * m, const UnmarkedSyntax * pattern, const Syntax * with);
+extern "C" Match * match_local(Match *, ...);
+extern "C" const Syntax * match_var(Match *, const char *);
+extern "C" SyntaxEnum * match_varl(Match *, const char *);
+extern "C" const Syntax * replace(const UnmarkedSyntax * p, Match * match, Mark * mark);
 extern "C" const Context * get_context(const Syntax * p);
 extern "C" const Syntax * replace_context(const Syntax * p, const Context * context);
+extern "C" const Syntax * partly_expand(const Syntax *, Position pos, Environ *);
+extern "C" const UnmarkedSyntax * string_to_syntax(const char *);
+extern "C" const char * syntax_to_string(const UnmarkedSyntax *);
+struct UserTypeInfo;
+struct ModuleInfo;
+extern "C" UserTypeInfo * user_type_info(const Syntax *);
+extern "C" ModuleInfo * user_type_module(UserTypeInfo *);
+extern "C" ModuleInfo * module_info(const Syntax *);
+extern "C" SyntaxEnum * module_symbols(ModuleInfo *);
+extern "C" bool module_have_symbol(ModuleInfo *, const Syntax *);
 
 String gen_sym() {
   static unsigned uniq_num = 0;

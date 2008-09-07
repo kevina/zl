@@ -928,7 +928,8 @@ namespace ast {
   struct Not : public UnOp {
     Not() : UnOp("not", "!") {}
     void resolve(Environ & env) {
-      abort();
+      // FIXME: Do I need to do more?
+      type = env.types.inst("int");
     }
   };
 
@@ -2703,9 +2704,9 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {}
     void compile(CompileWriter & f, CompileEnviron &) {
       if (f.for_compile_time()) 
-        f.printf("(UnmarkedSyntax *)%p", syn); 
+        f.printf("(struct UnmarkedSyntax *)%p", syn); 
       else
-        f.printf("(UnmarkedSyntax *)0");
+        f.printf("(struct UnmarkedSyntax *)0");
     }
   };
 
@@ -2724,9 +2725,9 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {}
     void compile(CompileWriter & f, CompileEnviron &) {
       if (f.for_compile_time()) 
-        f.printf("(EnvironSnapshot *)%p", env_ss); 
+        f.printf("(struct EnvironSnapshot *)%p", env_ss); 
       else
-        f.printf("(EnvironSnapshot *)0");
+        f.printf("(struct EnvironSnapshot *)0");
     }
   };
 

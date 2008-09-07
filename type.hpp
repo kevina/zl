@@ -41,6 +41,7 @@ namespace ast {
 
   extern TypeCategory * const ANY_C;
   extern TypeCategory * const SCALAR_C;
+  //extern TypeCategory * const BOOL_C;
   extern TypeCategory * const NUMERIC_C;
   extern TypeCategory * const INT_C;
   extern TypeCategory * const SIGNED_C;

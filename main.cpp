@@ -45,7 +45,8 @@ int main(int argc, const char *argv[])
     exit(1);
   }
   parse_maps(env);
-  SourceFile * code;
+  SourceFile * prelude = new_source_file("prelude.zlh");
+  SourceFile * code = NULL;
   if (argc >= 2) {
     code = new_source_file(argv[1]);
   } else {
@@ -60,7 +61,7 @@ int main(int argc, const char *argv[])
     const Syntax * to_expand =
     // parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
       new Syntax(new Syntax("top"),
-                 parse_str("SLIST", SourceStr(MACRO_PRELUDE, MACRO_PRELUDE_END)),
+                 parse_str("SLIST", SourceStr(prelude->entity(), prelude->begin(), prelude->end())),
                  parse_str("SLIST", SourceStr(code->entity(), code->begin(), code->end())));
     parse_top(to_expand, env);
     //printf("\n*************** EXPANDED *********************\n");
@@ -76,7 +77,8 @@ int main(int argc, const char *argv[])
     //AST::ExecEnviron env;
     //ast->eval(env);
   } catch (Error * err) {
-    err->source = code->entity();
+    //if (!err->source)
+    //  err->source = code->entity();
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(2);
   }

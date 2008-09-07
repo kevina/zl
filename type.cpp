@@ -8,6 +8,7 @@ namespace ast {
 
   static TypeCategory ANY_C_OBJ("any", 0);
   static TypeCategory SCALAR_C_OBJ("scalar", ANY_C);
+  //static TypeCategory BOOL_C_OBJ("bool", SCALAR_C);
   static TypeCategory NUMERIC_C_OBJ("numeric", SCALAR_C);
   static TypeCategory INT_C_OBJ("integer", NUMERIC_C);
   static TypeCategory SIGNED_C_OBJ("signed integer", INT_C);
@@ -22,6 +23,7 @@ namespace ast {
 
   TypeCategory * const ANY_C = &ANY_C_OBJ;
   TypeCategory * const SCALAR_C = &SCALAR_C_OBJ;
+  //TypeCategory * const BOOL_C = &BOOL_C_OBJ;
   TypeCategory * const NUMERIC_C = &NUMERIC_C_OBJ;
   TypeCategory * const INT_C = &INT_C_OBJ;
   TypeCategory * const SIGNED_C = &SIGNED_C_OBJ;
@@ -382,6 +384,11 @@ namespace ast {
         goto fail;
     }
 #endif
+
+    // deal with pointer to int case
+    // fixme, need to seperate out boolean case, and issue a warning otherwise
+    if (have->is(POINTER_C) && need->is(INT_C))
+      return new Cast(exp, type); 
 
     // deal with pointer types
     {
