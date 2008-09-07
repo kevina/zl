@@ -118,9 +118,6 @@ ast::AST * parse_fluid_binding(const Syntax *, Environ &);
 void assert_num_args(const Syntax * p, unsigned num);
 void assert_num_args(const Syntax * p, unsigned min, unsigned max);
 
-extern const char * MACRO_PRELUDE;
-extern const char * MACRO_PRELUDE_END;
-
 String gen_sym();
 
 #endif
