@@ -34,8 +34,8 @@ do
 done
 
 if [ -n "$failed" ]; then 
-    echo FAILED TESTS: $failed
+    echo FAILED TESTS: $failed 1>&2
 else
-    echo ALL TEST PASSED
+    echo ALL TEST PASSED 1>&2
 fi
 

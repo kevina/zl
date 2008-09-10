@@ -1,7 +1,7 @@
 
 TOP = <top> SPACING {STMT}+;
 
-SLIST = <slist> SPACING {STMT}+;
+SLIST = <@> SPACING {STMT}+;
 
 #
 # C Statement
@@ -147,7 +147,7 @@ RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 #
 
 RAW_ID : "identifier" =
-  <<mid>> {MID} / {[\a_]+[\a_\d]*} SPACING;
+  <<mid>> {MID} / {[@$\a_][\a_\d]*} SPACING;
 
 ID_W_INNER : "identifier" =
   <w/inner> {RAW_ID} "`" {RAW_ID} / {RAW_ID};
@@ -206,7 +206,7 @@ ARRAY_SIZE = {EXP} EOF / <literal 0>;
 
 TOKENS = <(...)> {TOKEN}*;
 
-STMTS = <slist> {STMT}*;
+STMTS = <@> {STMT}*;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
 SPLIT = <list> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;

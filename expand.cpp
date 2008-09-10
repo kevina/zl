@@ -41,7 +41,7 @@ typedef Syntax SyntaxList;
 typedef Syntax UnmarkedSyntax;
 struct SyntaxEnum;
 extern "C" Mark * new_mark_f(SymbolNode *);
-extern "C" const Syntax * syntax_flag(const Syntax *, const char *);
+extern "C" const Syntax * syntax_flag(const Syntax *, UnmarkedSyntax *);
 extern "C" SyntaxList * new_syntax_list();
 extern "C" int syntax_list_empty(const SyntaxList *);
 extern "C" void syntax_list_append(SyntaxList *, const Syntax *);
@@ -49,12 +49,14 @@ extern "C" const Syntax * syntax_enum_next(SyntaxEnum *);
 extern "C" Match * match(Match * m, const UnmarkedSyntax * pattern, const Syntax * with);
 extern "C" Match * match_args(Match * m, const UnmarkedSyntax * pattern, const Syntax * with);
 extern "C" Match * match_local(Match *, ...);
-extern "C" const Syntax * match_var(Match *, const char *);
-extern "C" SyntaxEnum * match_varl(Match *, const char *);
+extern "C" const Syntax * match_var(Match *, UnmarkedSyntax *);
+extern "C" SyntaxEnum * match_varl(Match *, UnmarkedSyntax *);
 extern "C" const Syntax * replace(const UnmarkedSyntax * p, Match * match, Mark * mark);
 extern "C" const Context * get_context(const Syntax * p);
 extern "C" const Syntax * replace_context(const Syntax * p, const Context * context);
 extern "C" const Syntax * partly_expand(const Syntax *, Position pos, Environ *);
+extern "C" const Syntax * reparse(const Syntax *, const char *, Environ *);
+extern "C" const SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
 extern "C" const UnmarkedSyntax * string_to_syntax(const char *);
 extern "C" const char * syntax_to_string(const UnmarkedSyntax *);
 struct UserTypeInfo;
@@ -157,21 +159,79 @@ struct Macro : public MacroSymbol {
   }
 };
 
-void match_parm(Match * m, const Syntax * p, const Syntax * repl) {
+//
+//
+//
+
+Mark * new_mark_f(SymbolNode * e) {
+  return new Mark(e);
+}
+
+const Syntax * syntax_flag(const Syntax *, UnmarkedSyntax *) {
+  abort();
+}
+
+SyntaxList * new_syntax_list() {
+  return new Syntax(new Syntax("@"));
+}
+
+int syntax_list_empty(const SyntaxList * p) {
+  return p->num_args() == 0;
+}
+
+void syntax_list_append(SyntaxList * l, const Syntax * p) {
+  l->add_part(p);
+}
+
+struct SyntaxEnum {
+  virtual const Syntax * next() = 0;
+  virtual ~SyntaxEnum() {}
+};
+
+struct SimpleSyntaxEnum : public SyntaxEnum {
+  Parts::const_iterator i;
+  Parts::const_iterator end;
+  SimpleSyntaxEnum(Parts::const_iterator i0, Parts::const_iterator e0)
+    : i(i0), end(e0) {}
+  const Syntax * next() {
+    if (i == end) return NULL;
+    const Syntax * res = *i;
+    ++i;
+    return res;
+  }
+};
+
+const Syntax * syntax_enum_next(SyntaxEnum * e) {
+  return e->next();
+}
+
+//
+//
+//
+
+void add_match_var(Match * m, const SymbolName & n, const Syntax * repl) {
+  if (n == "_") return; // "_" is a special variable meaning: don't care
+  m->push_back(Match::value_type(n, repl));
+}
+
+bool match_list(Match * m, 
+                Parts::const_iterator p_i, Parts::const_iterator p_end,
+                Parts::const_iterator r_i, Parts::const_iterator r_end);
+
+// if match_prep sets p == 0 then there is nothing more to do
+bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
   //printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   if (p->num_args() > 0) {
     if (p->is_a("pattern")) {
       p = p->arg(0);
       assert(p->what() == repl->what());
-      for (int j = 0; j != p->num_args(); ++j) {
-        m->push_back(Match::value_type(*p->arg(j), repl->arg(j)));
-      }
+      bool res = match_list(m, p->args_begin(), p->args_end(), repl->args_begin(), repl->args_end());
+      p = 0;
+      return res;
     } else if (p->is_a("reparse")) {
       if (!repl) {
         if (p->num_args() > 1)
           repl = p->arg(1);
-        else
-          abort();
       }
       p = p->arg(0);
     } else {
@@ -180,8 +240,52 @@ void match_parm(Match * m, const Syntax * p, const Syntax * repl) {
       abort();
     }
   }
-  //printf("match_parm >>: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
-  m->push_back(Match::value_type(*p, repl));
+  return true;
+}
+
+bool match_parm(Match * m, const Syntax * p, const Syntax * repl) {
+  //printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
+  bool cont = match_prep(m, p, repl);
+  if (!cont) return true;
+  if (repl) {
+    add_match_var(m, *p, repl);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool match_list(Match * m, 
+                Parts::const_iterator p_i, Parts::const_iterator p_end,
+                Parts::const_iterator r_i, Parts::const_iterator r_end)
+{
+  bool now_optional = false;
+  while (p_i != p_end) {
+    const Syntax * p = *p_i;
+    const Syntax * r = r_i < r_end ? *r_i : NULL;
+    bool ok = match_prep(m, p, r);
+    if (!ok) return false;
+    if (p) {
+      SymbolName v = *p;
+      if (v == "@") {
+        now_optional = true;
+        ++p_i; 
+        continue;
+      }
+      if (v.name[0] == '@') {
+        v.name = v.name.c_str() + 1;
+        r = new Syntax(new Syntax("@"), r_i, r_end);
+      }
+      if (r) {
+        add_match_var(m, v, r);
+      } else {
+        if (!now_optional) return false;
+      }
+    }
+    ++p_i;
+    ++r_i;
+  }
+  return true;
 }
 
 Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsigned shift) {
@@ -192,20 +296,15 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   //pattern->print(); printf("\n");
   //with->print(); printf("\n");
   //printf("---\n");
-  if (pattern->simple()) {
-    if (pattern->what().defined())
-      match_parm(m, pattern, with->part(shift));
-  } else {
-    const Parts & parts = pattern->d->parts;
-    const Flags & flags = pattern->d->flags;
-    for (unsigned i = 0, sz = parts.size(); i < sz; ++i) {
-      unsigned ii = i + shift;
-      match_parm(m, parts[i], with->num_parts() > ii ? with->part(ii) : NULL);
-    }
-    for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
-      const Syntax * w = with->flag((*i)->what());
-      match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL);
-    }
+  pattern = pattern->ensure_branch();
+  with    = with->ensure_branch();
+  const Flags & flags = pattern->d->flags;
+  bool ok = match_list(m, pattern->parts_begin(), pattern->parts_end(), 
+                        with->parts_begin() + shift, with->parts_end());
+  if (!ok) return NULL;
+  for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
+    const Syntax * w = with->flag((*i)->what());
+    match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL);
   }
   if (orig_m) 
     m->insert(m->end(), orig_m->begin(), orig_m->end());
@@ -220,8 +319,21 @@ Match * match_args(Match * m, const Syntax * pattern, const Syntax * with) {
   return match(m, pattern, with, 1);
 }
 
-Mark * new_mark_f(SymbolNode * e) {
-  return new Mark(e);
+const Syntax * match_var(Match * m, UnmarkedSyntax * n) {
+  Match::const_iterator i = m->begin(), e = m->end();
+  for (; i != e; ++i)
+    if (i->first == *n) return i->second;
+  return NULL;
+}
+
+SyntaxEnum * match_varl(Match * m, UnmarkedSyntax * n) {
+  const Syntax * p = match_var(m, n);
+  if (p) {
+    assert(p->is_a("@"));
+    return new SimpleSyntaxEnum(p->args_begin(), p->args_end());
+  } else {
+    return NULL;
+  }
 }
 
 const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
@@ -241,7 +353,7 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
 }
 
 const Syntax * reparse(String what, const Syntax * p, ReplTable * r) {
-  //printf("REPARSE AS %s\n", ~what);
+  //printf("REPARSE %s AS %s\n", ~p->to_string(), ~what);
   const Replacements * repls = combine_repl(p->repl, r);
   const Syntax * res = parse_str(what, p->str(), repls);
   //printf("PARSED STRING\n");
@@ -264,8 +376,16 @@ const Syntax * reparse(String what, const Syntax * p, ReplTable * r) {
   return res;
 }
 
+const Syntax * reparse(const Syntax * s, const char * what, Environ * env) {
+  return reparse(what, s);
+}
+
+
 const Syntax * replace(const Syntax * p, ReplTable * r) {
   // FIXME: Do I need to handle the case where the entity is a symbol name?
+  static unsigned seq=0;
+  unsigned seql = seq++;
+  //printf("REPLACE %d: %s\n", seql, ~p->to_string());
   if (p->simple()) {
     //return p;
     //printf("MARK %s %p\n", ~p->what(), r->mark);
@@ -283,6 +403,7 @@ const Syntax * replace(const Syntax * p, ReplTable * r) {
         p0 = reparse(what, p0->arg(0));
       }
     }
+    //printf("REPLACE RES %d: %s\n", seql, ~p0->to_string());
     return p0;
   } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
     return p;
@@ -296,19 +417,21 @@ const Syntax * replace(const Syntax * p, ReplTable * r) {
     Syntax * r0 = new Syntax(String(p->arg(0)->str()), p->arg(0)->str());
     r0->repl = res->repl;
     res->add_part(r0);
+    //printf("REPLACE RES %d: %s\n", seql, ~res->to_string());
     return res;
   } else {
     Syntax * res = new Syntax(p->str());
     for (unsigned i = 0; i != p->num_parts(); ++i) {
       //const Syntax * q = (i == 0 && p->part(0)->simple()) ? p->part(0) : replace(p->part(i), r); // HACK
       const Syntax * q = replace(p->part(i), r);
-      if (q->is_a("...")) {
+      if (!q->simple() && q->is_a("@")) {
         for (unsigned j = 0; j != q->num_args(); ++j)
           res->add_part(q->arg(j));
       } else {
         res->add_part(q);
       }
     }
+    //printf("REPLACE RES %d: %s\n", seql, ~res->to_string());
     return res;
   }
 }
@@ -333,6 +456,18 @@ const Syntax * replace_context(const Syntax * p, const Context * context) {
     }
     return res;
   }
+}
+
+//
+//
+//
+
+const UnmarkedSyntax * string_to_syntax(const char * str) {
+  return new Syntax(str);
+}
+
+const char * syntax_to_string(const UnmarkedSyntax *) {
+  abort();
 }
 
 // three type of macros, two namespaces
@@ -400,10 +535,11 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   SymbolName what = p->what().name;
   //printf("\n>expand>%s//\n", ~what);
   //p->print();
-  //printf("\n////\n");
+  // printf("\n////\n");
   if (p->simple()) {
     fprintf(stderr, "partly_expand can't be simple: %s\n", ~p->to_string());
-    abort(); // FIXME: Error Message
+    //abort(); // FIXME: Error Message
+    return p;
   } else if (what == "{}") {
     if (pos == ExpPos)
       return partly_expand(reparse("INIT", p->arg(0)), pos, env, flags);
@@ -414,7 +550,11 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   } else if (what == "[]") {
     return partly_expand(reparse("EXP", p->arg(0)), pos, env, flags);
   } else if (what == "parm") {
-    return partly_expand(reparse("EXP", p), pos, env, flags);
+    //abort();
+    if (pos & ExpPos)
+      return partly_expand(reparse("EXP", p), pos, env, flags);
+    else
+      return partly_expand(reparse("STMT", p), pos, env, flags);
   } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
     p = env.symbols.lookup<MacroSymbol>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, env);
     return partly_expand(p, pos, env, flags);
@@ -470,6 +610,44 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   }
   // we should have a primitive
   return p;
+}
+
+const Syntax * partly_expand(const Syntax * p, Position pos, Environ * env) {
+  return partly_expand(p, pos, *env);
+}
+
+struct PartlyExpandSyntaxEnum : public SyntaxEnum {
+  typedef Vector<SyntaxEnum *> VD;
+  VD stack;
+  SyntaxEnum * top;
+  Position pos;
+  Environ * env;
+  PartlyExpandSyntaxEnum(SyntaxEnum * e0, Position p0, Environ * env0)
+    : top(e0), pos(p0), env(env0) {}
+  const Syntax * next() {
+  try_again:
+    const Syntax * res = top->next();
+    if (!res) {
+      if (stack.empty()) {
+        return NULL;
+      } else {
+        top = stack.back();
+        stack.pop_back();
+        goto try_again;
+      }
+    }
+    res = partly_expand(res, pos, *env);
+    if (res->is_a("@")) {
+      stack.push_back(top);
+      top = new SimpleSyntaxEnum(res->args_begin(), res->args_end());
+      goto try_again;
+    }
+    return res;
+  }
+};
+
+const SyntaxEnum * partly_expand_list(SyntaxEnum * l, Position pos, Environ * env) {
+  return new PartlyExpandSyntaxEnum(l, pos, env);
 }
 
 SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
@@ -607,6 +785,31 @@ AST * parse_fluid_binding(const Syntax * p, Environ & env) {
   FluidBinding * b = new FluidBinding(n.name, mark(n, new Mark(NULL)));
   env.add(n, b);
   return new Empty();
+}
+
+
+//
+// 
+//
+
+UserTypeInfo * user_type_info(const Syntax *) {
+  abort();
+}
+
+ModuleInfo * user_type_module(UserTypeInfo *) {
+  abort();
+}
+
+ModuleInfo * module_info(const Syntax *) {
+  abort();
+}
+
+SyntaxEnum * module_symbols(ModuleInfo *) {
+  abort();
+}
+
+bool module_have_symbol(ModuleInfo *, const Syntax *) {
+  abort();
 }
 
 

@@ -1,8 +1,26 @@
 { global:
+  new_mark_f;
+  syntax_flag;
+  new_syntax_list;
+  syntax_list_empty;
+  syntax_list_append;
+  syntax_enum_next;
   match;
   match_args;
-  new_mark_f;
+  match_local;
+  match_var;
+  match_varl;
   replace;
   get_context;
   replace_context;
+  partly_expand;
+  partly_expand_list;
+  reparse;
+  string_to_syntax;
+  syntax_to_string;
+  user_type_info;
+  user_type_module;
+  module_info;
+  module_symbols;
+  module_have_symbol;
 };

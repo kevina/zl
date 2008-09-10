@@ -1,6 +1,7 @@
 //
 // basic IO
 //
+
 typedef typedef struct _IO_FILE FILE;
 int printf (const char *, ...);
 int snprintf(const char * str, unsigned long size, const char * format, ...);
@@ -24,7 +25,7 @@ user_type UnmarkedSyntax {
 }
 
 user_type Syntax;
-__ct_callback Syntax * syntax_flag(Syntax *, const char *);
+__ct_callback Syntax * syntax_flag(Syntax *, UnmarkedSyntax *);
 struct Syntax;
 user_type Syntax {
   finalize_user_type struct Syntax;
@@ -38,9 +39,11 @@ user_type SyntaxList;
 __ct_callback SyntaxList * new_syntax_list();
 __ct_callback int syntax_list_empty(const SyntaxList *);
 __ct_callback void syntax_list_append(SyntaxList *, Syntax *);
-struct SyntaxList;
+struct SyntaxList {};
 user_type SyntaxList {
   finalize_user_type struct SyntaxList;
+  map to_syntax (x) {(Syntax *)x;}
+  make_subtype Syntax to_syntax;
   export empty, append;
   map empty(:this this) {syntax_list_empty(this);}
   map append(syn, :this this) {syntax_list_append(this, syn);}
@@ -48,7 +51,7 @@ user_type SyntaxList {
 
 user_type SyntaxEnum;
 __ct_callback Syntax * syntax_enum_next(SyntaxEnum *);
-struct SyntaxEnum;
+struct SyntaxEnum {};
 user_type SyntaxEnum {
   finalize_user_type struct SyntaxEnum;
   export next;
@@ -59,8 +62,8 @@ user_type Match;
 __ct_callback Match * match(Match *, UnmarkedSyntax * pattern, Syntax * with);
 __ct_callback Match * match_args(Match *, UnmarkedSyntax * pattern, Syntax * with);
 __ct_callback Match * match_local(Match *, ...);
-__ct_callback Syntax * match_var(Match *, const char *);
-__ct_callback SyntaxEnum * match_varl(Match *, const char *);
+__ct_callback Syntax * match_var(Match *, UnmarkedSyntax *);
+__ct_callback SyntaxEnum * match_varl(Match *, UnmarkedSyntax *);
 struct Match {};
 user_type Match {
   finalize_user_type struct Match;
@@ -80,6 +83,8 @@ typedef struct Environ Environ;
 typedef enum  {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4, 
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32} Position;
 __ct_callback Syntax * partly_expand(Syntax *, Position pos, Environ *);
+__ct_callback SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
+__ct_callback Syntax * reparse(Syntax *, const char *, Environ *);
 
 __ct_callback UnmarkedSyntax * string_to_syntax(const char *);
 __ct_callback const char * syntax_to_string(UnmarkedSyntax *);

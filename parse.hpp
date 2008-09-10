@@ -109,11 +109,18 @@ Error * error(const char * pos, const char * fmt, ...)
 struct Syntax;
 
 struct Parts : public Vector<const Syntax *> {
+  typedef Vector<const Syntax *> Base;
+  typedef const value_type * const_iterator;
+  const_iterator begin() const {return &*Base::begin();}
+  const_iterator end()   const {return &*Base::end();}
   void append(const Syntax * x) {
     push_back(x);
   }
   void append(const Parts & other) {
-    insert(end(), other.begin(), other.end());
+    insert(Base::end(), other.begin(), other.end());
+  }
+  void append(const_iterator i, const_iterator end) {
+    insert(Base::end(), i, end);
   }
   void to_string(OStream & o) const;
 };
@@ -173,6 +180,7 @@ struct Syntax : public gc {
   mutable SourceStr str_;
   const SourceStr & str() const {if (d && str_.empty()) set_src_from_parts(); return str_;}
   D * d;
+  mutable const Syntax * self; // hack, see parts_begin()
   const Replacements * repl;
   Entity * entity_;
   Entity * entity() const {return entity_;}
@@ -287,6 +295,12 @@ struct Syntax : public gc {
     d = new D;
     d->parts.append(ps);
   }
+  Syntax(const Syntax * p, Parts::const_iterator b, Parts::const_iterator e) : repl(0), entity_() {
+    d = new D;
+    what_ = p->string_if_simple();
+    d->parts.push_back(p);
+    d->parts.append(b, e);
+  }
   Syntax(const Syntax * p, const Parts & ps) : repl(0), entity_() {
     d = new D;
     what_ = p->string_if_simple();
@@ -322,6 +336,12 @@ struct Syntax : public gc {
       d = new D;
     }
   }
+  const Syntax * ensure_branch() const {
+    if (d) return this;
+    Syntax * s = new Syntax(*this);
+    s->make_branch();
+    return s;
+  }
 
   unsigned num_parts() const {
     if (!d && what_.defined()) return 1;
@@ -345,10 +365,25 @@ struct Syntax : public gc {
   const Syntax * & arg(unsigned i) {
     return d->parts[i+1];
   }
-  Parts::const_iterator parts_begin() const {return d->parts.begin();}
-  Parts::const_iterator parts_end()   const {return d->parts.end();}
-  Parts::const_iterator args_begin() const {return d->parts.begin() + 1;}
-  Parts::const_iterator args_end()   const {return d->parts.end();}
+  Parts::const_iterator parts_begin() const {
+    if (d) return d->parts.begin();
+    self = this;
+    return &self;
+  }
+  Parts::const_iterator parts_end()   const {
+    if (d) return d->parts.end();
+    self = this;
+    if (what_.defined()) return &self + 1;
+    else return &self;
+  }
+  Parts::const_iterator args_begin() const {
+    if (d) return d->parts.begin() + 1;
+    return &self + 1;
+  }
+  Parts::const_iterator args_end()   const {
+    if (d) return d->parts.end();
+    return &self + 1;
+  }
   const Syntax * flag(SymbolName n) const {
     if (!d) return NULL;
     else return d->flags.lookup(n);
@@ -362,13 +397,13 @@ struct Syntax : public gc {
   void add_args(const Syntax * other) {
     if (!d) make_branch();
     assert(what_.defined());
-    d->parts.insert(d->parts.end(), other->args_begin(), other->args_end());
+    d->parts.append(other->args_begin(), other->args_end());
   }
   void add_parts(Parts::const_iterator i, Parts::const_iterator end) {
     if (i == end) return;
     if (!d) make_branch();
     if (d->parts.empty()) what_ = (*i)->string_if_simple();
-    d->parts.insert(d->parts.end(), i, end);
+    d->parts.append(i, end);
   }
   void add_parts(const Parts & p) {
     add_parts(p.begin(), p.end());

@@ -212,7 +212,7 @@ DeclWorking::DeclWorking(Parts & p)
 
 const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 {
-  Syntax * res = new Syntax(new Syntax("slist"));
+  Syntax * res = new Syntax(new Syntax("@"));
 
   Parts::const_iterator i = p->args_begin();
   Parts::const_iterator end = p->args_end();
@@ -601,7 +601,7 @@ const Syntax * DeclWorking::parse_init_exp(Parts::const_iterator & i,
   while (i != end && !(*i)->is_a("sym", ","))
     ++i;
   Syntax * p = new Syntax(new Syntax("exp"));
-  p->d->parts.insert(p->d->parts.end(), begin, i);
+  p->d->parts.append(begin, i);
   return p;
 }
 
