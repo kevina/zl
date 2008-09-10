@@ -163,9 +163,26 @@ namespace ast {
   }
   
   void TopLevelSymbol::add_to_top_level_env(const SymbolKey & k, Environ & env) const {
-    env.top_level_symbols->push_back(this);
-    if (num == NPOS)
-      assign_uniq_num<TopLevelSymbol>(*env.top_level_symbols);
+    // If the symbol already exists in the table, remove it and insert
+    // it in the end.  This will happen if a function was declared
+    // before it was defined.  Since order matters it's where the
+    // function is defined that is important.  Fixme, it not
+    // really necessary to do this every time...
+    Vector<const TopLevelSymbol *>::iterator 
+      i = env.top_level_symbols->begin(),
+      e = env.top_level_symbols->end();
+    while (i != e) {
+      if (*i == this) break;
+      ++i;
+    }
+    if (i != e) {
+      env.top_level_symbols->erase(i);
+      env.top_level_symbols->push_back(this);
+    } else {
+      env.top_level_symbols->push_back(this);
+      if (num == NPOS)
+        assign_uniq_num<TopLevelSymbol>(*env.top_level_symbols);
+    }
   }
   
   void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, Pass pass) const {
@@ -2183,16 +2200,45 @@ namespace ast {
   }
 #endif
 
-  AST * Fun::parse_forward(const Syntax * p, Environ & env0, Collect & collect) {
+  Fun * parse_fun_forward(const Syntax * p, Environ & env, Collect & collect) {
+    assert_num_args(p,3,4);
+    SymbolKey name = expand_binding(p->arg(0), env);
+    
+    bool previous_declared = env.symbols.exists_this_scope(name);
+    VarSymbol * sym;
+    TopLevelSymbol * tlsym = NULL;
+    Fun * f = NULL;
+    if (previous_declared) {
+      sym = const_cast<VarSymbol *>(env.symbols.find<VarSymbol>(name));
+      tlsym = dynamic_cast<TopLevelSymbol *>(sym);
+      f = const_cast<Fun *>(dynamic_cast<const Fun *>(tlsym->decl));
+      if (p->num_args() > 3)
+        f->parse_forward_i(p, env, collect);
+    } else {
+      f = new Fun;
+      f->name = name;
+      f->sym = sym = new_var_symbol(name, env.scope, f, env.where);
+      tlsym = dynamic_cast<TopLevelSymbol *>(sym);
+      tlsym->add_to_local_env(name, env);
+      f->parse_forward_i(p, env, collect);
+    }
+    return f;
+  }
+
+  AST * parse_fun(const Syntax * p, Environ & env) {
+    Collect collect;
+    Fun * f = parse_fun_forward(p, env, collect);
+    if (!collect.empty())
+      f->finish_parse(env);
+    return f;
+  }
+  
+  AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect & collect) {
     parse_ = p;
-    assert_num_args(3,4);
-    name = expand_binding(p->arg(0), env0);
+
+    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);    
 
     parse_flags(p);
-
-    sym = new_var_symbol(name, env0.scope, this, env0.where);
-    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);
-    tlsym->add_to_local_env(name, env0);
 
     // FIXME: is this necessary/correct for a new frame to be created
     //        to expand/parse the _paramaters_.  Of cource is needed for
@@ -2254,15 +2300,6 @@ namespace ast {
     tlsym->add_to_top_level_env(name, env0);
     symbols = env.symbols;
   }
-
-  AST * Fun::parse_self(const Syntax * p, Environ & env) {
-    Collect collect;
-    AST * res = parse_forward(p, env, collect);
-    if (!collect.empty())
-      finish_parse(env);
-    return res;
-  }
-
 
 //   void Fun::resolve(Environ & env0) {
 //     printf("RESOLVE FUN %s\n", name.c_str());
@@ -2818,8 +2855,6 @@ namespace ast {
   AST * try_decl_common(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "@")       return (new ASTList)->parse_self(p, env);
-    if (what == "var")     return (new Var)->parse_self(p, env);
-    if (what == "fun" )    return (new Fun)->parse_self(p, env);
     if (what == "struct")  return (new Struct)->parse_self(p, env);
     if (what == "union")   return (new Union)->parse_self(p, env);
     if (what == "enum")    return (new Enum)->parse_self(p, env);
@@ -2846,14 +2881,14 @@ namespace ast {
   AST * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect) {
     String what = p->what().name;
     if (what == "var")     return (new Var)->parse_forward(p, env, collect);
-    if (what == "fun" )    return (new Fun)->parse_forward(p, env, collect);
+    if (what == "fun" )    return parse_fun_forward(p, env, collect);
     return try_decl_common(p, env);
   }
 
   AST * try_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "var")     return (new Var)->parse_self(p, env);
-    if (what == "fun" )    return (new Fun)->parse_self(p, env);
+    if (what == "fun" )    return parse_fun(p, env);
     return try_decl_common(p, env);
   }
 

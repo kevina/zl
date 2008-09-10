@@ -329,12 +329,13 @@ namespace ast {
     //LabelSymbolTable * labels;
     unsigned frame_offset;
     unsigned frame_size;
-    AST * parse_self(const Syntax * p, Environ &);
-    AST * parse_forward(const Syntax * p, Environ &, Collect &);
     void finish_parse(Environ &);
     void eval(ExecEnviron & env);
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
+    
+    // internal method, should only be called by parse_fun_forward
+    AST * parse_forward_i(const Syntax * p, Environ &, Collect &); 
   };
 
   struct Literal : public AST {
