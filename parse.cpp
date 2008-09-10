@@ -207,6 +207,11 @@ namespace parse_parse {
         Res r = parse(str);
         str = r.end;
         res->add_part(r.parse);
+      } else if (*str == ':') {
+        ++str;
+        Res r = parse(str);
+        str = r.end;
+        res->add_flag(r.parse);
       } else {
         Syntax * r = new Syntax();
         r->str_.begin = str;

@@ -101,7 +101,7 @@ INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
 
 FLOATING_SUFFIX = <float> [fF] / <"long double"> [lL] / <double>;
 
-STRUCT_UNION = <%> {"struct"/"union"/"class"} 
+STRUCT_UNION = <%> {"struct"/"union"/"class"/"class_"} 
                    {ID/}
                    (:<public> ":" "public" {ID})?
                    {<{...}> "{" {STMT}* "}" }?;

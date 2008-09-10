@@ -21,7 +21,7 @@
   (left (bin bor  (sym |)))
   (left (bin and (sym &&)))
   (left (bin or (sym ||)))
-  (right (bin ? (sym ?)) (bin : (sym :)))
+  (right (bin ? (sym ?)) (bin ":" (sym ":")))
   (right (bin assign (sym =))
          (bin times_eq (sym *=)) (bin div_eq (sym /=)) (bin mod_eq (sym %=))
          (bin plus_eq (sym +=)) (bin minus_eq (sym -=))

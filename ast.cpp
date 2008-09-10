@@ -2216,11 +2216,6 @@ namespace ast {
       symbols = env.symbols;
     }
 
-    //printf("FUN DEPS: %s %d\n", ~name, deps.size());
-    //for (Deps::iterator i = deps.begin(), e = deps.end(); i != e; ++i)
-    //  printf("  %s\n", ~(*i)->name);
-    //printf("---\n");
-
     //sym->value = this;
 
     return this;
@@ -2250,6 +2245,11 @@ namespace ast {
 
     body = dynamic_cast<Block *>(parse_stmt(parse_->arg(3), env));
     assert(body); // FiXME
+
+    //printf("FUN DEPS: %s %d\n", ~name, deps_.size());
+    //for (Deps::iterator i = deps_.begin(), e = deps_.end(); i != e; ++i)
+    //  printf("  %s\n", ~(*i)->name);
+    //printf("---\n");
 
     tlsym->add_to_top_level_env(name, env0);
     symbols = env.symbols;
@@ -3001,40 +3001,51 @@ namespace ast {
     Vector<const TopLevelSymbol *>::const_iterator i, e = syms.end();
     const TopLevelVarSymbol * tl = NULL;
 
+    cw << "/* type decls */\n";
+
     for (i = syms.begin(); i != e; ++i) {
       if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
         d->compile(cw, Declaration::Forward);
     }
+
+    cw << "/* type definitions */\n";
 
     for (i = syms.begin(); i != e; ++i) {
       if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
         d->compile(cw, Declaration::Body);
     }
 
+    cw << "/* function decls */\n";
+
     for (i = syms.begin(); i != e; ++i) {
       if (const Fun * d = dynamic_cast<const Fun *>((*i)->decl)) {
         if (cw.for_compile_time()) {
           tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl))
+          if (cw.deps->have(tl)) {
             d->compile(cw, Declaration::Forward);
+          }
         } else if (!d->for_ct()) {
           d->compile(cw, Declaration::Forward);
         }
       }
     }
 
+    cw << "/* definitions */\n";
+
     for (i = syms.begin(); i != e; ++i) {
       if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
         if (cw.for_compile_time()) {
           tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl) && !d->sym->ct_ptr)
+          if (cw.deps->have(tl) && !d->sym->ct_ptr) {
             d->compile(cw, Declaration::Body);
+          }
         } else if (!d->for_ct()) {
           d->compile(cw, Declaration::Body);
         }
       }
     }
 
+    cw << "/* done */\n";
   }
   
   //

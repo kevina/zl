@@ -91,9 +91,9 @@ __ct_callback const char * syntax_to_string(UnmarkedSyntax *);
 
 user_type UserTypeInfo;
 user_type ModuleInfo;
-__ct_callback UserTypeInfo * user_type_info(const Syntax *);
+__ct_callback UserTypeInfo * user_type_info(const Syntax *, Environ *);
 __ct_callback ModuleInfo * user_type_module(UserTypeInfo *);
-__ct_callback ModuleInfo * module_info(const Syntax *);
+__ct_callback ModuleInfo * module_info(const Syntax *, Environ *);
 __ct_callback SyntaxEnum * module_symbols(ModuleInfo *);
 __ct_callback bool module_have_symbol(ModuleInfo *, const Syntax *);
 

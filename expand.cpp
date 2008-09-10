@@ -59,13 +59,13 @@ extern "C" const Syntax * reparse(const Syntax *, const char *, Environ *);
 extern "C" const SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
 extern "C" const UnmarkedSyntax * string_to_syntax(const char *);
 extern "C" const char * syntax_to_string(const UnmarkedSyntax *);
-struct UserTypeInfo;
-struct ModuleInfo;
-extern "C" UserTypeInfo * user_type_info(const Syntax *);
-extern "C" ModuleInfo * user_type_module(UserTypeInfo *);
-extern "C" ModuleInfo * module_info(const Syntax *);
-extern "C" SyntaxEnum * module_symbols(ModuleInfo *);
-extern "C" bool module_have_symbol(ModuleInfo *, const Syntax *);
+typedef UserType UserTypeInfo;
+typedef Module ModuleInfo;
+extern "C" const UserTypeInfo * user_type_info(const Syntax *, Environ *);
+extern "C" const ModuleInfo * user_type_module(const UserTypeInfo *);
+extern "C" const ModuleInfo * module_info(const Syntax *, Environ *);
+extern "C" SyntaxEnum * module_symbols(const ModuleInfo *);
+extern "C" bool module_have_symbol(const ModuleInfo *, const Syntax *);
 
 String gen_sym() {
   static unsigned uniq_num = 0;
@@ -167,8 +167,8 @@ Mark * new_mark_f(SymbolNode * e) {
   return new Mark(e);
 }
 
-const Syntax * syntax_flag(const Syntax *, UnmarkedSyntax *) {
-  abort();
+const Syntax * syntax_flag(const Syntax * s, UnmarkedSyntax * n) {
+  return s->flag(*n);
 }
 
 SyntaxList * new_syntax_list() {
@@ -383,8 +383,8 @@ const Syntax * reparse(const Syntax * s, const char * what, Environ * env) {
 
 const Syntax * replace(const Syntax * p, ReplTable * r) {
   // FIXME: Do I need to handle the case where the entity is a symbol name?
-  static unsigned seq=0;
-  unsigned seql = seq++;
+  //static unsigned seq=0;
+  //unsigned seql = seq++;
   //printf("REPLACE %d: %s\n", seql, ~p->to_string());
   if (p->simple()) {
     //return p;
@@ -466,8 +466,8 @@ const UnmarkedSyntax * string_to_syntax(const char * str) {
   return new Syntax(str);
 }
 
-const char * syntax_to_string(const UnmarkedSyntax *) {
-  abort();
+const char * syntax_to_string(const UnmarkedSyntax * s) {
+  return ~s->to_string();
 }
 
 // three type of macros, two namespaces
@@ -743,6 +743,11 @@ void compile_for_ct(Deps & deps, Environ & env) {
   for (unsigned i = 0, sz = deps.size(); i != sz; ++i) {
     deps.merge(deps[i]->decl->deps());
   }
+
+  //printf("COMPILE FOR CT DEPS: %d\n", deps.size());
+  //for (Deps::iterator i = deps.begin(), e = deps.end(); i != e; ++i)
+  //  printf("  %s\n", ~(*i)->name);
+  //printf("---\n");
   
   printf("COMPILE FOR CT: zlfct%03d\n", cntr);
   StringBuf buf;
@@ -792,24 +797,35 @@ AST * parse_fluid_binding(const Syntax * p, Environ & env) {
 // 
 //
 
-UserTypeInfo * user_type_info(const Syntax *) {
+const UserTypeInfo * user_type_info(const Syntax * s, Environ * env) {
+  return dynamic_cast<const UserType *>(env->types.inst(s));
+}
+
+const ModuleInfo * user_type_module(UserTypeInfo * t) {
+  return t->module;
+}
+
+const ModuleInfo * module_info(const Syntax *, Environ * env) {
   abort();
 }
 
-ModuleInfo * user_type_module(UserTypeInfo *) {
-  abort();
+struct ModuleSymbolsEnum : public SyntaxEnum {
+  SymbolNode * cur;
+  Syntax * next() {
+    if (!cur) return NULL;
+    Syntax * res = new Syntax(new SymbolKeyEntity(cur->key));
+    cur = cur->next;
+    return res;
+  }
+  ModuleSymbolsEnum(SymbolNode * c) : cur(c) {}
+};
+
+SyntaxEnum * module_symbols(const ModuleInfo * m) {
+  return new ModuleSymbolsEnum(m->syms);
 }
 
-ModuleInfo * module_info(const Syntax *) {
-  abort();
-}
-
-SyntaxEnum * module_symbols(ModuleInfo *) {
-  abort();
-}
-
-bool module_have_symbol(ModuleInfo *, const Syntax *) {
-  abort();
+bool module_have_symbol(const ModuleInfo * m, const Syntax * s) {
+  return find_symbol<Symbol>(s, DEFAULT_NS, m->syms);
 }
 
 
