@@ -18,6 +18,7 @@
   reparse;
   string_to_syntax;
   syntax_to_string;
+  dump_syntax;
   user_type_info;
   user_type_module;
   module_info;

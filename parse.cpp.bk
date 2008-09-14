@@ -15,13 +15,12 @@ using namespace parse_common;
 // SourceStr
 // 
 
-bool pos_str(const SourceFile * source, const char * pos,
-             const char * pre, OStream & o, const char * post)
-{
+
+bool SourceEntity::pos_str(const char * s, const char * pre, OStream & o, const char * post) const {
   char buf[24];
-  if (source) {
+  if (file_) {
     o << pre;
-    o << source->get_pos_str(pos, buf);
+    o << get_pos_str(s, buf);
     o << post;
     return true;
   } else {
@@ -29,13 +28,22 @@ bool pos_str(const SourceFile * source, const char * pos,
   }
 }
 
+bool SourceStr::pos_str(const char * pre, OStream & o, const char * post) const {
+  if (source)
+    return source->pos_str(begin, pre, o, post);
+  else
+    return false;
+}
+
 void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
   if (source) {
-    if (!source->file_name().empty()) {
-      o << source->file_name();
-      o << ":";
+    if (source) {
+      if (!source->file_name().empty()) {
+        o << source->file_name();
+        o << ":";
+      }
+      pos_str("", o, ":");
     }
-    pos_str("", o, ":");
   }
   o << '"';
   if (size() <= max_len) {
@@ -53,7 +61,7 @@ void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
 //
 
 Error * verror(const Annon * annon,
-               const SourceFile * s, const char * pos, 
+               const SourceEntity * s, const char * pos, 
                const char * fmt, va_list ap) {
   StringBuf buf;
   buf.vprintf(fmt, ap);
@@ -65,7 +73,7 @@ Error * verror(const Annon * annon,
   return error;
 }
 
-Error * error(const SourceFile * s, const char * pos, const char * fmt, ...) {
+Error * error(const SourceEntity * s, const char * pos, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   Error * res = verror(NULL, s, pos, fmt, ap);
@@ -99,14 +107,14 @@ Error * error(const char * pos, const char * fmt, ...) {
 }
 
 String Error::message() {
-  printf("ERROR:: %p %p\n", this, annon);
+  printf("ERROR %p %p\n", this, annon);
   StringBuf res;
   if (source) {
     if (!source->file_name().empty()) {
       res += source->file_name();
       res += ": ";
     }
-    pos_str(source, pos, "", res, ": ");
+    source->pos_str(pos, "", res, ": ");
   }
   res += msg;
   const Annon * cur = annon;

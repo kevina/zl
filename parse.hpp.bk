@@ -16,19 +16,41 @@ using ast::SymbolName;
 struct Syntax;
 struct Annon;
 
-bool pos_str(const SourceFile * source, const char * pos,
-             const char * pre, OStream & o, const char * post);
+// fixme: what's the point of this extra indirection?
+
+class SourceEntity : public gc {
+public: // but don't use
+  const SourceFile * file_;
+public:
+  explicit SourceEntity(const SourceFile * f = 0)
+    : file_(f) {}
+  explicit inline SourceEntity(const Syntax * e);
+  String file_name() const {return file_ ? file_->file_name() : String();} // FIXME: Is check really needed
+  Pos get_pos(const char * s) const {return file_->get_pos(s);}
+  char * get_pos_str(const char * s, char * buf) const {
+    return file_->get_pos_str(s, buf);
+  }
+  bool pos_str(const char * s, const char * pre, OStream & o, const char * post) const;
+  unsigned size() const {return file_->size();}
+  const char * begin() const {return file_->begin();}
+  const char * end() const {return file_->end();}
+};
+
+inline const SourceEntity * SourceFile::entity() const {
+  if (!entity_) entity_ = new SourceEntity(this);
+  return entity_;
+}
 
 struct SourceStr : public SubStr {
-  const SourceFile * source;
+  const SourceEntity * source;
   const Annon * annon;
   SourceStr() : source(), annon() {}
   SourceStr(const char * b, const char * e) : SubStr(b,e), source(), annon() {}
   SourceStr(String s) : SubStr(s), source(), annon() {}
-  SourceStr(const SourceFile * f) : SubStr(f->begin(), f->end()), source(f), annon() {}
-  SourceStr(const SourceFile * f, const char * b, const char * e) 
+  SourceStr(const SourceEntity * f) : SubStr(f->begin(), f->end()), source(f), annon() {}
+  SourceStr(const SourceEntity * f, const char * b, const char * e) 
     : SubStr(b,e), source(f), annon() {}
-  SourceStr(const SourceFile * f, String s) 
+  SourceStr(const SourceEntity * f, String s) 
     : SubStr(s), source(f), annon() {}
   operator const char * & () {return begin;}
   operator const char * () const {return begin;}
@@ -47,9 +69,7 @@ struct SourceStr : public SubStr {
     if (!end || end < other.end) end = other.end;
   }
   SourceStr & operator=(const char * s) {begin = s; return *this;}
-  bool pos_str(const char * pre, OStream & o, const char * pos) const {
-    return ::pos_str(source, begin, pre, o, pos);
-  }
+  bool pos_str(const char * pre, OStream & o, const char * pos) const;
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
 };
 
@@ -62,7 +82,7 @@ struct Annon : public gc {
 
 struct ErrorInfo : public gc {
   const Annon * annon;
-  const SourceFile * source;
+  const SourceEntity * source;
   const char * pos;
   String msg;
 };
@@ -72,9 +92,9 @@ struct Error : public ErrorInfo {
 };
 
 Error * verror(const Annon * annon, 
-               const SourceFile * s, const char * pos, 
+               const SourceEntity * s, const char * pos, 
                const char * fmt, va_list ap);
-Error * error(const SourceFile * s, const char * pos, 
+Error * error(const SourceEntity * s, const char * pos, 
               const char * fmt, ...)
   __attribute__ ((format (printf, 3, 4)));
 Error * error(const SourceStr & str, const char * fmt, ...)
@@ -426,6 +446,9 @@ static inline bool operator==(const Syntax & p, const char * str) {
   if (!p.simple() && !p.part(0)->simple()) return false;
   return p.what().name == str;
 }
+
+inline SourceEntity::SourceEntity(const Syntax * e)
+  : file_(e->str().source ? e->str().source->file_ : NULL), expansion_(e) {}
 
 inline const Syntax * Flags::lookup(SymbolName d) const {
   for (iterator i = begin(); i != end(); ++i) 

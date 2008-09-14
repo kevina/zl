@@ -7,7 +7,6 @@
 #include "gc.hpp"
 #include "ostream.hpp"
 
-struct Parse;
 struct SourceStr;
 
 class Entity : public gc_cleanup

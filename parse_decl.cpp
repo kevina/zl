@@ -354,43 +354,48 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
 
     DeclWorking w(type_scope);
 
-    Parts::const_iterator i = p->args_begin();
-    Parts::const_iterator end = p->args_end();
-    
-    {
-      bool r = w.parse_first_part(i, end, env);
-      if (!r) throw error(p, "Expected declaration.");
-    }
-    
-    w.make_inner_type(p);
-    
-    while (i != end) {
+    if (p->is_a("stmt")) {
 
-      const Syntax * id;
-      const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
-      
-      //const Syntax * decl = w.make_declaration(id, t);
-      // FIXME: Duplicate code from parse_decl, also...
-      const Syntax * decl;
-      if (i != end && (*i)->is_a("sym", "=")) {
-	++i;
-	const Syntax * init = w.parse_init_exp(i, end);
-	decl = w.make_declaration(id, t, init);
-      } else if (i != end && (*i)->is_a("{}")) {
-	const Syntax * body = *i;
-	++i;
-	decl = w.make_function(id, t, body);
-      } else {
-	decl = w.make_declaration(id, t);
-      }
-      
-      res->add_part(decl);
-      
-      if (i == end) break;
-      
-      if (!(*i)->is_a("sym", ","))
-        throw error(*i, "Expected \",\".");
-      ++i;
+        Parts::const_iterator i = p->args_begin();
+        Parts::const_iterator end = p->args_end();
+        
+        {
+          bool r = w.parse_first_part(i, end, env);
+          if (!r) throw error(p, "Expected declaration in \"%s\".", ~p->to_string());
+        }
+        
+        w.make_inner_type(p);
+        
+        while (i != end) {
+          
+          const Syntax * id;
+          const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
+          
+          //const Syntax * decl = w.make_declaration(id, t);
+          // FIXME: Duplicate code from parse_decl, also...
+          const Syntax * decl;
+          if (i != end && (*i)->is_a("sym", "=")) {
+            ++i;
+            const Syntax * init = w.parse_init_exp(i, end);
+            decl = w.make_declaration(id, t, init);
+          } else if (i != end && (*i)->is_a("{}")) {
+            const Syntax * body = *i;
+            ++i;
+            decl = w.make_function(id, t, body);
+          } else {
+            decl = w.make_declaration(id, t);
+          }
+          
+          res->add_part(decl);
+          
+          if (i == end) break;
+          
+          if (!(*i)->is_a("sym", ","))
+            throw error(*i, "Expected \",\".");
+          ++i;
+        }
+    } else {
+      res->add_part(p);
     }
   }
   return res;

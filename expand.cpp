@@ -26,6 +26,41 @@
 //   (struct ID [BODY])
 //   (union ID [BODY])
 
+
+//
+// Annon
+//
+
+struct MacroSymbol;
+
+struct ReparseAnnon : public Annon {
+  const Syntax * str;
+  String what;
+  ReparseAnnon(const Syntax * s, String w)
+    : str(s), what(w) {}
+  void to_string(OStream & o) const;
+};
+
+struct ExpandAnnon : public Annon {
+  const MacroSymbol * macro;
+  const Syntax * call_site;
+  ExpandAnnon(const MacroSymbol * m, const Syntax * c) 
+    : macro(m), call_site(c) {}
+  void to_string(OStream & o) const;
+};
+
+struct ReplaceAnnon : public Annon {
+  const Syntax * call_site_mid;
+  const Syntax * repl;
+  ReplaceAnnon(const Syntax * m, const Syntax * r)
+    : call_site_mid(m), repl(r) {}
+  void to_string(OStream & o) const;
+};
+
+//
+//
+//
+
 using namespace ast;
 
 void assert_pos(const Syntax * p, Position have, unsigned need);
@@ -59,6 +94,7 @@ extern "C" const Syntax * reparse(const Syntax *, const char *, Environ *);
 extern "C" const SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
 extern "C" const UnmarkedSyntax * string_to_syntax(const char *);
 extern "C" const char * syntax_to_string(const UnmarkedSyntax *);
+extern "C" void dump_syntax(const UnmarkedSyntax * s);
 typedef UserType UserTypeInfo;
 typedef Module ModuleInfo;
 extern "C" const UserTypeInfo * user_type_info(const Syntax *, Environ *);
@@ -77,11 +113,15 @@ String gen_sym() {
 const Syntax * replace(const Syntax * p, ReplTable * r);
 
 struct MacroSymbol : public Symbol {
+  const Syntax * def;
   virtual const Syntax * expand(const Syntax *, Environ & env) const = 0;
+  const Syntax * expand(const Syntax * s, const Syntax * p, Environ & env) const {
+    return new Syntax(new ExpandAnnon(this, s), expand(p, env));
+  }
 };
 
 struct Map : public MacroSymbol {
-  SourceEntity entity;
+  const SourceFile * entity;
   const Syntax * parse;
   const Syntax * parms;
   const Syntax * free;
@@ -90,8 +130,8 @@ struct Map : public MacroSymbol {
   Map * parse_self(const Syntax * p, Environ & e) {
     //printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what(), ~p->to_string());
     env = e.symbols.front;
-    entity = SourceEntity(p);
-    parse = p;
+    entity = p->str().source;
+    def = parse = p;
     assert_num_args(p, 4);
     name = expand_binding(p->arg(0), e);
     parms = p->arg(1);
@@ -107,7 +147,7 @@ struct Map : public MacroSymbol {
     SourceStr orig_str = orig->str();
     if (orig_str.source == outer_str.source && 
         outer_str.begin <= orig_str.begin && orig_str.end <= outer_str.end)
-      res->str_.source = &entity;
+      res->str_.source = entity;
     if (orig->d) {
       res->d = new Syntax::D;
       res->d->parts.reserve(orig->d->parts.size());
@@ -142,6 +182,7 @@ struct Macro : public MacroSymbol {
     assert_num_args(p, 1, 2);
     name = expand_binding(p->arg(0), e);
     fun = e.symbols.lookup<VarSymbol>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
+    def = static_cast<const TopLevelVarSymbol *>(fun)->decl->parse_;
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ & env) const {
@@ -158,6 +199,30 @@ struct Macro : public MacroSymbol {
     return res;
   }
 };
+
+//
+// Annon Definations
+//
+
+void ReparseAnnon::to_string(OStream & o) const {
+  o << "in ";
+  str->str().sample_w_loc(o);
+  o << " parsed as " << what;
+}
+
+void ExpandAnnon::to_string(OStream & o) const {
+  o << "in call ";
+  call_site->str().sample_w_loc(o);
+  o << " of macro " << macro->name;
+  if (macro->def)
+    macro->def->str().pos_str(" at ", o, "");
+}
+
+void ReplaceAnnon::to_string(OStream & o) const {
+  o << "when replacing ";
+  call_site_mid->str().sample_w_loc(o);
+  o << "  with ";
+}
 
 //
 //
@@ -336,9 +401,28 @@ SyntaxEnum * match_varl(Match * m, UnmarkedSyntax * n) {
   }
 }
 
+Match * match_local(Match * orig_m, ...) {
+  Match * m = new Match;
+  va_list parms;
+  const Syntax * p;
+  char buf[8];
+  unsigned i = 1;
+  va_start(parms, orig_m);
+  while ((p = va_arg(parms, const Syntax *))) {
+    snprintf(buf, 8, "$%d", i);
+    ++i;
+    add_match_var(m, buf, p);
+  }
+  va_end(parms);
+  if (orig_m) 
+    m->insert(m->end(), orig_m->begin(), orig_m->end());
+  return m;
+}
+
 const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   ReplTable * rparms = new ReplTable;
-  rparms->table = *match;
+  if (match)
+    rparms->table = *match;
   rparms->mark = mark;
   const Syntax * res;
   if (p->is_a("{}")) {
@@ -354,12 +438,20 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
 
 const Syntax * reparse(String what, const Syntax * p, ReplTable * r) {
   //printf("REPARSE %s AS %s\n", ~p->to_string(), ~what);
+  p = new Syntax(new ReparseAnnon(p, what), p);
   const Replacements * repls = combine_repl(p->repl, r);
-  const Syntax * res = parse_str(what, p->str(), repls);
-  //printf("PARSED STRING\n");
-  //res->print();
-  //if (repls) repls->print();
-  //printf("\n");
+  const Syntax * res;  
+  try {
+    res = parse_str(what, p->str(), repls);
+  } catch (Error * err) {
+    //Annon * annon = new ReparseAnnon(p, what);
+    //annon->prev = p->str().annon; // FIXME: Is this right
+    //err->annon = annon;
+    //puts(~err->message());
+    throw err;
+  }
+  //res = new Syntax(new ReparseAnnon(p, what), res);
+  //printf("PARSED STRING %s\n", ~res->to_string());
   if (repls) {
     for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
          i != e; ++i) 
@@ -373,6 +465,7 @@ const Syntax * reparse(String what, const Syntax * p, ReplTable * r) {
       //printf("\n");
     }
   }
+  //printf("REPARSE %s RES: %s\n", ~p->to_string(), ~res->to_string());
   return res;
 }
 
@@ -383,15 +476,16 @@ const Syntax * reparse(const Syntax * s, const char * what, Environ * env) {
 
 const Syntax * replace(const Syntax * p, ReplTable * r) {
   // FIXME: Do I need to handle the case where the entity is a symbol name?
-  //static unsigned seq=0;
-  //unsigned seql = seq++;
+  static unsigned seq=0;
+  unsigned seql = seq++;
   //printf("REPLACE %d: %s\n", seql, ~p->to_string());
   if (p->simple()) {
     //return p;
-    //printf("MARK %s %p\n", ~p->what(), r->mark);
+    //printf("MARK %s\n", ~p->what());
     return new Syntax(p, r->mark);
   } else if (p->is_a("mid") && r->have(*p->arg(0))) {
     const Syntax * p0 = r->lookup(*p->arg(0));
+    p0 = new Syntax(new ReplaceAnnon(p, p0), p0);
     if (p->num_args() > 1) {
       String what = p->arg(1)->as_symbol_name().name;
       if (what == "TOKEN" || what == "EXP" || what == "STMT")
@@ -462,13 +556,19 @@ const Syntax * replace_context(const Syntax * p, const Context * context) {
 //
 //
 
-const UnmarkedSyntax * string_to_syntax(const char * str) {
+extern "C" const UnmarkedSyntax * string_to_syntax(const char * str) {
   return new Syntax(str);
 }
 
-const char * syntax_to_string(const UnmarkedSyntax * s) {
+extern "C" const char * syntax_to_string(const UnmarkedSyntax * s) {
   return ~s->to_string();
 }
+
+extern "C" void dump_syntax(const UnmarkedSyntax * s) {
+  s->print();
+  printf("\n");
+}
+
 
 // three type of macros, two namespaces
 // syntax macros in there own name space
@@ -556,7 +656,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     else
       return partly_expand(reparse("STMT", p), pos, env, flags);
   } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
-    p = env.symbols.lookup<MacroSymbol>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, env);
+    p = env.symbols.lookup<MacroSymbol>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, p, env);
     return partly_expand(p, pos, env, flags);
   } else if (what == "id" && !(flags & EXPAND_NO_ID_MACRO_CALL)) { 
     // NOTE: ID macros can have flags, since there is no parameter list
@@ -569,7 +669,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     if (m) { // id macro
       Syntax * a = new Syntax(new Syntax("list"));
       a->set_flags(p);
-      p = m->expand(a, env);
+      p = m->expand(p, a, env);
       return partly_expand(p, pos, env, flags);
     }
   } else if (what == "call") { 
@@ -584,7 +684,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
         const MacroSymbol * m = env.symbols.find<MacroSymbol>(n->arg(0));
         if (m) { // function macros
           //  (call (id fun) (list parm1 parm2 ...))?
-          p = m->expand(a, env);
+          p = m->expand(p, a, env);
           return partly_expand(p, pos, env, flags);
         } else if (*n->arg(0) == "environ_snapshot") {
           if (a->num_args() > 0)
@@ -667,6 +767,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   } else if (const SymbolKeyEntity * s = dynamic_cast<const SymbolKeyEntity *>(p->entity())) {
     return s->name;
   } else {
+    printf("Unsupported Binding Form: %s\n", ~p->to_string());
     abort();
   }
 }
@@ -755,7 +856,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
   String source = buf.freeze();
   buf.printf("./zlfct%03d.so", cntr);
   String lib = buf.freeze();
-  buf.printf("gcc -g -shared -fpic -o zlfct%03d.so zlfct%03d.c", cntr, cntr);
+  buf.printf("gcc -g -fexceptions -shared -fpic -o zlfct%03d.so zlfct%03d.c", cntr, cntr);
   String cmd = buf.freeze();
   cntr++;
   
@@ -801,7 +902,7 @@ const UserTypeInfo * user_type_info(const Syntax * s, Environ * env) {
   return dynamic_cast<const UserType *>(env->types.inst(s));
 }
 
-const ModuleInfo * user_type_module(UserTypeInfo * t) {
+const ModuleInfo * user_type_module(const UserTypeInfo * t) {
   return t->module;
 }
 

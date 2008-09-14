@@ -488,6 +488,7 @@ public:
     assert(prts.size() == 1);
     if (mids && mids->anywhere(*prts[0]->arg(0)) > 0) {
       Syntax * p = new Syntax(prts[0]->str(), prts[0]->part(0), prts[0]->arg(0), new Syntax(in_named_prod));
+      //printf("MATCH MID %s\n", ~p->to_string());
       if (res) res.parts->append(p);
       return r;
     } else {
@@ -562,20 +563,20 @@ private:
 #endif
 
 const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
-  //printf("PARSE STR as %s\n", ~what);
+  //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
   mids = repls;
   Prod * p = parse.named_prods[what];
   parse.clear_cache();
   Parts dummy;
   ParseErrors errors;
-  //const char * s = str.begin;
+  const char * s = str.begin;
   const char * e = p->match(str, PartsFlags(&dummy,NULL), errors);
   mids = 0;
   //assert(s != e);
   //printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
   if (e == str.end) {
     //printf(">>%.*s<<\n", e-s, s);
-    //dummy.print();
+    //dummy[0]->print();
     //printf("\n");
   } else {
     //printf("FAIL\n");
@@ -915,10 +916,10 @@ namespace ParsePeg {
   }
 }
 
-Error * ParseErrors::to_error(const SourceEntity * entity, const SourceFile * grammer)
+Error * ParseErrors::to_error(const SourceFile * source, const SourceFile * grammer)
 {    
   if (empty()) {
-    return error(entity, 0, "Parse Failed (no specific error)\n");
+    return error(source, 0, "Parse Failed (no specific error)\n");
   } else {
     StringBuf buf;
     //Pos pos = file->get_pos(front()->pos);
@@ -935,7 +936,7 @@ Error * ParseErrors::to_error(const SourceEntity * entity, const SourceFile * gr
       if (i == size()) break;
       buf.printf(" or ");
     }
-    return error(entity, front()->pos, ~buf.freeze());
+    return error(source, front()->pos, ~buf.freeze());
   }
 }
 

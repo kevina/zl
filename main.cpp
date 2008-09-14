@@ -16,7 +16,7 @@ void parse_maps(ast::Environ & env) {
   const char * s = code->begin();
   try {
     while (s != code->end()) {
-      parse_parse::Res r = parse_parse::parse(SourceStr(code->entity(), s, code->end()));
+      parse_parse::Res r = parse_parse::parse(SourceStr(code, s, code->end()));
       read_macro(r.parse, env);
       s = r.end;
     }
@@ -40,7 +40,7 @@ int main(int argc, const char *argv[])
   try {
     parse.top(file->begin(), file->end());
   } catch (Error * err) {
-    err->source = file->entity();
+    err->source = file;
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
@@ -61,8 +61,8 @@ int main(int argc, const char *argv[])
     const Syntax * to_expand =
     // parse_str("TOP", SourceStr(code->entity(), code->begin(), code->end()));
       new Syntax(new Syntax("top"),
-                 parse_str("SLIST", SourceStr(prelude->entity(), prelude->begin(), prelude->end())),
-                 parse_str("SLIST", SourceStr(code->entity(), code->begin(), code->end())));
+                 parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),
+                 parse_str("SLIST", SourceStr(code, code->begin(), code->end())));
     parse_top(to_expand, env);
     //printf("\n*************** EXPANDED *********************\n");
     //expanded->print();

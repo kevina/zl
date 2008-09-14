@@ -123,8 +123,8 @@ private:
   unsigned size_;
   Vector<const char *> lines_;
 public:
-  SourceFile(String file) : data_(), size_(0), entity_(0) {read(file);}
-  SourceFile(int fd) : data_(), size_(0), entity_(0) {read(fd);}
+  SourceFile(String file) : data_(), size_(0) {read(file);}
+  SourceFile(int fd) : data_(), size_(0) {read(fd);}
   String file_name() const {return file_name_;}
   Pos get_pos(const char * s) const;
   char * get_pos_str(const char * s, char * buf) const {
@@ -137,9 +137,6 @@ public:
 private:
   void read(String file);
   void read(int fd);
-public:
-  mutable const class SourceEntity * entity_;
-  inline const class SourceEntity * entity() const; // defined in parse.hpp
 };
 
 SourceFile * new_source_file(String file);

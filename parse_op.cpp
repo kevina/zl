@@ -239,7 +239,7 @@ public:
   void init() {
     SourceFile * code = new_source_file("ops.in");
     //const char * s = code.begin();
-    parse_parse::Res r = parse_parse::parse(code->entity());
+    parse_parse::Res r = parse_parse::parse(code);
     //printf(">.>%.*s<.<\n", r.end-s, s);
     //r.parse->print();
     //printf("\n");

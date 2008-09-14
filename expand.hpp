@@ -53,15 +53,16 @@ struct ReplTable : public gc_cleanup {
     table.push_back(std::pair<SymbolName, const Syntax *>(n,p));
   }
   const ast::Mark * mark;
-  void to_string(OStream & o) const {
+  void to_string(OStream & o, PrintFlags f) const {
 //    abort();
 //#if 0
     o.printf("{");
-    for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
-      o.printf("%s=>", ~i->first.to_string());
-      i->second->to_string(o);
-      o.printf(",");
-    }
+    o.printf("...");
+    //for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
+    //  o.printf("%s=>", ~i->first.to_string());
+    //  i->second->to_string(o);
+    //  o.printf(",");
+    //}
     o.printf("}");
 //#endif
   }
@@ -73,9 +74,9 @@ struct Replacements : public Vector<ReplTable *> {
       if ((*i)->have(s)) return true;
     return false;
   }
-  void to_string(OStream & o) const {
+  void to_string(OStream & o, PrintFlags f) const {
     for (const_iterator i = begin(), e = end(); i != e; ++i)
-      (*i)->to_string(o);
+      (*i)->to_string(o, f);
   }
 };
 

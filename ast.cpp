@@ -2703,17 +2703,21 @@ namespace ast {
 
   struct SyntaxC : public AST {
     SyntaxC() : AST("syntax") {}
+    static Vector<const Syntax *> keep_me;
     const Syntax * syn;
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       if (p->is_a("syntax")) {
         syn = p->arg(0);
+        //fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
       } else if (p->is_a("raw_syntax")) {
         using namespace parse_parse;
         Res r = parse(p->arg(0)->str());
         syn = r.parse;
+        //fprintf(stdout, "RSYN %s<<\n", ~syn->to_string());
       }
+      keep_me.push_back(syn);
       type = env.types.inst(".pointer", env.types.inst("UnmarkedSyntax"));
       type = env.types.ct_const(type);
       *env.for_ct = true;
@@ -2727,6 +2731,8 @@ namespace ast {
         f.printf("(struct UnmarkedSyntax *)0");
     }
   };
+
+  Vector<const Syntax *> SyntaxC::keep_me;
 
   struct EnvironSnapshot : public AST {
     EnvironSnapshot() : AST("environ_snapshot") {}
@@ -2782,8 +2788,8 @@ namespace ast {
     //printf("Parsing top level fp:\n  %s\n", ~p->to_string());
     res = try_decl_first_pass(p, env, collect);
     if (res) return res;
-    //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
-    throw error (p, "Expected struct or union member.");
+    throw error (p, "Unsupported primative at top level: %s", ~p->what());
+    //throw error (p, "Expected top level expression.");
   }
 
   AST * parse_member(const Syntax * p, Environ & env) {
@@ -2793,10 +2799,12 @@ namespace ast {
     p = partly_expand(p, FieldPos, env);
     //printf("Parsing member:\n  %s\n", ~p->to_string());
     //res = try_decl(p, env);
-    if (p->what().name == "var") return (new Var)->parse_self_as_member(p, env);
+    String what = p->what().name;
+    if (what == "@")   return (new ASTList)->parse_self(p, env);
+    if (what == "var") return (new Var)->parse_self_as_member(p, env);
     //if (res) return res;
-    //throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->name);
-    throw error (p, "Expected struct or union member.");
+    throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->what());
+    //throw error (p, "Expected struct or union member.");
   }
 
   AST * parse_stmt(const Syntax * p, Environ & env) {
