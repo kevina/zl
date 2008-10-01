@@ -720,17 +720,19 @@ namespace ast {
     Var() : VarDeclaration("var"), init(), constructor() {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     SymbolKey name;
+    const Syntax * name_p;
     AST * init;
     AST * constructor;
     AST * parse_forward(const Syntax * p, Environ & env, Collect & collect) {
       parse_ = p;
       assert_num_args(2,3);
-      SymbolKey name = expand_binding(p->arg(0), env);
+      name_p = p->arg(0);
+      SymbolKey name = expand_binding(name_p, env);
       parse_flags(p);
       sym = new_var_symbol(name, env.scope, this, env.where);
       sym->type = parse_type(p->arg(1), env);
       if (storage_class != EXTERN && sym->type->size() == NPOS)
-        throw error(p->arg(0), "Size not known");
+        throw error(name_p, "Size not known");
       env.add(name, sym);
       if (p->num_args() > 2) {
         collect.push_back(this);
@@ -762,7 +764,7 @@ namespace ast {
       if (const UserType * ut = dynamic_cast<const UserType *>(sym->type))
         if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
           constructor = parse_stmt(SYN(SYN("member"), 
-                                       SYN(ID, SYN(sym)),
+                                       SYN(ID, SYN(name_p, sym)),
                                        SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN("list")))),
                                    env);
         }
@@ -1691,12 +1693,12 @@ namespace ast {
         Syntax * a = new Syntax(*arg1->arg(1));
         a->add_flag(new Syntax(THIS, ptr_exp));
         const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        call = new Syntax(arg1->part(0), new Syntax(ID, new Syntax(sym)), a);
+        call = new Syntax(arg1->part(0), new Syntax(ID, new Syntax(n->arg(0), sym)), a);
       } else {
         const Syntax * n = arg1;
         assert(n && n->is_a("id")); // FIXME Error Message
         const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        Syntax * c = new Syntax(ID, new Syntax(sym));
+        Syntax * c = new Syntax(ID, new Syntax(n->arg(0), sym));
         c->add_flag(new Syntax(THIS, ptr_exp));
         call = c;
       }
@@ -2717,6 +2719,8 @@ namespace ast {
         syn = r.parse;
         //fprintf(stdout, "RSYN %s<<\n", ~syn->to_string());
       }
+      ChangeSrc<SyntaxSourceInfo> cs(syn);
+      syn = new Syntax(cs, *syn);
       keep_me.push_back(syn);
       type = env.types.inst(".pointer", env.types.inst("UnmarkedSyntax"));
       type = env.types.ct_const(type);

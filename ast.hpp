@@ -180,6 +180,12 @@ namespace ast {
       return dynamic_cast<const CT_Value<T> *>(ct_value_)->value(this);
     }
   };
+}
+
+inline Syntax::Syntax(const ast::AST * e)
+  : what_("<entity>"), str_(e->parse_->str()), d(), repl(), entity_(const_cast<ast::AST*>(e)) {}
+
+namespace ast {
 
   struct OtherType {};
 

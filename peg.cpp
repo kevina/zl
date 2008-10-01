@@ -564,6 +564,7 @@ private:
 
 const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
+  //str.source = new ParseSourceInfo(str, what);
   mids = repls;
   Prod * p = parse.named_prods[what];
   parse.clear_cache();
@@ -580,7 +581,7 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
     //printf("\n");
   } else {
     //printf("FAIL\n");
-    throw errors.to_error(str.source, file);
+    throw errors.to_error(new ParseSourceInfo(str, what), file);
   }
   return dummy[0];
 }
@@ -916,7 +917,7 @@ namespace ParsePeg {
   }
 }
 
-Error * ParseErrors::to_error(const SourceFile * source, const SourceFile * grammer)
+Error * ParseErrors::to_error(const SourceInfo * source, const SourceFile * grammer)
 {    
   if (empty()) {
     return error(source, 0, "Parse Failed (no specific error)\n");
@@ -940,7 +941,7 @@ Error * ParseErrors::to_error(const SourceFile * source, const SourceFile * gram
   }
 }
 
-void ParseErrors::print(const SourceFile * file, const SourceFile * grammer)
+void ParseErrors::print(const SourceInfo * file, const SourceFile * grammer)
 {    
   if (empty()) {
     printf("Parse Failed (no specific error)\n");

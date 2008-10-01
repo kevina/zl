@@ -13,7 +13,6 @@ class Entity : public gc_cleanup
 {
 public:
   virtual void print(OStream & o) const {abort();}
-
   //virtual const SourceStr & source_str() const {abort();}
   //virtual void change_source_str(const SourceStr &) const {abort();}
   // ^^ const is a lie!!!

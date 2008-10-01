@@ -21,6 +21,7 @@ bool pos_str(const SourceFile * source, const char * pos,
   char buf[24];
   if (source) {
     o << pre;
+    o << source->file_name() << ":";
     o << source->get_pos_str(pos, buf);
     o << post;
     return true;
@@ -30,45 +31,50 @@ bool pos_str(const SourceFile * source, const char * pos,
 }
 
 void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
-  if (source) {
-    if (!source->file_name().empty()) {
-      o << source->file_name();
-      o << ":";
-    }
-    pos_str("", o, ":");
+  pos_str("", o, ":");
+  StringBuf buf;
+  const char * cur = begin;
+  while (cur < end && asc_isspace(*cur))
+    ++cur;
+  while (cur < end && buf.size() < max_len) {
+    if (*cur == '\n') break;
+    buf << *cur;
+    ++cur;
   }
-  o << '"';
-  if (size() <= max_len) {
-    o.write(begin, end - begin);
-  } else {
-    o.write(begin, max_len - 3);
-    o << "...";
+  if ((cur == end && buf.size() == max_len) || (cur != end && *cur == '\n')) {
+    if (buf.size() > max_len - 3)
+      buf.resize(max_len - 3);
+    buf += "...";
   }
-  o << '"';
+  o << '"' << buf.freeze() << '"';
 }
 
+void Syntax::sample_w_loc(OStream & o, unsigned max_len) const {
+  if (!str().empty())
+    str().sample_w_loc(o, max_len);
+  else
+    o.printf("a %s", ~what_);
+}
 
 //
 // Error
 //
 
-Error * verror(const Annon * annon,
-               const SourceFile * s, const char * pos, 
+Error * verror(const SourceInfo * s, const char * pos, 
                const char * fmt, va_list ap) {
   StringBuf buf;
   buf.vprintf(fmt, ap);
   Error * error = new Error;
-  error->annon = annon;
   error->source = s;
   error->pos = pos;
   error->msg = buf.freeze();
   return error;
 }
 
-Error * error(const SourceFile * s, const char * pos, const char * fmt, ...) {
+Error * error(const SourceInfo * s, const char * pos, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(NULL, s, pos, fmt, ap);
+  Error * res = verror(s, pos, fmt, ap);
   va_end(ap);
   return res;
 }
@@ -76,7 +82,7 @@ Error * error(const SourceFile * s, const char * pos, const char * fmt, ...) {
 Error * error(const SourceStr & str, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(str.annon, str.source, str.begin, fmt, ap);
+  Error * res = verror(str.source, str.begin, fmt, ap);
   va_end(ap);
   return res;
 }
@@ -85,7 +91,7 @@ Error * error(const Syntax * p, const char * fmt, ...) {
   SourceStr str = p ? p->str() : SourceStr();
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(str.annon, str.source, str.begin, fmt, ap);
+  Error * res = verror(str.source, str.begin, fmt, ap);
   va_end(ap);
   return res;
 }
@@ -93,28 +99,19 @@ Error * error(const Syntax * p, const char * fmt, ...) {
 Error * error(const char * pos, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(NULL, NULL, pos, fmt, ap);
+  Error * res = verror(NULL, pos, fmt, ap);
   va_end(ap);
   return res;
 }
 
 String Error::message() {
-  printf("ERROR:: %p %p\n", this, annon);
   StringBuf res;
-  if (source) {
-    if (!source->file_name().empty()) {
-      res += source->file_name();
-      res += ": ";
-    }
-    pos_str(source, pos, "", res, ": ");
-  }
+  if (source)
+    pos_str(source->file(), pos, "", res, ": ");
   res += msg;
-  const Annon * cur = annon;
-  while (cur) {
-    res << "\n  ";
-    cur->to_string(res);
-    cur = cur->prev;
-  }
+  res += "\n";
+  if (source)
+    source->dump_info(res, "  ");
   return res.freeze();
 }
 
@@ -123,23 +120,26 @@ String Error::message() {
 //
 //
 
+// note: if the source info is diffrent for the parts but the source
+//       block is the same, it will use the source info of the first part
 void Syntax::set_src_from_parts() const {
   //printf("SET SRC FROM PARTS\n");
-  SourceStr s;
+  SourceStr s = str_; // even though the SubStr is empty it might
+                      // contain useful source info
   for (unsigned i = 0; i != d->parts.size(); ++i) {
     SourceStr other = d->parts[i]->str();
     if (!s.source) {
       s = other;
-    } else if (s.source == other.source) {
+    } else if (s.source_block() == other.source_block()) {
       // enlarge str
-      if (other.begin < s.begin)
+      if (!s.begin || other.begin < s.begin)
         s.begin = other.begin;
-      if (other.end > s.end)
+      if (!s.end || other.end > s.end)
         s.end = other.end;
     } else if (i == 1) { // ignore source string for first part, only use the args
       s = other;
     } else {
-      s.clear();
+      s = str_;
       break;
     }
   }
@@ -181,6 +181,13 @@ void Flags::to_string(OStream & o, PrintFlags f) const {
     (*i)->to_string(o, f);
     ++i;
   }
+}
+
+void ParseSourceInfo::dump_info(OStream & o, const char * prefix) const {
+  o << "  when parsing ";
+  str.sample_w_loc(o);
+  o << " as " << what << "\n";
+  str.source->dump_info(o, prefix);
 }
 
 String escape(String n) {

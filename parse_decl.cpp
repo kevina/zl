@@ -149,6 +149,7 @@ struct DeclWorking {
     return true;
   }
 
+  const Syntax * type_symbol_p;
   const ast::TypeSymbol * type_symbol;
   bool try_type_name(const Syntax * p, Environ & env) {
     // doesn't make sense to have two types, so if we already have a
@@ -156,6 +157,7 @@ struct DeclWorking {
     if (base_type || type_symbol || inner_type) return false;
     const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
     if (ts) {
+      type_symbol_p = p;
       type_symbol = ts;
       return true;
     } else {
@@ -514,7 +516,7 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
       }
       break;
     }
-    inner_type->add_part(type_symbol ? new Syntax(type_symbol) : new Syntax(t.freeze()));
+    inner_type->add_part(type_symbol ? new Syntax(type_symbol_p, type_symbol) : new Syntax(t.freeze()));
   } else {
     // stuct or union
     // nothing to do

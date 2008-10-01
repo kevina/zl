@@ -177,6 +177,7 @@ namespace ast {
   class TypeSymbol : public TopLevelSymbol {
   public:
     Syntax * parse;
+    Syntax * syntax_obj() const {return parse;}
     String what() const {return name;}
     const PrintInst * print_inst;
     TypeSymbol() 
@@ -198,7 +199,8 @@ namespace ast {
 
   class TypeInst : public Entity {
   public:
-    String what() const {return type_symbol->name;} 
+    String what() const {return type_symbol->name;}  
+    Syntax * syntax_obj() const {return type_symbol->parse;}
     TypeCategory * category;
     const TypeSymbol * type_symbol;
     virtual unsigned size() const = 0;

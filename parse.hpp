@@ -13,6 +13,12 @@
 
 using ast::SymbolName;
 
+namespace ast {
+  struct AST;
+  class TypeSymbol;
+  class TypeInst;
+}
+
 struct Syntax;
 struct Annon;
 
@@ -20,16 +26,18 @@ bool pos_str(const SourceFile * source, const char * pos,
              const char * pre, OStream & o, const char * post);
 
 struct SourceStr : public SubStr {
-  const SourceFile * source;
-  const Annon * annon;
-  SourceStr() : source(), annon() {}
-  SourceStr(const char * b, const char * e) : SubStr(b,e), source(), annon() {}
-  SourceStr(String s) : SubStr(s), source(), annon() {}
-  SourceStr(const SourceFile * f) : SubStr(f->begin(), f->end()), source(f), annon() {}
-  SourceStr(const SourceFile * f, const char * b, const char * e) 
-    : SubStr(b,e), source(f), annon() {}
-  SourceStr(const SourceFile * f, String s) 
-    : SubStr(s), source(f), annon() {}
+  const SourceInfo * source;
+  const SourceInfo * source_block() const {return source ? source->block() : NULL;}
+  SourceStr() : source() {}
+  SourceStr(const char * b, const char * e) : SubStr(b,e), source() {}
+  SourceStr(String s) : SubStr(s), source() {}
+  SourceStr(const SourceInfo * f) : SubStr(f->begin(), f->end()), source(f) {}
+  SourceStr(const SourceInfo * f, const char * b, const char * e) 
+    : SubStr(b,e), source(f) {}
+  SourceStr(const SourceInfo * f, String s) 
+    : SubStr(s), source(f) {}
+  SourceStr(const SourceInfo * f, SubStr s) 
+    : SubStr(s), source(f) {}
   operator const char * & () {return begin;}
   operator const char * () const {return begin;}
   void clear() {
@@ -42,27 +50,22 @@ struct SourceStr : public SubStr {
   }
   void adj(const SourceStr & other) {
     if (!source && other.source) source = other.source;
-    if (source != other.source) return;
+    if (source_block() != other.source_block()) return;
     if (!begin || begin > other.begin) begin = other.begin;
     if (!end || end < other.end) end = other.end;
   }
   SourceStr & operator=(const char * s) {begin = s; return *this;}
   bool pos_str(const char * pre, OStream & o, const char * pos) const {
-    return ::pos_str(source, begin, pre, o, pos);
+    if (source)
+      return ::pos_str(source->file(), begin, pre, o, pos);
+    else
+      return false;
   }
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
 };
 
-struct Annon : public gc {
-  const Annon * prev;
-  virtual void to_string(OStream & o) const = 0;
-  Annon() : prev() {}
-  virtual ~Annon() {}
-};
-
 struct ErrorInfo : public gc {
-  const Annon * annon;
-  const SourceFile * source;
+  const SourceInfo * source;
   const char * pos;
   String msg;
 };
@@ -71,10 +74,9 @@ struct Error : public ErrorInfo {
   String message();
 };
 
-Error * verror(const Annon * annon, 
-               const SourceFile * s, const char * pos, 
+Error * verror(const SourceInfo * s, const char * pos, 
                const char * fmt, va_list ap);
-Error * error(const SourceFile * s, const char * pos, 
+Error * error(const SourceInfo * s, const char * pos, 
               const char * fmt, ...)
   __attribute__ ((format (printf, 3, 4)));
 Error * error(const SourceStr & str, const char * fmt, ...)
@@ -89,6 +91,9 @@ struct PrintFlags {
   unsigned indent;
   PrintFlags() : indent(0) {}
 };
+
+template <typename T>
+struct ChangeSrc;
 
 struct Parts : public Vector<const Syntax *> {
   typedef Vector<const Syntax *> Base;
@@ -105,6 +110,8 @@ struct Parts : public Vector<const Syntax *> {
     insert(Base::end(), i, end);
   }
   void to_string(OStream & o, PrintFlags f = PrintFlags(), char sep = ' ') const;
+  Parts() {}
+  template <typename T> Parts(ChangeSrc<T> &, const Parts & o);
 };
 
 struct Flags : public gc {
@@ -127,6 +134,8 @@ struct Flags : public gc {
       insert(*i);
   }
   void to_string(OStream & o, PrintFlags f = PrintFlags()) const;
+  Flags() {}
+  template <typename T> Flags(ChangeSrc<T> &, const Flags & o);
 };
 
 
@@ -144,11 +153,13 @@ struct Flags : public gc {
 
 struct Replacements;
 
-
 struct Syntax : public gc {
   struct D : public gc_cleanup {
     Parts parts;
     Flags flags;
+    D() {}
+    template <typename T> D(ChangeSrc<T> & f, const D & o)
+      : parts(f, o.parts), flags(f, o.flags) {}
   };
   static D * const AS_ENTITY;
   SymbolName what_;
@@ -170,9 +181,7 @@ struct Syntax : public gc {
   Syntax(const Syntax & other) 
     : what_(other.what_), str_(other.str_), d(other.d ? new D(*other.d) : 0), repl(other.repl), entity_(other.entity_)
   {}
-  Syntax(Annon * a, const Syntax * other) 
-    : what_(other->what_), str_(other->str_), d(other->d ? new D(*other->d) : 0), repl(other->repl), entity_(other->entity_)
-    {a->prev = str_.annon; str_.annon = a;}
+  template <typename T> Syntax(ChangeSrc<T> & f, const Syntax & other); // defined in expand.cpp
   Syntax & operator= (const Syntax & other) {
     what_ = other.what_;
     str_ = other.str_;
@@ -195,8 +204,8 @@ struct Syntax : public gc {
   Syntax(const SourceStr & s) 
     : str_(s), d(), repl(0), entity_() {}
 
-  Syntax(const Syntax * o, const ast::Mark * m)
-    : what_(ast::mark(o->what_, m)), str_(o->str_), d(), repl(), entity_()
+  Syntax(const Syntax * o, const ast::Mark * m, const SourceInfo * s)
+    : what_(ast::mark(o->what_, m)), str_(s, o->str_), d(), repl(), entity_()
     {assert(o->simple()); /*printf(">>%s %p\n", ~what_, what_.marks);*/}
 
   Syntax(const Syntax * o, const ast::Marks * m)
@@ -274,8 +283,11 @@ struct Syntax : public gc {
     d->parts.push_back(y);
     d->parts.push_back(z);
   }
-  Syntax(const Entity * e) : what_("<entity>"), str_(), d(), repl(), entity_(const_cast<Entity*>(e)) 
-    {}
+  Syntax(const Entity * e) 
+    : what_("<entity>"), str_(), d(), repl(), entity_(const_cast<Entity*>(e)) {}
+  Syntax(const Syntax * s, const Entity * e) 
+    : what_("<entity>"), str_(s->str()), d(), repl(), entity_(const_cast<Entity*>(e)) {}
+  inline Syntax(const ast::AST * e);
   Syntax(const Parts & ps) : repl(0), entity_() {
     d = new D;
     d->parts.append(ps);
@@ -417,7 +429,7 @@ struct Syntax : public gc {
   bool is_a(String n) const {return what_.name == n;}
   bool is_a(SymbolName n) const {return what_ == n;}
   bool is_a(const char * n, const char * p) const {return what_.name == n && num_args() > 0 && arg(0)->is_a(p);}
-
+  void sample_w_loc(OStream & o, unsigned max_len = 20) const;
   virtual ~Syntax() {}
 };
 
@@ -439,6 +451,17 @@ inline bool Flags::insert(const Syntax * p) {
   data.push_back(p);
   return true;
 }
+
+struct ParseSourceInfo : public SourceInfo {
+  SourceStr str;
+  String what;
+  ParseSourceInfo(const SourceStr & s, String w) 
+    : str(s), what(w) {}
+  const SourceFile * file() const {return str.source->file();}
+  const SourceInfo * block() const {return str.source->block();}
+  const SourceInfo * parent() const {return str.source;}
+  void dump_info(OStream &, const char * prefix) const;
+};
 
 namespace ast {
   inline SymbolKey::SymbolKey(const Syntax & p, const InnerNS * ns0) 

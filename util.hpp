@@ -116,7 +116,32 @@ struct Pos {
 
 char * pos_to_str(Pos p, char * buf);
 
-class SourceFile : public gc_cleanup {
+class OStream;
+class SourceFile;
+
+#define PURE __attribute__ ((pure)) 
+
+//
+// A SourceInfo "block" is part of a "file".  The syntax inside a
+// macro call or syntax primitive is its own block.  If a piece
+// of syntax contains two parts from the same block the the SourceStr
+// for that syntax is considered the "bounding box" of its parts.
+//
+class SourceInfo : public gc_cleanup {
+public:
+  String file_name() const;
+  Pos get_pos(const char * s) const;
+  unsigned size() const;
+  const char * begin() const;
+  const char * end() const;    
+  PURE virtual const SourceFile * file() const = 0;
+  PURE virtual const SourceInfo * block() const = 0; // FIXME: Need better name
+  PURE virtual const SourceInfo * parent() const = 0;
+  virtual void dump_info(OStream &, const char * prefix="") const = 0;
+  virtual ~SourceInfo() {}
+};
+
+class SourceFile : public SourceInfo {
 private:
   String file_name_;
   char * data_;
@@ -134,10 +159,20 @@ public:
   const char * begin() const {return data_;}
   const char * end() const {return data_ + size_;}
   ~SourceFile() {if (data_) free(data_);}
+  const SourceFile * file() const {return this;}
+  const SourceInfo * block() const {return this;}
+  const SourceInfo * parent() const {return NULL;}
+  void dump_info(OStream & o, const char * prefix) const;
 private:
   void read(String file);
   void read(int fd);
 };
+
+inline String SourceInfo::file_name() const {return file()->file_name();}
+inline Pos SourceInfo::get_pos(const char * s) const {return file()->get_pos(s);}
+inline unsigned SourceInfo::size() const {return file()->size();}
+inline const char * SourceInfo::begin() const {return file()->begin();}
+inline const char * SourceInfo::end() const {return file()->end();}
 
 SourceFile * new_source_file(String file);
 SourceFile * new_source_file(int fd);

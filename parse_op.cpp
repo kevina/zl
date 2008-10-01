@@ -250,62 +250,67 @@ public:
     opr_s.clear();
     val_s.clear();
     Op::Types prev = 0;
-    for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i) {
-      const Syntax * pop = *i; // parsed op
-      Op::Types cur = ops.lookup_types(pop);
-      if (cur & Op::Special) {
-        const Syntax * res = ops.try_special(pop, i, e);
-        if (res) {
-          pop = res;
-          cur = ops.lookup_types(pop);
+    try {
+      for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i) {
+        const Syntax * pop = *i; // parsed op
+        Op::Types cur = ops.lookup_types(pop);
+        if (cur & Op::Special) {
+          const Syntax * res = ops.try_special(pop, i, e);
+          if (res) {
+            pop = res;
+            cur = ops.lookup_types(pop);
+          } else {
+            cur &= ~Op::Special;
+          }
+        } 
+        assert(!(cur & Op::Special));
+        if (prev == 0 || prev & (Op::Prefix | Op::Bin)) {
+          cur &= (Op::Prefix | Op::Other);
+          if (cur == 0) 
+            throw error(pop, "Expected an operand or a prefix operator.");
         } else {
-          cur &= ~Op::Special;
+          cur &= (Op::Bin | Op::Postfix);
+          if (cur == 0)
+            throw error(pop, "Expected a binary or postfix operator.");
         }
-      } 
-      assert(!(cur & Op::Special));
-      if (prev == 0 || prev & (Op::Prefix | Op::Bin)) {
-        cur &= (Op::Prefix | Op::Other);
-        if (cur == 0) 
-          throw error(pop, "Expected an operand or a prefix operator.");
-      } else {
-        cur &= (Op::Bin | Op::Postfix);
-        if (cur == 0)
-          throw error(pop, "Expected a binary or postfix operator.");
+        //if (cur == (Op::Prefix | Op::Other)) {
+        //  if (i + 1 == sz || (ops.lookup_types(p->arg(i+1)) & (Op::Postfix | Op::Bin))) {
+        //    cur &= (Op::Postfix | Op::Other);
+        //    if (cur == 0)
+        //      throw error(pop, "Expected an operand or a postfix operator.");
+        //  } else {
+        //    cur &= (Op::Bin | Op::Prefix);
+        //    if (cur == 0)
+        //      throw error(pop, "Expected an binary or prefix operator.");
+        //  }
+        //}
+        const Op * op = ops.lookup(pop, cur);
+        if (op->type == Op::Other) {
+          val_s.push_back(pop);
+        } else {
+          while (!opr_s.empty() && 
+                 (opr_s.back().op->level < op->level || 
+                  (opr_s.back().op->level == op->level && op->assoc == Left)))
+            reduce();
+          if (!opr_s.empty() && opr_s.back().op->level == op->level && op->assoc == None)
+            throw error(pop, "\"%s\" is non-associative.", 
+                        op->symbol.c_str());
+          opr_s.push_back(OpInfo(op, pop)); 
+        }
+        prev = cur;
       }
-      //if (cur == (Op::Prefix | Op::Other)) {
-      //  if (i + 1 == sz || (ops.lookup_types(p->arg(i+1)) & (Op::Postfix | Op::Bin))) {
-      //    cur &= (Op::Postfix | Op::Other);
-      //    if (cur == 0)
-      //      throw error(pop, "Expected an operand or a postfix operator.");
-      //  } else {
-      //    cur &= (Op::Bin | Op::Prefix);
-      //    if (cur == 0)
-      //      throw error(pop, "Expected an binary or prefix operator.");
-      //  }
-      //}
-      const Op * op = ops.lookup(pop, cur);
-      if (op->type == Op::Other) {
-        val_s.push_back(pop);
-      } else {
-        while (!opr_s.empty() && 
-               (opr_s.back().op->level < op->level || 
-                (opr_s.back().op->level == op->level && op->assoc == Left)))
-          reduce();
-        if (!opr_s.empty() && opr_s.back().op->level == op->level && op->assoc == None)
-          throw error(pop, "\"%s\" is non-associative.", 
-                      op->symbol.c_str());
-        opr_s.push_back(OpInfo(op, pop)); 
-      }
-      prev = cur;
+      while (!opr_s.empty())
+        reduce();
+      if (val_s.size() == 0)
+        throw error(p, "Empty expression.");
+      if (val_s.size() > 1)
+        throw error(val_s[val_s.size()-2], "Extra operand(s).");
+      assert(val_s.size() == 1);
+      return val_s.front();
+    } catch (Error * err) {
+      err->source = new ParseSourceInfo(p->str(), "<op exp>");
+      throw err;
     }
-    while (!opr_s.empty())
-      reduce();
-    if (val_s.size() == 0)
-      throw error(p, "Empty expression.");
-    if (val_s.size() > 1)
-      throw error(val_s[val_s.size()-2], "Extra operand(s).");
-    assert(val_s.size() == 1);
-    return val_s.front();
   }
 
   void reduce() {
@@ -336,9 +341,9 @@ public:
       const Syntax * p2 = val_s.back(); val_s.pop_back();
       const Syntax * p1 = val_s.back(); val_s.pop_back();
       parse->str_ = opi.parse->str();
-      if (p1->str().source == parse->str_.source)
+      if (p1->str().source->block() == parse->str_.source->block())
         parse->str_.begin = p1->str().begin;
-      if (p2->str().source == parse->str_.source)
+      if (p2->str().source->block() == parse->str_.source->block())
         parse->str_.end   = p2->str().end;
       parse->add_part(p1);
       if (op->capture_op_itself()) parse->add_part(opi.parse);
@@ -351,14 +356,14 @@ public:
       const Syntax * p1 = val_s.back(); val_s.pop_back();
       if (op->type == Op::Prefix) {
         parse->str_ = opi.parse->str();
-        if (p1->str().source == parse->str_.source)
+        if (p1->str().source->block() == parse->str_.source->block())
           parse->str_.end   = p1->str().end;
         if (op->capture_op_itself())
           parse->add_part(opi.parse);
         parse->add_part(p1);
       } else if (op->type == Op::Postfix) {
         parse->str_ = opi.parse->str();
-        if (p1->str().source == parse->str_.source)
+        if (p1->str().source->block() == parse->str_.source->block())
           parse->str_.begin = p1->str().begin;
         parse->add_part(p1);
         if (op->capture_op_itself())

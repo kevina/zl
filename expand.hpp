@@ -21,6 +21,8 @@ using ast::SymbolName;
 
 void read_macro(const Syntax * p, Environ &);
 
+struct ExpandSourceInfo;
+
 // misnamed, now replaces and marks
 struct ReplTable : public gc_cleanup {
   typedef Vector<std::pair<SymbolName, const Syntax *> > Table;
@@ -52,7 +54,17 @@ struct ReplTable : public gc_cleanup {
   void insert(SymbolName n, const Syntax * p) {
     table.push_back(std::pair<SymbolName, const Syntax *>(n,p));
   }
+  const Syntax * macro_call;
   const ast::Mark * mark;
+  struct CacheItem {
+    const SourceInfo * key;
+    const ExpandSourceInfo * value;
+  };
+  Vector<CacheItem> cache;
+  inline const ExpandSourceInfo * expand_source_info(const SourceInfo * s);
+  inline const ExpandSourceInfo * expand_source_info(const Syntax * s);
+  inline SourceStr expand_source_info_str(const SourceStr & str);
+  inline SourceStr expand_source_info_str(const Syntax * s);
   void to_string(OStream & o, PrintFlags f) const {
 //    abort();
 //#if 0
@@ -120,5 +132,27 @@ void assert_num_args(const Syntax * p, unsigned num);
 void assert_num_args(const Syntax * p, unsigned min, unsigned max);
 
 String gen_sym();
+
+
+class SyntaxSourceInfo : public SourceInfo {
+public:
+  //const MacroSymbol * macro;
+  const Syntax * syntax;
+  SyntaxSourceInfo(const Syntax * s) : syntax(s) {}
+  const SourceFile * file() const {return syntax->str().source->file();}
+  const SourceInfo * block() const {return this;}
+  const SourceInfo * parent() const {return syntax->str().source;}
+  void dump_info(OStream &, const char * prefix) const;
+};
+
+template <>
+struct ChangeSrc<SyntaxSourceInfo> {
+  const SyntaxSourceInfo * cache;
+  ChangeSrc(const Syntax * s) : cache(new SyntaxSourceInfo(s)) {}
+  const SourceInfo * operator() (const SourceInfo * o) {
+    if (o == cache->syntax->str().source) return cache;
+    else return o;
+  }
+};
 
 #endif

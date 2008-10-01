@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "util.hpp"
+#include "iostream.hpp"
 
 #include <algorithm>
 
@@ -68,6 +69,10 @@ SourceFile * new_source_file(String file) {
 
 SourceFile * new_source_file(int fd) {
   return new SourceFile(fd);
+}
+
+void SourceFile::dump_info(OStream & o, const char * prefix) const {
+  //o.printf("%sin file %s\n", prefix, ~file_name_);
 }
 
 int cmp(const char * x, unsigned x_sz, const char * y, unsigned y_sz) {
