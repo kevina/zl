@@ -125,7 +125,7 @@ SYNTAX_P =
 # Misc
 #
 
-EXP = <<mid>> {MID} / <exp> {TOKEN}+;
+EXP = <exp> {TOKEN}+;
 
 INIT = <<mid>> {MID} / <init> {TOKEN}+;
 
