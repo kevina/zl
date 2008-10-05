@@ -11,17 +11,21 @@
 
 using namespace parse_common;
 
+Vector<const Syntax *> Flags::EMPTY;
+
 //
 // SourceStr
 // 
 
 bool pos_str(const SourceFile * source, const char * pos,
-             const char * pre, OStream & o, const char * post)
+             const char * pre, OStream & o, const char * post,
+             bool w_source)
 {
   char buf[24];
   if (source) {
     o << pre;
-    o << source->file_name() << ":";
+    if (w_source)
+      o << source->file_name() << ":";
     o << source->get_pos_str(pos, buf);
     o << post;
     return true;
@@ -41,12 +45,13 @@ void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
     buf << *cur;
     ++cur;
   }
-  if ((cur == end && buf.size() == max_len) || (cur != end && *cur == '\n')) {
+  if (cur < end && (buf.size() == max_len || *cur == '\n')) {
     if (buf.size() > max_len - 3)
       buf.resize(max_len - 3);
     buf += "...";
   }
   o << '"' << buf.freeze() << '"';
+  //o << end_pos_str(":", o, "");
 }
 
 void Syntax::sample_w_loc(OStream & o, unsigned max_len) const {
@@ -54,6 +59,12 @@ void Syntax::sample_w_loc(OStream & o, unsigned max_len) const {
     str().sample_w_loc(o, max_len);
   else
     o.printf("a %s", ~what_);
+}
+
+String Syntax::sample_w_loc() const {
+  StringBuf buf;
+  sample_w_loc(buf);
+  return buf.freeze();
 }
 
 //
@@ -132,9 +143,9 @@ void Syntax::set_src_from_parts() const {
       s = other;
     } else if (s.source_block() == other.source_block()) {
       // enlarge str
-      if (!s.begin || other.begin < s.begin)
+      if (!s.begin || (other.begin && other.begin < s.begin))
         s.begin = other.begin;
-      if (!s.end || other.end > s.end)
+      if (other.end > s.end)
         s.end = other.end;
     } else if (i == 1) { // ignore source string for first part, only use the args
       s = other;
@@ -143,6 +154,7 @@ void Syntax::set_src_from_parts() const {
       break;
     }
   }
+  assert((!s.begin && !s.end) || s.begin && s.end);
   if (s.source) {
     str_ = s;
   } else if (d->parts.size() > 0) { // FIXME: Is this check really necessary ...

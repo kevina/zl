@@ -23,7 +23,15 @@ struct Syntax;
 struct Annon;
 
 bool pos_str(const SourceFile * source, const char * pos,
-             const char * pre, OStream & o, const char * post);
+             const char * pre, OStream & o, const char * post,
+             bool w_source = true);
+
+static inline bool pos_str(const SourceInfo * source, const char * pos,
+                           const char * pre, OStream & o, const char * post,
+                           bool w_source = true) 
+{
+  return pos_str(source ? source->file() : NULL, pos, pre, o, post, w_source);
+}
 
 struct SourceStr : public SubStr {
   const SourceInfo * source;
@@ -56,10 +64,10 @@ struct SourceStr : public SubStr {
   }
   SourceStr & operator=(const char * s) {begin = s; return *this;}
   bool pos_str(const char * pre, OStream & o, const char * pos) const {
-    if (source)
-      return ::pos_str(source->file(), begin, pre, o, pos);
-    else
-      return false;
+    return ::pos_str(source, begin, pre, o, pos);
+  }
+  bool end_pos_str(const char * pre, OStream & o, const char * pos) const {
+    return ::pos_str(source, end, pre, o, pos, false);
   }
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
 };
@@ -115,6 +123,7 @@ struct Parts : public Vector<const Syntax *> {
 };
 
 struct Flags : public gc {
+  static Vector<const Syntax *> EMPTY;
   Vector<const Syntax *> data;
   typedef Vector<const Syntax *>::const_iterator iterator;
   typedef Vector<const Syntax *>::const_iterator const_iterator;
@@ -385,6 +394,14 @@ struct Syntax : public gc {
     if (!d) return NULL;
     else return d->flags.lookup(n);
   }
+  Flags::const_iterator flags_begin() const {
+    if (d) return d->flags.begin();
+    else return Flags::EMPTY.begin();
+  }
+  Flags::const_iterator flags_end()   const {
+    if (d) return d->flags.end();
+    else return Flags::EMPTY.end();
+  }
 
   void add_part(const Syntax * p) {
     if (!d) make_branch();
@@ -410,6 +427,15 @@ struct Syntax : public gc {
     if (!d) make_branch();
     d->flags.insert(p);
   }
+  void add_flags(const Flags & f) {
+    if (!d) make_branch();
+    d->flags.merge(f);
+  }
+  void add_flags(const Syntax * p) {
+    if (!p->d) return;
+    if (!d) make_branch();
+    d->flags.merge(p->d->flags);
+  }
   void set_flags(const Flags & p) {
     if (p.empty()) return;
     if (!d) make_branch();
@@ -430,6 +456,7 @@ struct Syntax : public gc {
   bool is_a(SymbolName n) const {return what_ == n;}
   bool is_a(const char * n, const char * p) const {return what_.name == n && num_args() > 0 && arg(0)->is_a(p);}
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
+  String sample_w_loc() const;
   virtual ~Syntax() {}
 };
 

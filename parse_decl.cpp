@@ -573,6 +573,7 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
                                               Environ & env)
 {
   Syntax * ps = new Syntax(new Syntax(".tuple"));
+  printf("MAKE FUNCTION TYPE: %s\n", ~parms->to_string());
   Parts::const_iterator i = parms->args_begin();
   Parts::const_iterator end = parms->args_end();
   if (i != end) for (;;) {

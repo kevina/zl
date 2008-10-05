@@ -483,6 +483,7 @@ public:
   const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
     //if (!in_repl) return FAIL;
     Parts prts;
+    //Flags flgs;
     const char * r = prod->match(str, PartsFlags(&prts, NULL), errs);
     if (r == FAIL) return r;
     assert(prts.size() == 1);
@@ -569,6 +570,7 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
   Prod * p = parse.named_prods[what];
   parse.clear_cache();
   Parts dummy;
+  //Flags dummyf;
   ParseErrors errors;
   const char * s = str.begin;
   const char * e = p->match(str, PartsFlags(&dummy,NULL), errors);

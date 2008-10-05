@@ -308,6 +308,8 @@ public:
       assert(val_s.size() == 1);
       return val_s.front();
     } catch (Error * err) {
+      printf("?? %s\n", ~p->to_string());
+      //abort();
       err->source = new ParseSourceInfo(p->str(), "<op exp>");
       throw err;
     }

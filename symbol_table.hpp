@@ -367,7 +367,8 @@ namespace ast {
     const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s1) {
       //fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
-      throw error(str, "Unknown Identifier \"%s\"", ~k.name);
+      //throw error(str, "Unknown Identifier \"%s\"", ~k.name);
+      throw error(str, "Unknown Identifier \"%s\"", ~k.to_string());
     }
 
     const T * s2 = dynamic_cast<const T *>(s1->value);

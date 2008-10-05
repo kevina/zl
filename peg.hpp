@@ -1,3 +1,5 @@
+
+
 #include <set> // FIXME: Should't need to include here
 
 #include "gc.hpp"
@@ -165,8 +167,17 @@ public:
     errs.add(r->errors);
     if (parts) {
       parts.parts->append(r->parts);
-      parts.flags->merge(r->flags);
-    } 
+      if (!r->flags.empty()) {
+        if (parts.flags) {
+          parts.flags->merge(r->flags);
+        } else {
+          assert(parts.parts->size() == 0);
+          Syntax * s = new Syntax(new Syntax("@"));
+          s->add_flags(r->flags);
+          parts.parts->append(s);
+        }
+      }
+    }
     return r->end;
   };
   NamedProd(String n) 

@@ -55,6 +55,7 @@ struct ReplTable : public gc_cleanup {
     table.push_back(std::pair<SymbolName, const Syntax *>(n,p));
   }
   const Syntax * macro_call;
+  const Syntax * macro_def;
   const ast::Mark * mark;
   struct CacheItem {
     const SourceInfo * key;
@@ -66,17 +67,15 @@ struct ReplTable : public gc_cleanup {
   inline SourceStr expand_source_info_str(const SourceStr & str);
   inline SourceStr expand_source_info_str(const Syntax * s);
   void to_string(OStream & o, PrintFlags f) const {
-//    abort();
-//#if 0
     o.printf("{");
-    o.printf("...");
-    //for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
-    //  o.printf("%s=>", ~i->first.to_string());
-    //  i->second->to_string(o);
-    //  o.printf(",");
-    //}
+    //o.printf("...");
+    for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
+      o.printf("%s", ~i->first.to_string());
+      //o.printf("%s=>", ~i->first.to_string());
+      //i->second->to_string(o);
+      o.printf(",");
+    }
     o.printf("}");
-//#endif
   }
 };
 
@@ -90,7 +89,26 @@ struct Replacements : public Vector<ReplTable *> {
     for (const_iterator i = begin(), e = end(); i != e; ++i)
       (*i)->to_string(o, f);
   }
+  String to_string() const {
+    StringBuf buf;
+    to_string(buf, PrintFlags());
+    return buf.freeze();
+  }
 };
+
+static inline const Replacements * combine_repl(const Replacements * rs, const Replacements * r) {
+  if (rs && r) {
+    Replacements * res = new Replacements(*rs);
+    res->insert(res->end(), r->begin(), r->end());
+    return res;
+  } else if (rs) {
+    return rs;
+  } else if (r) {
+    return r;
+  } else {
+    return NULL;
+  }
+}
 
 static inline const Replacements * combine_repl(const Replacements * rs, ReplTable * r) {
   if (rs && r) {
@@ -122,7 +140,8 @@ static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
   return expand_binding(p, ast::DEFAULT_NS, env);
 }
 
-const Syntax * reparse(String what, const Syntax * p, ReplTable * r = 0);
+const Syntax * reparse(String what, const Syntax * p, ReplTable * r = NULL, 
+                       const Replacements * additional_repls = NULL);
 
 ast::AST * parse_map(const Syntax * p, Environ & env);
 ast::AST * parse_macro(const Syntax * p, Environ & env);
@@ -133,6 +152,7 @@ void assert_num_args(const Syntax * p, unsigned min, unsigned max);
 
 String gen_sym();
 
+const Syntax * flatten(const Syntax * p);
 
 class SyntaxSourceInfo : public SourceInfo {
 public:

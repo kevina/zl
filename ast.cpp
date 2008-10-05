@@ -1517,7 +1517,7 @@ namespace ast {
 
   AST * parse_export(const Syntax * p, Environ & env) {
     Module * m = dynamic_cast<Module *>(env.where);
-    m->exports.push_back(p);
+    m->exports.push_back(flatten(p));
     return new Empty();
   }
 
@@ -1702,7 +1702,7 @@ namespace ast {
         c->add_flag(new Syntax(THIS, ptr_exp));
         call = c;
       }
-      //printf("member: %s\n", ~call->to_string());
+      printf("member: %s\n", ~call->to_string());
       return parse_exp(call, env);
     } else {
       abort();
@@ -2712,7 +2712,7 @@ namespace ast {
       assert_num_args(1);
       if (p->is_a("syntax")) {
         syn = p->arg(0);
-        //fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
+        fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
       } else if (p->is_a("raw_syntax")) {
         using namespace parse_parse;
         Res r = parse(p->arg(0)->str());
@@ -2850,7 +2850,7 @@ namespace ast {
     //printf("parsing expression: %s\n", ~p->to_string());
     res = try_exp(p, env);
     if (res) return res;
-    abort();
+    //abort();
     throw error (p, "Unsupported primative at expression position: %s", ~p->what());
     //throw error (p, "Expected expression.");
   }

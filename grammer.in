@@ -63,8 +63,7 @@ ID_LIST =
 MATCH_LIST =
   <> ({MATCH} ",")* {MATCH}?;
 
-MATCH = 
-  :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
+MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
 
 #
 # C Token
@@ -120,6 +119,7 @@ SYNTAX =
 
 SYNTAX_P =
   <<mid>> {MID} / {ID} / {BRACE} / {PARAN}; # / {BRACK};
+#  <<mid>> {MID} / {ID} / {BRACE} / <parm> "(" {RAW_TOKEN*} ")"; # / {BRACK};
 
 #
 # Misc
