@@ -305,7 +305,7 @@ struct Map : public MacroSymbol {
   const Syntax * expand(const Syntax * p, Environ &) const {
     printf("EXPANDING MAP %s\n", ~name);
     Match * m = match_args(NULL, parms, p);
-    //m = match(m, free, replace_context(free, get_context(p)));
+    m = match(m, free, replace_context(free, get_context(p)));
     const Syntax * res = replace(repl, m, new Mark(env));
     return res;
   }
