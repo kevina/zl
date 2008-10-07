@@ -8,6 +8,8 @@
 #include "ostream.hpp"
 #include "istream.hpp"
 
+// NOTE: StringBuf always leaves room for the null character at the
+//       end, that is end_ < storage_end_
 struct StringBuf : public OStream {
 public:
   typedef const char * const_iterator;
