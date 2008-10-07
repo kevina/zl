@@ -39,7 +39,7 @@
     int res = 0;
     va_list ap;
   loop: {
-      int avail = storage_end_ - end_;
+      int avail = storage_end_ - end_ - 1;
       if (res < 0 && avail > 1024*1024)
         return -1; // to avoid an infinite loop in case a neg result
                    // really means an error and not just "not enough
