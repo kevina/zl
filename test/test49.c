@@ -4,13 +4,11 @@ class X {
   int x_;
   static int x;
   static int foo() {return x;}
-  //virtual int foo() {}
 };
 
 class Y : public X {
   static int y;
   static int bar() {return y;}
-  //virtual int bar() {}
 };
 
 int main() {

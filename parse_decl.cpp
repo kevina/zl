@@ -60,7 +60,7 @@ struct DeclWorking {
   typedef Vector<const Syntax *> Attributes;
   Attributes attributes;
   bool try_attributes(const Syntax * p) {
-    if (*p == "__for_ct" || *p == "__ct_callback") {
+    if (*p == "__for_ct" || *p == "__ct_callback" || *p == "__static_constructor") {
       attributes.push_back(p);
       return true;
     } else {
@@ -255,7 +255,11 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     ++i;
     
   }
-  return res;
+
+  if (res->num_args() == 1)
+    return res->arg(0);
+  else
+    return res;
 }
 
 const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
@@ -298,6 +302,9 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
         try_function_specifier(p) ||
         try_type_name(p, env);
       if (!any) break;
+      ++i;
+    } else if (try_type_name(cur, env)) {
+      //fixme: this seams like a hack...
       ++i;
     } else if (try_typeof(cur, env)) {
       ++i;

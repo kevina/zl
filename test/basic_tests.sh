@@ -23,13 +23,14 @@ else
     tests=`cat test/basic_tests.txt`;
 fi
 
-LOG_CMD="| tee"
+#LOG_CMD="| tee"
+#LOG_CMD=" > "
 
 for f in $tests
 do 
     base=`basename $f .c`
     echo $f 1>&2
-    ( ./zl test/$f $LOG_CMD test/$base.log && compile_test $base ) \
+    ( ./zl test/$f > test/$base.log && compile_test $base ) \
     || failed $f
 done
 

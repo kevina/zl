@@ -298,11 +298,11 @@ namespace ast {
     //printf ("*** %s\n", ~k.to_string());
     for (; cur != stop; cur = cur->next) {
       //if (k.ns->name == "internal") 
-      //printf ("--- %s`%s\n", ~cur->key.to_string(), ~cur->key.ns->name);
+      //printf ("--- %s\n", ~cur->key.to_string());
       //printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
       if (k == cur->key && cmp(cur->key, cur->value)) break;
     }
-    //printf("^^^\n");
+    //printf("^^^ %d\n", cur == stop);
     if (cur == stop) {
       if (strategy == NormalStrategy && k.marks) {
         cur = k.marks->mark->env;

@@ -33,6 +33,11 @@ static inline bool pos_str(const SourceInfo * source, const char * pos,
   return pos_str(source ? source->file() : NULL, pos, pre, o, post, w_source);
 }
 
+String sample(const char * begin, const char * end, unsigned max_len = 20);
+static inline String sample(String str, unsigned max_len = 20) {
+  return sample(str.begin(), str.end(), max_len);
+}
+
 struct SourceStr : public SubStr {
   const SourceInfo * source;
   const SourceInfo * source_block() const {return source ? source->block() : NULL;}
@@ -108,14 +113,18 @@ struct Parts : public Vector<const Syntax *> {
   typedef const value_type * const_iterator;
   const_iterator begin() const {return &*Base::begin();}
   const_iterator end()   const {return &*Base::end();}
+  void push_back(const Syntax * x) {
+    assert(x);
+    Base::push_back(x);
+  }
   void append(const Syntax * x) {
     push_back(x);
   }
-  void append(const Parts & other) {
-    insert(Base::end(), other.begin(), other.end());
-  }
   void append(const_iterator i, const_iterator end) {
     insert(Base::end(), i, end);
+  }
+  void append(const Parts & other) {
+    append(other.begin(), other.end());
   }
   void to_string(OStream & o, PrintFlags f = PrintFlags(), char sep = ' ') const;
   Parts() {}
@@ -467,8 +476,9 @@ static inline bool operator==(const Syntax & p, const char * str) {
 }
 
 inline const Syntax * Flags::lookup(SymbolName d) const {
+  // FIXME: Handle marks correctly rather than ignoring them
   for (iterator i = begin(); i != end(); ++i) 
-    if ((*i)->what() == d) return *i;
+    if ((*i)->what().name == d.name) return *i;
   return NULL;
 }
 

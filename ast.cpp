@@ -1145,7 +1145,15 @@ namespace ast {
         throw error(lhs->parse_, "Can not be used as lvalue");
       if (lhs->type->read_only) 
         throw error (lhs->parse_, "Assignment to read-only location");
-      rhs = rhs->resolve_to(lhs->type, env);
+      try {
+        rhs = rhs->resolve_to(lhs->type, env);
+      } catch (Error * err) {
+        StringBuf buf;
+        buf = err->msg;
+        buf.printf(" in assignment of %s.", ~lhs->parse_->sample_w_loc());
+        err->msg = buf.freeze();
+        throw err;
+      }
       type = lhs->type;
     }
   };
@@ -1571,9 +1579,16 @@ namespace ast {
     SymbolName name = *p->arg(0);
     UserType * t = dynamic_cast<UserType *>(env.types.inst(SymbolKey(name)));
     if (!(env.symbols.exists_this_scope(SymbolKey(name)) && (t && !t->defined /* FIXME: hack */))) {
+      printf("DECLARE: ADDING SYM %s\n", ~name.to_string());
       UserType * s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
       add_simple_type(env.types, SymbolKey(name), s);
+    } else {
+      printf("DECLARE: SYM ALREADY EXISTS: %s\n", ~name);
+      if (name == "_VTable") {
+        const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
+        //abort();
+      }
     }
     return new Empty();
   }
@@ -1606,17 +1621,26 @@ namespace ast {
   AST * parse_user_type(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, 3);
     SymbolName name = *p->arg(0);
+    printf("PARSING USER TYPE %s\n", ~name);
     if (!env.symbols.exists_this_scope(SymbolKey(name))) {
+      printf("ADDING SYM %s\n", ~name);
       UserType * s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
       add_simple_type(env.types, SymbolKey(name), s);
-    } 
+    } else {
+      printf("SYM ALREADY EXISTS: %s\n", ~name);
+      if (name == "_VTable") {
+        const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
+        //abort();
+      }
+    }
     return parse_module(p, env);
   }
 
   AST * parse_finalize_user_type(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     Module * m = dynamic_cast<Module *>(env.where);
+    //printf("FINALIZE USER TYPE %s\n", ~m->name.to_string());
     const Type * t0 = env.types.inst(SymbolKey(m->name));
     UserType * s = const_cast<UserType *>(dynamic_cast<const UserType *>(t0));
     s->module = m;
@@ -1869,7 +1893,7 @@ namespace ast {
       //   and add init code
       Syntax * init = SYN(SYN("fun"), SYN("init"), SYN(SYN(".tuple")), SYN("void"),
                           SYN(SYN("block"), vtable_i));
-      init->add_flag(SYN("static_constructor"));
+      init->add_flag(SYN("__static_constructor"));
       module_b.push_back(init);
 
       //printf("Adding _vptr\n");
@@ -2423,12 +2447,12 @@ namespace ast {
       type = ftype->ret;
       if (!ftype->parms->vararg && parms.size() != ftype->parms->parms.size()) 
         throw error(parse_->arg(1), 
-                    "Wrong number of parameters, expected %u but got %u",
-                    ftype->parms->parms.size(), parms.size());
+                    "Wrong number of parameters, expected %u but got %u when calling %s",
+                    ftype->parms->parms.size(), parms.size(), ~ftype->what());
       else if (ftype->parms->vararg && parms.size() < ftype->parms->parms.size())
         throw error(parse_->arg(1),
-                    "Not enough parameters, expected at least %u but got %u",
-                    ftype->parms->parms.size(), parms.size());
+                    "Not enough parameters, expected at least %u but got %u when calling %s",
+                    ftype->parms->parms.size(), parms.size(), ~ftype->what());
       const int typed_parms = ftype->parms->parms.size();
       for (int i = 0; i != typed_parms; ++i) {
         parms[i] = parms[i]->resolve_to(ftype->parms->parms[i].type, env);
@@ -2566,6 +2590,8 @@ namespace ast {
       //type_name << "struct " << what();
       sym->decl = this;
       s->env = &env;
+      if (s->members.empty())
+        printf("Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
       s->finalize();
       return new Empty();
     }
@@ -2984,6 +3010,7 @@ namespace ast {
 
   void VarDeclaration::parse_flags(const Syntax * p) {
     storage_class = NONE;
+    printf("PARSING FLAGS OF %s\n", ~p->to_string());
     if (p->flag("auto")) storage_class = AUTO;
     else if (p->flag("static")) storage_class = STATIC;
     else if (p->flag("extern")) storage_class = EXTERN;
@@ -2996,7 +3023,7 @@ namespace ast {
     if (p->flag("__for_ct")) for_ct_ = true;
     deps_closed = ct_callback;
     static_constructor = false;
-    if (p->flag("static_constructor")) static_constructor = true;
+    if (p->flag("__static_constructor")) static_constructor = true;
   }
   
   void VarDeclaration::write_flags(CompileWriter & f) const {

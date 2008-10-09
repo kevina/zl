@@ -12,6 +12,7 @@ class X {
 int main() {
   X v;
   int x;
+  x += v.x;
   x += v.f();
   x += v.g();
   x += v.h0(20);

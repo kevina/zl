@@ -70,9 +70,9 @@ struct ReplTable : public gc_cleanup {
     o.printf("{");
     //o.printf("...");
     for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
-      o.printf("%s", ~i->first.to_string());
-      //o.printf("%s=>", ~i->first.to_string());
-      //i->second->to_string(o);
+      //o.printf("%s", ~i->first.to_string());
+      o.printf("%s=>", ~i->first.to_string());
+      i->second->to_string(o, f);
       o.printf(",");
     }
     o.printf("}");
@@ -159,7 +159,7 @@ public:
   //const MacroSymbol * macro;
   const Syntax * syntax;
   SyntaxSourceInfo(const Syntax * s) : syntax(s) {}
-  const SourceFile * file() const {return syntax->str().source->file();}
+  const SourceFile * file() const {return syntax->str().source ? syntax->str().source->file() : NULL;}
   const SourceInfo * block() const {return this;}
   const SourceInfo * parent() const {return syntax->str().source;}
   void dump_info(OStream &, const char * prefix) const;

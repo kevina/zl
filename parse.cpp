@@ -34,8 +34,8 @@ bool pos_str(const SourceFile * source, const char * pos,
   }
 }
 
-void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
-  pos_str("", o, ":");
+String sample(const char * begin, const char * end, unsigned max_len)
+{ 
   StringBuf buf;
   const char * cur = begin;
   while (cur < end && asc_isspace(*cur))
@@ -50,7 +50,12 @@ void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
       buf.resize(max_len - 3);
     buf += "...";
   }
-  o << '"' << buf.freeze() << '"';
+  return buf.freeze();
+}
+
+void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
+  pos_str("", o, ":");
+  o << '"' << sample(begin, end, max_len) << '"';
   //o << end_pos_str(":", o, "");
 }
 
@@ -242,7 +247,7 @@ void Syntax::to_string(OStream & o, PrintFlags f) const {
   } else {
     o.printf("(");
     char sep = ' ';
-    if (what_ == "{...}")
+    if (what_ == "{...}" || what_ == "@")
       sep = '\n';
     d->parts.to_string(o, f, sep);
     d->flags.to_string(o, f);
