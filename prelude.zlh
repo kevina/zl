@@ -197,7 +197,6 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     Match * m0 = match(m, raw_syntax (what n @_), member);
 
     const char * what = syntax_to_string(m0->var(syntax what));
-    printf("what = %s\n", what);
     if      (strcmp(what, "var")==0) parse_class_var(member, m, mark, struct_b, module_b);
     else if (strcmp(what, "fun")==0) parse_class_fun(member, m, mark, struct_b, module_b,
                                                      parent_vtable,
@@ -207,8 +206,6 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     else                     module_b->append(member);
     exports->append(m0->var(syntax n));
   }
-
-  printf("XXX %s %p %d %d\n", syntax_to_string(name), parent_vtable, vtable_b->empty(), vtable_i->empty());
 
   const bool need_vtable = !vtable_i->empty();
 
@@ -240,7 +237,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if (parent_vtable) {
       // fixme "parent_n *" cast should be an icast
       module_b->append(replace(
-                         syntax {map _vptr (:this this = this) {*(_VTable * *)&(((parent_n *)this)->_vptr);}},
+                         syntax {map _vptr (:this this = this) {(_VTable *)&(((parent_n *)this)->_vptr);}},
                          m, mark));
     } else {
       // have to use raw_syntax here becuase _VTable is not defined
@@ -324,28 +321,13 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
   // FIXME: handle flags
   bool is_static = p->flag(syntax static);
   bool is_virtual = p->flag(syntax virtual);
-  printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
+  //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
   //assert(!(is_static && is_virtual)); // FIXME Error message
-  //printf("IS VIRTUAL %s\n", ~*name);
 
-  //Syntax * fun_name = SYN(SYN("w/inner"), name, SYN("internal"));
-  //Syntax * fun_id   = SYN(ID, fun_name);
-  //SYN(SYN("w/outer"), type_name, fun_name));
-
-  //const Syntax * nv_name  = name;
   if (is_virtual)
     m = match(m, syntax nv, replace(syntax n`non_virtual, m, mark));
   else
     m = match(m, syntax nv, replace(syntax n, m, mark));
-
-  //printf("____________________________\n");
-  //Syntax * s;
-  //s = replace(raw_syntax ("()" n), m, mark);
-  //printf(">>> %s\n", syntax_to_string(s));
-  //s = replace(syntax (n), m, mark);
-  //printf(">>> %s\n", syntax_to_string(s));
-  //s = partly_expand(s, ExpPos, env);
-  //printf("___ %s\n", syntax_to_string(s));
 
   SyntaxList * new_parms = new_syntax_list(); 
   if (!is_static)
@@ -375,8 +357,6 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
                            match_local(m, new_parms, 0), mark));
   module_b->append(replace(syntax {map nv ($1) {n`internal($2);}},
                            match_local(m, macro_parms, call_parms, 0), mark));
-  //module_b->append(replace(raw_syntax(map (mid nv) ((mid $1)) () (call (id (w/inner (mid n) internal)) ((mid $2)))),
-  //                         match_local(m, macro_parms, call_parms, 0), mark));
 
   if (is_virtual) {
     module_b->append(replace(

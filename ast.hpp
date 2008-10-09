@@ -261,7 +261,7 @@ namespace ast {
   struct Cast : public AST {
     Cast(String s) : AST(s) {}
     Cast(AST * e, const Type * t) 
-      : AST("<cast>") {exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
+      : AST("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
     AST * exp;
     void compile(CompileWriter&, CompileEnviron&);
     void finalize(FinalizeEnviron &); 

@@ -100,10 +100,10 @@ void ReplaceSourceInfo::dump_info(OStream & o, const char * prefix) const {
 //
 
 void SyntaxSourceInfo::dump_info(OStream & o, const char * prefix) const {
-  //o << prefix;
-  //o << "in syntax ";
-  //syntax->str().sample_w_loc(o);
-  //o << "\n";
+  o << prefix;
+  o << "in syntax ";
+  syntax->sample_w_loc(o);
+  o << "\n";
   if (syntax->str().source)
     syntax->str().source->dump_info(o, prefix);
 }
@@ -128,6 +128,10 @@ void ExpandSourceInfo::dump_info(OStream & o, const char * prefix) const {
   o << prefix;
   o << "in expansion of ";
   call->sample_w_loc(o);
+  StringBuf new_prefix = prefix;
+  new_prefix += "e ";
+  if (call->str().source)
+    call->str().source->dump_info(o, new_prefix.freeze());
   //o.printf(" macro %s ", ~def->to_string());
   o << "\n";
   if (source)
@@ -317,6 +321,11 @@ struct Map : public MacroSymbol {
     Match * m = match_args(NULL, parms, p);
     m = match(m, free, replace_context(free, get_context(p)));
     const Syntax * res = replace(repl, m, new Mark(env));
+    printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
+    printf("  %s\n", ~res->sample_w_loc());
+    res->str().source->dump_info(COUT, "    ");
+    printf("  macro_call = %s\n", ~macro_call->sample_w_loc());
+    macro_call->str().source->dump_info(COUT, "    ");
     return res;
   }
 };

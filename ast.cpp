@@ -1143,6 +1143,7 @@ namespace ast {
       //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->to_string());
       if (!lhs->lvalue)
         throw error(lhs->parse_, "Can not be used as lvalue");
+      //throw error(parse_->arg(1), "Can not be used as lvalue");
       if (lhs->type->read_only) 
         throw error (lhs->parse_, "Assignment to read-only location");
       try {
@@ -2211,7 +2212,10 @@ namespace ast {
       t = t->arg(0);
     Type * type = parse_type(t, env);
     AST * exp = parse_exp(p->arg(1), env);
-    return env.type_relation->resolve_to(exp, type, env, ctype);
+    AST * res = env.type_relation->resolve_to(exp, type, env, ctype);
+    if (dynamic_cast<Cast *>(res))
+      res->parse_ = p;
+    return res;
   }
 
 #if 0
