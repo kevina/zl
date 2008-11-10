@@ -12,6 +12,7 @@
 %          right=1.5in}
 \usepackage{setspace}
 \usepackage{verbatim}
+\usepackage{fancyvrb}
 \usepackage{mdwlist}
 
 % Note: when changing spacing also change to code macro below
@@ -33,24 +34,23 @@
 \usepackage{babel}
 \makeatother
 
-\newenvironment{code}
-  {\singlespacing\verbatim}
-  {\endverbatim\onehalfspacing}
+\DefineVerbatimEnvironment
+  {code}{Verbatim}{baselinestretch=1,xleftmargin=2ex}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
 
-\title{The ZL Parset and Macro Expander}
+\title{The ZL Parser and Macro Expander}
 \author{Kevin Atkinson}
 
 \section{Overview}
 
 Parsing a source file in ZL is a three step process.  In the first
 step a string of characters in converted to a syntax object, in other
-words a string is parsed into a syntax object.  The grammer is
-specified as a PEG and a Pacrat parser is used to convert the string of
-charaters to a syntax object.  The second step is the expander, in
+words a string is parsed into a syntax object.  The grammar is
+specified as a PEG and a Packrat parser is used to convert the string of
+characters to a syntax object.  The second step is the expander, in
 this step Syntax objects are manipulated into other Syntax objects.
 It is here where Macro's are expanded.  Finally, in the third step
 syntax objects are converted in an AST.  However, these three steps
@@ -58,74 +58,301 @@ are deeply intertwined.
 
 The process starts by performing an initial parse of the source code
 into a Syntax object using the Packrat parser.  This initial parse
-serves to seperate the source code in seperate declarations.  It does
-not fully parse the code, in paraticular anything between grouping
+serves to separate the source code in separate declarations.  It does
+not fully parse the code, in particular anything between grouping
 characters "()", "\{\}", and "[]" is only minimally parsed to match
 grouping characters and returned as an unparsed string.
 
-The syntax object returned after this is esentually a list of
+The syntax object returned after this is essentially a list of
 declarations.  Each declaration is converted into an AST object and
-added to the envirment.  In order to do this it is necessary to partly
+added to the environment.  In order to do this it is necessary to partly
 expand the syntax object to expand any macros and perform any other
 necessary transformations.  The partial expansion will expand just
 enough to expose the top level form so we know what type of AST object
-it needs to be conveted to.
+it needs to be converted to.
 
 Once the top level form is exposed, it is converted into an AST
 object.  During the conversion each of its parts is also converted to
-an AST.  This convertion, thus involves partly expanding the source
+an AST.  This conversion, thus involves partly expanding the source
 code.  Thus as a syntax Object is convected into an AST it is expanded
 as necessary, which means at no point during the expansion process is
-a completely expanded Syntax object availabe.
+a completely expanded Syntax object available.
 
-%\section{Syntax Objects}
-%
-%Syntax object in ZL are analogise to S-expression in scheme and are
-%thus represented in a similar manner.
+\section{The Initial Parse \& Top Level Grammar}
 
-\section{The Partial Expander}
+The expansion/parsing process starts out by performing an initial
+parse of the source code into a Syntax object using the Packrat parser
+using something like\footnote{For The Complete Grammar see ...} the
+following grammar:
 
-During the partial expansion process a number a things happen.  First
-off any unparsed strings and parsed as necessary.  Like the partial
-expanader this parsing does not fully parse the string, rather it
-parses just enough to be able to recognise the top level form, in
-particular this means that like the initial parse anything between
-grouping characters "()", "\{\}", and "[]" is only minimally parsed to
-match grouping characters and returned as a unparsed string.  It will
-also expand any macros as necessary.  This includes two special macros
-which are built into the expander.
+\begin{code}[fontsize=\small]
+TOP = <top> SPACING {STMT}+;
 
-These two special macros are the declarion expander and the expression
-expander.  These are necessary becuase the current PEG grammer does
-not necessary return a valid top-level form.  It will only reconize
-block structures such as "if" and "while" forms.  It will not
-recognize functions, varable declarstions and expressions.  The reason
-for this is primary pragmatic.  Correctly parsing C and C++
+STMT : "statement" = 
+      <<mid>> {MID} ";"
+    / <if>    "if" "(" {EXP} ")" {STMT} ("else" {STMT})?
+    / <while> "while" "(" {EXP} ")" {STMT}
+    / <break>    "break" ";"
+    / <continue> "continue" ";"
+    / <return>   "return" {EXP} ";"
+    # other statements ...
+    / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
+   ;
+
+EXP = <exp> {TOKEN}+;
+
+TOKEN_ : "token_" =  
+      <<mid>> {MID} / {BRACK} / {CONST} / <id> {ID} / <sym> {SYM};
+TOKEN : "token" = TOKEN_ / PARAN;
+
+PARAN = <()> "(" {RAW_TOKEN*} ")";
+BRACE = <{}> "{" {RAW_TOKEN*} "}";
+BRACK = <[]> "[" {RAW_TOKEN*} "]";
+
+CONST = <float> ...  / <literal> ... / <string> ... / <char> ...
+
+ID : "identifier" =
+  <<mid>> {MID} / {[@$\a_][\a_\d]*} SPACING;
+
+SYM : "symbol" = {'...' / '==' / '+' / ...} SPACING;
+
+RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
+
+STRING = '"' ('\\'_/[^"])+ '"' SPACING;
+CHAR   = '\'' ('\\'_/[^'])+ '\'' SPACING;
+
+SPACING : "spacing" = [\s]* COMMENT?;
+
+COMMENT = ...;
+\end{code}
+
+In this grammar specifications the standard Packrat operators are
+supported.  That is, given any existing parsing expressions e, e1, and
+e2, a new parsing expression can be constructed using the following
+operators:
+\begin{itemize*}
+\item Grouping: (e)
+\item Literal string: ' '
+\item Literal string: " "
+\item Character class: [ ]
+\item Any character: \_
+\item Optional: e?
+\item Zero-or-more: e*
+\item One-or-more: e+
+\item And-predicate: \&e
+\item Not-predicate: !e
+\item Sequence: e1 e2
+\item Ordered choice: e1 / e2
+\end{itemize*}
+as well as some additional operators for constructing syntax objects:
+\begin{itemize*}
+\item Capture: {e}
+\item Named Capture: <> e
+\end{itemize*}
+
+The capture operators are used for constructing syntax objects in the
+obvious ways.  The special \verb/<<mid>>/ operator and \verb/MID/
+production will be explained latter.
+
+The grammar serves to separate individual statements and declarations
+and to recognize forms which are convenient to do using a Packrat
+parser.  It does not fully parse the code.  In particular anything
+between grouping characters "()", "\{\}", and "[]" is only minimally
+parsed to match grouping characters and returned as an unparsed
+string.  In addition declarations and expressions are not parsed at
+this point, and are represented as a list of tokens.
+
+For example the program:
+
+\begin{code}
+int x = 20;
+
+int main() {
+  x = x + 5;
+  return x;
+}
+\end{code}
+
+will become
+
+\begin{code}
+(top 
+  (stmt (id int) (id x) (sym =) (literal 5))
+  (stmt (id int) (id main) ("()") ("{}" "x = x + 5; return x;")))
+\end{code}
+
+Next the individual statements are converted to an AST, partly
+expanding as necessary.
+
+\section{The Conversion to an AST \& The Partial Expander}
+
+After the initial parse each statement is converted into an AST object
+and added to the environment.  In order to do this it is necessary to
+partly expand the syntax object to expand any macros and perform any
+other necessary transformations.  The partial expansion will expand just
+enough to expose the top level form so we know what type of AST object
+it needs to be converted to.
+
+In addition to normal macros the partly expander handles several
+special forms which could be considered macros since it converts
+from one syntax object to another.  These forms are ``stmt'', ``exp'',
+``()'', ``[]'', and ``\{\}''.
+
+The ``stmt'' macro recognizes declarations and expressions.  First the
+declarations expander is tried and if that fails the expression
+expander is tried.  These are necessary because the current PEG
+grammar does not necessary return a valid top-level form.  It will
+only recognize block structures such as "if" and "while" forms.  It
+will not recognize functions, variable declarations and expressions.
+The reason for this is primary pragmatic.  Correctly parsing C and C++
 declarations involves maintaining state which in inherently
-incompatible with Packrat parsing while grammers for expressions
-generaly involves left-recursion, again incompatable with Packrat
+incompatible with Packrat parsing while grammar for expressions
+generally involves left-recursion, again incompatible with Packrat
 parsing.  With work both of these problems can be addressed in the
 Packrat parser.  It is possible to have limited state....  It is also
-fairly straightforward to convert a grammer with left-recursion to one
-that is not....  In addition it is even possible to modify the Pacrat
+fairly straightforward to convert a grammar with left-recursion to one
+that is not....  In addition it is even possible to modify the Packrat
 parser to support left recursion...  Nevertheless, I chose to avoid
-these two issues completely by using a PEG grammer which essentially
-parses a statment into a list of tokens if it not a not a recognized
+these two issues completely by using a PEG grammar which essentially
+parses a statement into a list of tokens if it not a not a recognized
 block structure.  I use the term "tokens" loosely here, since anything
-inside of a "()", "\{\}", or "[]" is treated as one token.
+inside of a ``()'', ``\{\}'', or ``[]'' is treated as one token.  As with
+everything else both these expander do not fully expand the ``stmt''.
+For example the statement:
+\begin{code}
+x = (x + 1) * 2;
+\end{code}
+will first get parsed as:
+\begin{code}
+(stmt (id x) (sym =) ("()" "x + 1") (sym *) (literal 2))
+\end{code}
+which will become:
+\begin{code}
+(assign (id x) (times ("()" "x + 1") (literal 2)))
+\end{code}
+with the \verb/(x + 1)/ left unparsed.
 
-Thus when the expander encounters a "statement" the expander will
-first try expanding the stmt using the declaration expander and if
-that fails try expression expander which is an Operator-precedence
-parser.  In principle both these expanders could be true macros.
+The ``exp'' macro is like the ``stmt'' macro but only the expression
+expander is tried.
 
-%\section{Details}
+The other two macros ``()'', ``[]'', and ``\{\}'' macros are used for
+reparsing strings.  The ``()'' and ``[]'' macros reparses the string
+as an expression using the ``EXP'' production in the grammar, while
+the ``\{\}'' reparses the string as a list of statements using the
+``SLIST'' production which is as follows:
+\begin{code}
+SLIST = <@> SPACING {STMT}+;
+\end{code}
+The ``@'' means ``list of'' which becomes a list of AST nodes. 
 
+If the syntax object is not one of the special forms than normal macro
+expansion is tried.  Macros can be in one of three forms. 1) Syntax
+macros which can be considered new syntax forms.  These forms
+generally come from new PEG productions but can also be the results of
+other macros.  Syntax macros are of the form \verb/(XXX ...)/ where
+\verb/XXX/ is the macro name.  2) Function call macros which have the
+form \verb/(call XXX ("()" "..."))/, and 3) Identifier macros which
+have the form \verb/(id XXX)/.  No mater form the macro is in, the
+mechanism of expansion is the same, which will be described in the
+next section.
 
+If any expansion is done the process is repeated on the result of the
+expansion.  If there is no expansion the syntax object is assumed to
+represent a primitive and is converted into an AST node or list of AST
+nodes in the case of a ``@''.  During the conversion to an AST node
+the individual parts will be partly expanded as necessary, thus
+repeating the process and eventually fully expanding the source code.
+However, the end result is a AST tree and not a fully expanded syntax
+object.
 
+\section{Macros}
+
+A macro is a normal function which takes in Syntax object and an
+environment and return a transformed Syntax object.  It transforms the
+syntax object via call back functions.  The core Macro API consists of:
+\begin{itemize*}
+\item the types:
+\begin{itemize*}
+\item Syntax 
+\item Match
+\item Mark
+\end{itemize*}
+\item the call back functions:
+\begin{itemize*}
+\item \verb/Mark * new_mark()/
+\item \verb/Match * match_args(Match *, Syntax * pattern, Syntax * with)/
+\item \verb/Syntax * replace(Syntax *, Match *, Mark *)/
+\end{itemize*}
+\item and syntax forms:
+\begin{itemize*}
+\item \verb/syntax (...)|{...}|ID/
+\item \verb/syntax_macro [ID] [ID];/
+\item \verb/macro ID [ID];/
+\end{itemize*}
+\end{itemize*}
+
+[Give a brief overview of how the parts of the API fit together]
+
+For example:
+\begin{code}
+Syntax * foo(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, syntax (v, z), syn);
+  Syntax * res = replace(syntax {int x = v + y; z = x * x;}, m, mark);
+  return res;
+}
+\end{code}
+
+Which will transform:
+\begin{code}
+foo(i,j)
+\end{code}
+to
+\begin{code}
+int x' = i + j;
+j = x' * x';
+\end{code}
+where the \verb/'/ is a mark on x to keep it from clashing with local variables.
+
+In addition to full macros. ZL also supports simple pattern matching
+for example foo can more simply be written as:
+
+\begin{code}
+map foo (v,z) {
+  int x = v + y; 
+  z = x * x;
+}
+\end{code}
+
+Pattern matching macros can in fact be defined as a macro in terms of
+the above API:
+
+\begin{code}
+Syntax * map(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, syntax (name, parms, repl), syn);
+  Syntax * res = replace(syntax {
+      Syntax * name(Syntax * syn, Environ * env) {
+        Mark * mark = new_mark();
+        Match * m = match_args(0, syntax parms, syn);
+        Syntax * res = replace(syntax repl, m, mark);
+        return res;
+      }
+      macro name;
+    }, m, mark);
+}
+
+syntax_macro map;
+\end{code}
+
+However, for efficiency reasons are defined directly.
+
+\section{Macro Expander}
+
+[Now describe in detail how each of the Macro expander works,
+  including the hygiene system].
 
 \end{document}
-
 
 %% EXPANDING MACROS
 
