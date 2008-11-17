@@ -37,6 +37,8 @@
 \DefineVerbatimEnvironment
   {code}{Verbatim}{baselinestretch=1,xleftmargin=2ex}
 
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
@@ -51,13 +53,13 @@ step a string of characters in converted to a syntax object, in other
 words a string is parsed into a syntax object.  The grammar is
 specified as a PEG and a Packrat parser is used to convert the string of
 characters to a syntax object.  The second step is the expander, in
-this step Syntax objects are manipulated into other Syntax objects.
-It is here where Macro's are expanded.  Finally, in the third step
+this step syntax objects are manipulated into other syntax objects.
+It is here where macros are expanded.  Finally, in the third step
 syntax objects are converted in an AST.  However, these three steps
 are deeply intertwined.
 
 The process starts by performing an initial parse of the source code
-into a Syntax object using the Packrat parser.  This initial parse
+into a syntax object using the Packrat parser.  This initial parse
 serves to separate the source code in separate declarations.  It does
 not fully parse the code, in particular anything between grouping
 characters "()", "\{\}", and "[]" is only minimally parsed to match
@@ -73,15 +75,15 @@ it needs to be converted to.
 
 Once the top level form is exposed, it is converted into an AST
 object.  During the conversion each of its parts is also converted to
-an AST.  This conversion, thus involves partly expanding the source
-code.  Thus as a syntax Object is convected into an AST it is expanded
+an AST.  This conversion thus involves partly expanding the source
+code.  Thus as a syntax object is convected into an AST it is expanded
 as necessary, which means at no point during the expansion process is
-a completely expanded Syntax object available.
+a completely expanded syntax object available.
 
 \section{The Initial Parse \& Top Level Grammar}
 
 The expansion/parsing process starts out by performing an initial
-parse of the source code into a Syntax object using the Packrat parser
+parse of the source code into a syntax object using the Packrat parser
 using something like\footnote{For The Complete Grammar see ...} the
 following grammar:
 
@@ -126,7 +128,7 @@ SPACING : "spacing" = [\s]* COMMENT?;
 COMMENT = ...;
 \end{code}
 
-In this grammar specifications the standard Packrat operators are
+In this grammar specification the standard Packrat operators are
 supported.  That is, given any existing parsing expressions e, e1, and
 e2, a new parsing expression can be constructed using the following
 operators:
@@ -156,11 +158,11 @@ production will be explained latter.
 
 The grammar serves to separate individual statements and declarations
 and to recognize forms which are convenient to do using a Packrat
-parser.  It does not fully parse the code.  In particular anything
-between grouping characters "()", "\{\}", and "[]" is only minimally
-parsed to match grouping characters and returned as an unparsed
-string.  In addition declarations and expressions are not parsed at
-this point, and are represented as a list of tokens.
+parser.  As noted earlier, it does not fully parse the code.  In
+particular anything between grouping characters "()", "\{\}", and "[]"
+is only minimally parsed to match grouping characters and returned as
+an unparsed string.  In addition declarations and expressions are not
+parsed at this point, and are represented as a list of tokens.
 
 For example the program:
 
@@ -193,7 +195,7 @@ other necessary transformations.  The partial expansion will expand just
 enough to expose the top level form so we know what type of AST object
 it needs to be converted to.
 
-In addition to normal macros the partly expander handles several
+In addition to normal macros the partial expander handles several
 special forms which could be considered macros since it converts
 from one syntax object to another.  These forms are ``stmt'', ``exp'',
 ``()'', ``[]'', and ``\{\}''.
@@ -201,11 +203,11 @@ from one syntax object to another.  These forms are ``stmt'', ``exp'',
 The ``stmt'' macro recognizes declarations and expressions.  First the
 declarations expander is tried and if that fails the expression
 expander is tried.  These are necessary because the current PEG
-grammar does not necessary return a valid top-level form.  It will
+grammar does not necessarily return a valid top-level form.  It will
 only recognize block structures such as "if" and "while" forms.  It
 will not recognize functions, variable declarations and expressions.
-The reason for this is primary pragmatic.  Correctly parsing C and C++
-declarations involves maintaining state which in inherently
+The reason for this is primarily pragmatic.  Correctly parsing C and
+C++ declarations involves maintaining state.  This is inherently
 incompatible with Packrat parsing while grammar for expressions
 generally involves left-recursion, again incompatible with Packrat
 parsing.  With work both of these problems can be addressed in the
@@ -216,9 +218,9 @@ parser to support left recursion...  Nevertheless, I chose to avoid
 these two issues completely by using a PEG grammar which essentially
 parses a statement into a list of tokens if it not a not a recognized
 block structure.  I use the term "tokens" loosely here, since anything
-inside of a ``()'', ``\{\}'', or ``[]'' is treated as one token.  As with
-everything else both these expander do not fully expand the ``stmt''.
-For example the statement:
+inside of a ``()'', ``\{\}'', or ``[]'' is treated as one token.  As
+with everything else both these expander do not fully expand the
+``stmt''.  For example the statement:
 \begin{code}
 x = (x + 1) * 2;
 \end{code}
@@ -245,16 +247,16 @@ SLIST = <@> SPACING {STMT}+;
 \end{code}
 The ``@'' means ``list of'' which becomes a list of AST nodes. 
 
-If the syntax object is not one of the special forms than normal macro
-expansion is tried.  Macros can be in one of three forms. 1) Syntax
-macros which can be considered new syntax forms.  These forms
-generally come from new PEG productions but can also be the results of
-other macros.  Syntax macros are of the form \verb/(XXX ...)/ where
-\verb/XXX/ is the macro name.  2) Function call macros which have the
-form \verb/(call XXX ("()" "..."))/, and 3) Identifier macros which
-have the form \verb/(id XXX)/.  No mater form the macro is in, the
-mechanism of expansion is the same, which will be described in the
-next section.
+If the syntax object is not one of the previously mentioned special
+forms than normal macro expansion is tried.  Macros can be in one of
+three forms. 1) Syntax macros which can be considered new syntax
+forms.  These forms generally come from new PEG productions but can
+also be the results of other macros.  Syntax macros are of the form
+\verb/(XXX ...)/ where \verb/XXX/ is the macro name.  2) Function call
+macros which have the form \verb/(call XXX ("()" "..."))/, and 3)
+Identifier macros which have the form \verb/(id XXX)/.  No matter form
+the macro is in, the mechanism of expansion is the same, which will be
+described in the next section.
 
 If any expansion is done the process is repeated on the result of the
 expansion.  If there is no expansion the syntax object is assumed to
@@ -267,31 +269,67 @@ object.
 
 \section{Macros}
 
-A macro is a normal function which takes in Syntax object and an
-environment and return a transformed Syntax object.  It transforms the
+A macro is a normal function which takes in syntax object and an
+environment and return a transformed syntax object.  It transforms the
 syntax object via call back functions.  The core Macro API consists of:
 \begin{itemize*}
 \item the types:
 \begin{itemize*}
-\item Syntax 
+\item UnmarkedSyntax
+\item Syntax
 \item Match
 \item Mark
 \end{itemize*}
 \item the call back functions:
 \begin{itemize*}
-\item \verb/Mark * new_mark()/
-\item \verb/Match * match_args(Match *, Syntax * pattern, Syntax * with)/
-\item \verb/Syntax * replace(Syntax *, Match *, Mark *)/
+\item \verb/Match * match_args(Match *, UnmarkedSyntax * pattern, Syntax * with)/
+\item \verb/Syntax * replace(UnmarkedSyntax *, Match *, Mark *)/
 \end{itemize*}
 \item and syntax forms:
 \begin{itemize*}
-\item \verb/syntax (...)|{...}|ID/
+\item \verb/new_mark()/ -- returns \verb/Mark */
+\item \verb/syntax (...)|{...}|ID/ -- returns \verb/UnmarkedSyntax */
+\item \verb/raw_syntax (...)/ -- returns \verb/UnmarkedSyntax */
 \item \verb/syntax_macro [ID] [ID];/
 \item \verb/macro ID [ID];/
 \end{itemize*}
 \end{itemize*}
 
-[Give a brief overview of how the parts of the API fit together]
+One of the most important part of a macro is the ability to create new
+syntax, this is done using the \verb/syntax/ and \verb/raw_syntax/
+primitive.  Exactly what type of syntax object is created depends on
+which form is used, for the \verb/syntax/ forms, it is as follows:
+\begin{description}
+\item[\texttt{syntax (...)}] a ``()'', which generally parsed as an expression
+\item[\texttt{syntax \{...\}}] a ``\{\}'', which is generally parsed as an statement block
+\item[\texttt{syntax ID}] an identifier
+\end{description}
+The \verb/raw_syntax/ directly creates a syntax object without any
+additional reparsing.  That is
+\verb/raw_syntax (times (id x) (literal 2))/ creates exactly that,
+which is almost the same as \verb/syntax (x * 2)/ but it first gets
+parsed as \verb/("()" "x * 2")/ and than latter gets transformed to
+\verb/(times (id x) (literal 2)/.
+
+Creating syntax alone is not very useful without being able to perform
+substitution on pattern variables.  This is what the ``match'' and
+``replace'' function is for.  The ``match'' function is used to
+decompose the input by matching pattern variables, the second
+parameter, with the arguments of the macro, the third
+parameter.  (The first argument, which will be explained latter, is
+generally null).  The ``replace'' function is used to rebuild the
+output by matching the passed in syntax object, the first parameter
+and generally created with ``syntax'', with the pattern variables
+in the ``Match'' object, the second parameter.  However, syntax
+objects created with ``syntax'', do not have any lexical information
+associated with them, in other words they are unmarked.  Thus it is
+necessary to attach lexical information to them by passing in a mark
+created with ``new\_mark'', which is the third parameter to replace.
+
+Once the function is defined it is necessary to declare it as a macro
+using on of ``syntax\_macro'' or ``macro''.  The first creates a
+syntax macro while the second creates a function call macro.
+% FIXME: What about id macros.
 
 For example:
 \begin{code}
@@ -303,7 +341,7 @@ Syntax * foo(Syntax * syn, Environ * env) {
 }
 \end{code}
 
-Which will transform:
+will transform:
 \begin{code}
 foo(i,j)
 \end{code}
@@ -347,12 +385,168 @@ syntax_macro map;
 
 However, for efficiency reasons are defined directly.
 
-\section{Macro Expander}
+\section{The Basic Macro Expansion Algorithm}
 
-[Now describe in detail how each of the Macro expander works,
-  including the hygiene system].
+This section will describe the basic macro expansion algorithm without
+the reparsing steps.  It will primary focus on the hygiene system.  For
+simplicity it will be assumed that macro parameters and syntax forms
+are fully parsed.  The next section will explain the details of how
+parsing of both is really done.
+
+In order to understand how hygiene is maintained it is necessary
+understand a little of how programs are parsed.  During parsing an
+environment is maintained as a list which is a mapping of symbol names
+to symbol objects.  Every symbol name, in both syntax objects and in
+the environment, has a set of marks associated with it.  Marks are
+used to keep track of where a symbol came from.
+
+The initial environment is empty, when a binding form is encountered
+the form is added to the front of a list.  Functions create a new
+environment whose tail is the current environment from the top level.
+The environment is then populated with the function parameters.
+Blocks create they own local environment whose tail is the current
+environment where the block was defined.  Macro also capture the
+environment using the \verb/new_mark/ primitive.
+
+...
+
+%% In the \verb/replace/ function
+%% each symbol is either replaced if it is a macro parameter
+%% or marked.  For example:
+
+%% The mark has an environment associated with it which is
+%% simply the environment captured when the macro was defined.  For
+%% example given:
+
+%% \begin{code}
+
+%%     (var x 10)
+%%     (map foo (y) (+ x y)))
+%% \end{code}
+
+%% (foo x) will be expanded to:
+
+%% \begin{code}
+%%   (+'0 x'0 x)
+%%   '0 := [x => 10]
+%% \end{code}
+
+%% Where [x => 10] is the environment associated with the mark.  For
+%% simplicity we will assume that variables are constant and the symbol
+%% object is simply the associated value.
+
+%% Each expansion of a macro gets a fresh set of marks for example,
+%% "(+ (foo x) (foo y))" will expand to:
+
+%% \begin{code}
+%%   (+ (+'0 x'0 x) (+'1 x'1 y))
+%%   '0 := [x => 10]
+%%   '1 := [x => 10]
+%% \end{code}
+
+%% If a symbol has marks associated with it in a binding form those marks
+%% are preserved in the environment.
+
+%% When looking up a binding the current environment is first checked.  If
+%% a symbol with the same set of marks is not found in the current
+%% environment than the outermost mark is stripped and the symbol is
+%% looked up in the environment associated with the mark stripped.  This
+%% process continues until no more marks are left.  If the symbol is
+%% still not found then it is assumed to be associated with a primitive
+%% form, otherwise it's an error.
+
+%% For example in the above example "(+'0 x'0 x)", "+'0" will bind to the
+%% the "+" primitive, while the "x'0" will bind to "10".
+
+%% \section{AN ILLUSTRATIVE EXAMPLE}
+
+%% We will parse and expand the following code:
+
+%% \begin{code}
+%% (top
+%%    (var y 2)
+%%    (map foo (v x) ()
+%%      (var z (+ x y))
+%%      (var v (+ x z))) 
+%%    (fun main () 
+%%      (block
+%%        (var y 4)
+%%        (foo z y)
+%%        (return z))))
+%% \end{code}
+
+%% When the first binding form "(var y 2)" is encountered the mapping "y
+%% => 2" is added to the current environment.  Then when the Macro
+%% mapping "foo" in encountered, it is added to the environment, in
+%% addition the current environment is remebered for latter.
+
+%% Now the body of main is parsed.  A new local environment is created
+%% and the binding mapping "y => 4" is added at this point we have.
+
+%% \begin{code}
+%% (top
+%%    [foo => ..., y => 2]
+%%    (fun main () 
+%%      (block
+%%        [y => 4, foo => ..., y => 2]
+%%        (foo z y)
+%%        (return z))))
+%% \end{code}
+
+%% where [] represents the current scope.  Since the local environment
+%% inside the block includes the environment from the outer scope, y is
+%% listed twise since the local y shadows the top level y, however this
+%% is not a problem since lookup started from the head of the list.
+
+%% Now foo is expanded and we have:
+
+%% \begin{code}
+%%        [y => 4, foo => ..., y => 2]
+%%        (var'0 z'0 (+'0 y y'0))
+%%        (var'0 z (+'0 y z'0))
+%%        (return z)
+%%        '0 => [y => 2]
+%% \end{code}
+
+%% Inside the block.  The marks keep the duplicate y and z's distinct.
+
+%% Now the statement "(var'0 z'0 ...)" is evaluated.  Since the symbol
+%% "var'0" is not in the local environment or the environment for the
+%% mark, it assumed to be the "var" primitive.  Thus the expression
+%% "(+'0 y y'0)" is evaluated.  The "+'0" binds to the primitive "+".
+%% The first y binds to 4 since it has no marks.  The second y is not in
+%% the local environment since it has a mark associated with it so the
+%% mark is stripped and the stripped symbol is looked up in the
+%% environment for the mark, thus "y'0" binds to 2.  Thus we have "(+ 4
+%% 2")", and the mapping "z'0 => 6" is added to the local environment.
+%% We now have:
+
+%% \begin{code}
+%%        [z'0 => 6, y => 4, foo => ..., y => 2]
+%%        (var'0 z (+'0 y z'0))
+%%        (return z)
+%%        '0 => [y => 2]
+%% \end{code}
+
+%% Now the variable "z" is evaluated.  "z'0" is found in the local
+%% environment since it has the same set of marks as the one in the
+%% local environment and we have:
+
+%% \begin{code}
+%%        [z => 10, z'0 => 6, y => 4, foo => ..., y => 2]
+%%        (return z)
+%%        '0 => [y => 2]
+%% \end{code}
+
+%% And finally the function main will returns 10.
+
+%% \section{Macro Expander}
+
+%% [Now describe in detail how each of the Macro expander works,
+%%   including the hygiene system].
 
 \end{document}
+
 
 %% EXPANDING MACROS
 
