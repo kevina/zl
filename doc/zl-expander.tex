@@ -794,6 +794,8 @@ is not a TOKEN, for example if the call to foo was instead
 parsed as a TOKEN is really parsed as a PARM whose production is:
 
 \begin{code}
+PARM : "macro paramater" = 
+   {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
 \end{code}
 
 NOW EXPLAIN HOW SYNTAX MACROS DIFFER.
