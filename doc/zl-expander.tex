@@ -37,7 +37,7 @@
 \DefineVerbatimEnvironment
   {code}{Verbatim}{baselinestretch=1,xleftmargin=2ex}
 
-
+\newcommand{\subs}[1]{$_{#1}$}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -76,7 +76,7 @@ it needs to be converted to.
 Once the top level form is exposed, it is converted into an AST
 object.  During the conversion each of its parts is also converted to
 an AST.  This conversion thus involves partly expanding the source
-code.  Thus as a syntax object is convected into an AST it is expanded
+code.  Thus as a syntax object is converted into an AST it is expanded
 as necessary, which means at no point during the expansion process is
 a completely expanded syntax object available.
 
@@ -84,7 +84,7 @@ a completely expanded syntax object available.
 
 The expansion/parsing process starts out by performing an initial
 parse of the source code into a syntax object using the Packrat parser
-using something like\footnote{For The Complete Grammar see ...} the
+using something like\footnote{For the complete grammar see ...} the
 following grammar:
 
 \begin{code}[fontsize=\small]
@@ -270,7 +270,7 @@ object.
 \section{Macros}
 
 A macro is a normal function which takes in syntax object and an
-environment and return a transformed syntax object.  It transforms the
+environment, and returns a transformed syntax object.  It transforms the
 syntax object via call back functions.  The core Macro API consists of:
 \begin{itemize*}
 \item the types:
@@ -327,11 +327,16 @@ necessary to attach lexical information to them by passing in a mark
 created with ``new\_mark'', which is the third parameter to replace.
 
 Once the function is defined it is necessary to declare it as a macro
-using on of ``syntax\_macro'' or ``macro''.  The first creates a
-syntax macro while the second creates a function call macro.
+using one of ``syntax\_macro'' or ``macro''.  The first creates a
+syntax macro while the second creates a function call macro. (FIXME:
+Explain the difference) The first parameter is the name of the macro.
+The second is the name of the function to use, if different.
+
 % FIXME: What about id macros.
 
-For example:
+To understand better how macros work lets look at a simple example.
+The macro:
+
 \begin{code}
 Syntax * foo(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
@@ -340,6 +345,7 @@ Syntax * foo(Syntax * syn, Environ * env) {
   return res;
 }
 \end{code}
+macro foo;
 
 will transform:
 \begin{code}
@@ -383,15 +389,15 @@ Syntax * map(Syntax * syn, Environ * env) {
 syntax_macro map;
 \end{code}
 
-However, for efficiency reasons are defined directly.
+However, for efficiency reasons they are defined directly.
 
 \section{The Basic Macro Expansion Algorithm}
 
 This section will describe the basic macro expansion algorithm without
-the reparsing steps.  It will primary focus on the hygiene system.  For
-simplicity it will be assumed that macro parameters and syntax forms
-are fully parsed.  The next section will explain the details of how
-parsing of both is really done.
+the reparsing steps.  It will primary focus on the hygiene system.
+For simplicity it will be assumed that macro parameters and syntax
+forms are fully parsed.  The next section will explain the details of
+how parsing of both is really done.  
 
 In order to understand how hygiene is maintained it is necessary
 understand a little of how programs are parsed.  During parsing an
@@ -408,7 +414,66 @@ Blocks create they own local environment whose tail is the current
 environment where the block was defined.  Macro also capture the
 environment using the \verb/new_mark/ primitive.
 
-...
+For example in the code:
+
+\begin{code}
+int x = 10;
+Syntax * foo(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark()
+  ...
+}
+\end{code}
+
+The mark \verb/m/ will contain \verb/x/ in the environment.
+
+Marks are applied to symbols during the replacement process.  During
+this process, each symbol is either replaced, if it is a macro
+parameter, or marked.  The mark has an environment associated with it
+which is simply the environment captured when the macro was defined.
+
+For example the code:
+
+\begin{code}
+int x = 10;
+Syntax * foo(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, syntax (y), syn);
+  Syntax * res = replace(syntax (x * y), m, mark);
+}
+macro foo;
+int main() {
+  int x = 20;
+  return foo(x);
+}
+\end{code}
+
+will expand to something like\footnote{Macro expansion really in the
+  interment s-expression language, but for simplicity the expanded
+  results will be presented in the input language in this section.}
+
+\begin{code}
+int $x0 = 10;
+int main() {
+  int $x1 = 20;
+  [x => $x1, x => $x0]
+  return x'0 * x;
+}
+'0 := [x => $x0]
+\end{code}
+
+Where variables starting with \verb/$/ represent a bound symbol.  The
+\verb/[...]/ represents the current environment which maps symbol
+names to bound symbols.  The \verb/'0/ is a mark, and the
+\verb/'0 := [...]/ is the environment for the mark.
+
+When looking up a binding the current environment is first checked.  If
+a symbol with the same set of marks is not found in the current
+environment than the outermost mark is stripped and the symbol is
+looked up in the environment associated with the mark stripped.  This
+process continues until no more marks are left.
+
+For example, in the above example "x'0" will bind to "\$x0", and "x"
+will bind to "\$x1".
 
 %% In the \verb/replace/ function
 %% each symbol is either replaced if it is a macro parameter
@@ -458,92 +523,292 @@ environment using the \verb/new_mark/ primitive.
 %% For example in the above example "(+'0 x'0 x)", "+'0" will bind to the
 %% the "+" primitive, while the "x'0" will bind to "10".
 
-%% \section{AN ILLUSTRATIVE EXAMPLE}
+\subsection{An Illustrative Example}
 
-%% We will parse and expand the following code:
+We will expand and evaluate the following code:
 
-%% \begin{code}
-%% (top
-%%    (var y 2)
-%%    (map foo (v x) ()
-%%      (var z (+ x y))
-%%      (var v (+ x z))) 
-%%    (fun main () 
-%%      (block
-%%        (var y 4)
-%%        (foo z y)
-%%        (return z))))
-%% \end{code}
+\begin{code}
+int y = 2;
 
-%% When the first binding form "(var y 2)" is encountered the mapping "y
-%% => 2" is added to the current environment.  Then when the Macro
-%% mapping "foo" in encountered, it is added to the environment, in
-%% addition the current environment is remebered for latter.
+Syntax * foo(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, syntax (y,z), syn);
+  Syntax * res = replace(syntax {int x = x + y;
+                                 int v = x + z;}, m, mark);
+  return res;
+}
+macro foo;
 
-%% Now the body of main is parsed.  A new local environment is created
-%% and the binding mapping "y => 4" is added at this point we have.
+int main() {
+  int y = 4;
+  foo(z,y);
+  return z;
+}
+\end{code}
+%% map foo(y,z) {
+%%  int x = x + y;
+%%  int v = x + z;
+%% }
 
-%% \begin{code}
-%% (top
-%%    [foo => ..., y => 2]
-%%    (fun main () 
-%%      (block
-%%        [y => 4, foo => ..., y => 2]
-%%        (foo z y)
-%%        (return z))))
-%% \end{code}
+When the first binding form, "int y = 2", is parsed ``y'' in bound to
+unique symbol ``\$y0'' and the mapping "y => \$y2" is added to the
+current environment.  Then when the function "foo" in parsed, it is
+added to the environment.  When the \verb/new_mark()/ primitive is
+parsed inside the body of the function the current global environment
+is remembered.  new\_mark does not capture local variables since it
+makes little sense to use them in the result of the macro.  Next,
+\verb/macro foo/ is parsed which makes the function foo into a macro.
 
-%% where [] represents the current scope.  Since the local environment
-%% inside the block includes the environment from the outer scope, y is
-%% listed twise since the local y shadows the top level y, however this
-%% is not a problem since lookup started from the head of the list.
+Now the body of main is parsed.  A new local environment is created.
+\verb/int y = 4/ created a new unique symbol ``\$y1'' and the mapping
+"y => \$y1" is added.  At this point we have.
 
-%% Now foo is expanded and we have:
+\begin{code}
+int $y0 = 2;
+[foo => ..., y => $y0]
+int main () {
+  int $y1 = 4;
+  [y => $y1, foo => ..., y => $y0]
+  foo(z,y);
+  return z;
+}
+\end{code}
 
-%% \begin{code}
-%%        [y => 4, foo => ..., y => 2]
-%%        (var'0 z'0 (+'0 y y'0))
-%%        (var'0 z (+'0 y z'0))
-%%        (return z)
-%%        '0 => [y => 2]
-%% \end{code}
+where \verb/[...]/ represents the current scope.  Since the local
+environment inside the block includes the environment from the outer
+scope, y is listed twice since the local y shadows the top level y,
+however this is not a problem since lookup started from the head of
+the list.
 
-%% Inside the block.  The marks keep the duplicate y and z's distinct.
+Now foo is expanded and we have:
 
-%% Now the statement "(var'0 z'0 ...)" is evaluated.  Since the symbol
-%% "var'0" is not in the local environment or the environment for the
-%% mark, it assumed to be the "var" primitive.  Thus the expression
-%% "(+'0 y y'0)" is evaluated.  The "+'0" binds to the primitive "+".
-%% The first y binds to 4 since it has no marks.  The second y is not in
-%% the local environment since it has a mark associated with it so the
-%% mark is stripped and the stripped symbol is looked up in the
-%% environment for the mark, thus "y'0" binds to 2.  Thus we have "(+ 4
-%% 2")", and the mapping "z'0 => 6" is added to the local environment.
-%% We now have:
+\begin{code}
+  ...
+  [y => $y1, foo => ..., y => $y0]
+  int z'0 = y + y'0;
+  int z = y + z'0;
+  return z;
+  '0 => [y => $y0]
+\end{code}
 
-%% \begin{code}
-%%        [z'0 => 6, y => 4, foo => ..., y => 2]
-%%        (var'0 z (+'0 y z'0))
-%%        (return z)
-%%        '0 => [y => 2]
-%% \end{code}
+The marks keep the duplicate y and z's distinct.
 
-%% Now the variable "z" is evaluated.  "z'0" is found in the local
-%% environment since it has the same set of marks as the one in the
-%% local environment and we have:
+Now the statement \verb/int z'0 = y + y'0/ is evaluated.  First off,
+\verb/int z'0/ creates a unique symbol ``\$z0'' and the mapping, ``z'0
+=> \$z0'' is added to the local environment.  Notice how the mark
+becomes part of the name.  Next, the expression \verb/y + y'0/ is
+expanded.  The first y binds to ``\$y1'' since it has no marks.  The
+second y is not in the local environment since it has a mark
+associated with it, so the mark is stripped and the stripped symbol is
+looked up in the environment for the mark, thus ``y'0'' binds to
+``\$y0''.  We now have:
 
-%% \begin{code}
-%%        [z => 10, z'0 => 6, y => 4, foo => ..., y => 2]
-%%        (return z)
-%%        '0 => [y => 2]
-%% \end{code}
+\begin{code}
+  ...
+  int $z0 = $y1 + $y0;
+  [z'0 => $z0, y => $y1, foo => ..., y => $y0]
+  int z = y + z'0;
+  return z;
+  '0 => [y => $y0]
+\end{code}
 
-%% And finally the function main will returns 10.
+Now the statement \verb/int z = y + z'0/ is evaluated.  The variable
+``z'0'' is found in the local environment since it has the same
+set of marks as the one in the local environment and we have:
+
+\begin{code}
+  ...
+  int $z1 = $y1 + $z0;
+  [z => $z1, z'0 => $z0, y => $y1, foo => ..., y => $y0]
+  return z;
+  '0 => [y => $y0]
+\end{code}
+
+And finally the ``z'' in the return statement will bind to ``\$z1'' giving:
+\begin{code}
+int $y0 = 2;
+int main() {
+  int $y1 = 4;
+  int $z0 = $y1 + $y0;
+  int $z1 = $y1 + $z0;
+  return $z1;    
+}
+\end{code}
+
+which will evaluate to
+
+\begin{code}
+int $y0 = 2;
+int main() {
+  int $y1 = 4;
+  int $z0 = 4 + 2 = 6;
+  int $z1 = 4 + 6 = 10;
+  return 10;    
+}
+\end{code}
+
+and thus main will return 10;
 
 %% \section{Macro Expander}
 
 %% [Now describe in detail how each of the Macro expander works,
 %%   including the hygiene system].
+
+\section{The Reparser}
+
+The previous section glossed over how macros are parsed and the fact
+that the expansion happens on the intermediate syntax objects.  This
+section will fill in the gaps and explain what is really going on.
+
+When ZL encounters something that looks like a function call, for
+example \verb/f(x + 2, y)/ it does not know if it is a true function
+or a macro.  If it is a macro the arguments could be an expression, a
+statement, or something else entirely depending on the context in
+which they are used.  Thus function call arguments are only minimally
+parsed in order to separate them from each other.  For example the
+function call of \verb/f/ above will get parsed as
+\verb/(call (id f) (list (parm "x + 2") (parm y)))/.  After which the
+expander looks up the symbol \verb/f/. If it is a macro than it is
+expanded with the parsing of the parameters delayed, otherwise it is
+assumed to be a function and the parameters will get parsed as an
+expression as the function is parsed.
+
+In addition, as previously mentioned, syntax forms such as
+\verb/syntax (x * y)/ are not fully parsed but rather first becomes
+\verb/("()" "x * y")/.  This is because it is not known if x and y are
+local variables or pattern variables until the substitution is
+performed.  If they are normal variables then they it will be parsed as
+\verb/(exp (id x) (syn *) (id y))/ but if they where pattern variable it will be
+parsed as \verb/(exp (mid x) (syn *) (mid y))/.
+
+Even when substitution is performed using the \verb/replace/ callback
+function, the syntax object is not parsed.  This is for two reasons: 1)
+we still do not know what context the results are going to be used in,
+thus we can not be completely sure what it should be
+parsed as and 2) by delaying the substitution until it is needed we
+can reduce the complexity of the macro expansion from quadratic to
+linear.  Instead a list of substations is stored with the syntax
+object which will be used when the syntax object is finally parsed.
+
+For example in the code:
+
+\begin{code}
+int x = 10;
+Syntax * foo(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, syntax (y), syn);
+  Syntax * res = replace(syntax (x * y), m, mark);
+}
+macro foo;
+int main() {
+  int x = 20;
+  return foo(x);
+}
+\end{code}
+
+the call \verb/foo(x)/ will first get parsed as
+\verb/(call (id foo) (list (parm x)))/.  When the symbol foo is looked
+up ZL discoverers it is a macro and than calls the function foo to
+expand it.  Foo first creates a new mark which will be used latter.
+Next match\_args is called which will map y to \verb/(parm x)/.  Then
+replace is called, first the \verb/syntax (x * y)/ is parsed as
+\verb/("()" "x * y")/ and then replace will annotate it with two bits
+or information 1) the mark to apply, and 2) the substations to apply.
+This will which will be represented as \verb/{'0; y => (parm x)}/
+where the first part is the mark and the second is the substations to
+apply.  Thus after the expansion the above code will become:
+
+\begin{code}
+(top
+  (var (id $x0) int 10)
+  (fun (id main) () (block
+    (var (id $x1) int (literal 20))
+    [x => $x1, x => $x0]
+    (return ("()" "x * y"){'0; y => (parm x)})))
+'0 := [x => $x0]
+\end{code}
+
+The result of the macro will get parsed when return is converted from a
+syntax object to an AST node.  In the process of doing this it will
+partly expand it's parameter.  The expander will recognize the \verb/()/
+as something that needs to be reparsed and instruct the reparser to reparse
+\verb/x * y/ as an ``EXP'' and than apply \verb/{'0; y => (parm x)}/.
+
+The reparser will first use the PEG parser to reparse the string 
+as an EXP with the special instruction that \verb/y/ is
+an macro parameter.  This will then get parsed as
+\verb/(exp (id x) (sym +) (mid y PARM))/.  The parser is able to recognize y
+as a ``mid'' rather than a ``id'' because of the special \verb/MID/
+production in the grammar:
+
+\begin{code}[fontsize=\small]
+...
+EXP = <exp> {TOKEN}+;
+TOKEN : "token" = 
+      <<mid PARM>> {MID} / {BRACK} / {CONST} / <id> {ID} / <sym> {SYM} / PARAN;
+...
+MID : "macro identifier" = 
+     {[@$\a_][\a_\d]*} SPACING;
+\end{code}
+
+That is when trying to match a token the MID production is tried, it
+matches ``x'' but it is rejected because the special instruction
+\verb/<<mid>>/ tells the PEG parser to reject the match unless the
+string is in the list of possible macro identifiers.  However, when it
+matches ``y'' it is accepted since ``y'' is in the list.  When an MID
+matched the parser add the production where it matches as the
+second argument which will be used latter.
+
+After the string is parsed it will then apply the
+\verb/{'0; y => (parm x)}/ instructions to the sub-parts.  This will
+result in \verb/(exp'0 (id'0 x'0) (syn +) (id x))/.  That is marks are
+applied to most of the symbols while \verb/(mid y TOKEN)/ becomes
+\verb/(id x)/.  During the substitution the string, \verb/x/, is
+reparsed as the production noted in the second argument of the
+\verb/mid/, which in this case in ``TOKEN''.  Hence, \verb/x/ becomes
+\verb/(id x)/.  \verb/(syn +)/ does not get a symbol because ``sym''
+is a special case of a syntax form which does not get additional
+processing, other forms include literal numbers, and strings.
+
+The results of the reparse are then expanded and parsed as before,
+with marks being used as described in the previous section, with the
+additional rule that if no marks are left and a symbol is still not
+found than it is assumed to be associated with a primitive form.  For
+example ``exp'0'' and ``id'0'' will be assumed to represent the built
+in ``exp'' macro and the ``id'' primitive since neither are in the
+current environment.  Since the result is an ``exp'' it will be
+expanded again to become \verb/(plus (id'0 x'0) (id x))/, 
+which will than be converted into an AST.
+
+In this case the result of the reparse is a fully parsed string, but
+this is not always the case, for example if the macro instead expanded
+to \verb/("()" "(x + 2) * y")/ the string will parse to
+\verb/(exp ("()" "x + 2") (sym *) (mid y))/ and then become
+\verb/(exp'0 ("()" "x + 2"){'0; y => (parm x)} (sym *) (id x))/, that
+is if any unparsed string are encountered the instructions are simply
+pushed down rather than being directly applied.
+
+Another problem is dealing with the case in which the macro parameter
+is not a TOKEN, for example if the call to foo was instead
+\verb/foo(x + 2)/.  In order to handle this case mid's labeled to be
+parsed as a TOKEN is really parsed as a PARM whose production is:
+
+\begin{code}
+\end{code}
+
+NOW EXPLAIN HOW SYNTAX MACROS DIFFER.
+
+ALSO EXPLAIN HOW MULTIPLE REPLACEMENT SETS ARE HANDLED.
+
+\section{Bending Lexical Scope}
+
+EXPLAIN get\_context and replace\_context.
+
+EXPLAIN ``fluid\_*''.
+
+\section{The Complete Macro ABI}
+
+...
 
 \end{document}
 
