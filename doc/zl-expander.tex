@@ -35,7 +35,7 @@
 \makeatother
 
 \DefineVerbatimEnvironment
-  {code}{Verbatim}{baselinestretch=1,xleftmargin=2ex}
+  {code}{Verbatim}{baselinestretch=1,xleftmargin=2ex,fontsize=\small}
 
 \newcommand{\subs}[1]{$_{#1}$}
 
@@ -148,7 +148,7 @@ operators:
 \end{itemize*}
 as well as some additional operators for constructing syntax objects:
 \begin{itemize*}
-\item Capture: {e}
+\item Capture: \{e\}
 \item Named Capture: <> e
 \end{itemize*}
 
@@ -268,6 +268,7 @@ However, the end result is a AST tree and not a fully expanded syntax
 object.
 
 \section{Macros}
+\label{macros}
 
 A macro is a normal function which takes in syntax object and an
 environment, and returns a transformed syntax object.  It transforms the
@@ -674,7 +675,8 @@ In addition, as previously mentioned, syntax forms such as
 local variables or pattern variables until the substitution is
 performed.  If they are normal variables then they it will be parsed
 as \verb/(exp (id x) (syn *) (id y))/ but if they where pattern
-variable it will be parsed as \verb/(exp (mid x) (syn *) (mid y))/.
+variable it will be parsed as \verb/(exp (mid x) (syn *) (mid y))/,
+where ``mid'' is a macro identifier.
 
 Even when substitution is performed using the \verb/replace/ callback
 function, the syntax object is not parsed.  This is for two reasons: 1)
@@ -794,19 +796,269 @@ parsed as a ``TOKEN''.  However this is not always the case, for
 example if the call to foo was instead \verb/foo(x + 2)/, as the
 string \verb/x + 2/ is not a token.
 
-NOW EXPLAIN HOW SYNTAX MACROS DIFFER.
+The reparsing of the macro parameters only applied to function call
+macros.  For syntax macros the parameters are already
+parsed\footnote{Well partly...}.  This is possible because the
+production the parameter should be parsed as is known... FIXME: Need
+better explanation of syntax macros earlier in text.
+
+As the lazy substation of macro parameters and the reparsing are
+intertwined, lazy substitution only applies to syntax forms that are to
+be reparsed, for example ``()'' and ``\{\}'' forms.  Syntax created
+with the \verb/syntax/ form is always of the form to be reparsed,
+however syntax created with \verb/raw_syntax/ is fully parsed and thus
+replace performs the substations eagerly.
 
 ALSO EXPLAIN HOW MULTIPLE REPLACEMENT SETS ARE HANDLED.
 
 \section{Bending Lexical Scope}
 
-EXPLAIN get\_context and replace\_context.
+Normal hygiene rules for macros work well in most cases, but it is
+often necessary to bend lexical scope.  For example ... CLASS EXAMPLE.
 
-EXPLAIN ``fluid\_*''.
+ZL produces two different mechanisms to support this....
+
+\subsection{Get\_context and Replace\_context}
+\label{replace_context}
+
+The first is get\_context and replace\_context.  It is used when there
+is a need to create new symbols as if they are in the context of an
+existing symbol.  Get\_context and replace\_context are callback
+functions with the following prototype:
+\begin{itemize*}
+\item \verb/Context * get_context(Syntax *)/
+\item \verb/Syntax * replace_context(UnmarkedSyntax *, Context *)/
+\end{itemize*}
+A ``Context'' is simply a collection of marks.  Thus get\_context
+simply gets the marks associated with the Syntax object, while
+replace\_context replaces the marks of a syntax object.  If an syntax
+object already has any marks associated with it, they are ignored.
+
+\subsection{Fluid Binding}
+
+\subsubsection{The Idea}
+
+get\_context and replace\_context is not always the correct solution.
+Sometimes what is needed is a form of dynamic binding...  A prime
+example of this is the special variable ``this'' in classes.  For this
+ZL provides a new construct ``fluid\_binding''... JUSTIFY ...
+
+Variables in ZL are lexically scoped, for example the code:
+
+\begin{code}
+int g(X *);
+int f() {return g(this);}
+int main() {X * this = ...; return f();}
+\end{code}
+
+Will not compile because the ``this'' defined in main() is not visible in
+f() even, though f() is called inside main().  However, if variables
+where instead dynamically scoped the ``this'' in main() will be visible
+to f().  
+
+Normal hygiene rules preserve lexical scope in a similar fashion such that:
+
+\begin{code}
+int g(X *);
+map m() {g(this);}
+int main() {X * this = ...; return m();}
+\end{code}
+
+will also not compile.  Attempts to make this work with get and
+replace context will not compose well.  FIXME: Give example. What is
+really needed is for this to be dynamically scoped in the hygiene
+system.  This can be done by marking the ``this'' symbol as ``fluid''
+using ``fluid\_binding'' at the top level and then using ``fluid''
+when defined the symbol in local scope.  For example:
+
+\begin{code}
+fluid_binding this;
+int g(X *);
+map m() {g(this);}
+int main() {X * fluid this = ...; return m();}
+\end{code}
+
+Will work as expected.  That is the ``this'' in m() will bind to the
+``this'' in main(). 
+
+\subsubsection{The Implementation}
+
+The key idea to making fluid\_binding work is that when a fluid
+variable is defined it is renamed to a unique symbol name that is
+associated with fluid\_binding.  This has the effect of making uses of
+the variable first resolve to the fluid\_binding form instead of the
+local variable.  During the resolution process variables that resolve
+to a fluid\_binding form, will be looked up again, but this time using
+the unique symbol name associated with the fluid\_binding form.  This
+will then correctly resolve to the local variable.
+
+As such, the fluid\_binding construct will insert a special symbol into
+the environment which contains a unique symbol name constructed by
+taking the symbol name and applying a fresh mark to it (with an empty
+environment) which will be represented as \verb/fluid(SYMBOL'MARK')/
+for example /verb/fluid\_binding this/ will insert the mapping
+\verb/this => fluid(this'0)/ into the environment.
+
+The \verb/fluid/ construct will then look up the symbol name in the
+environment and replace it with the unique symbol name associated with
+the fluid binding.  For example \verb/X * fluid this/ will become
+\verb/X * this'0/, which will insert the mapping
+\verb/this'0 => $this0/ into the environment.
+
+Finally, when ever a symbol resolves to something that is a fluid
+binding the symbol will be resolved again, this time using the unique
+symbol name in the fluid binding.  For example ``this'' will first
+resolve to ``fluid(this'0)''.  Next, ``this'0'' resolves to
+``\$this0''.
+
+\subsubsection{Example}
+
+In the code:
+
+\begin{code}
+fluid_binding this;
+int g(X *, X *) {...}
+map m1(body) {{X * fluid this = ...;body}}
+map m2(x) {g(x,this);}
+int main() {
+  X * this = ...;
+  m1(m2(this));
+}
+\end{code}
+
+Thu fluid binding this is first parsed, and added to the environment
+as \verb/this => fluid(this'0)/ where \verb/'0/ is an empty mark.  The
+function ``g'' and macros ``m1'' and ``m2'' are also parsed and added
+to the environment giving:
+
+\begin{code}
+int $g0(X *, X *);
+[m2 => ..., m1 => ..., g => $g0, this => fluid(this'0)]
+'0 => [];
+...
+\end{code}
+
+Next main is parsed, first the local variable ``this'' is parsed and
+added to the environment.  Since it was not prefixed with ``fluid'',
+it is just an ordinarily variable which happens to have the same name as
+the global fluid binding ``this'', thus shadowing it.  Now we have:
+
+\begin{code}
+int main() {
+  X * $this0 = ...
+  [this => $this0, m2 => ..., m1 => ..., g => $g0, this => ...]
+  m1(m2(this));
+}
+\end{code}
+
+Next ``m1'' is expanded giving:
+
+\begin{code}
+int main() {
+  X * this$0 = ...
+  [this => $this0, m2 => ..., m1 => ..., g => $g0, this => ...]
+  { X * fluid this'1 = ...;
+    m2'1(this);}
+}
+'1 = [m2 => ..., m1 => ..., g => $g0, this => fluid(this'0)]
+\end{code}
+
+Now the fluid variable ``this'1'' is parsed.  The symbol is looked up
+using the normal strategy and is found to correspond to the symbol
+fluid(this'0).  Thus ``fluid this'1'' becomes ``this'0'' and a mapping
+\verb/this'0 => \$this1/ is added to the local environment.
+
+\begin{code}
+int main() {
+  X * $this0 = ...;
+  { X * $this1 = ...;
+    [this'0 => $this1, this => $this0, m2 => ..., m1 => ..., g => $g0, ...]
+    m2'1(this);}
+}
+\end{code}
+
+Next ``m2'1'' is expanded:
+
+\begin{code}
+int main() {
+  { ...   
+    [this'0 => $this1, this => $this0, m2 => ..., m1 => ..., g => $g0, ...]
+    g'2(this, this'2); }
+}
+'2 = [m2 => ..., m1 => ..., g => $g0, this => fluid(this'0)]
+\end{code}
+
+Now ``g'2'' and ``this'' resolve as expected.  And ``this'2'' is
+resolved.  When resolving ``this'2'', it first resolves to
+fluid(this'0), which is an instruction to try the lookup again, this
+time using ``this'0'' as the symbol name.  Thus ``this'0'' is looked
+up in the current environment, and resolves to ``\$this0''. Thus,
+giving:
+
+\begin{code}
+int $g0(X *, X *);
+int main() {
+  X * $this0 = ...;
+  { X * $this1 = ...;
+    $g0($this0, $this1);}
+}
+\end{code}
 
 \section{The Complete Macro ABI}
 
+\subsection{Creating Marks}
+
+The ``new\_mark'' primitive is actually a macro with which calls the
+callback function new\_mark\_f and uses the primitive
+``environ\_snapshot()'' to capture the environment.  The ABI is thus:
+
+\begin{itemize*}
+\item The type \verb/EnvironSnapshot/
+\item The type \verb/Mark/
+\item \verb/Mark * new_mark_f(EnvironSnapshot *)/
+\item \verb/macro new_mark() {new_mark_f(environ_snapshot());}/
+\item \verb/macro new_empty_mark() {new_mark_f(0);}/ --
+      creates a mark with an empty environment.
+\end{itemize*}
+
+\subsection{The Syntax Object}
+
+There are two syntax objects types, \verb/UnmarkedSyntax/ and
+\verb/Syntax/.  The difference between the two is the first represents
+a syntax object that has not been marked yet, while the second one
+has.  A \verb/Syntax/ object automatically convert to
+\verb/UnmarkedSyntax/.  But in order to go from \verb/UnmarkedSyntax/
+to \verb/Syntax/ the syntax object needs be marked, which is generally
+done via \verb/replace/.
+
+FIXME: Explain flags.
+
+\subsection{The Syntax List}
+
 ...
+
+\subsection{Matching}
+
+...
+
+\subsection{Replace}
+
+...
+
+\subsection{Get and Replace Context}
+
+As described in section \ref{replace_context}.
+
+\subsection{Expanding and Reparsing}
+
+...
+
+\subsection{Converting Between Identifers to Strings}
+
+\begin{itemize*}
+\item \verb/UnmarkedSyntax * string_to_syntax(const char *)/
+\item \verb/const char * syntax_to_string(UnmarkedSyntax *)/
+\end{itemize*}
 
 \end{document}
 
