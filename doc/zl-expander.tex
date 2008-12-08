@@ -290,8 +290,8 @@ syntax object via call back functions.  The core Macro API consists of:
 \item \verb/new_mark()/ -- returns \verb/Mark */
 \item \verb/syntax (...)|{...}|ID/ -- returns \verb/UnmarkedSyntax */
 \item \verb/raw_syntax (...)/ -- returns \verb/UnmarkedSyntax */
-\item \verb/syntax_macro [ID] [ID];/
-\item \verb/macro ID [ID];/
+\item \verb/make_syntax_macro [ID] [ID];/
+\item \verb/make_macro ID [ID];/
 \end{itemize*}
 \end{itemize*}
 
@@ -327,7 +327,7 @@ necessary to attach lexical information to them by passing in a mark
 created with ``new\_mark'', which is the third parameter to replace.
 
 Once the function is defined it is necessary to declare it as a macro
-using one of ``syntax\_macro'' or ``macro''.  The first creates a
+using one of ``make\_syntax\_macro'' or ``make\_macro''.  The first creates a
 syntax macro while the second creates a function call macro. (FIXME:
 Explain the difference) The first parameter is the name of the macro.
 The second is the name of the function to use, if different.
@@ -344,8 +344,8 @@ Syntax * foo(Syntax * syn, Environ * env) {
   Syntax * res = replace(syntax {int x = v + y; z = x * x;}, m, mark);
   return res;
 }
+make_macro foo;
 \end{code}
-macro foo;
 
 will transform:
 \begin{code}
@@ -362,7 +362,7 @@ In addition to full macros. ZL also supports simple pattern matching
 for example foo can more simply be written as:
 
 \begin{code}
-map foo (v,z) {
+macro foo (v,z) {
   int x = v + y; 
   z = x * x;
 }
@@ -372,7 +372,7 @@ Pattern matching macros can in fact be defined as a macro in terms of
 the above API:
 
 \begin{code}
-Syntax * map(Syntax * syn, Environ * env) {
+Syntax * macro(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_args(0, syntax (name, parms, repl), syn);
   Syntax * res = replace(syntax {
@@ -382,11 +382,11 @@ Syntax * map(Syntax * syn, Environ * env) {
         Syntax * res = replace(syntax repl, m, mark);
         return res;
       }
-      macro name;
+      make_macro name;
     }, m, mark);
 }
 
-syntax_macro map;
+make_syntax_macro macro;
 \end{code}
 
 However, for efficiency reasons they are defined directly.
@@ -440,7 +440,7 @@ Syntax * foo(Syntax * syn, Environ * env) {
   Match * m = match_args(0, syntax (y), syn);
   Syntax * res = replace(syntax (x * y), m, mark);
 }
-macro foo;
+make_macro foo;
 int main() {
   int x = 20;
   return foo(x);
@@ -537,7 +537,7 @@ Syntax * foo(Syntax * syn, Environ * env) {
                                  int v = x + z;}, m, mark);
   return res;
 }
-macro foo;
+make_macro foo;
 
 int main() {
   int y = 4;
@@ -649,11 +649,6 @@ int main() {
 
 and thus main will return 10;
 
-%% \section{Macro Expander}
-
-%% [Now describe in detail how each of the Macro expander works,
-%%   including the hygiene system].
-
 \section{The Reparser}
 
 The previous section glossed over how macros are parsed and the fact
@@ -677,9 +672,9 @@ In addition, as previously mentioned, syntax forms such as
 \verb/syntax (x * y)/ are not fully parsed but rather first becomes
 \verb/("()" "x * y")/.  This is because it is not known if x and y are
 local variables or pattern variables until the substitution is
-performed.  If they are normal variables then they it will be parsed as
-\verb/(exp (id x) (syn *) (id y))/ but if they where pattern variable it will be
-parsed as \verb/(exp (mid x) (syn *) (mid y))/.
+performed.  If they are normal variables then they it will be parsed
+as \verb/(exp (id x) (syn *) (id y))/ but if they where pattern
+variable it will be parsed as \verb/(exp (mid x) (syn *) (mid y))/.
 
 Even when substitution is performed using the \verb/replace/ callback
 function, the syntax object is not parsed.  This is for two reasons: 1)
@@ -699,7 +694,7 @@ Syntax * foo(Syntax * syn, Environ * env) {
   Match * m = match_args(0, syntax (y), syn);
   Syntax * res = replace(syntax (x * y), m, mark);
 }
-macro foo;
+make_macro foo;
 int main() {
   int x = 20;
   return foo(x);
@@ -745,10 +740,13 @@ production in the grammar:
 ...
 EXP = <exp> {TOKEN}+;
 TOKEN : "token" = 
-      <<mid PARM>> {MID} / {BRACK} / {CONST} / <id> {ID} / <sym> {SYM} / PARAN;
+      <<mid PARM>> {MID} / {BRACK} / {CONST} / 
+      <id> {ID} / <sym> {SYM} / PARAN;
 ...
 MID : "macro identifier" = 
      {[@$\a_][\a_\d]*} SPACING;
+PARM : "macro paramater" = 
+   {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
 \end{code}
 
 That is when trying to match a token the MID production is tried, it
@@ -756,16 +754,18 @@ matches ``x'' but it is rejected because the special instruction
 \verb/<<mid>>/ tells the PEG parser to reject the match unless the
 string is in the list of possible macro identifiers.  However, when it
 matches ``y'' it is accepted since ``y'' is in the list.  When an MID
-matched the parser add the production where it matches as the
-second argument which will be used latter.
+matched the parser add a note as to how to reparse the macro
+parameter.  This is either the production where it matches, or the
+production as given in the \verb/<<mid>>/ instruction.  In this case
+it is the ``PARM'' production.
 
 After the string is parsed it will then apply the
 \verb/{'0; y => (parm x)}/ instructions to the sub-parts.  This will
 result in \verb/(exp'0 (id'0 x'0) (syn +) (id x))/.  That is marks are
-applied to most of the symbols while \verb/(mid y TOKEN)/ becomes
+applied to most of the symbols while \verb/(mid y PARM)/ becomes
 \verb/(id x)/.  During the substitution the string, \verb/x/, is
 reparsed as the production noted in the second argument of the
-\verb/mid/, which in this case in ``TOKEN''.  Hence, \verb/x/ becomes
+\verb/mid/, which in this case in ``PARM''.  Hence, \verb/x/ becomes
 \verb/(id x)/.  \verb/(syn +)/ does not get a symbol because ``sym''
 is a special case of a syntax form which does not get additional
 processing, other forms include literal numbers, and strings.
@@ -788,15 +788,11 @@ to \verb/("()" "(x + 2) * y")/ the string will parse to
 is if any unparsed string are encountered the instructions are simply
 pushed down rather than being directly applied.
 
-Another problem is dealing with the case in which the macro parameter
-is not a TOKEN, for example if the call to foo was instead
-\verb/foo(x + 2)/.  In order to handle this case mid's labeled to be
-parsed as a TOKEN is really parsed as a PARM whose production is:
-
-\begin{code}
-PARM : "macro paramater" = 
-   {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
-\end{code}
+In the above example the macro parameter was just an identifier and the
+special ``PARM'' production is not needed as it would of correctly
+parsed as a ``TOKEN''.  However this is not always the case, for
+example if the call to foo was instead \verb/foo(x + 2)/, as the
+string \verb/x + 2/ is not a token.
 
 NOW EXPLAIN HOW SYNTAX MACROS DIFFER.
 
@@ -813,33 +809,6 @@ EXPLAIN ``fluid\_*''.
 ...
 
 \end{document}
-
-
-%% EXPANDING MACROS
-
-%% A pattern matching macro consists of two parts.  The first part is to
-%% match the paramaters of the macro with pattern variables and (known as
-%% the match step), the second part is to replace and pattern variables
-%% in the macro body with the paramaters matched in the previous step
-%% (known as the replace step).
-
-%% ...
-
-%% Pattern variablies inside the replace string are known as macro
-%% identifiers and are repsented as (mid <ID>)
-
-
-
-%% During the replace step when an unparsed string is encountered it is
-%% reparsed as ....  During the reparsing step macro identifers are
-%% reconized by special productions in the grammer <<mid>> which matches
-%% an identifier when this rule in encountered the matching identider is
-%% checked againat a list of macro identifers in the current scope and if
-%% it matches than is parsed as a (mid <ID>) otherwise the production is
-%% ignored...
-
-
-%% MISC
 
 
 %% ----
