@@ -254,9 +254,9 @@ forms.  These forms generally come from new PEG productions but can
 also be the results of other macros.  Syntax macros are of the form
 \verb/(XXX ...)/ where \verb/XXX/ is the macro name.  2) Function call
 macros which have the form \verb/(call XXX ("()" "..."))/, and 3)
-Identifier macros which have the form \verb/(id XXX)/.  No matter form
-the macro is in, the mechanism of expansion is the same, which will be
-described in the next section.
+Identifier macros which have the form \verb/(id XXX)/.  No matter what
+form the macro is in, the mechanism of expansion is the same, and
+will be described in the next section.
 
 If any expansion is done the process is repeated on the result of the
 expansion.  If there is no expansion the syntax object is assumed to
@@ -296,10 +296,10 @@ syntax object via call back functions.  The core Macro API consists of:
 \end{itemize*}
 \end{itemize*}
 
-One of the most important part of a macro is the ability to create new
-syntax, this is done using the \verb/syntax/ and \verb/raw_syntax/
+One of the most important parts of a macro is the ability to create new
+syntax.  This is done using the \verb/syntax/ and \verb/raw_syntax/
 primitive.  Exactly what type of syntax object is created depends on
-which form is used, for the \verb/syntax/ forms, it is as follows:
+which form is used.  For the \verb/syntax/ forms, it is as follows:
 \begin{description}
 \item[\texttt{syntax (...)}] a ``()'', which generally parsed as an expression
 \item[\texttt{syntax \{...\}}] a ``\{\}'', which is generally parsed as an statement block
@@ -319,10 +319,10 @@ decompose the input by matching pattern variables, the second
 parameter, with the arguments of the macro, the third
 parameter.  (The first argument, which will be explained latter, is
 generally null).  The ``replace'' function is used to rebuild the
-output by matching the passed in syntax object, the first parameter
+output by matching the passed in syntax object, the first parameter,
 and generally created with ``syntax'', with the pattern variables
 in the ``Match'' object, the second parameter.  However, syntax
-objects created with ``syntax'', do not have any lexical information
+objects created with ``syntax'' do not have any lexical information
 associated with them, in other words they are unmarked.  Thus it is
 necessary to attach lexical information to them by passing in a mark
 created with ``new\_mark'', which is the third parameter to replace.
@@ -335,7 +335,7 @@ The second is the name of the function to use, if different.
 
 % FIXME: What about id macros.
 
-To understand better how macros work lets look at a simple example.
+To understand better how macros work let's look at a simple example.
 The macro:
 
 \begin{code}
@@ -359,8 +359,8 @@ j = x' * x';
 \end{code}
 where the \verb/'/ is a mark on x to keep it from clashing with local variables.
 
-In addition to full macros. ZL also supports simple pattern matching
-for example foo can more simply be written as:
+In addition to full macros ZL also supports simple pattern matching.
+For example foo can more simply be written as:
 
 \begin{code}
 macro foo (v,z) {
@@ -395,13 +395,13 @@ However, for efficiency reasons they are defined directly.
 \section{The Basic Macro Expansion Algorithm}
 
 This section will describe the basic macro expansion algorithm without
-the reparsing steps.  It will primary focus on the hygiene system.
-For simplicity it will be assumed that macro parameters and syntax
+the reparsing steps.  It will primarily focus on the hygiene system.
+For simplicity it will be assumed that Smacro parameters and syntax
 forms are fully parsed.  The next section will explain the details of
 how parsing of both is really done.  
 
 In order to understand how hygiene is maintained it is necessary
-understand a little of how programs are parsed.  During parsing an
+understand a little about how programs are parsed.  During parsing an
 environment is maintained as a list which is a mapping of symbol names
 to symbol objects.  Every symbol name, in both syntax objects and in
 the environment, has a set of marks associated with it.  Marks are
@@ -411,7 +411,7 @@ The initial environment is empty, when a binding form is encountered
 the form is added to the front of a list.  Functions create a new
 environment whose tail is the current environment from the top level.
 The environment is then populated with the function parameters.
-Blocks create they own local environment whose tail is the current
+Blocks create their own local environment whose tail is the current
 environment where the block was defined.  Macro also capture the
 environment using the \verb/new_mark/ primitive.
 
@@ -449,7 +449,7 @@ int main() {
 \end{code}
 
 will expand to something like\footnote{Macro expansion really in the
-  interment s-expression language, but for simplicity the expanded
+  intermediate s-expression language, but for simplicity the expanded
   results will be presented in the input language in this section.}
 
 \begin{code}
@@ -670,21 +670,22 @@ assumed to be a function and the parameters will get parsed as an
 expression as the function is parsed.
 
 In addition, as previously mentioned, syntax forms such as
-\verb/syntax (x * y)/ are not fully parsed but rather first becomes
-\verb/("()" "x * y")/.  This is because it is not known if x and y are
-local variables or pattern variables until the substitution is
-performed.  If they are normal variables then they it will be parsed
-as \verb/(exp (id x) (syn *) (id y))/ but if they where pattern
-variable it will be parsed as \verb/(exp (mid x) (syn *) (mid y))/,
-where ``mid'' is a macro identifier.
+\verb/syntax (x * y)/ are not fully parsed but rather in this case
+first becomes \verb/("()" "x * y")/.  This is because it is not known
+if x and y are local variables or pattern variables until the
+substitution is performed.  If they are normal variables then it
+will be parsed as \verb/(exp (id x) (syn *) (id y))/ but if they were
+pattern variables it will be parsed as
+\verb/(exp (mid x) (syn *) (mid y))/, where ``mid'' is a macro
+identifier.
 
-Even when substitution is performed using the \verb/replace/ callback
+Even when a substitution is performed using the \verb/replace/ callback
 function, the syntax object is not parsed.  This is for two reasons: 1)
 we still do not know what context the results are going to be used in,
-thus we can not be completely sure what it should be
-parsed as and 2) by delaying the substitution until it is needed we
+thus we cannot be completely sure what it should be
+parsed as, and 2) by delaying the substitution until it is needed we
 can reduce the complexity of the macro expansion from quadratic to
-linear.  Instead a list of substations is stored with the syntax
+linear.  Instead a list of substitutions is stored with the syntax
 object which will be used when the syntax object is finally parsed.
 
 For example in the code:
@@ -705,14 +706,14 @@ int main() {
 
 the call \verb/foo(x)/ will first get parsed as
 \verb/(call (id foo) (list (parm x)))/.  When the symbol foo is looked
-up ZL discoverers it is a macro and than calls the function foo to
+up ZL discoverers it is a macro and then calls the function foo to
 expand it.  Foo first creates a new mark which will be used latter.
 Next match\_args is called which will map y to \verb/(parm x)/.  Then
-replace is called, first the \verb/syntax (x * y)/ is parsed as
-\verb/("()" "x * y")/ and then replace will annotate it with two bits
-or information 1) the mark to apply, and 2) the substations to apply.
-This will which will be represented as \verb/{'0; y => (parm x)}/
-where the first part is the mark and the second is the substations to
+replace is called.  First the \verb/syntax (x * y)/ is parsed as
+\verb/("()" "x * y")/. Next replace will annotate it with two bits
+or information 1) the mark to apply, and 2) the substitutions to apply.
+This will be represented as \verb/{'0; y => (parm x)}/
+where the first part is the mark and the second is the substitutions to
 apply.  Thus after the expansion the above code will become:
 
 \begin{code}
@@ -727,15 +728,15 @@ apply.  Thus after the expansion the above code will become:
 
 The result of the macro will get parsed when return is converted from a
 syntax object to an AST node.  In the process of doing this it will
-partly expand it's parameter.  The expander will recognize the \verb/()/
+partly expand its parameter.  The expander will recognize the \verb/()/
 as something that needs to be reparsed and instruct the reparser to reparse
-\verb/x * y/ as an ``EXP'' and than apply \verb/{'0; y => (parm x)}/.
+\verb/x * y/ as an ``EXP'' and then apply \verb/{'0; y => (parm x)}/.
 
 The reparser will first use the PEG parser to reparse the string 
 as an EXP with the special instruction that \verb/y/ is
 an macro parameter.  This will then get parsed as
 \verb/(exp (id x) (sym +) (mid y PARM))/.  The parser is able to recognize y
-as a ``mid'' rather than a ``id'' because of the special \verb/MID/
+as a ``mid'' rather than an ``id'' because of the special \verb/MID/
 production in the grammar:
 
 \begin{code}[fontsize=\small]
@@ -755,8 +756,8 @@ That is when trying to match a token the MID production is tried, it
 matches ``x'' but it is rejected because the special instruction
 \verb/<<mid>>/ tells the PEG parser to reject the match unless the
 string is in the list of possible macro identifiers.  However, when it
-matches ``y'' it is accepted since ``y'' is in the list.  When an MID
-matched the parser add a note as to how to reparse the macro
+matches ``y'' it is accepted since ``y'' is in the list.  When a MID
+matched the parser adds a note as to how to reparse the macro
 parameter.  This is either the production where it matches, or the
 production as given in the \verb/<<mid>>/ instruction.  In this case
 it is the ``PARM'' production.
@@ -770,7 +771,7 @@ reparsed as the production noted in the second argument of the
 \verb/mid/, which in this case in ``PARM''.  Hence, \verb/x/ becomes
 \verb/(id x)/.  \verb/(syn +)/ does not get a symbol because ``sym''
 is a special case of a syntax form which does not get additional
-processing, other forms include literal numbers, and strings.
+processing; other forms include literal numbers, and strings.
 
 The results of the reparse are then expanded and parsed as before,
 with marks being used as described in the previous section, with the
@@ -796,7 +797,7 @@ parsed as a ``TOKEN''.  However this is not always the case, for
 example if the call to foo was instead \verb/foo(x + 2)/, as the
 string \verb/x + 2/ is not a token.
 
-The reparsing of the macro parameters only applied to function call
+The reparsing of the macro parameters is only applied to function call
 macros.  For syntax macros the parameters are already
 parsed\footnote{Well partly...}.  This is possible because the
 production the parameter should be parsed as is known... FIXME: Need
@@ -807,7 +808,7 @@ intertwined, lazy substitution only applies to syntax forms that are to
 be reparsed, for example ``()'' and ``\{\}'' forms.  Syntax created
 with the \verb/syntax/ form is always of the form to be reparsed,
 however syntax created with \verb/raw_syntax/ is fully parsed and thus
-replace performs the substations eagerly.
+replace performs the substitutions eagerly.
 
 ALSO EXPLAIN HOW MULTIPLE REPLACEMENT SETS ARE HANDLED.
 
@@ -851,7 +852,7 @@ int f() {return g(this);}
 int main() {X * this = ...; return f();}
 \end{code}
 
-Will not compile because the ``this'' defined in main() is not visible in
+will not compile because the ``this'' defined in main() is not visible in
 f() even, though f() is called inside main().  However, if variables
 where instead dynamically scoped the ``this'' in main() will be visible
 to f().  
@@ -878,7 +879,7 @@ map m() {g(this);}
 int main() {X * fluid this = ...; return m();}
 \end{code}
 
-Will work as expected.  That is the ``this'' in m() will bind to the
+will work as expected.  That is the ``this'' in m() will bind to the
 ``this'' in main(). 
 
 \subsubsection{The Implementation}
