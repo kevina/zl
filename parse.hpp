@@ -85,6 +85,7 @@ struct ErrorInfo : public gc {
 
 struct Error : public ErrorInfo {
   String message();
+  String extra; // extra information after expand backtrace
 };
 
 Error * verror(const SourceInfo * s, const char * pos, 
@@ -465,7 +466,7 @@ struct Syntax : public gc {
   bool is_a(SymbolName n) const {return what_ == n;}
   bool is_a(const char * n, const char * p) const {return what_.name == n && num_args() > 0 && arg(0)->is_a(p);}
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
-  String sample_w_loc() const;
+  String sample_w_loc(unsigned max_len = 20) const;
   virtual ~Syntax() {}
 };
 
@@ -493,10 +494,7 @@ struct ParseSourceInfo : public SourceInfo {
   SourceStr str;
   String what;
   ParseSourceInfo(const SourceStr & s, String w) 
-    : str(s), what(w) {}
-  const SourceFile * file() const {return str.source->file();}
-  const SourceInfo * block() const {return str.source->block();}
-  const SourceInfo * parent() const {return str.source;}
+    : SourceInfo(s.source), str(s), what(w) {}
   void dump_info(OStream &, const char * prefix) const;
 };
 

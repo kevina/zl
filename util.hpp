@@ -8,6 +8,8 @@
 #include "vector.hpp"
 #include "parm_string.hpp"
 
+#include "iostream.hpp"
+
 struct StringObj {
   unsigned size;
   char str[];
@@ -119,7 +121,9 @@ char * pos_to_str(Pos p, char * buf);
 class OStream;
 class SourceFile;
 
-#define PURE __attribute__ ((pure)) 
+#define PURE __attribute__ ((pure))
+
+struct Syntax;
 
 //
 // A SourceInfo "block" is part of a "file".  The syntax inside a
@@ -129,14 +133,23 @@ class SourceFile;
 //
 class SourceInfo : public gc_cleanup {
 public:
+  const SourceInfo * parent;
+  SourceInfo(const SourceInfo * p = NULL) : parent(p) {}
   String file_name() const;
   Pos get_pos(const char * s) const;
   unsigned size() const;
   const char * begin() const;
   const char * end() const;    
-  PURE virtual const SourceFile * file() const = 0;
-  PURE virtual const SourceInfo * block() const = 0; // FIXME: Need better name
-  PURE virtual const SourceInfo * parent() const = 0;
+  PURE virtual const SourceFile * file() const  {return parent ? parent->file() : NULL;}
+  PURE virtual const SourceInfo * block() const {return parent ? parent->block() : NULL;}
+  virtual const SourceInfo * find_insertion_point(const Syntax * outer) const 
+    { //printf("esi find i point (parent = %p)\n", parent);
+      //dump_info(COUT, "  ");
+      return parent ? parent->find_insertion_point(outer) : NULL;}
+  // clone_until: clone until (and including) stop, if we are the same
+  //   as stop then when cloning set the parent to new_parent
+  virtual const SourceInfo * clone_until(const SourceInfo * stop, 
+                                         const SourceInfo * new_parent) const {abort();}
   virtual void dump_info(OStream &, const char * prefix="") const = 0;
   virtual ~SourceInfo() {}
 };
@@ -161,7 +174,6 @@ public:
   ~SourceFile() {if (data_) free(data_);}
   const SourceFile * file() const {return this;}
   const SourceInfo * block() const {return this;}
-  const SourceInfo * parent() const {return NULL;}
   void dump_info(OStream & o, const char * prefix) const;
 private:
   void read(String file);

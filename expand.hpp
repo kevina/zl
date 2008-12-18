@@ -23,72 +23,11 @@ void read_macro(const Syntax * p, Environ &);
 
 struct ExpandSourceInfo;
 
-// misnamed, now replaces and marks
-struct ReplTable : public gc_cleanup {
-  typedef Vector<std::pair<SymbolName, const Syntax *> > Table;
-  Table table;
-  const Syntax * lookup(SymbolName n) const {
-    for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
-      if (i->first == n) return i->second;
-    }
-    return NULL;
-  }
-  bool have(SymbolName n) const {
-    return lookup(n);
-  }
-  const Syntax * lookup(String n) const {
-    for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
-      if (i->first.name == n) return i->second;
-    }
-    return NULL;
-  }
-  bool have(String n) const {
-    return lookup(n);
-  }
-  const Syntax * lookup(const Syntax & n) const {
-    return lookup(static_cast<const SymbolName &>(n));
-  }
-  bool have(const Syntax & n) const {
-    return have(static_cast<const SymbolName &>(n));
-  }
-  void insert(SymbolName n, const Syntax * p) {
-    table.push_back(std::pair<SymbolName, const Syntax *>(n,p));
-  }
-  const Syntax * macro_call;
-  const Syntax * macro_def;
-  const ast::Mark * mark;
-  struct CacheItem {
-    const SourceInfo * key;
-    const ExpandSourceInfo * value;
-  };
-  Vector<CacheItem> cache;
-  inline const ExpandSourceInfo * expand_source_info(const SourceInfo * s);
-  inline const ExpandSourceInfo * expand_source_info(const Syntax * s);
-  inline SourceStr expand_source_info_str(const SourceStr & str);
-  inline SourceStr expand_source_info_str(const Syntax * s);
-  void to_string(OStream & o, PrintFlags f) const {
-    o.printf("{");
-    //o.printf("...");
-    for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
-      //o.printf("%s", ~i->first.to_string());
-      o.printf("%s=>", ~i->first.to_string());
-      i->second->to_string(o, f);
-      o.printf(",");
-    }
-    o.printf("}");
-  }
-};
+struct ReplTable;
 
 struct Replacements : public Vector<ReplTable *> {
-  bool anywhere(String s) const {
-    for (const_iterator i = begin(), e = end(); i != e; ++i)
-      if ((*i)->have(s)) return true;
-    return false;
-  }
-  void to_string(OStream & o, PrintFlags f) const {
-    for (const_iterator i = begin(), e = end(); i != e; ++i)
-      (*i)->to_string(o, f);
-  }
+  bool anywhere(String s) const;
+  void to_string(OStream & o, PrintFlags f) const;
   String to_string() const {
     StringBuf buf;
     to_string(buf, PrintFlags());
@@ -154,14 +93,26 @@ String gen_sym();
 
 const Syntax * flatten(const Syntax * p);
 
+// template <>
+// struct ChangeSrc<SourceInfo> {
+//   const SourceInfo * orig;
+//   const SourceInfo * new_;
+//   ChangeSrc(const SourceInfo * o, const SourceInfo * n) : orig(o), new_(n) {}
+//   const SourceInfo * operator() (const SourceInfo * o) {
+//     if (o == orig) return new_;
+//     else return o;
+//   }
+// };
+
 class SyntaxSourceInfo : public SourceInfo {
 public:
   //const MacroSymbol * macro;
   const Syntax * syntax;
-  SyntaxSourceInfo(const Syntax * s) : syntax(s) {}
-  const SourceFile * file() const {return syntax->str().source ? syntax->str().source->file() : NULL;}
+  SyntaxSourceInfo(const Syntax * s) : SourceInfo(s->str().source), syntax(s) {}
+  SyntaxSourceInfo(const SourceInfo * p, const Syntax * s) : SourceInfo(p), syntax(s) {}
   const SourceInfo * block() const {return this;}
-  const SourceInfo * parent() const {return syntax->str().source;}
+  const SourceInfo * clone_until(const SourceInfo * stop, 
+                                 const SourceInfo * new_parent) const;
   void dump_info(OStream &, const char * prefix) const;
 };
 

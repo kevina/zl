@@ -66,9 +66,9 @@ void Syntax::sample_w_loc(OStream & o, unsigned max_len) const {
     o.printf("a %s", ~what_);
 }
 
-String Syntax::sample_w_loc() const {
+String Syntax::sample_w_loc(unsigned max_len) const {
   StringBuf buf;
-  sample_w_loc(buf);
+  sample_w_loc(buf, max_len);
   return buf.freeze();
 }
 
@@ -128,6 +128,7 @@ String Error::message() {
   res += "\n";
   if (source)
     source->dump_info(res, "  ");
+  res += extra;
   return res.freeze();
 }
 

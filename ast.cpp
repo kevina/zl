@@ -1140,7 +1140,8 @@ namespace ast {
     Assign() : BinOp("assign", "=") {}
     void resolve(Environ & env) {
       //printf("RESOLVE ASSIGN:: %p %s\n", lhs, ~parse_->to_string());
-      //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->to_string());
+      printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->to_string());
+      printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->sample_w_loc(60));
       if (!lhs->lvalue)
         throw error(lhs->parse_, "Can not be used as lvalue");
       //throw error(parse_->arg(1), "Can not be used as lvalue");

@@ -71,3 +71,7 @@
 (make_inner_ns internal)
 (make_inner_ns non_virtual)
 
+#(map h (x_h) () (times (literal 2) (mid x_h)))
+#(map g (x_g y_g) () (plus (mid x_g) (mid y_g)))
+#(map f (x_f) () (call (id g) (list (mid x_f) (literal 4))))
+
