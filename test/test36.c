@@ -1,12 +1,11 @@
 
 Syntax * map(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, syntax (name, parms, free, repl), syn);
+  Match * m = match_args(0, syntax (name, parms, repl), syn);
   Syntax * res = replace(syntax {
       Syntax * name(Syntax * syn, Environ * env) {
         Mark * mark = new_mark();
         Match * m = match_args(0, syntax parms, syn);
-        m = match(m, syntax free, replace_context(syntax free, get_context(syn)));
         Syntax * res = replace(syntax repl, m, mark);
         return res;
       }

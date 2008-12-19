@@ -436,18 +436,21 @@ struct Map : public MacroSymbol {
     env = e.symbols.front;
     //entity = p->str().source;
     def = parse = p;
-    assert_num_args(p, 4);
+    assert_num_args(p, 3);
     name = expand_binding(p->arg(0), e);
     parms = flatten(p->arg(1));
-    free = p->arg(2);
-    ChangeSrc<SyntaxSourceInfo> cs(p->arg(3));
-    repl = new Syntax(cs,*p->arg(3));
+    free = p->flag("free");
+    if (free)
+      free = free->arg(0);
+    ChangeSrc<SyntaxSourceInfo> cs(p->arg(2));
+    repl = new Syntax(cs,*p->arg(2));
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ &) const {
     printf("EXPANDING MAP %s\n", ~name);
     Match * m = match_args(NULL, parms, p);
-    m = match(m, free, replace_context(free, get_context(p)));
+    if (free)
+      m = match(m, free, replace_context(free, get_context(p)));
     const Syntax * res = replace(repl, m, new Mark(env));
     printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
     printf("  %s\n", ~res->sample_w_loc());

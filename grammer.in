@@ -45,7 +45,7 @@ CASE_LABEL =
 CASE_EXP = <exp> (!":" {TOKEN})+;
 
 MAP =
-  <map> "map" {ID} "(" {MATCH_LIST} ")" (":" "(" {ID_LIST} ")" / <>) {BRACE} ;
+  <map> "map" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE} ;
 
 MACRO  =
     <macro> "macro" {ID} {ID}? ";"
