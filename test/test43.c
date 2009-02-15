@@ -4,7 +4,7 @@ struct Foo {
 
 module Foo {
   export x;
-  map x(:this this = this) {(*this)..x;}
+  macro x(:this this = this) {(*this)..x;}
 }
 
 make_user_type Foo;

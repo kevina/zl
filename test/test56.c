@@ -15,7 +15,7 @@ Syntax * add_namespace(Syntax * syn, Environ * env) {
   return l;
 }
 
-macro add_namespace;
+make_macro add_namespace;
 
 add_namespace(myns, int x;, int f() {return 0;});
 

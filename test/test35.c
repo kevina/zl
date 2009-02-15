@@ -1,5 +1,5 @@
 
-map try_forever(c,g) {
+macro try_forever(c,g) {
  label:
   if (c) goto g;
   else goto label;

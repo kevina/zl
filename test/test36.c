@@ -1,5 +1,5 @@
 
-Syntax * map(Syntax * syn, Environ * env) {
+Syntax * macro(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_args(0, syntax (name, parms, repl), syn);
   Syntax * res = replace(syntax {
@@ -9,15 +9,15 @@ Syntax * map(Syntax * syn, Environ * env) {
         Syntax * res = replace(syntax repl, m, mark);
         return res;
       }
-      macro name;
+      make_macro name;
     }, m, mark);
 }
 
-syntax_macro map;
+make_syntax_macro macro;
 
 int y = 30;
 
-map foo (v,z) {
+macro foo (v,z) {
   int x = v + y; 
   z = x * x;
 }
@@ -41,7 +41,7 @@ Syntax * foo2(Syntax * syn, Environ * env) {
   return res;
 }
 
-macro foo2;
+make_macro foo2;
 
 int main() {
   int x,y,z;

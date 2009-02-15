@@ -3,7 +3,7 @@ int f1(int);
 int f2(int, int);
 int f3(int, int, int);
 
-map mycall (fun, @parms) {
+macro mycall (fun, @parms) {
   fun(1, parms);
 }
 

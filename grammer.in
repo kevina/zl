@@ -23,7 +23,7 @@ STMT : "statement" =
     / <local_label> "__label__" {ID} ";"
     / <goto>     "goto" (<id> {ID}) ";"
     / {BLOCK}
-    / {MAP} / {MACRO}
+    / {MACRO} / {MAKE_MACRO}
     / {MODULE} / {IMPORT}
     / <fluid_binding> "fluid_binding" {ID} ";"
     / <fluid_label>   "fluid_label"   {ID} ";"
@@ -44,12 +44,12 @@ CASE_LABEL =
 
 CASE_EXP = <exp> (!":" {TOKEN})+;
 
-MAP =
-  <map> "map" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE} ;
+MACRO =
+  <macro> "macro" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE} ;
 
-MACRO  =
-    <macro> "macro" {ID} {ID}? ";"
-  / <syntax_macro> "syntax_macro" {ID} {ID}? ";";
+MAKE_MACRO  =
+    <make_macro> "make_macro" {ID} {ID}? ";"
+  / <make_syntax_macro> "make_syntax_macro" {ID} {ID}? ";";
 
 MODULE = 
     <%> {"module"/"user_type"} {ID} ({<{...}> "{" {STMT}* "}" } / ";");

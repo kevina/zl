@@ -1,5 +1,5 @@
 
-map gen(f1, f2) : (S, init_s) {
+macro gen(f1, f2) : (S, init_s) {
   struct S {
     int priv;
     int f1;

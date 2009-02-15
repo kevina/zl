@@ -1,5 +1,5 @@
 
-map gen(m1, m2) : (S, init_s, use_s, foo) {
+macro gen(m1, m2) : (S, init_s, use_s, foo) {
   struct S {
     int m1;
     int m2;
@@ -13,12 +13,12 @@ map gen(m1, m2) : (S, init_s, use_s, foo) {
   void use_s(struct S s) {
     s.m1 + s.m2 + s.priv;
   }
-  map foo(p) {
+  macro foo(p) {
     p.mine + p.priv;
   }
 }
 
-map foo2(p) {
+macro foo2(p) {
   p.mine + p.priv;
 }
 

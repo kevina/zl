@@ -4,7 +4,7 @@ module N {
   int z = 20;
 }
 
-map foo(var) {
+macro foo(var) {
   module M {
     export var, priv;
     int var = 20;

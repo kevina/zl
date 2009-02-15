@@ -1,13 +1,13 @@
 
-map foo1(:p p = 20) {
+macro foo1(:p p = 20) {
   p;
 }
 
-map foo2(p = 20) {
+macro foo2(p = 20) {
   p;
 }
 
-map foo3(q, p = 20) {
+macro foo3(q, p = 20) {
   q + p;
 }
 

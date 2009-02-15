@@ -1,7 +1,7 @@
 
 int x = 10;
 
-map foo (v) {
+macro foo (v) {
   v = x;
 }
 

@@ -1,26 +1,26 @@
-(smap fluid_label (ID)
+(smacro fluid_label (ID)
       (fluid_binding (w/inner (mid ID) label)))
 
-(smap fluid_syntax (ID)
+(smacro fluid_syntax (ID)
       (fluid_binding (w/inner (mid ID) syntax)))
 
 (fluid_binding this)
 (fluid_label continue)
 
-(smap while (TEST BODY)
+(smacro while (TEST BODY)
      (loop (block 
              (local_label (fluid continue))
              (lstmt continue
                (if (mid TEST) (noop) (break)))
              (mid BODY))))
 
-(smap do (BODY TEST)
+(smacro do (BODY TEST)
      (loop (block 
              (local_label (fluid continue))
              (mid BODY)
              (lstmt continue (mid TEST) (noop) (break)))))
 
-(smap for (INIT TEST POST BODY)
+(smacro for (INIT TEST POST BODY)
       (block 
                (mid INIT)
                (loop (block
@@ -30,40 +30,40 @@
                  (lstmt continue
                    (mid POST))))))
 
-(smap continue ()
+(smacro continue ()
        (goto (id continue)))
 
-#(smap "()" (...)
+#(smacro "()" (...)
 #    (exp ...))
 
-#(smap "{}" (...)
+#(smacro "{}" (...)
 #    (block ...))
 
-(map m (x y)
+(macro m (x y)
  (call f (list (mid x) (mid y))))
 
-(smap or (x y)
+(smacro or (x y)
     (eif (mid x) (literal 1) (mid y)))
 
-(smap and (x y)
+(smacro and (x y)
     (eif (mid x) (mid y) (literal 0)))
 
-(smap ? (test (pattern (":" if_true if_false)))
+(smacro ? (test (pattern (":" if_true if_false)))
     (eif (mid test) (mid if_true) (mid if_false)))
 
-(smap -> (exp id)
+(smacro -> (exp id)
     (member (deref (mid exp)) (mid id)))
 
-(smap ".[]" (x y)
+(smacro ".[]" (x y)
     (deref (plus (mid x) (mid y))))
 
-(smap preinc (x)
+(smacro preinc (x)
     (plus_eq (mid x) (literal 1)))
 
-(smap predec (x)
+(smacro predec (x)
     (minus_eq (mid x) (literal 1)))
 
-#(smap postinc (x)
+#(smacro postinc (x)
 #    (block (stmt (id int) (id `x) (sym =) (id x))
 #           (stmt (sym ++) (id x))
 #           (stmt (id `x))))
@@ -71,7 +71,7 @@
 (make_inner_ns internal)
 (make_inner_ns non_virtual)
 
-#(map h (x_h) () (times (literal 2) (mid x_h)))
-#(map g (x_g y_g) () (plus (mid x_g) (mid y_g)))
-#(map f (x_f) () (call (id g) (list (mid x_f) (literal 4))))
+#(macro h (x_h) () (times (literal 2) (mid x_h)))
+#(macro g (x_g y_g) () (plus (mid x_g) (mid y_g)))
+#(macro f (x_f) () (call (id g) (list (mid x_f) (literal 4))))
 

@@ -2903,10 +2903,10 @@ namespace ast {
     if (what == "enum")    return (new Enum)->parse_self(p, env);
     if (what == "talias")  return (new TypeAlias)->parse_self(p, env);
     if (what == "local_label") return (new LocalLabelDecl)->parse_self(p, env);
-    if (what == "map")     return parse_map(p, env);
-    if (what == "smap")    return parse_map(p, env);
-    if (what == "macro")         return parse_macro(p, env);
-    if (what == "syntax_macro")  return parse_macro(p, env);
+    if (what == "macro")   return parse_map(p, env);
+    if (what == "smacro")  return parse_map(p, env);
+    if (what == "make_macro")         return parse_macro(p, env);
+    if (what == "make_syntax_macro")  return parse_macro(p, env);
     if (what == "fluid_binding") return parse_fluid_binding(p, env);
     if (what == "module")        return parse_module(p, env);
     if (what == "import")        return parse_import(p, env);

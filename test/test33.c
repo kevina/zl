@@ -1,5 +1,5 @@
 
-map gen(z) : (f) {
+macro gen(z) : (f) {
   enum E {X, Y, z};
   enum E foo() {
     return X + Y + z;

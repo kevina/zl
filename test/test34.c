@@ -1,5 +1,5 @@
 
-map gen(y) {
+macro gen(y) {
   typedef int X;
   typedef int y;
 }

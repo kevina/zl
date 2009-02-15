@@ -5,7 +5,7 @@
 typedef typedef struct _IO_FILE FILE;
 int printf (const char *, ...);
 int snprintf(const char * str, unsigned long size, const char * format, ...);
-map NULL() {0;}
+macro NULL() {0;}
 typedef int bool;
 int strcmp(const char *s1, const char *s2);
 
@@ -17,8 +17,8 @@ typedef struct EnvironSnapshot EnvironSnapshot;
 
 typedef struct Mark Mark;
 __ct_callback Mark * new_mark_f(EnvironSnapshot *);
-map new_mark() {new_mark_f(environ_snapshot());}
-map new_empty_mark() {new_mark_f(0);}
+macro new_mark() {new_mark_f(environ_snapshot());}
+macro new_empty_mark() {new_mark_f(0);}
 
 struct UnmarkedSyntax {};
 user_type UnmarkedSyntax {
@@ -30,10 +30,10 @@ __ct_callback Syntax * syntax_flag(Syntax *, UnmarkedSyntax *);
 struct Syntax {};
 user_type Syntax {
   finalize_user_type struct Syntax;
-  map to_unmarked (x) {(UnmarkedSyntax *)x;}
+  macro to_unmarked (x) {(UnmarkedSyntax *)x;}
   make_subtype UnmarkedSyntax to_unmarked;
   export flag;
-  map flag(str, :this this) {syntax_flag(this, str);}
+  macro flag(str, :this this) {syntax_flag(this, str);}
 }
 
 user_type SyntaxList;
@@ -43,11 +43,11 @@ __ct_callback void syntax_list_append(SyntaxList *, Syntax *);
 struct SyntaxList {};
 user_type SyntaxList {
   finalize_user_type struct SyntaxList;
-  map to_syntax (x) {(Syntax *)x;}
+  macro to_syntax (x) {(Syntax *)x;}
   make_subtype Syntax to_syntax;
   export empty, append;
-  map empty(:this this) {syntax_list_empty(this);}
-  map append(syn, :this this) {syntax_list_append(this, syn);}
+  macro empty(:this this) {syntax_list_empty(this);}
+  macro append(syn, :this this) {syntax_list_append(this, syn);}
 }
 
 user_type SyntaxEnum;
@@ -56,7 +56,7 @@ struct SyntaxEnum {};
 user_type SyntaxEnum {
   finalize_user_type struct SyntaxEnum;
   export next;
-  map next(:this this) {syntax_enum_next(this);}
+  macro next(:this this) {syntax_enum_next(this);}
 }
 
 user_type Match;
@@ -69,8 +69,8 @@ struct Match {};
 user_type Match {
   finalize_user_type struct Match;
   export var, varl;
-  map var(str, :this this) {match_var(this, str);}
-  map varl(str, :this this) {match_varl(this, str);}
+  macro var(str, :this this) {match_var(this, str);}
+  macro varl(str, :this this) {match_varl(this, str);}
 }
 
 __ct_callback Syntax * replace(UnmarkedSyntax *, Match *, Mark *);
@@ -103,22 +103,22 @@ struct UserTypeInfo {};
 user_type UserTypeInfo {
   finalize_user_type struct UserTypeInfo;
   export module;
-  map module(:this this) {user_type_module(this);}
+  macro module(:this this) {user_type_module(this);}
 }
 
 struct ModuleInfo {};
 user_type ModuleInfo {
   finalize_user_type struct ModuleInfo; 
   export symbols, have_symbol;
-  map symbols(:this this) {module_symbols(this);}
-  map have_symbol(sym, :this this) {module_have_symbol(this, sym);}
+  macro symbols(:this this) {module_symbols(this);}
+  macro have_symbol(sym, :this this) {module_have_symbol(this, sym);}
 }
 
 //
 //
 //
 
-map class_cast_up (child) {
+macro class_cast_up (child) {
   &(*child)..parent;
 }
 
@@ -237,7 +237,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if (parent_vtable) {
       // fixme "parent_n *" cast should be an icast
       module_b->append(replace(
-                         syntax {map _vptr (:this this = this) {(_VTable *)&(((parent_n *)this)->_vptr);}},
+                         syntax {macro _vptr (:this this = this) {(_VTable *)&(((parent_n *)this)->_vptr);}},
                          m, mark));
     } else {
       // have to use raw_syntax here becuase _VTable is not defined
@@ -300,11 +300,11 @@ void parse_class_var(Syntax * p, Match * m, Mark * mark,
   // FIXME: handle flags
   if (is_static) {
     module_b->append(replace(raw_syntax(var (w/inner (mid n) internal) (mid rest)), m, mark));
-    module_b->append(replace(syntax {map n () {n`internal;}}, m, mark));
+    module_b->append(replace(syntax {macro n () {n`internal;}}, m, mark));
   } else {
     struct_b->append(p);
     // FIXME: "name *" should be an icast
-    module_b->append(replace(syntax {map n (:this this = this) {(*(name *)this)..n;}}, m, mark));
+    module_b->append(replace(syntax {macro n (:this this = this) {(*(name *)this)..n;}}, m, mark));
   }
 }
 
@@ -355,12 +355,12 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
 
   module_b->append(replace(raw_syntax (fun (w/inner (mid n) internal) (.tuple (mid $1)) (mid ret) (mid body)),
                            match_local(m, new_parms, 0), mark));
-  module_b->append(replace(syntax {map nv ($1) {n`internal($2);}},
+  module_b->append(replace(syntax {macro nv ($1) {n`internal($2);}},
                            match_local(m, macro_parms, call_parms, 0), mark));
 
   if (is_virtual) {
     module_b->append(replace(
-                       syntax {map n ($1) {(this->_vptr->n)($2);}},
+                       syntax {macro n ($1) {(this->_vptr->n)($2);}},
                        match_local(m, macro_parms, call_parms, 0),
                        mark));
     m = match(m, syntax pfun, 
@@ -373,6 +373,6 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
   }
 }
 
-syntax_macro class parse_class;
+make_syntax_macro class parse_class;
 
 

@@ -1,9 +1,9 @@
 
 int x = 10;
 
-map gen() : (foo) {
+macro gen() : (foo) {
   int y = x;
-  map foo (v) {
+  macro foo (v) {
     v = x + y;
   }
 }

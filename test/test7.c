@@ -1,25 +1,25 @@
 
-map times2 (x) {
+macro times2 (x) {
   x *= 2;
 }
 
-map stmts (x, y) {{
+macro stmts (x, y) {{
   x *= 20;
   y *= 30;
 }}
 
-map decl0 (t, v) {
+macro decl0 (t, v) {
   t z = 0;
   z = 20;
   t v = z;
 }
 
-map loop (body) {
+macro loop (body) {
   for (;;) body;
 }
 
-map make_macro (name, op) {
-  map name (x) {
+macro make_macro (name, op) {
+  macro name (x) {
     x op x;
   }
 }

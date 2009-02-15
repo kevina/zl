@@ -424,14 +424,14 @@ struct MacroSymbol : public Symbol {
 const Syntax * MacroSymbol::macro_call = NULL;
 const Syntax * MacroSymbol::macro_def = NULL;
 
-struct Map : public MacroSymbol {
+struct SimpleMacro : public MacroSymbol {
   //const SourceFile * entity;
   const Syntax * parse;
   const Syntax * parms;
   const Syntax * free;
   const Syntax * repl;
   const SymbolNode * env;
-  Map * parse_self(const Syntax * p, Environ & e) {
+  SimpleMacro * parse_self(const Syntax * p, Environ & e) {
     printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what(), ~p->to_string());
     env = e.symbols.front;
     //entity = p->str().source;
@@ -1151,9 +1151,9 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
 
 AST * parse_map(const Syntax * p, Environ & env) {
   //printf("MAP>>%s\n", ~p->to_string());
-  Map * m = new Map;
+  SimpleMacro * m = new SimpleMacro;
   m->parse_self(p, env);
-  if (p->is_a("smap"))
+  if (p->is_a("smacro"))
     env.add(SymbolKey(m->name, SYNTAX_NS), m);
   else
     env.add(m->name, m);
@@ -1163,7 +1163,7 @@ AST * parse_map(const Syntax * p, Environ & env) {
 AST * parse_macro(const Syntax * p, Environ & env) {
   Macro * m = new Macro;
   m->parse_self(p, env);
-  if (p->is_a("syntax_macro"))
+  if (p->is_a("make_syntax_macro"))
     env.add(SymbolKey(m->name, SYNTAX_NS), m);
   else
     env.add(m->name, m);

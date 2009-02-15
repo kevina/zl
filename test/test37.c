@@ -1,19 +1,19 @@
 
 fluid_binding z;
 
-map f(body) {
+macro f(body) {
   int fluid z = 20;
   body;
 }
 
 /*
-map f(body) : (z) {
+macro f(body) : (z) {
   int z = 20;
   body;
 }
 */
 
-map g(body) {
+macro g(body) {
   f({
       z = 40;
       body;
