@@ -237,7 +237,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if (parent_vtable) {
       // fixme "parent_n *" cast should be an icast
       module_b->append(replace(
-                         syntax {macro _vptr (:this this = this) {(_VTable *)&(((parent_n *)this)->_vptr);}},
+                         syntax {macro _vptr (:this this = this) {*(_VTable * *)&(((parent_n *)this)->_vptr);}},
                          m, mark));
     } else {
       // have to use raw_syntax here becuase _VTable is not defined
