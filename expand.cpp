@@ -10,6 +10,8 @@
 #include "parse_op.hpp"
 #include "parse_decl.hpp"
 
+#include "hash-t.hpp"
+
 // 
 //   EXP
 //   DECL
@@ -28,32 +30,6 @@
 //   (union ID [BODY])
 
 //
-//
-//
-
-template <typename T>
-Syntax::Syntax(ChangeSrc<T> & f, const Syntax & other)
-  : what_(other.what_), 
-    str_(f(other.str_.source), other.str_), 
-    d(other.d ? new D(f, *other.d) : 0), 
-    repl(other.repl), 
-    entity_(other.entity_) {}
-
-template <typename T>
-Parts::Parts(ChangeSrc<T> & f, const Parts & o) {
-  reserve(o.size());
-  for (const_iterator i = o.begin(), e = o.end(); i != e; ++i)
-    push_back(new Syntax(f, **i));
-}
-
-template <typename T>
-Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
-  data.reserve(o.size());
-  for (const_iterator i = o.begin(), e = o.end(); i != e; ++i)
-    data.push_back(new Syntax(f, **i));
-}
-
-//
 // 
 //
 
@@ -67,19 +43,31 @@ public:
                                          const SourceInfo * new_parent) const {
     return new SplitSourceInfo(parent->clone_until(stop, new_parent), source);
   }
-  void dump_info(OStream & o, const char * prefix="") const {
+  bool dump_info_self(OStream & o) const {abort();}
+  void dump_info(OStream & o, AlreadySeen & as, const char * prefix) const {
     //o.printf("%sSPLIT SOURCE %p %p\n", prefix, prefix, source);
-    if (source) {
+    bool seen_self = as.have(this);
+    as.insert(this);
+    StringBuf buf;
+    if (parent)
+      parent->dump_info(buf, as, prefix);
+    if (!seen_self && source) {
+      AlreadySeen as2(as);
       StringBuf new_prefix = prefix;
       new_prefix += ". ";
-      source->dump_info(o, new_prefix.freeze());
+      source->dump_info(o, as2, new_prefix.freeze());
     }
-    parent->dump_info(o, prefix);
+    o << buf.freeze();
   }
 };
 
+struct ChangeSrcBase {
+  virtual const SourceInfo * operator() (const SourceInfo * o) = 0;
+  virtual ~ChangeSrcBase() {}
+};
+
 template <>
-struct ChangeSrc<SplitSourceInfo> {
+struct ChangeSrc<SplitSourceInfo> : public ChangeSrcBase {
   struct CacheItem {
     const SourceInfo * key;
     const SourceInfo * value;
@@ -90,6 +78,9 @@ struct ChangeSrc<SplitSourceInfo> {
   ChangeSrc(const Syntax * o, const SourceInfo * n) 
     : outer(o), new_(n) {cache.reserve(2);}
   const SourceInfo * operator() (const SourceInfo * o) {
+    //printf("CHANGE SPLIT SRC\n");
+    //if (o)
+    //  o->dump_info(COUT, "   in>");
     for (Vector<CacheItem>::const_iterator i = cache.begin(), e = cache.end(); i != e; ++i) {
       if (i->key == o) return i->value;
     }
@@ -103,6 +94,7 @@ struct ChangeSrc<SplitSourceInfo> {
     else
       n.value = o->clone_until(ip, new SplitSourceInfo(new_,ip->parent));
     cache.push_back(n);
+    //n.value->dump_info(COUT, "  out>");
     return n.value;
   }
 };
@@ -122,13 +114,12 @@ public:
                                  const SourceInfo * new_parent) const {
     return new ReplaceSourceInfo(parent->clone_until(stop, new_parent), mid);
   }
-  void dump_info(OStream &, const char * prefix) const;
+  bool dump_info_self(OStream &) const;
   //ReplaceSourceInfo(const SourceInfo * s, const Syntax * m, const Syntax * r, const Syntax * c)
   //  : source(s), mid(m), repl(r), call(c) {}
 };
 
-void ReplaceSourceInfo::dump_info(OStream & o, const char * prefix) const {
-  o << prefix;
+bool ReplaceSourceInfo::dump_info_self(OStream & o) const {
   o << "when replacing ";
   mid->sample_w_loc(o);
   //o << " with ";
@@ -136,9 +127,7 @@ void ReplaceSourceInfo::dump_info(OStream & o, const char * prefix) const {
   //o.printf("/%s/ ", ~sample(repl->to_string(), 40));
   //o << ", in expansion of ";
   //call->sample_w_loc(o);
-  o << "\n";
-
-  parent->dump_info(o, prefix);
+  return true;
 }
 
 //
@@ -151,13 +140,10 @@ const SourceInfo * SyntaxSourceInfo::clone_until(const SourceInfo * stop,
   return new SyntaxSourceInfo(parent->clone_until(stop, new_parent), syntax);
 }
 
-void SyntaxSourceInfo::dump_info(OStream & o, const char * prefix) const {
-  o << prefix;
-  o << "in syntax ";
-  syntax->sample_w_loc(o);
-  o << "\n";
-  if (parent)
-    parent->dump_info(o, prefix);
+bool SyntaxSourceInfo::dump_info_self(OStream & o) const {
+  return false;
+  //o << "in syntax ";
+  //syntax->sample_w_loc(o);
 }
 
 //
@@ -193,21 +179,18 @@ public:
     return new ExpandSourceInfo(new_parent, call, def, outer_ip);
   }
 
-  void dump_info(OStream &, const char * prefix) const;
+  bool dump_info_self(OStream &) const;
 };
 
-void ExpandSourceInfo::dump_info(OStream & o, const char * prefix) const {
+bool ExpandSourceInfo::dump_info_self(OStream & o) const {
   if (call) {
-    o << prefix;
+    //o.printf("(%p) ", this);
     o << "in expansion of ";
     call->sample_w_loc(o);
-    o << "\n";
   } else {
-    o << prefix;
     o << "in expansion of <unknown>\n";
   }
-  if (parent)
-    parent->dump_info(o, prefix);
+  return true;
 }
 
 //
@@ -248,6 +231,7 @@ struct ReplTable : public gc_cleanup {
   const ast::Mark * mark;
   ExpandSourceInfo * expand_si;
   ChangeSrc<SplitSourceInfo> ci;
+  const SourceInfo * outer_si;
   const SourceInfo * expand_source_info(const SourceInfo * s) {
     return ci(s);
   }
@@ -272,7 +256,7 @@ struct ReplTable : public gc_cleanup {
     o.printf("}");
   }
   ReplTable(const ast::Mark * m, ExpandSourceInfo * e)
-    : mark(m), expand_si(e), ci(NULL, e) {}
+    : mark(m), expand_si(e), ci(NULL, e), outer_si(NULL) {}
 };
 
 //
@@ -295,7 +279,7 @@ void Replacements::to_string(OStream & o, PrintFlags f) const {
 //
 
 template <>
-struct ChangeSrc<ExpandSourceInfo> {
+struct ChangeSrc<ExpandSourceInfo> : public ChangeSrcBase {
   ReplTable * r;
   ChangeSrc(ReplTable * r0) : r(r0) {}
   const SourceInfo * operator() (const SourceInfo * o) {
@@ -756,6 +740,7 @@ const Syntax * reparse(String what, const Syntax * p, ReplTable * r, const Repla
   //res = new Syntax(new ReparseAnnon(p, what), res);
   printf("PARSED STRING %s\n", ~res->to_string());
   if (repls) {
+    printf("# repls = %d\n", repls->size());
     for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
          i != e; ++i) 
     {
@@ -862,14 +847,39 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     return res;
   } else {
     printf(">>%s %s\n", ~mid->sample_w_loc(), ~repl->sample_w_loc());
-    //mid->str().source->dump_info(COUT, "  mid> ");
-    r->expand_si->dump_info(COUT, "  exp> ");
+    mid->str().source->dump_info(COUT, "  mid> ");
+    if (mid->repl) {
+      printf("<mid>");
+      mid->repl->to_string(COUT, PrintFlags());
+      printf("\n");
+    }
+    //repl->str().source->dump_info(COUT, " orep> ");
+    //r->expand_si->dump_info(COUT, "  exp> ");
+    printf("<  r>");
+    r->to_string(COUT, PrintFlags());
+    printf("\n");
 
-    ChangeSrc<SplitSourceInfo> cs(repl, new ReplaceSourceInfo(r->expand_si,mid));
+    ChangeSrc<SplitSourceInfo> cs(repl, r->outer_si ? r->outer_si : new ReplaceSourceInfo(r->expand_si,mid));
+    //ChangeSrc<void> cs;
     //ChangeSrc<SplitSourceInfo> cs(repl, new ReplaceSourceInfo(r->expand_si->clone(new SplitSourceInfo(mid->str().source, r->expand_si->parent)),mid));
-    repl = new Syntax(cs, *repl);
 
+    const Syntax * orig_repl = repl;
+    repl = new Syntax(cs, *repl);
     cs.new_->dump_info(COUT, "  new> ");
+
+//     if (rs) {
+//       printf("RSRSRSRSRS\n");
+//       for (Replacements::const_iterator i = rs->begin(), e = rs->end(); 
+//            i != e; ++i) 
+//       {
+//         for (ReplTable::Table::iterator j = (*i)->table.begin(), e = (*i)->table.end();
+//              j != e; ++j)
+//         {
+//           printf("<><>%s\n", ~j->first.to_string());
+//           j->second = new Syntax(cs, *j->second);
+//         }
+//       }
+//     }
 
     printf(">>> %s %s\n", ~repl->sample_w_loc(), ~repl->to_string());
     repl->str().source->dump_info(COUT, "  rep> ");
@@ -885,7 +895,17 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
         printf("REPL SIMPLE RES %s %s\n", ~mid->to_string(), ~repl->to_string());
       } else if (repl->is_a("parm") || repl->is_a("()")) {
         printf("REPL REPARSE %s %s %s\n", ~mid->to_string(), ~repl->sample_w_loc(), ~repl->to_string());
+        if (repl->arg(0)->repl) {
+          for (Replacements::const_iterator i = repl->arg(0)->repl->begin(), e = repl->arg(0)->repl->end(); 
+               i != e; ++i) 
+          {
+            // FIXME: This seams like the correct thing to do,
+            //        however, I have no idea if it is.....
+            (*i)->outer_si = cs.new_;
+          }
+        }
         repl = reparse(what, repl->arg(0), NULL, rs);
+        printf("repl reparse %s %s %s\n", ~mid->to_string(), ~repl->sample_w_loc(), ~repl->to_string());
       } else {
         printf("REPL OTHER %s %s\n", ~mid->to_string(), ~repl->to_string());
       }
@@ -1309,4 +1329,45 @@ bool module_have_symbol(const ModuleInfo * m, const Syntax * s) {
   return find_symbol<Symbol>(s, DEFAULT_NS, m->syms);
 }
 
+
+//
+//
+//
+
+template <typename T>
+Syntax::Syntax(ChangeSrc<T> & f, const Syntax & other)
+  : what_(other.what_), 
+    str_(f(other.str_.source), other.str_), 
+    d(other.d ? new D(f, *other.d) : 0), 
+    entity_(other.entity_) 
+{
+  if (other.repl) {
+    repl = new Replacements(*other.repl);
+    for (Replacements::const_iterator i = repl->begin(), e = repl->end(); 
+         i != e; ++i) 
+    {
+      for (ReplTable::Table::iterator j = (*i)->table.begin(), e = (*i)->table.end();
+           j != e; ++j)
+      {
+        //j->second = new Syntax(f, *j->second);
+      }
+    }
+  } else {
+    repl = NULL;
+  }
+}
+
+template <typename T>
+Parts::Parts(ChangeSrc<T> & f, const Parts & o) {
+  reserve(o.size());
+  for (const_iterator i = o.begin(), e = o.end(); i != e; ++i)
+    push_back(new Syntax(f, **i));
+}
+
+template <typename T>
+Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
+  data.reserve(o.size());
+  for (const_iterator i = o.begin(), e = o.end(); i != e; ++i)
+    data.push_back(new Syntax(f, **i));
+}
 

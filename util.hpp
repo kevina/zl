@@ -8,6 +8,7 @@
 #include "vector.hpp"
 #include "parm_string.hpp"
 
+#include "hash.hpp"
 #include "iostream.hpp"
 
 struct StringObj {
@@ -128,7 +129,7 @@ struct Syntax;
 //
 // A SourceInfo "block" is part of a "file".  The syntax inside a
 // macro call or syntax primitive is its own block.  If a piece
-// of syntax contains two parts from the same block the the SourceStr
+// of syntax contains two parts from the same block then the SourceStr
 // for that syntax is considered the "bounding box" of its parts.
 //
 class SourceInfo : public gc_cleanup {
@@ -150,7 +151,10 @@ public:
   //   as stop then when cloning set the parent to new_parent
   virtual const SourceInfo * clone_until(const SourceInfo * stop, 
                                          const SourceInfo * new_parent) const {abort();}
-  virtual void dump_info(OStream &, const char * prefix="") const = 0;
+  typedef hash_set<const SourceInfo *> AlreadySeen;
+  virtual bool dump_info_self(OStream &) const = 0;
+  virtual void dump_info(OStream & o, AlreadySeen & as, const char * prefix) const;
+  void dump_info(OStream & o, const char * prefix="") const;
   virtual ~SourceInfo() {}
 };
 
@@ -174,7 +178,7 @@ public:
   ~SourceFile() {if (data_) free(data_);}
   const SourceFile * file() const {return this;}
   const SourceInfo * block() const {return this;}
-  void dump_info(OStream & o, const char * prefix) const;
+  bool dump_info_self(OStream & o) const;
 private:
   void read(String file);
   void read(int fd);

@@ -1,0 +1,13 @@
+
+macro f(x_f) {
+  x_f * 2;
+}
+
+macro g(x_g) {
+  2 + f(x_g);
+}
+
+int main() {
+    g(i);
+}
+

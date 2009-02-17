@@ -201,11 +201,13 @@ void Flags::to_string(OStream & o, PrintFlags f) const {
   }
 }
 
-void ParseSourceInfo::dump_info(OStream & o, const char * prefix) const {
+bool ParseSourceInfo::dump_info_self(OStream & o) const {
   o << "  when parsing ";
   str.sample_w_loc(o);
-  o << " as " << what << "\n";
-  str.source->dump_info(o, prefix);
+  o << " as " << what;
+  return true;
+  // FIXME: ... below, make parent
+  //str.source->dump_info(o, prefix); 
 }
 
 String escape(String n) {

@@ -75,3 +75,6 @@
 #(macro g (x_g y_g) () (plus (mid x_g) (mid y_g)))
 #(macro f (x_f) () (call (id g) (list (mid x_f) (literal 4))))
 
+#(macro f (x_f) (times (literal 2) (mid x_f)))
+#(macro g (x_g) (plus (literal 2) (call (id f) (list (mid x_g)))))
+

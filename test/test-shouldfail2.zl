@@ -1,0 +1,23 @@
+
+macro maker(d,f,g) {
+
+  macro d(x_d) {
+    x_d - 2;
+  }
+
+  macro f(x_f) {
+    d(x_f) * 2;
+  }
+
+  macro g(x_g) {
+    2 + f(x_g);
+  }
+
+}
+
+maker(dm,fm,gm);
+
+int main() {
+    gm(i);
+}
+

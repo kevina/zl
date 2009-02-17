@@ -113,7 +113,7 @@ public:
   const SourceInfo * block() const {return this;}
   const SourceInfo * clone_until(const SourceInfo * stop, 
                                  const SourceInfo * new_parent) const;
-  void dump_info(OStream &, const char * prefix) const;
+  bool dump_info_self(OStream &) const;
 };
 
 template <>

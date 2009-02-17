@@ -6,8 +6,31 @@
 
 #include "util.hpp"
 #include "iostream.hpp"
+#include "string_buf.hpp"
+#include "hash-t.hpp"
 
 #include <algorithm>
+
+void SourceInfo::dump_info(OStream & o, AlreadySeen & as, const char * prefix) const {
+  bool seen_self = as.have(this);
+  as.insert(this);
+  StringBuf buf;
+  bool dump_parents = dump_info_self(buf);
+  String str = buf.freeze();
+  if (!str.empty()) {
+    if (seen_self) 
+      o << prefix << "[" << str << "]\n";
+    else
+      o << prefix << str << "\n";
+  }
+  if (parent && !seen_self && dump_parents)
+    parent->dump_info(o, as, prefix);
+}
+
+void SourceInfo::dump_info(OStream & o, const char * prefix) const {
+  AlreadySeen as;
+  dump_info(o, as, prefix);
+}
 
 static inline StringObj * create_empty_string_obj() {
   StringObj * p = (StringObj *)malloc(sizeof(StringObj) + 1);
@@ -71,7 +94,8 @@ SourceFile * new_source_file(int fd) {
   return new SourceFile(fd);
 }
 
-void SourceFile::dump_info(OStream & o, const char * prefix) const {
+bool SourceFile::dump_info_self(OStream & o) const {
+  return false;
   //o.printf("%sin file %s\n", prefix, ~file_name_);
 }
 

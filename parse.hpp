@@ -495,7 +495,7 @@ struct ParseSourceInfo : public SourceInfo {
   String what;
   ParseSourceInfo(const SourceStr & s, String w) 
     : SourceInfo(s.source), str(s), what(w) {}
-  void dump_info(OStream &, const char * prefix) const;
+  bool dump_info_self(OStream &) const;
 };
 
 namespace ast {

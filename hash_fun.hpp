@@ -28,8 +28,8 @@
   template <> struct hash<unsigned int>   {unsigned long operator()(unsigned int   v) const {return v;}};
   template <> struct hash<unsigned long>  {unsigned long operator()(unsigned long  v) const {return v;}};
 
-  template <> struct hash<void *>   {
-    unsigned long operator()(const void * v) const {return (unsigned long)v;}
+  template <typename P> struct hash<P *>   {
+    unsigned long operator()(const P * v) const {return (unsigned long)v;}
   };
 
   template <> struct hash<const char *> {
