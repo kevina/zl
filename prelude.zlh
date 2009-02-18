@@ -169,6 +169,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   m = match(m, syntax _vtable, replace_context(syntax _vtable, context));
   m = match(m, syntax _vptr, replace_context(syntax _vptr, context));
   m = match(m, syntax _constructor, replace_context(syntax _constructor, context));
+  m = match(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
   
   if (parent) {
     parent_m = parent->module;
@@ -227,11 +228,21 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     // create static vtable obj
     // create init function
     //   and add init code
-    Syntax * init = replace(
-      syntax {__static_constructor void init() {$1;} },
+    module_b->append(replace(
+      syntax {void _vtable_init(_VTable * _vt) {$1;} },
       match_local(m, vtable_i, 0),
-      mark);
-    module_b->append(init);
+      mark));
+    exports->append(replace(syntax _vtable_init, m, mark));
+
+    if (parent_vtable) {
+      module_b->append(replace(
+                         syntax {__static_constructor void init() {parent_n::_vtable_init(&_vtable); _vtable_init(&_vtable);}},
+                         m, mark));
+    } else {
+      module_b->append(replace(
+                         syntax {__static_constructor void init() {_vtable_init(&_vtable);}},
+                         m, mark));
+    }
 
     //printf("Adding _vptr\n");
     if (parent_vtable) {
@@ -368,7 +379,7 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
     if (!(parent_vtable && parent_vtable->module->have_symbol(m->var(syntax n)))) {
       vtable_b->append(replace(raw_syntax (var (mid n) (mid pfun)), m, mark));
     }
-    vtable_i->append(replace(raw_syntax (assign (member (id (mid _vtable)) (id (mid n))) 
+    vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid n))) 
                                          (cast (mid pfun) (id (w/inner (mid n) internal)))), m, mark));
   }
 }

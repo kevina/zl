@@ -2243,9 +2243,13 @@ namespace ast {
       sym = const_cast<VarSymbol *>(env.symbols.find<VarSymbol>(name));
       tlsym = dynamic_cast<TopLevelSymbol *>(sym);
       f = const_cast<Fun *>(dynamic_cast<const Fun *>(tlsym->decl));
+      if (f->body) goto foo; // FIXME: This is a hack, to allow
+                             // functions to shadow an imported
+                             // function.
       if (p->num_args() > 3)
         f->parse_forward_i(p, env, collect);
     } else {
+    foo:
       f = new Fun;
       f->name = name;
       f->sym = sym = new_var_symbol(name, env.scope, f, env.where);
