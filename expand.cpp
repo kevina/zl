@@ -453,7 +453,7 @@ struct SimpleMacro : public MacroSymbol {
 
 struct Macro : public MacroSymbol {
   const Syntax * parse;
-  const VarSymbol * fun;
+  const TopLevelVarSymbol * fun;
   typedef const Syntax * (*MacroCall)(const Syntax *, Environ * env);
   Macro * parse_self(const Syntax * p, Environ & e) {
     //printf("PARSING MACRO %s\n", ~p->arg(0)->name);
@@ -462,14 +462,15 @@ struct Macro : public MacroSymbol {
     parse = p;
     assert_num_args(p, 1, 2);
     name = expand_binding(p->arg(0), e);
-    fun = e.symbols.lookup<VarSymbol>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
-    def = static_cast<const TopLevelVarSymbol *>(fun)->decl->parse_;
+    fun = e.symbols.lookup<TopLevelVarSymbol>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
+    dynamic_cast<const Fun *>(fun->decl)->is_macro = true;
+    def = fun->decl->parse_;
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ & env) const {
     if (!fun->ct_ptr) {
       Deps deps;
-      deps.push_back(static_cast<const TopLevelVarSymbol *>(fun));
+      deps.push_back(fun);
       compile_for_ct(deps, env);
       assert(fun->ct_ptr);
     }
@@ -1281,6 +1282,49 @@ void compile_for_ct(Deps & deps, Environ & env) {
       void * p = dlsym(lh, (*i)->uniq_name());
       //assert(p);
       (*i)->ct_ptr = p;
+      SymbolNode * env_ss = dynamic_cast<const Fun *>((*i)->decl)->env_ss;
+      if (env_ss) {
+        StringBuf buf;
+        buf.printf("%s$env_ss", ~(*i)->uniq_name());
+        void * p = dlsym(lh, ~buf.freeze());
+        *static_cast<void * *>(p) = env_ss;
+      }
+    }
+  }
+}
+
+struct Syntaxes {const char * str; const Syntax * syn;};
+
+void load_macro_lib(ParmString lib, Environ & env) {
+  void * lh = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
+  if (!lh) {
+    fprintf(stderr, "ERROR: %s\n", dlerror());
+    abort();
+  }
+  unsigned macro_funs_size = *(unsigned *)dlsym(lh, "_macro_funs_size");
+  if (macro_funs_size > 0) {
+    const char * * i = (const char * *)dlsym(lh, "_macro_funs");
+    const char * * e = i + macro_funs_size;
+    for (; i != e; ++i) {
+      const Syntax * name = parse_str("ID", SourceStr(*i, *i+strlen(*i)));
+      const TopLevelVarSymbol * sym = env.symbols.lookup<TopLevelVarSymbol>(name);
+      const Fun * fun = dynamic_cast<const Fun *>(sym->decl);
+      String uniq_name = sym->uniq_name();
+      if (fun->is_macro) {
+        sym->ct_ptr = dlsym(lh, ~uniq_name);
+      }
+      if (fun->env_ss) {
+        void * * p = (void * *)dlsym(lh, ~sbprintf("%s$env_ss", ~uniq_name));
+        *p = fun->env_ss;
+      }
+    }
+  }
+  unsigned syntaxes_size = *(unsigned *)dlsym(lh, "_syntaxes_size");
+  if (syntaxes_size > 0) {
+    Syntaxes * i = (Syntaxes *)dlsym(lh, "_syntaxes");
+    Syntaxes * e = i + syntaxes_size;
+    for (; i != e; ++i) {
+      i->syn = parse_syntax_c(parse_str("SYNTAX", SourceStr(i->str, i->str+strlen(i->str))));
     }
   }
 }

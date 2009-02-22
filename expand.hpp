@@ -93,6 +93,8 @@ String gen_sym();
 
 const Syntax * flatten(const Syntax * p);
 
+void load_macro_lib(ParmString lib, Environ & env);
+
 // template <>
 // struct ChangeSrc<SourceInfo> {
 //   const SourceInfo * orig;

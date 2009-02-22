@@ -10,3 +10,8 @@ zl_LDADD=
 #zl_LDADD+= -lgccpp
 zl_LDADD+= -ldl
 zl_LDFLAGS=-Wl,--export-dynamic,--version-script=zl.ld
+
+noinst_DATA=prelude.so
+
+prelude.so: prelude.zlh prelude.zl zl
+	./zl -p > /dev/null

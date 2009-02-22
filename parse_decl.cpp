@@ -60,7 +60,7 @@ struct DeclWorking {
   typedef Vector<const Syntax *> Attributes;
   Attributes attributes;
   bool try_attributes(const Syntax * p) {
-    if (*p == "__for_ct" || *p == "__ct_callback" || *p == "__static_constructor") {
+    if (*p == "__for_ct" || *p == "__ct_callback" || *p == "__static_constructor" || *p == "__need_snapshot") {
       attributes.push_back(p);
       return true;
     } else {

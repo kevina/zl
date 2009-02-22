@@ -394,15 +394,20 @@ public:
     return append_line(str,delem);
   }
 
-
-
-
-
 namespace std
 {
   template<> inline void swap(StringBuf & x, StringBuf & y) {return x.swap(y);}
 }
 
+__attribute__ ((format (printf,1,2)))
+inline String sbprintf(const char * format, ...) {
+  StringBuf buf;
+  va_list ap;
+  va_start(ap, format);
+  int res = buf.vprintf(format, ap);
+  va_end(ap);
+  return buf.freeze();
+}
 
 
 #endif

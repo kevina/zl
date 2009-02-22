@@ -12,6 +12,9 @@
 
 #include "hash-t.hpp"
 
+// from peg.hpp
+const Syntax * parse_str(String what, SourceStr str, const Replacements * repls = 0);
+
 // each AST node pushes the result on the top of the stack
 //   unless the type is void
 
@@ -30,15 +33,12 @@ namespace ast {
   //
   //
 
-  struct ASTList : public AST {
-    ASTList() : AST("astlist") {}
+  struct ASTList : public FakeAST {
+    ASTList() : FakeAST("astlist") {}
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       return this;
     }
-    void resolve(Environ & env) {abort();} 
-    void finalize(FinalizeEnviron &) {abort();}
-    void compile(CompileWriter & f, CompileEnviron & env) {abort();}
   };
 
   template <typename C>
@@ -201,8 +201,8 @@ namespace ast {
   //
   //
 
-  struct NoOp : public AST {
-    NoOp() : AST("noop") {}
+  struct NoOp : public ASTLeaf {
+    NoOp() : ASTLeaf("noop") {}
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
@@ -210,35 +210,27 @@ namespace ast {
       return this;
     }
     void eval(ExecEnviron &) {}
-    void finalize(FinalizeEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
+    void compile(CompileWriter & f) {
       f << indent << "noop();\n";
     }
   };
 
-  struct Terminal : public AST {
-    Terminal(const Syntax * p) : AST(p->what(), p) {}
+  struct Terminal : public FakeAST {
+    Terminal(const Syntax * p) : FakeAST(p->what(), p) {}
     AST * parse_self(const Syntax * p, Environ & env) {abort();}
-    void eval(ExecEnviron & env) {abort();}
-    void finalize(FinalizeEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {abort();}
   };
 
-  struct Generic : public AST {
+  struct Generic : public FakeAST {
     Vector<AST *> parts;
-    Generic(const Syntax * p) 
-      : AST(p->what(), p) {
+    Generic(const Syntax * p) : FakeAST(p->what(), p) {
       for (int i = 0; i != p->num_args(); ++i)
         abort();
         //parts.push_back(new Terminal(p->arg(i)));
     }
     Generic(const Syntax * p, const Vector<AST *> & pts) 
-      : AST(p->what(), p), parts(pts) {}
+      : FakeAST(p->what(), p), parts(pts) {}
     //AST * part(unsigned i) {return parts[i];}
     AST * parse_self(const Syntax*, Environ&) {abort();}
-    void eval(ExecEnviron & env) {abort();}
-    void compile(CompileWriter & f, CompileEnviron &) {abort();}
-    void finalize(FinalizeEnviron &) {abort();}
   };
 
   struct LStmt : public AST {
@@ -261,7 +253,10 @@ namespace ast {
     void eval(ExecEnviron & env) {
       stmt->eval(env);
     }
-    void compile(CompileWriter & o, CompileEnviron &) {
+    void compile_prep(CompileEnviron & env) {
+      stmt->compile_prep(env);
+    }
+    void compile(CompileWriter & o) {
       o << adj_indent(-2) << indent << label << ":\n";
       o << stmt;
     }
@@ -294,7 +289,10 @@ namespace ast {
         exp->finalize(env);
       stmt->finalize(env);
     }
-    void compile(CompileWriter & o, CompileEnviron &) {
+    void compile_prep(CompileEnviron & env) {
+      stmt->compile_prep(env);
+    }
+    void compile(CompileWriter & o) {
       if (exp)
         o << adj_indent(-2) << indent << "case " << exp << ":\n";
       else
@@ -327,14 +325,15 @@ namespace ast {
         sym = lookup_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), 
                                          parse_->arg(0)->arg(0)->str(), env.fun_symbols);
     }
-    void compile(CompileWriter & o, CompileEnviron &) {
+    void compile_prep(CompileEnviron & env) {}
+    void compile(CompileWriter & o) {
       o << indent 
         << "goto " << sym << ";\n";
     }
   };
   
-  struct LocalLabelDecl : public AST {
-    LocalLabelDecl() : AST("local_label") {}
+  struct LocalLabelDecl : public ASTLeaf {
+    LocalLabelDecl() : ASTLeaf("local_label") {}
     const LabelSymbol * label;
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
@@ -345,8 +344,7 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    void finalize(FinalizeEnviron & env) {}
-    void compile(CompileWriter & o, CompileEnviron &) {
+    void compile(CompileWriter & o) {
       o << indent << "__label__ " << label << ";\n";
     }
   };
@@ -365,7 +363,7 @@ namespace ast {
   //void Literal::eval(ExecEnviron & env) {
     //env.ret<int>(this) = value;
   //}
-  void Literal::compile(CompileWriter & f, CompileEnviron &) {
+  void Literal::compile(CompileWriter & f) {
     ct_value_->to_string(this, f);
     //f.printf("%lld", value);
     String tname = type->unqualified->to_string();
@@ -442,7 +440,7 @@ namespace ast {
     return this;
   }
 
-  void FloatC::compile(CompileWriter & f, CompileEnviron &) {
+  void FloatC::compile(CompileWriter & f) {
     ct_value_->to_string(this, f);
     String tname = type->unqualified->to_string();
     if (tname == "float")
@@ -478,7 +476,7 @@ namespace ast {
     type = env.types.ct_const(type);
     return this;
   }
-  void StringC::compile(CompileWriter & f, CompileEnviron &) {
+  void StringC::compile(CompileWriter & f) {
     f << orig;
   }
   
@@ -490,12 +488,12 @@ namespace ast {
     type = env.types.ct_const(type);
     return this;
   }
-  void CharC::compile(CompileWriter & f, CompileEnviron &) {
+  void CharC::compile(CompileWriter & f) {
     f << orig;
   }
 
-  struct Id : public AST {
-    Id() : AST("id") {}
+  struct Id : public ASTLeaf {
+    Id() : ASTLeaf("id") {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     const VarSymbol * sym;
     AST * parse_self(const Syntax * p, Environ & env) {
@@ -529,8 +527,7 @@ namespace ast {
       //  copy_val(env.ret(this), env.var(*sym), type);
       // }
     }
-    void finalize(FinalizeEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
+    void compile(CompileWriter & f) {
       f << sym;
     }
   };
@@ -572,7 +569,12 @@ namespace ast {
       if_true->finalize(env);
       if_false->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+      if_true->compile_prep(env);
+      if_false->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << indent << "if (" << exp << ")\n";
       f << adj_indent(2) << if_true;
       f << indent << "else\n";
@@ -607,7 +609,12 @@ namespace ast {
       if_true->finalize(env);
       if_false->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+      if_true->compile_prep(env);
+      if_false->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << "(" << exp << " ? " << if_true << " : " << if_false << ")";
     }
   };
@@ -659,7 +666,11 @@ namespace ast {
       exp->finalize(env);
       body->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+      body->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << indent << "switch (" << exp << ")\n";
       f << adj_indent(2) << body;
     }
@@ -691,14 +702,17 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       body->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      body->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << indent << "for (;;)\n";
       f << body;
     }
   };
   
-  struct Break : public AST {
-    Break() : AST("break") {}
+  struct Break : public ASTLeaf {
+    Break() : ASTLeaf("break") {}
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
@@ -710,8 +724,7 @@ namespace ast {
     void eval(ExecEnviron &) {
       throw BreakException();
     }
-    void finalize(FinalizeEnviron & env) {}
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile(CompileWriter & f) {
       f << indent << "break;\n";
     }
   };
@@ -775,6 +788,10 @@ namespace ast {
       if (init)
         init->finalize(env);
     }
+    void compile_prep(CompileEnviron & env) {
+      if (init)
+        init->compile_prep(env);
+    }
     void compile(CompileWriter & f, Phase phase) const {
       f << indent;
       write_flags(f);
@@ -807,7 +824,10 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << indent << exp << ";\n";
     }
   };
@@ -844,7 +864,12 @@ namespace ast {
         stmts[i]->finalize(env);
       }
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      for (int i = 0; i != stmts.size(); ++i) {
+        stmts[i]->compile_prep(env);
+      }
+    }
+    void compile(CompileWriter & f) {
       if (as_exp)
         f << "({\n";
       else
@@ -889,7 +914,10 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << indent << "printf(\"%d\\n\", " << exp << ");\n";
     }
   };
@@ -917,7 +945,10 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << "(" << op << " " << exp << ")";
     }
   };
@@ -1024,7 +1055,11 @@ namespace ast {
       lhs->finalize(env);
       rhs->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      lhs->compile_prep(env);
+      rhs->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << "(" << lhs << " " << op << " " << rhs << ")";
     }
   };
@@ -1055,7 +1090,10 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << "((" << exp << ")" << "." << sym->uniq_name() << ")";
     }
   };
@@ -1378,7 +1416,10 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << "(" << exp << " " << op << ")";
     }
   };
@@ -1407,7 +1448,11 @@ namespace ast {
       for (unsigned i = 0; i != parts.size(); ++i)
         parts[i]->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      for (unsigned i = 0; i != parts.size(); ++i)
+        parts[i]->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << "{";
       for (unsigned i = 0; i != parts.size(); ++i)
         f << parts[i] << ",";
@@ -1423,7 +1468,7 @@ namespace ast {
   //
   //
 
-  static void parse_stmts(const Syntax * parse, Environ & env) {
+  void parse_stmts(const Syntax * parse, Environ & env) {
     for (unsigned i = 0; i < parse->num_args(); ++i) {
       const Syntax * p = parse->arg(i);
       AST * a = parse_top_level(p, env);
@@ -2197,7 +2242,10 @@ namespace ast {
     exp->finalize(env);
   }
 
-  void Cast::compile(CompileWriter & f, CompileEnviron & env) {
+  void Cast::compile_prep(CompileEnviron & env) {
+    exp->compile_prep(env);
+  }
+  void Cast::compile(CompileWriter & f) {
     f << "((" << type->to_string() << ")";
     if (dynamic_cast<const InitList *>(exp)) 
       f << exp;
@@ -2274,6 +2322,9 @@ namespace ast {
     TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);    
 
     parse_flags(p);
+
+    if (p->flag("__need_snapshot"))
+      env_ss = *env0.top_level_environ;
 
     // FIXME: is this necessary/correct for a new frame to be created
     //        to expand/parse the _paramaters_.  Of cource is needed for
@@ -2389,15 +2440,28 @@ namespace ast {
     }
   }
 
+  void Fun::compile_prep(CompileEnviron & env) {
+    if (env.for_macro_sep_c && (env_ss || is_macro))
+      env.for_macro_sep_c->macro_funs.push_back(this);
+    if (body) {
+      body->compile_prep(env);
+    }
+  }
+
   void Fun::compile(CompileWriter & f, Phase phase) const {
     if (!body && phase == Body)
       return;
+    if (env_ss && phase != Forward) {
+      f << "struct EnvironSnapshot * " << sym->uniq_name() << '$' << "env_ss" << ";\n";
+    }
     write_flags(f);
     StringBuf buf;
     c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
     f << buf.freeze();
     if (body && phase != Forward) {
+      f.in_fun = this;
       f << "\n" << body;
+      f.in_fun = NULL;
     } else {
       if (static_constructor)
         f << " __attribute__((constructor))";
@@ -2430,7 +2494,10 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       what->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      what->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << indent << "return " << what << ";\n";
     }
   };
@@ -2507,11 +2574,17 @@ namespace ast {
       for (int i = 0; i != num_parms; ++i)
         parms[i]->finalize(env);
     }
-    void compile(CompileWriter & f, CompileEnviron & env) {
+    void compile_prep(CompileEnviron & env) {
+      lhs->compile_prep(env);
+      const int num_parms = parms.size();
+      for (int i = 0; i != num_parms; ++i)
+        parms[i]->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
       f << lhs << "(";
       int i = 0;
       if (i != parms.size()) while (true) {
-        parms[i]->compile(f, env);
+        parms[i]->compile(f);
         ++i;
         if (i == parms.size()) break;
         f.printf(", ");
@@ -2538,6 +2611,7 @@ namespace ast {
       return new Empty();
     }
     void finalize(FinalizeEnviron &) {}
+    void compile_prep(CompileEnviron &) {}
     void compile(CompileWriter & f, Phase phase) const {
       if (phase == Body) return;
       f << indent << "typedef ";
@@ -2550,16 +2624,14 @@ namespace ast {
 
   struct StructUnion : public TypeDeclaration {
     enum Which {STRUCT, UNION} which;
-    struct Body : public AST {
-      Body(Which w) : AST(w == STRUCT ? "struct_body" : "union_body") {}
+    struct Body : public FakeAST {
+      Body(Which w) : FakeAST(w == STRUCT ? "struct_body" : "union_body") {}
       AST * part(unsigned i) {return members[i];}
       Vector<AST *> members;
       AST * parse_self(const Syntax * p, Environ & env) {
         add_ast_nodes(p->parts_begin(), p->parts_end(), members, parse_member, env);
         return this;
       }
-      void finalize(FinalizeEnviron & env) {abort();}
-      void compile(CompileWriter &, CompileEnviron &) {abort();}
     };
     StructUnion(Which w) : TypeDeclaration(w == STRUCT ? "struct" : "union"), which(w), env(OTHER)  {}
     AST * part(unsigned i) {return 0; /* FIXME */}
@@ -2608,6 +2680,12 @@ namespace ast {
       if (body)
         for (int i = 0; i != body->members.size(); ++i) {
           body->members[i]->finalize(e);
+        }
+    }
+    void compile_prep(CompileEnviron & e) {
+      if (body)
+        for (int i = 0; i != body->members.size(); ++i) {
+          body->members[i]->compile_prep(e);
         }
     }
     void compile(CompileWriter & f, Phase phase) const {
@@ -2687,6 +2765,7 @@ namespace ast {
       return new Empty();
     }
     void finalize(FinalizeEnviron &) {}
+    void compile_prep(CompileEnviron &) {}
     void compile(CompileWriter & f, Phase phase) const {
       if (!body && phase == Body) return;
       f << indent << what() << " " << sym;
@@ -2705,12 +2784,12 @@ namespace ast {
     }
   };
 
-  struct SizeOf : public AST {
-    SizeOf() : AST("sizeof") {}
+  struct SizeOf : public ASTLeaf {
+    SizeOf() : ASTLeaf("sizeof") {}
     const Type * sizeof_type;
     AST * parse_self(const Syntax * p, Environ & env);
     void finalize(FinalizeEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
+    void compile(CompileWriter & f) {
       f << sizeof_type->size();
     }
   };
@@ -2738,43 +2817,66 @@ namespace ast {
 
   //
 
-  struct SyntaxC : public AST {
-    SyntaxC() : AST("syntax") {}
+  struct SyntaxC : public ASTLeaf {
+    SyntaxC() : ASTLeaf("syntax") {}
     static Vector<const Syntax *> keep_me;
     const Syntax * syn;
-    AST * parse_self(const Syntax * p, Environ & env) {
-      parse_ = p;
-      assert_num_args(1);
-      if (p->is_a("syntax")) {
-        syn = p->arg(0);
-        fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
-      } else if (p->is_a("raw_syntax")) {
-        using namespace parse_parse;
-        Res r = parse(p->arg(0)->str());
+    unsigned syn_num;
+    AST * parse_self(const Syntax * p, Environ & env);
+    void compile_prep(CompileEnviron & env);
+    void compile(CompileWriter & f);
+  };
+
+  const Syntax * parse_syntax_c(const Syntax * p) {
+    assert_num_args(p, 1);
+    const Syntax * syn;
+    String what = p->part(0)->what().name;
+    if (what == "syntax") {
+      syn = p->part(1);
+      fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
+    } else if (what == "raw_syntax") {
+      using namespace parse_parse;
+      Res r = parse(p->part(1)->str());
         syn = r.parse;
         //fprintf(stdout, "RSYN %s<<\n", ~syn->to_string());
-      }
-      ChangeSrc<SyntaxSourceInfo> cs(syn);
-      syn = new Syntax(cs, *syn);
-      keep_me.push_back(syn);
-      type = env.types.inst(".pointer", env.types.inst("UnmarkedSyntax"));
-      type = env.types.ct_const(type);
-      *env.for_ct = true;
-      return this;
+    } else {
+      abort();
     }
-    void finalize(FinalizeEnviron & env) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
-      if (f.for_compile_time()) 
-        f.printf("(struct UnmarkedSyntax *)%p", syn); 
-      else
-        f.printf("(struct UnmarkedSyntax *)0");
+    ChangeSrc<SyntaxSourceInfo> cs(syn);
+    syn = new Syntax(cs, *syn);
+    SyntaxC::keep_me.push_back(syn);
+    return syn;
+  }
+
+  AST * SyntaxC::parse_self(const Syntax * p, Environ & env) {
+    parse_ = p;
+    assert_num_args(1);
+    syn = parse_syntax_c(p);
+    syn_num = (unsigned)-1;
+    *env.for_ct = true;
+    type = env.types.inst(".pointer", env.types.inst("UnmarkedSyntax"));
+    type = env.types.ct_const(type);
+    return this;
+  }
+  void SyntaxC::compile_prep(CompileEnviron & env) {
+    if (env.for_macro_sep_c) {
+      syn_num = env.for_macro_sep_c->syntaxes.size();
+        env.for_macro_sep_c->syntaxes.push_back(this);
     }
-  };
+  }
+  void SyntaxC::compile(CompileWriter & f) {
+    if (f.for_macro_sep_c) {
+      f.printf("_syntaxes[%d].syn", syn_num);
+    } else if (f.for_compile_time()) 
+      f.printf("(struct UnmarkedSyntax *)%p", syn); 
+    else
+      f.printf("(struct UnmarkedSyntax *)0");
+  }
 
   Vector<const Syntax *> SyntaxC::keep_me;
 
-  struct EnvironSnapshot : public AST {
-    EnvironSnapshot() : AST("environ_snapshot") {}
+  struct EnvironSnapshot : public ASTLeaf {
+    EnvironSnapshot() : ASTLeaf("environ_snapshot") {}
     SymbolNode * env_ss;
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
@@ -2785,11 +2887,12 @@ namespace ast {
       *env.for_ct = true;
       return this;
     }
-    void finalize(FinalizeEnviron & env) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
-      if (f.for_compile_time()) 
+    void compile(CompileWriter & f) {
+      if (f.in_fun && f.in_fun->env_ss) 
+        f.printf("%s$env_ss", ~f.in_fun->sym->uniq_name());
+      else if (f.for_compile_time())
         f.printf("(struct EnvironSnapshot *)%p", env_ss); 
-      else
+      else 
         f.printf("(struct EnvironSnapshot *)0");
     }
   };
@@ -3071,8 +3174,24 @@ namespace ast {
   }
 
   //
+  // __compile__
   //
-  //
+
+  void escape(OStream & out, SourceStr str) {
+    for (const char * i = str.begin; i != str.end; ++i) {
+      switch (*i) {
+      case '\a': out.put("\\a"); break;
+      case '\b': out.put("\\b"); break;
+      case '\f': out.put("\\f"); break;
+      case '\n': out.put("\\n"); break;
+      case '\t': out.put("\\t"); break;
+      case '\v': out.put("\\v"); break;
+      case '\"': out.put("\\\""); break;
+      case '\x00' - '\x1f': out.printf("\\x%.2x", *i); break;
+      default: out.put(*i);
+      }
+    }
+  }
 
   void compile(const Vector<const TopLevelSymbol *> & syms, CompileWriter & cw) {
 
@@ -3098,6 +3217,48 @@ namespace ast {
         d->compile(cw, Declaration::Body);
     }
 
+    if (cw.for_macro_sep_c) {
+
+      cw << "/* macro sep. c. stuff */\n";
+
+      for (i = syms.begin(); i != e; ++i) {
+        if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
+          const_cast<VarDeclaration *>(d)->compile_prep(cw); // evil I know...
+        }
+      }
+      
+      unsigned macro_funs_size = cw.for_macro_sep_c->macro_funs.size();
+      cw << "unsigned _macro_funs_size = " << macro_funs_size << ";\n";
+      if (macro_funs_size  > 0 ) {
+        cw << "const char * _macro_funs[" << macro_funs_size << "] = {\n";
+        for (Vector<Fun *>::const_iterator i = cw.for_macro_sep_c->macro_funs.begin(), 
+               e = cw.for_macro_sep_c->macro_funs.end(); i != e; ++i)
+        {
+          cw.printf("  \"%s\"%s\n", ~(*i)->name.to_string(), i + 1 != e ? "," : "");
+        }
+        cw << "};\n";
+      }
+
+      unsigned syntaxes_size = cw.for_macro_sep_c->syntaxes.size();
+      if (syntaxes_size > 0) {
+        cw << "unsigned _syntaxes_size = " << syntaxes_size << ";\n";
+        cw << "struct {const char * str; struct UnmarkedSyntax * syn;} ";
+        cw << "_syntaxes[" << syntaxes_size << "] = {\n";
+        for (Vector<SyntaxC *>::const_iterator i = cw.for_macro_sep_c->syntaxes.begin(), 
+               e = cw.for_macro_sep_c->syntaxes.end(); i != e; ++i)
+        {
+          cw << "  {\"";
+          escape(cw, (*i)->parse_->str());
+          cw << "\", 0}";
+          if (i + 1 != e)
+            cw << ",\n";
+          else
+            cw << "\n";
+        }
+        cw << "};\n\n";
+      }
+    }
+
     cw << "/* function decls */\n";
 
     for (i = syms.begin(); i != e; ++i) {
@@ -3107,7 +3268,7 @@ namespace ast {
           if (cw.deps->have(tl)) {
             d->compile(cw, Declaration::Forward);
           }
-        } else if (!d->for_ct()) {
+        } else if (cw.for_macro_sep_c || !d->for_ct()) {
           d->compile(cw, Declaration::Forward);
         }
       }
@@ -3122,7 +3283,7 @@ namespace ast {
           if (cw.deps->have(tl) && !d->sym->ct_ptr) {
             d->compile(cw, Declaration::Body);
           }
-        } else if (!d->for_ct()) {
+        } else if (cw.for_macro_sep_c || !d->for_ct()) {
           d->compile(cw, Declaration::Body);
         }
       }

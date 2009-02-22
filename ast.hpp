@@ -103,18 +103,34 @@ namespace ast {
     }
   };
 
-  struct CompileEnviron {};
+  struct SyntaxC;
+  struct Fun;
+
+  struct CompileEnviron {
+    struct ForMacroSepC {
+      Vector<Fun *> macro_funs;
+      Vector<SyntaxC *> syntaxes;
+    };
+    ForMacroSepC * for_macro_sep_c;
+    CompileEnviron() : for_macro_sep_c() {}
+  };
 
   struct FinalizeEnviron {
     SymbolNode * fun_symbols;
   };
-  
-  class CompileWriter : public FStream {
+
+  //struct MacroSepCompInfo {
+  //  Vector<const SyntaxC *> syntaxs;
+  //  bool collect;
+  //};
+    
+  class CompileWriter : public FStream, public CompileEnviron {
   public:
+    const Fun * in_fun;
     unsigned indent_level;
     Deps * deps;
     bool for_compile_time() {return deps;}
-    CompileWriter() : indent_level(0), deps() {}
+    CompileWriter() : in_fun(), indent_level(0), deps() {}
     void indent() {
       for (int i = 0; i != indent_level; ++i)
         *this << ' ';
@@ -165,7 +181,8 @@ namespace ast {
     virtual void finalize(FinalizeEnviron &) = 0;
     virtual void prep_eval(PrepEvalEnviron &) {abort();}
     virtual void eval(ExecEnviron &) {abort();}
-    virtual void compile(CompileWriter &, CompileEnviron &) = 0; 
+    virtual void compile_prep(CompileEnviron &) = 0;
+    virtual void compile(CompileWriter &) = 0; 
     virtual AST * resolve_to(const Type * type, Environ & env, 
                              TypeRelation::CastType rule = TypeRelation::Implicit) {
       return env.type_relation->resolve_to(this, type, env, rule);
@@ -180,6 +197,20 @@ namespace ast {
       return dynamic_cast<const CT_Value<T> *>(ct_value_)->value(this);
     }
   };
+
+  struct ASTLeaf : public AST {
+    ASTLeaf(String n, const Syntax * p = 0) : AST(n,p) {}
+    void compile_prep(CompileEnviron &) {}
+    void finalize(FinalizeEnviron &) {}
+  };
+
+  struct FakeAST : public AST {
+    FakeAST(String n, const Syntax * p = 0) : AST(n,p) {}
+    void compile(CompileWriter &) {abort();}
+    void compile_prep(CompileEnviron &) {abort();}
+    void finalize(FinalizeEnviron &) {abort();}
+  };
+
 }
 
 inline Syntax::Syntax(const ast::AST * e)
@@ -217,8 +248,7 @@ namespace ast {
   static inline 
   CompileWriter & operator<< (CompileWriter & o, AST * v) {
     //printf("COMPILE %s\n", ~v->name());
-    CompileEnviron dummy;
-    v->compile(o, dummy);
+    v->compile(o);
     return o;
   }
 
@@ -263,7 +293,8 @@ namespace ast {
     Cast(AST * e, const Type * t) 
       : AST("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
     AST * exp;
-    void compile(CompileWriter&, CompileEnviron&);
+    void compile_prep(CompileEnviron&);
+    void compile(CompileWriter&);
     void finalize(FinalizeEnviron &); 
     AST * parse_self(const Syntax * p, Environ &) {abort();}
   };
@@ -292,7 +323,7 @@ namespace ast {
   struct Declaration : public AST {
     enum Phase {Normal, Forward, Body};
     virtual void compile(CompileWriter &, Phase) const = 0;
-    void compile(CompileWriter & cw, CompileEnviron &) {compile(cw, Normal);}
+    void compile(CompileWriter & cw) {compile(cw, Normal);}
     Declaration(String n) : AST(n) {}
   };
 
@@ -325,10 +356,12 @@ namespace ast {
   typedef Vector<ForSecondPass *> Collect;
 
   struct Fun : public VarDeclaration {
-    Fun() : VarDeclaration("fun") {}
+    Fun() : VarDeclaration("fun"), env_ss(), is_macro() {}
     //AST * part(unsigned i);
     SymbolKey name;
     SymbolTable symbols;
+    SymbolNode * env_ss;
+    mutable bool is_macro;
     const Tuple * parms;
     const Type * ret_type;
     Block * body;
@@ -337,54 +370,50 @@ namespace ast {
     unsigned frame_size;
     void finish_parse(Environ &);
     void eval(ExecEnviron & env);
+    void compile_prep(CompileEnviron &);
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
-    
     // internal method, should only be called by parse_fun_forward
     AST * parse_forward_i(const Syntax * p, Environ &, Collect &); 
   };
 
-  struct Literal : public AST {
-    Literal() : AST("literal") {}
+  struct Literal : public ASTLeaf {
+    Literal() : ASTLeaf("literal") {}
     //AST * part(unsigned i);
     //long long value;
     AST * parse_self(const Syntax * p, Environ &);
     //void eval(ExecEnviron & env);
-    void compile(CompileWriter & f, CompileEnviron &);
-    void finalize(FinalizeEnviron &) {}
+    void compile(CompileWriter & f);
   };
 
-  struct FloatC : public AST {
-    FloatC() : AST("float") {}
+  struct FloatC : public ASTLeaf {
+    FloatC() : ASTLeaf("float") {}
     //AST * part(unsigned i);
     //long double value;
     AST * parse_self(const Syntax * p, Environ &);
-    void compile(CompileWriter & f, CompileEnviron &);
-    void finalize(FinalizeEnviron &) {}
+    void compile(CompileWriter & f);
   };
 
-  struct StringC : public AST {
-    StringC() : AST("string") {}
+  struct StringC : public ASTLeaf {
+    StringC() : ASTLeaf("string") {}
     //AST * part(unsigned i);
     String orig;
     String value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
-    void compile(CompileWriter & f, CompileEnviron &);
-    void finalize(FinalizeEnviron &) {}
+    void compile(CompileWriter & f);
   };
 
-  struct CharC : public AST {
-    CharC() : AST("char") {}
+  struct CharC : public ASTLeaf {
+    CharC() : ASTLeaf("char") {}
     //AST * part(unsigned i);
     String orig;
     char value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
-    void compile(CompileWriter & f, CompileEnviron &);
-    void finalize(FinalizeEnviron &) {}
+    void compile(CompileWriter & f);
   };
 
-  struct Empty : public AST {
-    Empty() : AST("empty") {}
+  struct Empty : public ASTLeaf {
+    Empty() : ASTLeaf("empty") {}
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
@@ -392,10 +421,9 @@ namespace ast {
       return this;
     }
     void eval(ExecEnviron &) {}
-    void compile(CompileWriter & f, CompileEnviron &) {
+    void compile(CompileWriter & f) {
       // do absolutely nothing
     }
-    void finalize(FinalizeEnviron &) {}
   };
 
   //
@@ -470,6 +498,7 @@ namespace ast {
 
   AST * parse_top(const Syntax * p);
   AST * parse_top(const Syntax * p, Environ & env);
+  void parse_stmts(const Syntax * p, Environ & env);
 
   AST * parse_top_level(const Syntax * p, Environ & env);
   AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect);
@@ -482,6 +511,7 @@ namespace ast {
 
   AST * cast_up(AST * exp, const Type * type, Environ & env);
 
+  const Syntax * parse_syntax_c(const Syntax * p);
 
   //
   // For lack of a better place
