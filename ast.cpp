@@ -3234,7 +3234,7 @@ namespace ast {
         for (Vector<Fun *>::const_iterator i = cw.for_macro_sep_c->macro_funs.begin(), 
                e = cw.for_macro_sep_c->macro_funs.end(); i != e; ++i)
         {
-          cw.printf("  \"%s\"%s\n", ~(*i)->name.to_string(), i + 1 != e ? "," : "");
+          cw.printf("  \"%s\"%s\n", ~(*i)->sym->uniq_name(), i + 1 != e ? "," : "");
         }
         cw << "};\n";
       }

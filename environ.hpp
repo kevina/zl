@@ -85,6 +85,17 @@ namespace ast {
   struct Environ : public gc {
     TypeRelation * type_relation;
     Vector<const TopLevelSymbol *> * top_level_symbols;
+    const TopLevelSymbol * find_tls(const char * to_find) const {
+      if (!top_level_symbols)
+        return NULL;
+      Vector<const TopLevelSymbol *>::const_iterator 
+        i = top_level_symbols->begin(),
+        e = top_level_symbols->end();
+      for (; i != e; ++i) {
+        if ((*i)->uniq_name() == to_find) return *i;
+      }
+      return NULL;
+    }
     SymbolTable symbols;
     TypeSymbolTable types;
     OpenSymbolTable fun_labels;

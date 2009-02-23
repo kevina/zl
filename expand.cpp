@@ -1306,8 +1306,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
     const char * * i = (const char * *)dlsym(lh, "_macro_funs");
     const char * * e = i + macro_funs_size;
     for (; i != e; ++i) {
-      const Syntax * name = parse_str("ID", SourceStr(*i, *i+strlen(*i)));
-      const TopLevelVarSymbol * sym = env.symbols.lookup<TopLevelVarSymbol>(name);
+      const TopLevelVarSymbol * sym = dynamic_cast<const TopLevelVarSymbol *>(env.find_tls(*i));
       const Fun * fun = dynamic_cast<const Fun *>(sym->decl);
       String uniq_name = sym->uniq_name();
       if (fun->is_macro) {

@@ -159,14 +159,18 @@ namespace ast {
 
   struct Symbol : public Entity {
     String name;
+    mutable String uniq_name_;
     Symbol() {}
     virtual void uniq_name(OStream & o) const {
       o << name;
     }
     String uniq_name() const {
+      if (uniq_name_.defined())
+        return uniq_name_;
       StringBuf buf;
       uniq_name(buf);
-      return buf.freeze();
+      uniq_name_ = buf.freeze();
+      return uniq_name_;
     }
     virtual void add_to_env(const SymbolKey & k, Environ &, Pass = AllPasses) const;
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
