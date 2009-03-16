@@ -332,6 +332,7 @@ extern "C" const ModuleInfo * user_type_module(const UserTypeInfo *);
 extern "C" const ModuleInfo * module_info(const Syntax *, Environ *);
 extern "C" SyntaxEnum * module_symbols(const ModuleInfo *);
 extern "C" bool module_have_symbol(const ModuleInfo *, const Syntax *);
+extern "C" unsigned long ct_value(const Syntax *, Environ *);
 
 String gen_sym() {
   static unsigned uniq_num = 0;
@@ -1415,3 +1416,11 @@ Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
     data.push_back(new Syntax(f, **i));
 }
 
+//
+//
+//
+
+unsigned long ct_value(const Syntax * p, Environ * env) {
+  AST * ast = parse_exp(p, *env);
+  return ast->ct_value<unsigned int>();
+}

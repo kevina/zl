@@ -1,3 +1,11 @@
+void parse_class_var(Syntax * p, Match * m, Mark * mark,
+                     SyntaxList * struct_b, SyntaxList * module_b);
+void parse_class_fun(Syntax * p, Match * m, Mark * mark,
+                     SyntaxList * struct_b, SyntaxList *  module_b,
+                     UserTypeInfo * parent_vtable,
+                     SyntaxList *  vtable_b, SyntaxList * vtable_i,
+                     Environ * env);
+
 Syntax * parse_class(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
 

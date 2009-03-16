@@ -24,4 +24,5 @@
   module_info;
   module_symbols;
   module_have_symbol;
+  ct_value;
 };

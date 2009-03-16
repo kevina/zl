@@ -8,6 +8,7 @@ int snprintf(const char * str, unsigned long size, const char * format, ...);
 macro NULL() {0;}
 typedef int bool;
 int strcmp(const char *s1, const char *s2);
+typedef unsigned long size_t;
 
 //
 // Macro ABI
@@ -114,6 +115,8 @@ user_type ModuleInfo {
   macro have_symbol(sym, :this this) {module_have_symbol(this, sym);}
 }
 
+__ct_callback size_t ct_value(const Syntax *, Environ *);
+
 //
 //
 //
@@ -125,10 +128,3 @@ macro class_cast_up (child) {
 __need_snapshot Syntax * parse_class(Syntax * p, Environ * env);
 make_syntax_macro class parse_class;
 
-void parse_class_var(Syntax * p, Match * m, Mark * mark,
-                     SyntaxList * struct_b, SyntaxList * module_b);
-void parse_class_fun(Syntax * p, Match * m, Mark * mark,
-                     SyntaxList * struct_b, SyntaxList *  module_b,
-                     UserTypeInfo * parent_vtable,
-                     SyntaxList *  vtable_b, SyntaxList * vtable_i,
-                     Environ * env);
