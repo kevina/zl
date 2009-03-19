@@ -150,6 +150,8 @@ namespace ast {
 
   class CPrintInst : public PrintInst { 
   public:
+    enum Mode {C_MODE, ZL_MODE} mode;
+    CPrintInst(Mode m = C_MODE) : mode(m) {}
     void to_string(const TypeInst &, StringBuf & buf) const;
     void declaration(String var, const TypeInst & t, StringBuf & buf, bool parentheses) const;
     void declaration(String var, const TypeInst & t, StringBuf & buf) const {
@@ -157,8 +159,14 @@ namespace ast {
     }
   };
 
+  class ZLPrintInst : public  CPrintInst { 
+  public:
+    ZLPrintInst() : CPrintInst(ZL_MODE) {}
+  };
+
   extern PrintInst const * const generic_print_inst;
   extern PrintInst const * const c_print_inst;
+  extern PrintInst const * const zl_print_inst;
 
   struct AST;
   
@@ -168,6 +176,7 @@ namespace ast {
     virtual AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
     virtual void resolve_assign(AST * &, AST * &, Environ & env) const = 0;
+    virtual AST * to_effective(AST * exp, Environ & env) const = 0;
     const Type * unify(int rule, AST * &, AST * &, Environ & env);
     //virtual const Type * promote(AST * exp) const = 0;
     virtual ~TypeRelation() {}
@@ -182,7 +191,7 @@ namespace ast {
     String what() const {return name;}
     const PrintInst * print_inst;
     TypeSymbol() 
-      : TopLevelSymbol(), parse(), print_inst(c_print_inst) {}
+      : TopLevelSymbol(), parse(), print_inst(zl_print_inst) {}
     virtual Type * inst(Vector<TypeParm> & d) const = 0;
     //virtual Type * inst(const Syntax *) const = 0;
     virtual unsigned required_parms() const = 0;
@@ -246,7 +255,7 @@ namespace ast {
     virtual void finalize_hook() {} 
     virtual const TypeInst * find_root() {return this;}
     virtual const TypeInst * find_unqualified() const {return this;}
-    virtual const TypeInst * find_effective() const {return root;}
+    virtual const TypeInst * find_effective() const {return this;}
   };
 
   bool operator==(const TypeInst & lhs, const Vector<TypeParm> & rhs);
@@ -572,6 +581,7 @@ namespace ast {
       : ParmTypeInst(st->category), subtype(st) 
       {addressable = true; read_only = st->read_only;}
     const Type * subtype;
+    const Type * find_effective() const {return subtype;}
     unsigned size() const {return subtype->size();}
     unsigned align() const {return subtype->align();}
     unsigned storage_size() const {return POINTER_SIZE;}

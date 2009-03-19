@@ -61,6 +61,7 @@ namespace ast {
 
   PrintInst const * const generic_print_inst = new GenericPrintInst();
   PrintInst const * const c_print_inst = new CPrintInst();
+  PrintInst const * const zl_print_inst = new ZLPrintInst();
   
   void TypeParm::to_string(StringBuf & buf) const {
     switch (what) {
@@ -175,7 +176,7 @@ namespace ast {
       declaration(lbuf.freeze(), *t->subtype, buf, true);
     } else if (const Reference * t = dynamic_cast<const Reference *>(type)) {
       StringBuf lbuf;
-      lbuf << "*" << qualifiers;
+      lbuf << (mode == C_MODE ? "*" : "&") << qualifiers;
       if (!var.empty())
         lbuf << " " << var;
       declaration(lbuf.freeze(), *t->subtype, buf, true);
@@ -215,7 +216,7 @@ namespace ast {
   }
 
   inline TypeOf::TypeOf(AST * a) 
-    : SimpleTypeInst(a->type), of_ast(a), of(a->type) {type_symbol = of->type_symbol;}
+    : SimpleTypeInst(a->type->effective), of_ast(a), of(a->type->effective) {type_symbol = of->type_symbol;}
 
   Type * parse_type(const Syntax * p, Environ & env) {
     if (p->entity()) {
@@ -363,30 +364,10 @@ namespace ast {
   class C_TypeRelation : public TypeRelation {
   public:
     AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule) const;
-    const Type * unify(int rule, const Type *, const Type *) const;
+    AST * to_effective(AST * exp, Environ & env) const;
     void resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const;
+    const Type * unify(int rule, const Type *, const Type *) const;
   };
-
-  void C_TypeRelation::resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const {
-    if (!lhs->lvalue)
-      throw error(lhs->parse_, "Can not be used as lvalue");
-    //throw error(parse_->arg(1), "Can not be used as lvalue");
-    if (lhs->type->read_only) 
-      throw error (lhs->parse_, "Assignment to read-only location");
-    const Reference * lhs_r = dynamic_cast<const Reference *>(lhs->type->unqualified);
-    if (lhs_r) {
-      lhs = from_ref(lhs, env);
-    }
-    try {
-      rhs = rhs->resolve_to(lhs->type, env);
-    } catch (Error * err) {
-      StringBuf buf;
-      buf = err->msg;
-      buf.printf(" in assignment of %s.", ~lhs->parse_->sample_w_loc());
-      err->msg = buf.freeze();
-      throw err;
-    }
-  }
 
   AST * C_TypeRelation::resolve_to(AST * orig_exp, const Type * type, Environ & env, CastType rule) const {
     static int i = -1;
@@ -483,6 +464,35 @@ namespace ast {
     //abort();
     throw error(orig_exp->parse_, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
                 ~type->to_string(), ~orig_exp->type->to_string());
+  }
+
+  AST * C_TypeRelation::to_effective(AST * exp, Environ & env) const {
+    const Reference * ref = dynamic_cast<const Reference *>(exp->type->unqualified);
+    if (ref)
+      return from_ref(exp, env);
+    else
+      return exp;
+  }
+
+  void C_TypeRelation::resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const {
+    if (!lhs->lvalue)
+      throw error(lhs->parse_, "Can not be used as lvalue");
+    //throw error(parse_->arg(1), "Can not be used as lvalue");
+    if (lhs->type->read_only) 
+      throw error (lhs->parse_, "Assignment to read-only location");
+    const Reference * lhs_r = dynamic_cast<const Reference *>(lhs->type->unqualified);
+    if (lhs_r) {
+      lhs = from_ref(lhs, env);
+    }
+    try {
+      rhs = rhs->resolve_to(lhs->type, env);
+    } catch (Error * err) {
+      StringBuf buf;
+      buf = err->msg;
+      buf.printf(" in assignment of %s.", ~lhs->parse_->sample_w_loc());
+      err->msg = buf.freeze();
+      throw err;
+    }
   }
 
   const Type * C_TypeRelation::unify(int rule, const Type * x, const Type * y) const {

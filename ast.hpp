@@ -187,6 +187,9 @@ namespace ast {
                              TypeRelation::CastType rule = TypeRelation::Implicit) {
       return env.type_relation->resolve_to(this, type, env, rule);
     }
+    AST * to_effective(Environ & env) {
+      return env.type_relation->to_effective(this, env);
+    }
     virtual ~AST() {}
     //void print(OStream & o) const;
 

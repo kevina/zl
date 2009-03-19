@@ -964,9 +964,10 @@ namespace ast {
     }
   };
 
-  const Type * resolve_unop(Environ & env, TypeCategory * cat, AST * exp) {
+  const Type * resolve_unop(Environ & env, TypeCategory * cat, AST * & exp) {
     if (!exp->type->is(cat))
       abort();
+    exp = exp->to_effective(env);
     return exp->type;
   }
 
@@ -1017,6 +1018,7 @@ namespace ast {
     Not() : UnOp("not", "!") {}
     void resolve(Environ & env) {
       // FIXME: Do I need to do more?
+      exp = exp->to_effective(env);
       type = env.types.inst("int");
     }
   };
@@ -1027,6 +1029,7 @@ namespace ast {
       if (!exp->lvalue) {
         throw error(exp->parse_, "Can not be used as lvalue");
       }
+      exp = exp->to_effective(env);
       // FIXME: add check for register qualifier
       const TypeSymbol * t = env.types.find(".pointer");
       Vector<TypeParm> p;
@@ -1051,6 +1054,7 @@ namespace ast {
 
   AST * to_ref(AST * exp, Environ & env) {
     AddrOfRef * res = new AddrOfRef();
+    res->parse_ = exp->parse_;
     res->exp = exp;
     res->resolve(env);
     return res;
@@ -1060,6 +1064,7 @@ namespace ast {
     DeRef() : UnOp("deref", "*") {}
     void resolve(Environ & env) {
       check_type(exp, POINTER_C);
+      exp = exp->to_effective(env);
       const PointerLike * t = dynamic_cast<const PointerLike *>(exp->type->unqualified);
       type = t->subtype;
       lvalue = true;
@@ -1077,6 +1082,7 @@ namespace ast {
 
   AST * from_ref(AST * exp, Environ & env) {
     DeRefRef * res = new DeRefRef();
+    res->parse_ = exp->parse_;
     res->exp = exp;
     res->resolve(env);
     return res;
@@ -1121,6 +1127,7 @@ namespace ast {
       parse_ = p;
       assert_num_args(2);
       exp = parse_exp(p->arg(0), env);
+      exp = exp->to_effective(env);
       //printf("::"); p->arg(1)->print(); printf("\n");
       if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected identifier");
       SymbolName id = *p->arg(1)->arg(0);
@@ -1145,10 +1152,6 @@ namespace ast {
       f << "((" << exp << ")" << "." << sym->uniq_name() << ")";
     }
   };
-
-  const Type * remove_qualifiers(const Type * t) {
-    return t->unqualified;
-  }
 
   const Type * resolve_binop(Environ & env, TypeCategory * cat, AST *& lhs, AST *& rhs) {
     check_type(lhs, cat);
@@ -1178,9 +1181,7 @@ namespace ast {
   };
   
   const Type * p_subtype(const Type * t) {
-    if (const Pointer * p = dynamic_cast<const Pointer *>(t))
-      return p->subtype;
-    if (const Array   * p = dynamic_cast<const Array *>(t))
+    if (const PointerLike * p = dynamic_cast<const PointerLike *>(t))
       return p->subtype;
     return VOID_T;
     //abort();
@@ -1190,20 +1191,26 @@ namespace ast {
   void resolve_pointer_binop(PointerBinOp op, Environ & env, AST *& lhs, AST *& rhs) {
     check_type(lhs, POINTER_C);
     check_type(rhs, POINTER_C);
-    const Type * lhs_subtype = p_subtype(lhs->type->unqualified)->unqualified;
-    const Type * rhs_subtype = p_subtype(rhs->type->unqualified)->unqualified;
+    const Type * lhs_subtype = p_subtype(lhs->type->effective->unqualified)->unqualified;
+    const Type * rhs_subtype = p_subtype(rhs->type->effective->unqualified)->unqualified;
     if (op == P_MINUS) {
-      if (lhs_subtype == rhs_subtype) return;
+      if (lhs_subtype == rhs_subtype) goto ok;
     } else if (op == P_COMP) {
       if (lhs_subtype == rhs_subtype
           || lhs->type->is_null || lhs->type->is_null 
           || dynamic_cast<const Void *>(lhs_subtype) 
           || dynamic_cast<const Void *>(rhs_subtype))
-        return;
+        goto ok;
     } else {
-      abort();
+      goto fail;
     }
-    throw error(rhs->parse_, "Incompatible pointer types");
+  ok:
+    lhs = lhs->to_effective(env);
+    rhs = rhs->to_effective(env);
+    return;
+  fail:
+    abort();
+    //throw error(rhs->parse_, "Incompatible pointer types");
   }
   
   const Type * resolve_additive(Environ & env, AST *& lhs, AST *& rhs) {
@@ -1213,9 +1220,13 @@ namespace ast {
       return resolve_binop(env, NUMERIC_C, lhs, rhs);
     } else if (lhs->type->is(POINTER_C)) {
       check_type(rhs, INT_C);
+      lhs = lhs->to_effective(env);
+      rhs = rhs->to_effective(env);
       return lhs->type;
     } else if (lhs->type->is(INT_C)) {
       check_type(rhs, POINTER_C);
+      lhs = lhs->to_effective(env);
+      rhs = rhs->to_effective(env);
       return rhs->type;
     } else {
       abort(); // this should't happen
@@ -1226,8 +1237,8 @@ namespace ast {
     Assign() : BinOp("assign", "=") {}
     void resolve(Environ & env) {
       //printf("RESOLVE ASSIGN:: %p %s\n", lhs, ~parse_->to_string());
-      printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->to_string());
-      printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->sample_w_loc(60));
+      //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->to_string());
+      //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->sample_w_loc(60));
       env.type_relation->resolve_assign(lhs, rhs, env);
       type = lhs->type;
     }
@@ -1445,6 +1456,7 @@ namespace ast {
       parse_ = p;
       assert_num_args(1);
       exp = parse_exp(p->arg(0), env);
+      exp = exp->to_effective(env);
       type = exp->type;
       return this;
     }
@@ -1784,6 +1796,7 @@ namespace ast {
   AST * parse_member_access(const Syntax * p, Environ & env) {
     assert_num_args(p, 2);
     AST * exp = parse_exp(p->arg(0), env);
+    exp = exp->to_effective(env);
     Syntax * ptr_exp = new Syntax(new Syntax("addrof"), new Syntax(exp));
     if (dynamic_cast<const StructUnionT *>(exp->type->unqualified)) {
       const Syntax * np = new Syntax(p->str(), p->part(0), new Syntax(exp), p->arg(1));
@@ -1822,6 +1835,7 @@ namespace ast {
   AST * parse_imember_access(const Syntax * p, Environ & env) {
     assert_num_args(p, 2);
     AST * exp = parse_exp(p->arg(0), env);
+    exp = exp->to_effective(env);
     //printf("::"); p->arg(1)->print(); printf("\n");
     if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected Identifier");
     SymbolName id = *p->arg(1)->arg(0);
@@ -2227,6 +2241,7 @@ namespace ast {
   }
 
   AST * cast_up(AST * exp, const Type * type, Environ & env) {
+    exp = exp->to_effective(env);
     const PointerLike * from_ptr = dynamic_cast<const PointerLike *>(exp->type->unqualified);
     const QualifiedType * from_qualified = dynamic_cast<const QualifiedType *>(from_ptr->subtype->root);
     const UserType * from_base = dynamic_cast<const UserType *>(from_ptr->subtype->unqualified);
@@ -2262,7 +2277,7 @@ namespace ast {
   }
 
   AST * subtype_cast(AST * exp, const UserType * type, Environ & env) {
-    const Type * have = exp->type->unqualified;
+    const Type * have = exp->type->effective->unqualified;
     const Type * need = type->unqualified;
     if (have->is(need->category))
       return cast_up(exp, type, env);
@@ -2281,7 +2296,9 @@ namespace ast {
     exp->compile_prep(env);
   }
   void Cast::compile(CompileWriter & f) {
-    f << "((" << type->to_string() << ")";
+    StringBuf buf;
+    c_print_inst->to_string(*type, buf);
+    f << "((" << buf.freeze() << ")";
     if (dynamic_cast<const InitList *>(exp)) 
       f << exp;
     else
