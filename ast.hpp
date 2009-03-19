@@ -9,6 +9,7 @@
 
 #include <typeinfo>
 #include <map>
+#include <limits>
 
 #undef NPOS
 
@@ -156,6 +157,23 @@ namespace ast {
     virtual T value(const AST *) const = 0;
   };
 
+  template <typename T, bool is_int, bool is_signed, size_t size>
+  struct ExactTypeByProp {typedef T type;};
+  template <typename T> struct ExactTypeByProp<T, true, true, 1> {typedef int8_t type;};
+  template <typename T> struct ExactTypeByProp<T, true, false, 1> {typedef uint8_t type;};
+  template <typename T> struct ExactTypeByProp<T, true, true, 2> {typedef int16_t type;};
+  template <typename T> struct ExactTypeByProp<T, true, false, 2> {typedef uint16_t type;};
+  template <typename T> struct ExactTypeByProp<T, true, true, 4> {typedef int32_t type;};
+  template <typename T> struct ExactTypeByProp<T, true, false, 4> {typedef uint32_t type;};
+  template <typename T> struct ExactTypeByProp<T, true, true, 8> {typedef int64_t type;};
+  template <typename T> struct ExactTypeByProp<T, true, false, 8> {typedef uint64_t type;};
+
+  template <typename T> struct ExactType
+    : public ExactTypeByProp<T,
+                             std::numeric_limits<T>::is_integer,
+                             std::numeric_limits<T>::is_signed,
+                             sizeof(T)> {};
+
   struct AST : public Entity {
     String what_;
     String what() const {return what_;}
@@ -194,10 +212,9 @@ namespace ast {
     //void print(OStream & o) const;
 
     const CT_Value_Base * ct_value_;
-    template <typename T> 
-    T ct_value() const {
-      if (!ct_value_) throw error(parse_, "\"%s\" Can not be used in constant-expression", ~what_);
-      return dynamic_cast<const CT_Value<T> *>(ct_value_)->value(this);
+    template <typename T> T real_ct_value() const;
+    template <typename T> T ct_value() const {
+      return real_ct_value<typename ExactType<T>::type>();
     }
   };
 

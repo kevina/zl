@@ -2160,13 +2160,39 @@ namespace ast {
   //
   //
 
+  template <typename T> static inline const char * type_name() {return NULL;}
+  template <> static inline const char * type_name<uint8_t> () {return ".uint8";}
+  template <> static inline const char * type_name<uint16_t>() {return ".uint16";}
+  template <> static inline const char * type_name<uint32_t>() {return ".uint32";}
+  template <> static inline const char * type_name<uint64_t>() {return ".uint64";}
+  template <> static inline const char * type_name<int8_t> () {return ".int8";}
+  template <> static inline const char * type_name<int16_t>() {return ".int16";}
+  template <> static inline const char * type_name<int32_t>() {return ".int32";}
+  template <> static inline const char * type_name<int64_t>() {return ".int64";}
+  template <> static inline const char * type_name<float>() {return "float";}  
+  template <> static inline const char * type_name<double>() {return "double";}
+  template <> static inline const char * type_name<long double>() {return "long double";}
+
+  //
+  //
+  //
+
+  template <typename To>
+  struct Cast_CT_Value_Base : public CT_Value<To> {
+    virtual To value_direct(const AST * t) const = 0;
+  };
+
   template <typename From, typename To>
-  struct Cast_CT_Value : public CT_Value<To> {
+  struct Cast_CT_Value : public Cast_CT_Value_Base<To> {
+    To value_direct(const AST * exp) const {
+      return static_cast<To>(exp->ct_value<From>());
+    }
     To value(const AST * t) const {
       const Cast * c = dynamic_cast<const Cast *>(t);
       return static_cast<To>(c->exp->ct_value<From>());
     }
   };
+
   struct Cast_CT_Value_Inner_Map {
     String to;
     const CT_Value_Base * cast;
@@ -2225,9 +2251,7 @@ namespace ast {
   Cast_CT_Value_Map * cast_ct_value_map_end = 
     cast_ct_value_map + sizeof(cast_ct_value_map)/sizeof(Cast_CT_Value_Map);
 
-  const CT_Value_Base * cast_ct_value(const Type * f, const Type * t) {
-    String from = f->exact_type->to_string();
-    String to   = t->exact_type->to_string();
+  const CT_Value_Base * cast_ct_value(String from, String to) {
     for (const Cast_CT_Value_Map * i = cast_ct_value_map; i != cast_ct_value_map_end; ++i) {
       if (i->from == from) {
         for (const Cast_CT_Value_Inner_Map * j = i->map; j != i->map_end; ++j) {
@@ -2238,6 +2262,19 @@ namespace ast {
       }
     }
     return NULL;
+  }
+
+  const CT_Value_Base * cast_ct_value(const Type * f, const Type * t) {
+    String from = f->exact_type->to_string();
+    String to   = t->exact_type->to_string();
+    return cast_ct_value(from, to);
+  }
+
+  template <typename To> 
+  const Cast_CT_Value_Base<To> * cast_ct_value(const Type * f) {
+    String from = f->exact_type->to_string();
+    String to   = type_name<To>();
+    return dynamic_cast<const Cast_CT_Value_Base<To> *>(cast_ct_value(from, to));
   }
 
   AST * cast_up(AST * exp, const Type * type, Environ & env) {
@@ -2318,6 +2355,38 @@ namespace ast {
       res->parse_ = p;
     return res;
   }
+
+  //
+  //
+  //
+
+  template <typename T> 
+  T AST::real_ct_value() const {
+    if (!ct_value_) throw error(parse_, "\"%s\" Can not be used in constant-expression", ~what_);
+    const CT_Value<T> * ctv = dynamic_cast<const CT_Value<T> *>(ct_value_);
+    if (ctv)
+      return ctv->value(this);
+    const Cast_CT_Value_Base<T> * cast_ctv = cast_ct_value<T>(type);
+    if (cast_ctv)
+      return cast_ctv->value_direct(this);
+    abort();
+  }
+  template uint8_t AST::real_ct_value<uint8_t>() const;
+  template uint16_t AST::real_ct_value<uint16_t>() const;
+  template uint32_t AST::real_ct_value<uint32_t>() const;
+  template uint64_t AST::real_ct_value<uint64_t>() const;
+  template int8_t AST::real_ct_value<int8_t>() const;
+  template int16_t AST::real_ct_value<int16_t>() const;
+  template int32_t AST::real_ct_value<int32_t>() const;
+  template int64_t AST::real_ct_value<int64_t>() const;
+  template float AST::real_ct_value<float>() const;
+  template double AST::real_ct_value<double>() const;
+  template long double AST::real_ct_value<long double>() const;
+  
+  //
+  //
+  //
+
 
 #if 0
   AST * Fun::part(unsigned i) {

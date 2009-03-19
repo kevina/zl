@@ -1422,5 +1422,5 @@ Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
 
 unsigned long ct_value(const Syntax * p, Environ * env) {
   AST * ast = parse_exp(p, *env);
-  return ast->ct_value<unsigned int>();
+  return ast->ct_value<unsigned long>();
 }
