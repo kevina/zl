@@ -165,9 +165,15 @@ namespace ast {
       }
       buf << ")";
     } else if (const Pointer * t = dynamic_cast<const Pointer *>(type)) {
-      const Type * rec_subtype = t->subtype;
-      while (const Pointer * t2 = dynamic_cast<const Pointer *>(rec_subtype))
-        rec_subtype = t2->subtype;
+      //const Type * rec_subtype = t->subtype;
+      //while (const Pointer * t2 = dynamic_cast<const Pointer *>(rec_subtype))
+      //  rec_subtype = t2->subtype;
+      StringBuf lbuf;
+      lbuf << "*" << qualifiers;
+      if (!var.empty())
+        lbuf << " " << var;
+      declaration(lbuf.freeze(), *t->subtype, buf, true);
+    } else if (const Reference * t = dynamic_cast<const Reference *>(type)) {
       StringBuf lbuf;
       lbuf << "*" << qualifiers;
       if (!var.empty())
@@ -344,13 +350,13 @@ namespace ast {
   }
 #endif
 
-  const Type * TypeRelation::unify(int rule, AST * & x, AST * & y) {
-    const Type * xt = x->type->unqualified;
-    const Type * yt = y->type->unqualified;
-    const Type * t = unify(rule, xt, yt);
+  const Type * TypeRelation::unify(int rule, AST * & x, AST * & y, Environ & env) {
+    const Type * t = unify(rule, x->type, y->type);
     //printf("UNIFY %d to \"\%s\"\n", x->parse_->str().source->get_pos(x->parse_->str().begin).line, ~t->to_string());
-    if (t != xt) {x = new Cast(x, t);}
-    if (t != yt) {y = new Cast(y, t);}
+    //if (t != xt) {x = new Cast(x, t);}
+    //if (t != yt) {y = new Cast(y, t);}
+    x = x->resolve_to(t, env);
+    y = y->resolve_to(t, env);
     return t;
   }
 
@@ -358,13 +364,55 @@ namespace ast {
   public:
     AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule) const;
     const Type * unify(int rule, const Type *, const Type *) const;
+    void resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const;
   };
 
-  AST * C_TypeRelation::resolve_to(AST * exp, const Type * type, Environ & env, CastType rule) const {
+  void C_TypeRelation::resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const {
+    if (!lhs->lvalue)
+      throw error(lhs->parse_, "Can not be used as lvalue");
+    //throw error(parse_->arg(1), "Can not be used as lvalue");
+    if (lhs->type->read_only) 
+      throw error (lhs->parse_, "Assignment to read-only location");
+    const Reference * lhs_r = dynamic_cast<const Reference *>(lhs->type->unqualified);
+    if (lhs_r) {
+      lhs = from_ref(lhs, env);
+    }
+    try {
+      rhs = rhs->resolve_to(lhs->type, env);
+    } catch (Error * err) {
+      StringBuf buf;
+      buf = err->msg;
+      buf.printf(" in assignment of %s.", ~lhs->parse_->sample_w_loc());
+      err->msg = buf.freeze();
+      throw err;
+    }
+  }
+
+  AST * C_TypeRelation::resolve_to(AST * orig_exp, const Type * type, Environ & env, CastType rule) const {
     static int i = -1;
     ++i;
+    AST * exp = orig_exp;
     const Type * have = exp->type->unqualified;
     const Type * need = type->unqualified;
+    
+    const Reference * h_r = dynamic_cast<const Reference *>(have);
+    const Reference * n_r = dynamic_cast<const Reference *>(need);
+    if (h_r) {
+      exp = from_ref(exp, env);
+      have = exp->type->unqualified;
+    }
+    if (n_r) {
+      if (!exp->lvalue) 
+        throw error(orig_exp->parse_, 
+                    "Can not take a reference of temporary (yet) in conversion from \"%s\" to \"%s\"",
+                    ~orig_exp->type->to_string(), ~type->to_string());
+      if (have != n_r->subtype->unqualified) 
+        goto fail;
+      if (exp->type->read_only && !n_r->subtype->read_only)
+        throw error(orig_exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+                    ~orig_exp->type->to_string(), ~type->to_string());
+      return to_ref(exp, env);
+    }
 
     if (have == need) return exp;
     // FIXME: Is this right?
@@ -412,7 +460,7 @@ namespace ast {
           dynamic_cast<const Void *>(n_subtype->unqualified) /* this one is C only */)  
       {
         if (h_subtype->read_only && !n_subtype->read_only)
-          throw error(exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+          throw error(orig_exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
         else
           return exp;
@@ -421,7 +469,7 @@ namespace ast {
                  h_subtype->is(n_subtype->category)) 
       { // this is C++ only
         if (h_subtype->read_only && !n_subtype->read_only)
-          throw error(exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+          throw error(orig_exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
         else 
           return cast_up(exp, n_subtype, env);
@@ -433,14 +481,14 @@ namespace ast {
 
   fail:
     //abort();
-    throw error(exp->parse_, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
-                ~type->to_string(), ~exp->type->to_string());
+    throw error(orig_exp->parse_, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
+                ~type->to_string(), ~orig_exp->type->to_string());
   }
 
   const Type * C_TypeRelation::unify(int rule, const Type * x, const Type * y) const {
     // 3.6.1.8: Usual arithmetic conversions
-    x = x->unqualified;
-    y = y->unqualified;
+    x = x->effective->unqualified;
+    y = y->effective->unqualified;
     if (x == y) return x;
     {
       const Float * x0 = dynamic_cast<const Float *>(x);
@@ -517,6 +565,7 @@ namespace ast {
     types.add(".ptrdiff", types.find("long"));
 
     types.add_name(".pointer", new PointerSymbol);
+    types.add_name(".reference", new ReferenceSymbol);
     //types.add_name("<const>", new ConstSymbol);
     types.add_name(".array", new ArraySymbol);
     types.add_name(".fun", new FunctionSymbol);
@@ -541,10 +590,10 @@ namespace ast {
     align_ = 0;
     for (unsigned i = 0; i != members.size(); ++i) {
       const Type * t = members[i].subtype;
-      if (t->align() > align_) align_ = t->align();
-      unsigned align_offset = size_ % t->align();
-      if (align_offset != 0) size_ += t->align() - align_offset;
-      size_ += t->size();
+      if (t->storage_align() > align_) align_ = t->storage_align();
+      unsigned align_offset = size_ % t->storage_align();
+      if (align_offset != 0) size_ += t->storage_align() - align_offset;
+      size_ += t->storage_size();
     }
     defined = true;
   }
@@ -554,8 +603,8 @@ namespace ast {
     align_ = 0;
     for (unsigned i = 0; i != members.size(); ++i) {
       const Type * t = members[i].subtype;
-      if (t->align() > align_) align_ = t->align();
-      if (t->size() > size_) size_ = t->size();
+      if (t->storage_align() > align_) align_ = t->storage_align();
+      if (t->storage_size() > size_) size_ = t->storage_size();
     }
     defined = true;
   }

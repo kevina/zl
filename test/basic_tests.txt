@@ -51,3 +51,6 @@ test54.c
 test55.c
 test56.c
 test57.c
+test58.c
+test59.c
+test60.c

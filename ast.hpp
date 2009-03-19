@@ -605,7 +605,9 @@ namespace ast {
   inline bool SymbolTable::exists_this_scope(const Syntax * p, const InnerNS * ns) {
     return find_symbol<Symbol>(p, ns, front, back, ThisScope);
   }
-  
+
+  AST * to_ref(AST *, Environ &);
+  AST * from_ref(AST *, Environ &);
 
 }
 

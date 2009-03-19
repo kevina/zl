@@ -179,12 +179,15 @@ struct DeclWorking {
   Syntax * inner_type;
   void make_inner_type(const Syntax * orig);
   const Syntax * try_pointers(Parts::const_iterator & i, 
-                             Parts::const_iterator end,
-                             const Syntax * t);
+                              Parts::const_iterator end,
+                              const Syntax * t);
+  const Syntax * try_reference(Parts::const_iterator & i, 
+                               Parts::const_iterator end,
+                               const Syntax * t);
   const Syntax * try_arrays(Parts::const_iterator & i, 
-                           Parts::const_iterator end,
+                            Parts::const_iterator end,
                            const Syntax * t);
-
+  
   const Syntax * make_declaration(const Syntax * id, const Syntax * t, const Syntax * init = NULL);
   const Syntax * make_function(const Syntax * id, const Syntax * t, const Syntax * body);
   const Syntax * make_function_type(const Syntax *, const Syntax *, Environ & env);
@@ -540,7 +543,12 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
                                                  bool id_required) 
 {
   assert(t);
-  t = try_pointers(i, end, t);
+  Parts::const_iterator prev;
+  do {
+    prev = i;
+    t = try_pointers(i, end, t);
+    t = try_reference(i, end, t);
+  } while (i != prev);
   if (i == end) return t;
 
   const Syntax * outer = NULL;
@@ -621,8 +629,8 @@ const Syntax * DeclWorking::parse_init_exp(Parts::const_iterator & i,
 }
 
 const Syntax * DeclWorking::try_pointers(Parts::const_iterator & i, 
-                                        Parts::const_iterator end,
-                                        const Syntax * t) 
+                                         Parts::const_iterator end,
+                                         const Syntax * t) 
 {
   while (i != end && (*i)->is_a("sym", "*")) {
     ++i;
@@ -635,6 +643,17 @@ const Syntax * DeclWorking::try_pointers(Parts::const_iterator & i,
   return t;
 }
 
+const Syntax * DeclWorking::try_reference(Parts::const_iterator & i, 
+                                          Parts::const_iterator end,
+                                          const Syntax * t) 
+{
+  if (i != end && (*i)->is_a("sym", "&")) {
+    ++i;
+    return new Syntax(new Syntax(".reference"), t);
+  } else {
+    return t;
+  }
+}
 
 const Syntax * DeclWorking::try_arrays(Parts::const_iterator & i, 
                                       Parts::const_iterator end,

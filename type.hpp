@@ -167,7 +167,8 @@ namespace ast {
     enum CastType {Implicit, Explicit};
     virtual AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
-    const Type * unify(int rule, AST * &, AST * &);
+    virtual void resolve_assign(AST * &, AST * &, Environ & env) const = 0;
+    const Type * unify(int rule, AST * &, AST * &, Environ & env);
     //virtual const Type * promote(AST * exp) const = 0;
     virtual ~TypeRelation() {}
   };
@@ -205,6 +206,8 @@ namespace ast {
     const TypeSymbol * type_symbol;
     virtual unsigned size() const = 0;
     virtual unsigned align() const = 0;
+    virtual unsigned storage_size() const {return size();}
+    virtual unsigned storage_align() const {return align();}
     bool addressable;
     bool read_only;
     bool ct_const; // compile time const
@@ -224,6 +227,7 @@ namespace ast {
     }
     const TypeInst * root; // for typedef, the root type, recursively resolved
     const TypeInst * unqualified; // unqualified version of root, _not_ recursively resolved
+    const TypeInst * effective; // dereferenced version of root
     const TypeInst * exact_type;
     void finalize() // should be called just before it added to the
                     // type symbol cache (or whatever)
@@ -231,6 +235,7 @@ namespace ast {
       finalize_hook(); 
       root = find_root(); 
       unqualified = root->find_unqualified(); 
+      effective = root->find_effective();
       if (!exact_type) exact_type = unqualified->exact_type;
       if (!exact_type) exact_type = this; 
     }
@@ -241,6 +246,7 @@ namespace ast {
     virtual void finalize_hook() {} 
     virtual const TypeInst * find_root() {return this;}
     virtual const TypeInst * find_unqualified() const {return this;}
+    virtual const TypeInst * find_effective() const {return root;}
   };
 
   bool operator==(const TypeInst & lhs, const Vector<TypeParm> & rhs);
@@ -556,6 +562,37 @@ namespace ast {
     }
   };
 
+  //
+  //
+  //
+
+  class Reference : public ParmTypeInst {
+  public:
+    Reference(const Type * st)
+      : ParmTypeInst(st->category), subtype(st) 
+      {addressable = true; read_only = st->read_only;}
+    const Type * subtype;
+    unsigned size() const {return subtype->size();}
+    unsigned align() const {return subtype->align();}
+    unsigned storage_size() const {return POINTER_SIZE;}
+    unsigned storage_align() const {return POINTER_SIZE;}
+    unsigned num_parms() const {return 1;}
+    TypeParm parm(unsigned) const {return TypeParm(subtype);}
+  };
+
+  class ReferenceSymbol : public ParmTypeSymbol {
+  public:
+    ParmTypeInst * inst_p(Vector<TypeParm> & p) const {
+      assert(p.size() == 1);
+      assert(p[0].what == TypeParm::TYPE);
+      return new Reference(p[0].as_type);
+    }
+    unsigned required_parms() const {return 1;}
+    TypeParm::What parm(unsigned i) const {
+      if (i == 0) return TypeParm::TYPE;
+      else return TypeParm::NONE;
+    }
+  };
 
   //
   // QualifiedType is a type with one or more qualifiers which restrict there use

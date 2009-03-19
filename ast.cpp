@@ -761,6 +761,13 @@ namespace ast {
       assert(parse_->num_args() > 2);
       //env.add(name, sym, SecondPass);
       init = parse_exp(parse_->arg(2), env);
+      //if (sym->type->is_ref && !init->lvalue) {
+      //  temp_exp = init;
+      //  SymbolKey name = expand_binding(name_p, env);
+      //  
+      //  temp_sym = new_var_symbol(...);
+      //  init = addrof(temp_sym);
+      //}
       init = init->resolve_to(sym->type, env);
     }
     AST * parse_self_as_member(const Syntax * p, Environ & env) {
@@ -796,6 +803,10 @@ namespace ast {
       f << indent;
       write_flags(f);
       StringBuf buf;
+      //if (temp_sym) {
+      //  c_print_inst->declaration(temp_sym->uniq_name(), *temp_sym->type, buf);
+      //  f << " = " << temp_exp << ";\n";
+      //}
       c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
       f << buf.freeze();
       if (init && phase != Forward)
@@ -1024,6 +1035,27 @@ namespace ast {
     }
   };
 
+  struct AddrOfRef : public UnOp {
+    AddrOfRef() : UnOp("addrof_ref", "&") {}
+    void resolve(Environ & env) {
+      if (!exp->lvalue) {
+        throw error(exp->parse_, "Can not be used as lvalue");
+      }
+      // FIXME: add check for register qualifier
+      const TypeSymbol * t = env.types.find(".reference");
+      Vector<TypeParm> p;
+      p.push_back(TypeParm(exp->type));
+      type = t->inst(p);
+    }
+  };
+
+  AST * to_ref(AST * exp, Environ & env) {
+    AddrOfRef * res = new AddrOfRef();
+    res->exp = exp;
+    res->resolve(env);
+    return res;
+  }
+
   struct DeRef : public UnOp {
     DeRef() : UnOp("deref", "*") {}
     void resolve(Environ & env) {
@@ -1033,6 +1065,22 @@ namespace ast {
       lvalue = true;
     }
   };
+
+  struct DeRefRef : public UnOp {
+    DeRefRef() : UnOp("deref_ref", "*") {}
+    void resolve(Environ & env) {
+      const Reference * t = dynamic_cast<const Reference *>(exp->type->unqualified);
+      type = t->subtype;
+      lvalue = true;
+    }
+  };
+
+  AST * from_ref(AST * exp, Environ & env) {
+    DeRefRef * res = new DeRefRef();
+    res->exp = exp;
+    res->resolve(env);
+    return res;
+  }
 
   struct BinOp : public AST {
     BinOp(String name, String op0) : AST(name), op(op0) {}
@@ -1105,7 +1153,7 @@ namespace ast {
   const Type * resolve_binop(Environ & env, TypeCategory * cat, AST *& lhs, AST *& rhs) {
     check_type(lhs, cat);
     check_type(rhs, cat);
-    const Type * t = env.type_relation->unify(0, lhs, rhs);
+    const Type * t = env.type_relation->unify(0, lhs, rhs, env);
     return t;
   }
 
@@ -1180,20 +1228,7 @@ namespace ast {
       //printf("RESOLVE ASSIGN:: %p %s\n", lhs, ~parse_->to_string());
       printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->to_string());
       printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->parse_->sample_w_loc(60));
-      if (!lhs->lvalue)
-        throw error(lhs->parse_, "Can not be used as lvalue");
-      //throw error(parse_->arg(1), "Can not be used as lvalue");
-      if (lhs->type->read_only) 
-        throw error (lhs->parse_, "Assignment to read-only location");
-      try {
-        rhs = rhs->resolve_to(lhs->type, env);
-      } catch (Error * err) {
-        StringBuf buf;
-        buf = err->msg;
-        buf.printf(" in assignment of %s.", ~lhs->parse_->sample_w_loc());
-        err->msg = buf.freeze();
-        throw err;
-      }
+      env.type_relation->resolve_assign(lhs, rhs, env);
       type = lhs->type;
     }
   };
@@ -2521,6 +2556,7 @@ namespace ast {
       if (!ftype)
         throw error (lhs->parse_, "Expected function type");
       type = ftype->ret;
+      lvalue = type->addressable;
       if (!ftype->parms->vararg && parms.size() != ftype->parms->parms.size()) 
         throw error(parse_->arg(1), 
                     "Wrong number of parameters, expected %u but got %u when calling %s",
