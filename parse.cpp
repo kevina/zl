@@ -63,7 +63,7 @@ void Syntax::sample_w_loc(OStream & o, unsigned max_len) const {
   if (!str().empty())
     str().sample_w_loc(o, max_len);
   else
-    o.printf("a %s", ~what_);
+    o.printf("a %s", ~what_.name);
 }
 
 String Syntax::sample_w_loc(unsigned max_len) const {

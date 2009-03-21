@@ -420,7 +420,7 @@ struct SimpleMacro : public MacroSymbol {
   const Syntax * repl;
   const SymbolNode * env;
   SimpleMacro * parse_self(const Syntax * p, Environ & e) {
-    printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what(), ~p->to_string());
+    printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what().name, ~p->to_string());
     env = e.symbols.front;
     //entity = p->str().source;
     def = parse = p;
