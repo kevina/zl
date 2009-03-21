@@ -67,8 +67,11 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   // Parse Body
   //
 
-  SyntaxEnum * itr = partly_expand_list(match(NULL, raw_syntax (@body), body)->varl(syntax body),
-                                        FieldPos, env);
+  Environ * lenv = environ_new_scope(env);
+  pre_parse(replace(raw_syntax (declare_user_type (mid name)), m, mark),
+            lenv);
+  SyntaxEnum * itr = partly_expand_list(match(NULL, raw_syntax ({...} @body), body)->varl(syntax body),
+                                        FieldPos, lenv);
   Syntax * member;
   while ((member = itr->next)) {
     Match * m0 = match(m, raw_syntax (what n @_), member);
@@ -77,10 +80,10 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if      (strcmp(what, "var")==0) parse_class_var(member, m, mark, struct_b, module_b);
     else if (strcmp(what, "fun")==0) parse_class_fun(member, m, mark, struct_b, module_b,
                                                      parent_vtable,
-                                                     vtable_b, vtable_i, env);
+                                                     vtable_b, vtable_i, lenv);
     // otherwise we have some sort of type definition which needs to go before 
     // _Data
-    else                     module_b->append(member);
+    else                             module_p->append(pre_parse(member, lenv));
     exports->append(m0->var(syntax n));
   }
 

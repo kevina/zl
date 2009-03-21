@@ -527,6 +527,8 @@ namespace ast {
   AST * parse_stmt_decl(const Syntax * p, Environ & env);
   AST * parse_exp(const Syntax * p, Environ & env);
 
+  const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
+
   void compile(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
 
   AST * cast_up(AST * exp, const Type * type, Environ & env);

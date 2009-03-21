@@ -57,7 +57,7 @@ int main(int argc, const char *argv[])
       out.open("prelude.c", "w");
       ast::compile(*env.top_level_symbols, out);
       out.close();
-      system("gcc -O -fexceptions -shared -fpic -o prelude.so prelude.c");
+      system("gcc -g -O -fexceptions -shared -fpic -o prelude.so prelude.c");
       //load_macro_lib("./prelude.so", env);
     } else {
       unsigned offset = 1;

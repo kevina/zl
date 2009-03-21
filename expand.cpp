@@ -321,7 +321,8 @@ extern "C" const Context * get_context(const Syntax * p);
 extern "C" const Syntax * replace_context(const Syntax * p, const Context * context);
 extern "C" const Syntax * partly_expand(const Syntax *, Position pos, Environ *);
 extern "C" const Syntax * reparse(const Syntax *, const char *, Environ *);
-extern "C" const SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
+extern "C" SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
+extern "C" const Syntax * pre_parse(const Syntax *, Environ *);
 extern "C" const UnmarkedSyntax * string_to_syntax(const char *);
 extern "C" const char * syntax_to_string(const UnmarkedSyntax *);
 extern "C" void dump_syntax(const UnmarkedSyntax * s);
@@ -332,6 +333,7 @@ extern "C" const ModuleInfo * user_type_module(const UserTypeInfo *);
 extern "C" const ModuleInfo * module_info(const Syntax *, Environ *);
 extern "C" SyntaxEnum * module_symbols(const ModuleInfo *);
 extern "C" bool module_have_symbol(const ModuleInfo *, const Syntax *);
+extern "C" Environ * environ_new_scope(Environ *);
 extern "C" unsigned long ct_value(const Syntax *, Environ *);
 
 String gen_sym() {
@@ -506,11 +508,6 @@ int syntax_list_empty(const SyntaxList * p) {
 void syntax_list_append(SyntaxList * l, const Syntax * p) {
   l->add_part(p);
 }
-
-struct SyntaxEnum {
-  virtual const Syntax * next() = 0;
-  virtual ~SyntaxEnum() {}
-};
 
 struct SimpleSyntaxEnum : public SyntaxEnum {
   Parts::const_iterator i;
@@ -1146,8 +1143,17 @@ struct PartlyExpandSyntaxEnum : public SyntaxEnum {
   }
 };
 
-const SyntaxEnum * partly_expand_list(SyntaxEnum * l, Position pos, Environ * env) {
+SyntaxEnum * partly_expand_list(const Syntax * p, Position pos, Environ & env) {
+  return new PartlyExpandSyntaxEnum(new SimpleSyntaxEnum(p->args_begin(), p->args_end()), pos, &env);
+}
+
+SyntaxEnum * partly_expand_list(SyntaxEnum * l, Position pos, Environ * env) {
   return new PartlyExpandSyntaxEnum(l, pos, env);
+}
+
+const Syntax * pre_parse(const Syntax * p, Environ * env) {
+  printf("PRE_PARSE\n");
+  return pre_parse_decl(p, *env);
 }
 
 SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
@@ -1419,6 +1425,10 @@ Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
 //
 //
 //
+
+Environ * environ_new_scope(Environ * env) {
+  return new Environ(env->new_scope());
+}
 
 unsigned long ct_value(const Syntax * p, Environ * env) {
   AST * ast = parse_exp(p, *env);

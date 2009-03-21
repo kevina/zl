@@ -15,6 +15,7 @@
   replace_context;
   partly_expand;
   partly_expand_list;
+  pre_parse;
   reparse;
   string_to_syntax;
   syntax_to_string;
@@ -25,4 +26,5 @@
   module_symbols;
   module_have_symbol;
   ct_value;
+  environ_new_scope;
 };

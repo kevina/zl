@@ -86,6 +86,7 @@ typedef enum  {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4,
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32} Position;
 __ct_callback Syntax * partly_expand(Syntax *, Position pos, Environ *);
 __ct_callback SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
+__ct_callback Syntax * pre_parse(Syntax *, Environ *);
 __ct_callback Syntax * reparse(Syntax *, const char *, Environ *);
 
 __ct_callback UnmarkedSyntax * string_to_syntax(const char *);
@@ -114,6 +115,8 @@ user_type ModuleInfo {
   macro symbols(:this this) {module_symbols(this);}
   macro have_symbol(sym, :this this) {module_have_symbol(this, sym);}
 }
+
+__ct_callback Environ * environ_new_scope(Environ *);
 
 __ct_callback size_t ct_value(const Syntax *, Environ *);
 

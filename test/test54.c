@@ -7,10 +7,12 @@ class X {
   class C {
     int x;
   };
-  //C c;
-  //C get_c() {return c;}
-  //X make_x() {X x; return x;}
+  C c;
+  C get_c() {return c;}
+  X make_x() {X x; return x;}
 };
 
+struct X::D d;
+X::C c;
 X x;
 

@@ -128,4 +128,10 @@ struct ChangeSrc<SyntaxSourceInfo> {
   }
 };
 
+struct SyntaxEnum {
+  virtual const Syntax * next() = 0;
+  virtual ~SyntaxEnum() {}
+};
+SyntaxEnum * partly_expand_list(const Syntax * p, Position pos, Environ & env);
+
 #endif

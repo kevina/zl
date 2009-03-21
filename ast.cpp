@@ -1528,6 +1528,13 @@ namespace ast {
     }
   }
 
+  static void pre_parse_stmts(const Syntax * parse, Environ & env) {
+    SyntaxEnum * els = partly_expand_list(parse, TopLevel, env);
+    while (const Syntax * p = els->next()) {
+      pre_parse_decl(p, env);
+    }
+  }
+
   static void parse_stmts_first_pass(const Syntax * parse, Environ & env, Collect & collect) {
     for (unsigned i = 0; i < parse->num_args(); ++i) {
       const Syntax * p = parse->arg(i);
@@ -1559,7 +1566,7 @@ namespace ast {
   //
   //
 
-  AST * parse_module(const Syntax * p, Environ & env0) {
+  AST * parse_module(const Syntax * p, Environ & env0, bool pre_parse = false) {
     assert_num_args(p, 1, 2);
     SymbolName n = *p->arg(0);
     Module * m = NULL;
@@ -1578,8 +1585,12 @@ namespace ast {
       env.where = m;
 
       Collect collect;
-      parse_stmts_first_pass(p->arg(1), env, collect);
-
+      if (pre_parse) {
+        pre_parse_stmts(p->arg(1), env);
+      } else {
+        parse_stmts_first_pass(p->arg(1), env, collect);
+      }
+        
       for (unsigned i = 0; i != m->exports.size(); ++i) {
         const Syntax * p = m->exports[i];
         for (unsigned i = 0, sz = p->num_args(); i != sz; ++i) {
@@ -1588,28 +1599,32 @@ namespace ast {
                                    env.symbols.lookup<Symbol>(p->arg(i)), m->syms);
         }
       }
-
-     //printf("MODULE %s\n", ~n);
-
+        
+      //printf("MODULE %s\n", ~n);
+      
       //printf("INTERNAL\n");
       //for (SymbolNode * c = env.symbols.front; c != env.symbols.back; c = c->next)
       //  printf("  %s %p %s %s\n", ~c->key.to_string(), 
       //         c->value,
       //         c->value ? ~c->value->name : "", 
       //         c->value ? ~c->value->uniq_name() : "");
-
+      
       //printf("EXPORTED\n");
       //for (SymbolNode * c = m->syms; c; c = c->next)
       //  printf("  %s %p %s %s\n", ~c->key.to_string(), 
       //         c->value,
       //        c->value ? ~c->value->name : "", 
       //         c->value ? ~c->value->uniq_name() : "");
-
+      
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
         (*i)->finish_parse(env);
       }
     }
     return new Empty();
+  }
+
+  AST * pre_parse_module(const Syntax * p, Environ & env) {
+    return parse_module(p, env, true);
   }
 
   struct GatherMarks {
@@ -3043,7 +3058,7 @@ namespace ast {
     throw error (p, "Unsupported primative at top level: %s", ~p->what());
     //throw error (p, "Expected top level expression.");
   }
-
+    
   AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect) {
     AST * res;
     res = try_ast(p, env);
@@ -3069,6 +3084,22 @@ namespace ast {
     //if (res) return res;
     throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->what());
     //throw error (p, "Expected struct or union member.");
+  }
+
+  const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
+    String what = p->what().name;
+    printf("PRE PARSING %s\n", ~p->to_string());
+    if (what == "struct")  (new Struct)->parse_self(p, env);
+    if (what == "union")   (new Union)->parse_self(p, env);
+    if (what == "enum")    (new Enum)->parse_self(p, env);
+    if (what == "talias")  (new TypeAlias)->parse_self(p, env);
+    if (what == "module")         pre_parse_module(p, env);
+    if (what == "make_user_type") parse_make_user_type(p, env);
+    if (what == "user_type")          parse_user_type(p, env);
+    if (what == "finalize_user_type") parse_finalize_user_type(p, env);
+    if (what == "make_subtype") parse_make_subtype(p, env);
+    if (what == "declare_user_type") parse_declare_user_type(p, env);
+    return p;
   }
 
   AST * parse_stmt(const Syntax * p, Environ & env) {

@@ -11,8 +11,9 @@ macro foreach (VAR, WHAT, BODY) {
 }
 
 class Container {
-  int * begin() {return NULL;}
-  int * end() {return NULL;}
+  typedef int * iterator;
+  iterator begin() {return NULL;}
+  iterator end() {return NULL;}
 };
 
 int main() {

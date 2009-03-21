@@ -326,7 +326,7 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
 bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itself) {
   const Syntax * name = NULL;
   const Syntax * body = NULL;
-  if (p->is_a("struct") || p->is_a("union") || p->is_a("class")) {
+  if (p->is_a("struct") || p->is_a("union")) {
     unsigned i = 0;
     if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
                                         "Expected indentifer or \"{\" after \"%s\".",
@@ -344,8 +344,11 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
       name = gen_sym();
     inner_type = new Syntax(p->part(0), name);
     if (body || by_itself) {
+      const Syntax * n = name;
+      if (n->simple())
+        n = new Syntax(new Syntax("w/inner"), n, new Syntax("tag"));
       Syntax * struct_union = new Syntax(p->part(0));
-      struct_union->add_part(name);
+      struct_union->add_part(n);
       struct_union->set_flags(p);
       if (body)
         struct_union->add_part(parse_struct_union_body(body, env));
@@ -526,7 +529,11 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
       }
       break;
     }
-    inner_type->add_part(type_symbol ? new Syntax(type_symbol_p, type_symbol) : new Syntax(t.freeze()));
+    //inner_type->add_part(type_symbol ? new Syntax(type_symbol_p, type_symbol) : new Syntax(t.freeze()));
+    // Don't use the resolved symbol the final parse might bind it to
+    // a different symbol.  Otherwise "class X {X foo() {...}};" won't
+    // work as expected.
+    inner_type->add_part(type_symbol ? type_symbol_p : new Syntax(t.freeze()));
   } else {
     // stuct or union
     // nothing to do
@@ -588,7 +595,7 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
                                               Environ & env)
 {
   Syntax * ps = new Syntax(new Syntax(".tuple"));
-  printf("MAKE FUNCTION TYPE: %s\n", ~parms->to_string());
+  printf("MAKE FUNCTION TYPE: %s %s\n", ~ret->to_string(), ~parms->to_string());
   Parts::const_iterator i = parms->args_begin();
   Parts::const_iterator end = parms->args_end();
   if (i != end) for (;;) {
