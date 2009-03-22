@@ -1,3 +1,42 @@
+/* 
+ * Example class definition 
+ * (slightly out of date)
+ *
+
+  class Y : public X {
+    struct D {
+      ...
+    };
+    D d;
+    virtual Y make_y();
+    virtual D foo();
+  }
+
+  user_type Y {
+    make_subtype X; // this must come first otherwise X may be redefined by import
+    import X;
+    struct D {
+    };
+    class _VTable;
+    struct _Data {
+      _VTable * _vptr;
+      ...
+    };
+    finalize user_type _Data;
+    class _VTable { / must come after _Data and finalize user_type;
+      Y (*make_y)();
+      D (*foo());
+    }
+    static _VTable _vtable;
+    ...
+    now come access macros and functions in the order they appear
+    ...
+    init() : static_constructor ...;
+    map _vptr ...;
+    void _constructor() ..;
+  }
+ */
+
 void parse_class_var(Syntax * p, Match * m, Mark * mark,
                      SyntaxList * struct_b, SyntaxList * module_b);
 void parse_class_fun(Syntax * p, Match * m, Mark * mark,
