@@ -960,7 +960,7 @@ namespace ast {
       exp->compile_prep(env);
     }
     void compile(CompileWriter & f) {
-      f << "(" << op << " " << exp << ")";
+      f << "(" << op << exp << ")";
     }
   };
 
@@ -1052,14 +1052,6 @@ namespace ast {
     }
   };
 
-  AST * to_ref(AST * exp, Environ & env) {
-    AddrOfRef * res = new AddrOfRef();
-    res->parse_ = exp->parse_;
-    res->exp = exp;
-    res->resolve(env);
-    return res;
-  }
-
   struct DeRef : public UnOp {
     DeRef() : UnOp("deref", "*") {}
     void resolve(Environ & env) {
@@ -1080,7 +1072,35 @@ namespace ast {
     }
   };
 
+  AST * parse_addrof(const Syntax * p, Environ & env) {
+    AddrOf * addrof = new AddrOf;
+    addrof->parse_self(p, env);
+    DeRef * deref = dynamic_cast<DeRef *>(addrof->exp);
+    if (deref) return deref->exp;
+    return addrof;
+  }
+
+  AST * parse_deref(const Syntax * p, Environ & env) {
+    DeRef * deref = new DeRef;
+    deref->parse_self(p, env);
+    AddrOf * addrof = dynamic_cast<AddrOf *>(deref->exp);
+    if (addrof) return addrof->exp;
+    return deref;
+  }
+
+  AST * to_ref(AST * exp, Environ & env) {
+    DeRefRef * deref = dynamic_cast<DeRefRef *>(exp);
+    if (deref) return deref->exp;
+    AddrOfRef * res = new AddrOfRef();
+    res->parse_ = exp->parse_;
+    res->exp = exp;
+    res->resolve(env);
+    return res;
+  }
+
   AST * from_ref(AST * exp, Environ & env) {
+    AddrOfRef * addrof = dynamic_cast<AddrOfRef *>(exp);
+    if (addrof) return addrof->exp;
     DeRefRef * res = new DeRefRef();
     res->parse_ = exp->parse_;
     res->exp = exp;
@@ -1149,7 +1169,7 @@ namespace ast {
       exp->compile_prep(env);
     }
     void compile(CompileWriter & f) {
-      f << "((" << exp << ")" << "." << sym->uniq_name() << ")";
+      f << exp << "." << sym->uniq_name();
     }
   };
 
@@ -2350,12 +2370,7 @@ namespace ast {
   void Cast::compile(CompileWriter & f) {
     StringBuf buf;
     c_print_inst->to_string(*type, buf);
-    f << "((" << buf.freeze() << ")";
-    if (dynamic_cast<const InitList *>(exp)) 
-      f << exp;
-    else
-      f << "(" << exp << ")";
-    f << ")";
+    f << "((" << buf.freeze() << ")" << exp << ")";
   };
 
   AST * parse_cast(const Syntax * p, Environ & env, TypeRelation::CastType ctype) {
@@ -3242,8 +3257,8 @@ namespace ast {
     if (what == "ge")      return (new Ge)->parse_self(p, env);
     if (what == "not")     return (new Not)->parse_self(p, env);
     if (what == "complmnt")return (new Compliment)->parse_self(p, env);
-    if (what == "addrof")  return (new AddrOf)->parse_self(p, env);
-    if (what == "deref")   return (new DeRef)->parse_self(p, env);
+    if (what == "addrof")  return parse_addrof(p, env);
+    if (what == "deref")   return parse_deref(p, env);
     if (what == "member")  return parse_member_access(p, env);
     if (what == "imember") return parse_imember_access(p, env);
     if (what == "call")    return (new Call)->parse_self(p, env);
