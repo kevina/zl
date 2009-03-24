@@ -365,6 +365,7 @@ const Syntax * flatten(const Syntax * p) {
 const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs);
 
 struct MacroSymbol : public Symbol {
+  SymbolName real_name;
   static const Syntax * macro_call;
   static const Syntax * macro_def;
   struct MacroInfo {
@@ -425,7 +426,8 @@ struct SimpleMacro : public MacroSymbol {
     //entity = p->str().source;
     def = parse = p;
     assert_num_args(p, 3);
-    name = expand_binding(p->arg(0), e);
+    real_name = expand_binding(p->arg(0), e);
+    name = real_name.name;
     parms = flatten(p->arg(1));
     free = p->flag("free");
     if (free)
@@ -464,7 +466,8 @@ struct Macro : public MacroSymbol {
     //printf("\n");
     parse = p;
     assert_num_args(p, 1, 2);
-    name = expand_binding(p->arg(0), e);
+    real_name = expand_binding(p->arg(0), e);
+    name = real_name.name;
     fun = e.symbols.lookup<TopLevelVarSymbol>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
     dynamic_cast<const Fun *>(fun->decl)->is_macro = true;
     def = fun->decl->parse_;
@@ -1181,9 +1184,9 @@ AST * parse_map(const Syntax * p, Environ & env) {
   SimpleMacro * m = new SimpleMacro;
   m->parse_self(p, env);
   if (p->is_a("smacro"))
-    env.add(SymbolKey(m->name, SYNTAX_NS), m);
+    env.add(SymbolKey(m->real_name, SYNTAX_NS), m);
   else
-    env.add(m->name, m);
+    env.add(m->real_name, m);
   return new Empty();
 }
 
@@ -1191,9 +1194,9 @@ AST * parse_macro(const Syntax * p, Environ & env) {
   Macro * m = new Macro;
   m->parse_self(p, env);
   if (p->is_a("make_syntax_macro"))
-    env.add(SymbolKey(m->name, SYNTAX_NS), m);
+    env.add(SymbolKey(m->real_name, SYNTAX_NS), m);
   else
-    env.add(m->name, m);
+    env.add(m->real_name, m);
   return new Empty();
 }
 

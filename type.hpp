@@ -664,6 +664,7 @@ namespace ast {
   public:
     Array(const Type * t, unsigned sz) : PointerLike(ARRAY_C, t), length(sz) {}
     unsigned length;
+    unsigned align() const {return subtype->align();}
     unsigned size() const {return subtype->size() * length;}
     unsigned num_parms() const {return 2;}
     TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(subtype) : TypeParm(length);}

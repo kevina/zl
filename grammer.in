@@ -102,9 +102,10 @@ INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
 
 FLOATING_SUFFIX = <float> [fF] / <"long double"> [lL] / <double>;
 
-STRUCT_UNION = <%> {"struct"/"union"/"class"/"class_"} 
+STRUCT_UNION = <%> {"struct"/"union"/"class"} 
                    {ID/}
                    (:<public> ":" "public" {ID})?
+                   (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
                    {<{...}> "{" {STMT}* "}" }?;
 
 ENUM = <enum> "enum" {ID/} 
