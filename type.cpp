@@ -599,7 +599,8 @@ namespace ast {
     size_ = 0;
     align_ = 0;
     for (unsigned i = 0; i != members.size(); ++i) {
-      const Type * t = members[i].subtype;
+      members[i].offset = size_;
+      const Type * t = members[i].sym->type;
       if (t->storage_align() > align_) align_ = t->storage_align();
       unsigned align_offset = size_ % t->storage_align();
       if (align_offset != 0) size_ += t->storage_align() - align_offset;
@@ -612,7 +613,8 @@ namespace ast {
     size_ = 0;
     align_ = 0;
     for (unsigned i = 0; i != members.size(); ++i) {
-      const Type * t = members[i].subtype;
+      members[i].offset = 0;
+      const Type * t = members[i].sym->type;
       if (t->storage_align() > align_) align_ = t->storage_align();
       if (t->storage_size() > size_) size_ = t->storage_size();
     }

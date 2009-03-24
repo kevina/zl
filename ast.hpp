@@ -146,33 +146,56 @@ namespace ast {
   struct BreakException {};
   struct ReturnException {};
 
-  
+  struct CT_Ptr {
+    size_t val;
+    CT_Ptr(size_t v) : val(v) {}
+  };
+
+  struct CT_LValue {
+    CT_Ptr addr;
+    CT_LValue(CT_Ptr a) : addr(a) {}
+  };
+
   struct CT_Value_Base : public gc {
     virtual void to_string(const AST *, OStream &) const = 0;
+    virtual const char * type_name() const = 0;
     virtual ~CT_Value_Base() {}
   };
 
   template <typename T> struct CT_Value : public CT_Value_Base {
     void to_string(const AST *, OStream & o) const;
     virtual T value(const AST *) const = 0;
+    const char * type_name() const;
   };
 
-  template <typename T, bool is_int, bool is_signed, size_t size>
-  struct ExactTypeByProp {typedef T type;};
-  template <typename T> struct ExactTypeByProp<T, true, true, 1> {typedef int8_t type;};
-  template <typename T> struct ExactTypeByProp<T, true, false, 1> {typedef uint8_t type;};
-  template <typename T> struct ExactTypeByProp<T, true, true, 2> {typedef int16_t type;};
-  template <typename T> struct ExactTypeByProp<T, true, false, 2> {typedef uint16_t type;};
-  template <typename T> struct ExactTypeByProp<T, true, true, 4> {typedef int32_t type;};
-  template <typename T> struct ExactTypeByProp<T, true, false, 4> {typedef uint32_t type;};
-  template <typename T> struct ExactTypeByProp<T, true, true, 8> {typedef int64_t type;};
-  template <typename T> struct ExactTypeByProp<T, true, false, 8> {typedef uint64_t type;};
+  template <typename T>
+  struct CT_Type_Base {typedef T type; static const char * const name;};
+  template<typename T> const char * const CT_Type_Base<T>::name = NULL;
 
-  template <typename T> struct ExactType
-    : public ExactTypeByProp<T,
-                             std::numeric_limits<T>::is_integer,
-                             std::numeric_limits<T>::is_signed,
-                             sizeof(T)> {};
+  template <typename T, bool is_int, bool is_signed, size_t size>
+  struct CT_Type_ByProp : public CT_Type_Base<T> {};
+
+  template <typename T> struct CT_Type_ByProp<T, true, true, 1> : public CT_Type_Base<int8_t> {};
+  template <typename T> struct CT_Type_ByProp<T, true, false, 1> : public CT_Type_Base<uint8_t> {};
+  template <typename T> struct CT_Type_ByProp<T, true, true, 2> : public CT_Type_Base<int16_t> {};
+  template <typename T> struct CT_Type_ByProp<T, true, false, 2> : public CT_Type_Base<uint16_t> {};
+  template <typename T> struct CT_Type_ByProp<T, true, true, 4> : public CT_Type_Base<int32_t> {};
+  template <typename T> struct CT_Type_ByProp<T, true, false, 4> : public CT_Type_Base<uint32_t> {};
+  template <typename T> struct CT_Type_ByProp<T, true, true, 8> : public CT_Type_Base<int64_t> {};
+  template <typename T> struct CT_Type_ByProp<T, true, false, 8> : public CT_Type_Base<uint64_t> {};
+
+  template <typename T> struct CT_Type
+    : public CT_Type_ByProp<T,
+                            std::numeric_limits<T>::is_integer,
+                            std::numeric_limits<T>::is_signed,
+                            sizeof(T)> {};
+
+  template <typename T> struct CT_Type<T *> : public CT_Type_Base<CT_Ptr> {};
+                                                
+  template <typename T>
+  const char * CT_Value<T>::type_name() const {
+    return CT_Type<T>::name;
+  }
 
   struct AST : public Entity {
     String what_;
@@ -214,7 +237,7 @@ namespace ast {
     const CT_Value_Base * ct_value_;
     template <typename T> T real_ct_value() const;
     template <typename T> T ct_value() const {
-      return real_ct_value<typename ExactType<T>::type>();
+      return real_ct_value<typename CT_Type<T>::type>();
     }
   };
 
@@ -237,7 +260,7 @@ inline Syntax::Syntax(const ast::AST * e)
   : what_("<entity>"), str_(e->parse_->str()), d(), repl(), entity_(const_cast<ast::AST*>(e)) {}
 
 namespace ast {
-
+  
   struct OtherType {};
 
   template <typename T>

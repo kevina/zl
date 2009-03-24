@@ -122,6 +122,9 @@ SYNTAX_P =
   <<mid>> {MID} / {ID} / {BRACE} / {PARAN}; # / {BRACK};
 #  <<mid>> {MID} / {ID} / {BRACE} / <parm> "(" {RAW_TOKEN*} ")"; # / {BRACK};
 
+SYNTAX_STR =
+  ({SYNTAX_P} / <parm> {RAW_TOKEN+}) EOF;
+
 #
 # Misc
 #

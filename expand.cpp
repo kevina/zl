@@ -945,9 +945,7 @@ const Syntax * replace_context(const Syntax * p, const Context * context) {
 //
 
 extern "C" const UnmarkedSyntax * string_to_syntax(const char * str) {
-  Syntax * res = new Syntax(str);
-  res->str_ = SourceStr(res->what());
-  return res;
+  return parse_str("SYNTAX_STR", SourceStr(str));
 }
 
 extern "C" const char * syntax_to_string(const UnmarkedSyntax * s) {

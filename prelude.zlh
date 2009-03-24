@@ -3,12 +3,13 @@
 //
 
 typedef typedef struct _IO_FILE FILE;
+typedef unsigned size_t;
 int printf (const char *, ...);
-int snprintf(const char * str, unsigned long size, const char * format, ...);
+int snprintf(const char * str, size_t size, const char * format, ...);
 macro NULL() {0;}
 typedef int bool;
 int strcmp(const char *s1, const char *s2);
-typedef unsigned long size_t;
+macro offsetof(TYPE, MEMBER) {(size_t) &((TYPE *)0)->MEMBER;}
 
 //
 // Macro ABI
@@ -89,7 +90,7 @@ __ct_callback SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Enviro
 __ct_callback Syntax * pre_parse(Syntax *, Environ *);
 __ct_callback Syntax * reparse(Syntax *, const char *, Environ *);
 
-__ct_callback UnmarkedSyntax * string_to_syntax(const char *);
+__ct_callback UnmarkedSyntax * string_to_syntax(const char * str);
 __ct_callback const char * syntax_to_string(UnmarkedSyntax *);
 __ct_callback void dump_syntax(UnmarkedSyntax *);
 

@@ -86,7 +86,7 @@ namespace ast {
       {".int64", new W<int64_t>}      
     };
     static CT_Value_Map * map_end = map + sizeof(map)/sizeof(CT_Value_Map);
-    String n = t->exact_type->to_string();
+    String n = t->ct_type_name();
     for (const CT_Value_Map * i = map; i != map_end; ++i) {
       if (i->type == n) return i->ct_value;
     }
@@ -107,7 +107,7 @@ namespace ast {
       {"long double", new W<long double>},
     };
     static CT_Value_Map * map_end = map + sizeof(map)/sizeof(CT_Value_Map);
-    String n = t->exact_type->to_string();
+    String n = t->ct_type_name();
     for (const CT_Value_Map * i = map; i != map_end; ++i) {
       if (i->type == n) return i->ct_value;
     }
@@ -399,7 +399,7 @@ namespace ast {
       unsigned long long value = strtoull(s, &e, 0);
       if (*e) throw error(vp, "Expected Integer");
       if (value == 0) t = env.types.inst(".zero", t);
-      String n = it->exact_type->to_string();
+      String n = it->ct_type_name();
       if (n == ".uint8")
         return new Literal_Value<uint8_t>(value);
       else if (n == ".uint16")
@@ -416,7 +416,7 @@ namespace ast {
       long long value = strtoll(s, &e, 0);
       if (*e) throw error(vp, "Expected Integer");
       if (value == 0) t = env.types.inst(".zero", t);
-      String n = it->exact_type->to_string();
+      String n = it->ct_type_name();
       if (n == ".int8")
         return new Literal_Value<int8_t>(value);
       else if (n == ".int16")
@@ -453,7 +453,7 @@ namespace ast {
 
   CT_Value_Base * new_float_ct_value(const Syntax * vp, const Type * & t, Environ & env) {
     // FIXME: Do I need to make into ct_const type
-    String n = t->exact_type->to_string();
+    String n = t->ct_type_name();
     const char * s = ~*vp;
     char * e = (char *)s;
     long double value = strtold(s, &e);
@@ -1023,6 +1023,10 @@ namespace ast {
     }
   };
 
+  struct AddrOf_CT_Value : public CT_Value<CT_Ptr> {
+    CT_Ptr value(const AST * exp) const;
+  } addrof_ct_value;
+
   struct AddrOf : public UnOp {
     AddrOf() : UnOp("addrof", "&") {}
     void resolve(Environ & env) {
@@ -1036,7 +1040,17 @@ namespace ast {
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
     }
+    void make_ct_value(Environ & env) {
+      ct_value_ = &addrof_ct_value;
+    }
   };
+
+  CT_Ptr AddrOf_CT_Value::value(const AST * exp) const {
+    const AddrOf * addrof = dynamic_cast<const AddrOf *>(exp);
+    CT_LValue val = addrof->exp->ct_value<CT_LValue>();
+    return val.addr;
+  }
+
 
   struct AddrOfRef : public UnOp {
     AddrOfRef() : UnOp("addrof_ref", "&") {}
@@ -1052,6 +1066,10 @@ namespace ast {
     }
   };
 
+  struct DeRef_CT_Value : public CT_Value<CT_LValue> {
+    CT_LValue value(const AST * exp) const;
+  } deref_ct_value;
+
   struct DeRef : public UnOp {
     DeRef() : UnOp("deref", "*") {}
     void resolve(Environ & env) {
@@ -1061,7 +1079,16 @@ namespace ast {
       type = t->subtype;
       lvalue = true;
     }
+    void make_ct_value(Environ & env) {
+      ct_value_ = &deref_ct_value;
+    }
   };
+
+  CT_LValue DeRef_CT_Value::value(const AST * exp) const {
+    const DeRef * deref = dynamic_cast<const DeRef *>(exp);
+    CT_Ptr val = deref->exp->ct_value<CT_Ptr>();
+    return CT_LValue(val);
+  }
 
   struct DeRefRef : public UnOp {
     DeRefRef() : UnOp("deref_ref", "*") {}
@@ -1138,6 +1165,10 @@ namespace ast {
     }
   };
 
+  struct MemberAccess_CT_Value : public CT_Value<CT_LValue> {
+    CT_LValue value(const AST *) const;
+  } member_access_ct_value;
+
   struct MemberAccess : public AST {
     MemberAccess() : AST("member") {}
     AST * part(unsigned i) {abort();}
@@ -1160,6 +1191,7 @@ namespace ast {
                     ~id.to_string(), ~t->to_string());
       type = sym->type;
       lvalue = true;
+      ct_value_ = &member_access_ct_value;
       return this;
     };
     void finalize(FinalizeEnviron & env) {
@@ -1172,6 +1204,18 @@ namespace ast {
       f << exp << "." << sym->uniq_name();
     }
   };
+
+  CT_LValue MemberAccess_CT_Value::value(const AST * exp0) const {
+    const MemberAccess * e = dynamic_cast<const MemberAccess *>(exp0);
+    const StructUnionT * t = dynamic_cast<const StructUnionT *>(e->exp->type->unqualified);
+    CT_Ptr p = e->exp->ct_value<CT_LValue>().addr;
+    Vector<Member>::const_iterator i = t->members.begin(), end = t->members.end();
+    while (i != end && i->sym != e->sym)
+      ++i;
+    assert(i != end);
+    p.val += i->offset;
+    return CT_LValue(p);
+  }
 
   const Type * resolve_binop(Environ & env, TypeCategory * cat, AST *& lhs, AST *& rhs) {
     check_type(lhs, cat);
@@ -1297,11 +1341,41 @@ namespace ast {
     void resolve(Environ & env) {
       type = resolve_additive(env, lhs, rhs);
     }
-    void make_ct_value(Environ & env) {
-      if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
-        ct_value_ = op_ct_value<BinOp_CT_Value, std::plus>(type);
+    void make_ct_value(Environ & env);
+  };
+
+  template <typename T> 
+  struct Ptr_Plus_CT_Value : public CT_Value<CT_Ptr> {
+    CT_Ptr value(const AST * a) const {
+      const Plus * plus = dynamic_cast<const Plus *>(a);
+      CT_Ptr   lhs = plus->lhs->ct_value<CT_Ptr>();
+      T        sz  = dynamic_cast<const PointerLike *>(plus->lhs->type)->subtype->size();
+      T        rhs = plus->rhs->ct_value<T>();
+      return CT_Ptr(lhs.val + sz*rhs);
     }
   };
+
+  template <typename T> 
+  struct Plus_Ptr_CT_Value : public CT_Value<CT_Ptr> {
+    CT_Ptr value(const AST * a) const {
+      const Plus * plus = dynamic_cast<const Plus *>(a);
+      T        lhs = plus->lhs->ct_value<T>();
+      T        sz  = plus->rhs->type->size();
+      CT_Ptr   rhs = plus->rhs->ct_value<CT_Ptr>();
+      return CT_Ptr(sz*lhs + rhs.val);
+    }
+  };
+
+  void Plus::make_ct_value(Environ & env) {
+    if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
+      ct_value_ = op_ct_value<BinOp_CT_Value, std::plus>(type);
+    else if (lhs->type->is(POINTER_C))
+      ct_value_ = int_op_ct_value<Ptr_Plus_CT_Value>(rhs->type);
+    else if (rhs->type->is(POINTER_C))
+      ct_value_ = int_op_ct_value<Plus_Ptr_CT_Value>(lhs->type);
+    else
+      abort();
+  }
 
   struct Minus : public BinOp {
     Minus() : BinOp("minus", "-") {}
@@ -1882,19 +1956,20 @@ namespace ast {
   //
   //
   //
-
-  template <typename T> static inline const char * type_name() {return NULL;}
-  template <> static inline const char * type_name<uint8_t> () {return ".uint8";}
-  template <> static inline const char * type_name<uint16_t>() {return ".uint16";}
-  template <> static inline const char * type_name<uint32_t>() {return ".uint32";}
-  template <> static inline const char * type_name<uint64_t>() {return ".uint64";}
-  template <> static inline const char * type_name<int8_t> () {return ".int8";}
-  template <> static inline const char * type_name<int16_t>() {return ".int16";}
-  template <> static inline const char * type_name<int32_t>() {return ".int32";}
-  template <> static inline const char * type_name<int64_t>() {return ".int64";}
-  template <> static inline const char * type_name<float>() {return "float";}  
-  template <> static inline const char * type_name<double>() {return "double";}
-  template <> static inline const char * type_name<long double>() {return "long double";}
+  
+  template<> const char * const CT_Type_Base<int8_t>::name = ".int8";
+  template<> const char * const CT_Type_Base<uint8_t>::name = ".uint8";
+  template<> const char * const CT_Type_Base<int16_t>::name = ".int16";
+  template<> const char * const CT_Type_Base<uint16_t>::name = ".uint16";
+  template<> const char * const CT_Type_Base<int32_t>::name = ".int32";
+  template<> const char * const CT_Type_Base<uint32_t>::name = ".uint32";
+  template<> const char * const CT_Type_Base<int64_t>::name = ".int64";
+  template<> const char * const CT_Type_Base<uint64_t>::name = ".uint64";
+  template<> const char * const CT_Type_Base<float>::name = "float";
+  template<> const char * const CT_Type_Base<double>::name = "double";
+  template<> const char * const CT_Type_Base<long double>::name = "long double";
+  template<> const char * const CT_Type_Base<CT_Ptr>::name = ".pointer";
+  template<> const char * const CT_Type_Base<CT_LValue>::name = ".lvalue";
 
   //
   //
@@ -1905,14 +1980,73 @@ namespace ast {
     virtual To value_direct(const AST * t) const = 0;
   };
 
-  template <typename From, typename To>
-  struct Cast_CT_Value : public Cast_CT_Value_Base<To> {
+  template <typename From, typename To> 
+  struct Cast_CT_Value_Direct : public Cast_CT_Value_Base<To> {
     To value_direct(const AST * exp) const {
       return static_cast<To>(exp->ct_value<From>());
     }
+  };
+
+  template <typename From, typename To>
+  struct Cast_CT_Value : public  Cast_CT_Value_Direct<From, To> {
     To value(const AST * t) const {
       const Cast * c = dynamic_cast<const Cast *>(t);
-      return static_cast<To>(c->exp->ct_value<From>());
+      return Cast_CT_Value_Direct<From,To>::value_direct(c->exp);
+    }
+  };
+
+  template <typename T>
+  struct Cast_CT_Value<T,T> : public Cast_CT_Value_Base<T> {
+    T value_direct(const AST * exp) const {
+      // this makes no sense and could lead to infinite recursion
+      abort();
+    }
+    T value(const AST * t) const {
+      const Cast * c = dynamic_cast<const Cast *>(t);
+      return c->exp->ct_value<T>();
+    }
+  };
+
+  template <typename To>
+  struct Cast_CT_Value_Direct<CT_Ptr,To> : public Cast_CT_Value_Base<To> {
+    To value_direct(const AST * exp) const {
+      return static_cast<To>(exp->ct_value<CT_Ptr>().val);
+    }
+  };
+
+  template <typename From>
+  struct Cast_CT_Value_Direct<From,CT_Ptr> : public Cast_CT_Value_Base<CT_Ptr> {
+    CT_Ptr value_direct(const AST * exp) const {
+      return CT_Ptr(static_cast<size_t>(exp->ct_value<From>()));
+    }
+  };
+
+  template <typename To>
+  struct Cast_CT_Value_Direct<CT_LValue,To> : public Cast_CT_Value_Base<To> {
+    To value_direct(const AST * exp) const {
+      abort();
+    }
+  };
+
+  template <typename From>
+  struct Cast_CT_Value_Direct<From,CT_LValue> : public Cast_CT_Value_Base<CT_LValue> {
+    CT_LValue value_direct(const AST * exp) const {
+      abort();
+    }
+  };
+
+  template <>
+  struct Cast_CT_Value_Direct<CT_LValue,CT_Ptr> : public Cast_CT_Value_Base<CT_Ptr> {
+    CT_Ptr value_direct(const AST * exp) const {
+      // it can only happen id exp is an array type
+      return exp->ct_value<CT_LValue>().addr;
+    }
+  };
+
+  template <>
+  struct Cast_CT_Value_Direct<CT_Ptr,CT_LValue> : public Cast_CT_Value_Base<CT_LValue> {
+    CT_LValue value_direct(const AST * exp) const {
+      abort();
     }
   };
 
@@ -1940,6 +2074,8 @@ namespace ast {
     {"float", new Cast_CT_Value<From, float>},
     {"double", new Cast_CT_Value<From, double>},
     {"long double", new Cast_CT_Value<From, long double>},
+    {".pointer", new Cast_CT_Value<From, CT_Ptr>},
+    {".lvalue", new Cast_CT_Value<From, CT_LValue>}
   };
   template <typename From>
   Cast_CT_Value_Inner_Map * Cast_CT_Value_Group<From>::map_end = 
@@ -1970,6 +2106,8 @@ namespace ast {
     make_cast_ct_value_map<float>("float"),
     make_cast_ct_value_map<double>("double"),
     make_cast_ct_value_map<long double>("long double"),
+    make_cast_ct_value_map<CT_Ptr>(".pointer"),
+    make_cast_ct_value_map<CT_LValue>(".lvalue")
   };
   Cast_CT_Value_Map * cast_ct_value_map_end = 
     cast_ct_value_map + sizeof(cast_ct_value_map)/sizeof(Cast_CT_Value_Map);
@@ -1988,15 +2126,14 @@ namespace ast {
   }
 
   const CT_Value_Base * cast_ct_value(const Type * f, const Type * t) {
-    String from = f->exact_type->to_string();
-    String to   = t->exact_type->to_string();
+    String from = f->ct_type_name();
+    String to   = t->ct_type_name();
     return cast_ct_value(from, to);
   }
 
   template <typename To> 
-  const Cast_CT_Value_Base<To> * cast_ct_value(const Type * f) {
-    String from = f->exact_type->to_string();
-    String to   = type_name<To>();
+  const Cast_CT_Value_Base<To> * cast_ct_value(String from) {
+    String to   = CT_Type<To>::name;
     return dynamic_cast<const Cast_CT_Value_Base<To> *>(cast_ct_value(from, to));
   }
 
@@ -2080,11 +2217,11 @@ namespace ast {
 
   template <typename T> 
   T AST::real_ct_value() const {
-    if (!ct_value_) throw error(parse_, "\"%s\" Can not be used in constant-expression", ~what_);
+    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression", ~what_);
     const CT_Value<T> * ctv = dynamic_cast<const CT_Value<T> *>(ct_value_);
     if (ctv)
       return ctv->value(this);
-    const Cast_CT_Value_Base<T> * cast_ctv = cast_ct_value<T>(type);
+    const Cast_CT_Value_Base<T> * cast_ctv = cast_ct_value<T>(ct_value_->type_name());
     if (cast_ctv)
       return cast_ctv->value_direct(this);
     abort();
@@ -2505,7 +2642,7 @@ namespace ast {
         for (unsigned i = 0; i != body->members.size(); ++i) {
           Var * v = dynamic_cast<Var *>(body->members[i]);
           assert(v);
-          s->members.push_back(Member(v->sym->name,v->sym->type));
+          s->members.push_back(Member(v->sym));
         }
       //StringBuf type_name;
       //type_name << "struct " << what();
@@ -3151,6 +3288,11 @@ namespace ast {
   //
   //
   
+
+  template <typename T>
+  void CT_Value<T>::to_string(const AST * a, OStream & o) const {
+    abort();
+  }
 
   template <>
   void CT_Value<uint8_t>::to_string(const AST * a, OStream & o) const {

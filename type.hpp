@@ -25,6 +25,8 @@ namespace ast {
   class Tuple;
   struct Environ;
 
+  struct VarSymbol;
+
   struct AST;
 
   //struct ExpectedType {
@@ -217,6 +219,7 @@ namespace ast {
     virtual unsigned align() const = 0;
     virtual unsigned storage_size() const {return size();}
     virtual unsigned storage_align() const {return align();}
+    virtual String ct_type_name() const {return exact_type->to_string();}
     bool addressable;
     bool read_only;
     bool ct_const; // compile time const
@@ -548,6 +551,7 @@ namespace ast {
     const Type * subtype;
     unsigned size() const {return POINTER_SIZE;}
     unsigned align() const {return POINTER_SIZE;}
+    String ct_type_name() const {return ".pointer";}
   };
 
   class Pointer : public PointerLike {
@@ -701,9 +705,9 @@ namespace ast {
   //
 
   struct Member {
-    String name;
-    const Type * subtype;
-    Member(String n, const Type * s) : name(n), subtype(s) {}
+    VarSymbol * sym;
+    unsigned offset;
+    Member(VarSymbol * s) : sym(s), offset(INT_MAX) {}
   };
 
   class StructUnionT : public TaggedType, public SimpleTypeInst {
