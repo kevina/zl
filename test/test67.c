@@ -1,10 +1,18 @@
 Syntax * parse_myclass(Syntax * p, Environ * env) {
+  printf("ININ\n");
+  dump_syntax(p);
+
   Mark * mark = new_mark();
 
-  Match * m = match_args(0, raw_syntax (name @ body :(fix_size fix_size)), p);
+  Match * m = match_args(0, raw_syntax (name @ body :(fix_size fix_size) @rest), p);
 
   Syntax * body = m->var(syntax body);
   Syntax * fix_size_s = m->var(syntax fix_size);
+
+  Syntax * rest = m->var(syntax rest);
+  printf("REST\n");
+  if (rest) 
+    dump_syntax(rest);
 
   if (!body || !fix_size_s)
     return parse_class(p, env);
@@ -15,7 +23,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   m = match(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
   
   Environ * lenv = environ_new_scope(env);
-  Syntax * r = partly_expand(replace(raw_syntax (class (mid name) ({...} (mid body) (mid dummy_decl))), m, mark),
+  Syntax * r = partly_expand(replace(raw_syntax (class (mid name) ({...} (mid body) (mid dummy_decl)) (mid rest)), m, mark),
                              TopLevel, lenv);
   pre_parse(r, lenv);
 
@@ -27,7 +35,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
     char buf[32];
     snprintf(buf, 32, "{char dummy[%u];}", fix_size - size);
     m = match(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
-    p = replace(raw_syntax (class (mid name) ({...} (mid body) (mid buffer))), m, mark);
+    p = replace(raw_syntax (class (mid name) ({...} (mid body) (mid buffer)) (mid rest)), m, mark);
     return parse_class(p, env);
   } else {
     return parse_class(p, env);
@@ -42,6 +50,13 @@ class X : fix_size(16) {
   char c;
 };
 
+class Y : public X : fix_size(32) {
+  int j;
+};
+
 int main() {
   printf("%d\n", sizeof(X));
+  Y y;
+  y.x;
+  printf("%d\n", sizeof(Y));
 }

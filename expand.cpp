@@ -539,8 +539,8 @@ void add_match_var(Match * m, const SymbolName & n, const Syntax * repl) {
 }
 
 bool match_list(Match * m, 
-                Parts::const_iterator p_i, Parts::const_iterator p_end,
-                Parts::const_iterator r_i, Parts::const_iterator r_end);
+                const Syntax * p, Parts::const_iterator p_i, Parts::const_iterator p_end, 
+                const Syntax * r, Parts::const_iterator r_i, Parts::const_iterator r_end);
 
 // if match_prep sets p == 0 then there is nothing more to do
 bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
@@ -549,7 +549,8 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
     if (p->is_a("pattern")) {
       p = p->arg(0);
       assert(p->what() == repl->what());
-      bool res = match_list(m, p->args_begin(), p->args_end(), repl->args_begin(), repl->args_end());
+      bool res = match_list(m, p, p->args_begin(), p->args_end(),
+                            repl, repl->args_begin(), repl->args_end());
       p = 0;
       return res;
     } else if (p->is_a("reparse")) {
@@ -579,8 +580,8 @@ bool match_parm(Match * m, const Syntax * p, const Syntax * repl) {
 }
 
 bool match_list(Match * m, 
-                Parts::const_iterator p_i, Parts::const_iterator p_end,
-                Parts::const_iterator r_i, Parts::const_iterator r_end)
+                const Syntax * pattern, Parts::const_iterator p_i, Parts::const_iterator p_end, 
+                const Syntax * with,    Parts::const_iterator r_i, Parts::const_iterator r_end)
 {
   bool now_optional = false;
   while (p_i != p_end) {
@@ -597,7 +598,15 @@ bool match_list(Match * m,
       }
       if (v.name[0] == '@') {
         v.name = v.name.c_str() + 1;
-        r = new Syntax(new Syntax("@"), r_i, r_end);
+        Syntax * n = new Syntax(new Syntax("@"), r_i, r_end);
+        if (with->d) {
+          const Flags & flags = with->d->flags;
+          for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
+            if (!pattern->flag((*i)->what()))
+              n->add_flag(*i);
+          }
+        }
+        r = n;
       }
       if (r) {
         add_match_var(m, v, r);
@@ -607,6 +616,11 @@ bool match_list(Match * m,
     }
     ++p_i;
     ++r_i;
+  }
+  const Flags & flags = pattern->d->flags;
+  for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
+    const Syntax * w = with->flag((*i)->what());
+    match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL);
   }
   return true;
 }
@@ -623,14 +637,9 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
     add_match_var(m, pattern->what(), with);
   } else {
     with = with->ensure_branch();
-    const Flags & flags = pattern->d->flags;
-    bool ok = match_list(m, pattern->parts_begin(), pattern->parts_end(), 
-                         with->parts_begin() + shift, with->parts_end());
+    bool ok = match_list(m, pattern, pattern->parts_begin(), pattern->parts_end(),
+                         with, with->parts_begin() + shift, with->parts_end());
     if (!ok) return NULL;
-    for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
-      const Syntax * w = with->flag((*i)->what());
-      match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL);
-    }
   }
   printf("MATCH RES:: ");
   for (Match::const_iterator i = m->begin(), e = m->end(); i != e; ++i) {
@@ -846,6 +855,13 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     Syntax * res = new Syntax(mid->num_args() > 1 ? new Syntax("@") : new Syntax("@@")); 
     for (Parts::const_iterator i = repl->args_begin(), e = repl->args_end(); i != e; ++i) {
       res->add_part(replace_mid(mid, *i, r, rs));
+    }
+    for (Flags::const_iterator i = repl->flags_begin(), e = repl->flags_end(); i != e; ++i) {
+      const Syntax * q = *i;
+      Syntax * r0 = new Syntax(q->part(0)); // FIXME: I think I need to do more with first part
+      if (q->num_args() > 0) // FIXME: Can there me more than one arg?
+        r0->add_part(replace_mid(mid, (*i)->part(1), r, rs));
+      res->add_flag(r0);
     }
     return res;
   } else {
