@@ -1,28 +1,19 @@
 Syntax * parse_myclass(Syntax * p, Environ * env) {
-  printf("ININ\n");
-  dump_syntax(p);
-
   Mark * mark = new_mark();
 
-  Match * m = match_args(0, raw_syntax (name @ body :(fix_size fix_size) @rest), p);
+  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) @rest), p);
 
   Syntax * body = m->var(syntax body);
   Syntax * fix_size_s = m->var(syntax fix_size);
-
-  Syntax * rest = m->var(syntax rest);
-  printf("REST\n");
-  if (rest) 
-    dump_syntax(rest);
 
   if (!body || !fix_size_s)
     return parse_class(p, env);
 
   size_t fix_size = ct_value(fix_size_s, env);
 
-  m = match(m, raw_syntax ({...} @body), body);
   m = match(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
   
-  Environ * lenv = environ_new_scope(env);
+  Environ * lenv = temp_environ(env);
   Syntax * r = partly_expand(replace(raw_syntax (class (mid name) ({...} (mid body) (mid dummy_decl)) (mid rest)), m, mark),
                              TopLevel, lenv);
   pre_parse(r, lenv);
@@ -30,20 +21,21 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   size_t size = ct_value(replace(syntax (offsetof(name, dummy)), m, mark), lenv);
   
   if (size == fix_size) {
-    return parse_class(p, env);
+    return replace(raw_syntax (class (mid name) ({...} (mid body) (mid rest))), m, mark);
   } else if (size < fix_size) {
     char buf[32];
     snprintf(buf, 32, "{char dummy[%u];}", fix_size - size);
     m = match(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
-    p = replace(raw_syntax (class (mid name) ({...} (mid body) (mid buffer)) (mid rest)), m, mark);
-    return parse_class(p, env);
+    return replace(raw_syntax (class (mid name) ({...} (mid body) (mid buffer)) (mid rest)), m, mark);
   } else {
-    return parse_class(p, env);
-    // error
+    return NULL;
+    //return error("sizeof class larger than fix_size");
   }
 }
 
 make_syntax_macro class parse_myclass;
+
+class X;
 
 class X : fix_size(16) {
   int x;

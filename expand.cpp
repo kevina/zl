@@ -333,8 +333,9 @@ extern "C" const ModuleInfo * user_type_module(const UserTypeInfo *);
 extern "C" const ModuleInfo * module_info(const Syntax *, Environ *);
 extern "C" SyntaxEnum * module_symbols(const ModuleInfo *);
 extern "C" bool module_have_symbol(const ModuleInfo *, const Syntax *);
-extern "C" Environ * environ_new_scope(Environ *);
+extern "C" Environ * temp_environ(Environ *);
 extern "C" unsigned long ct_value(const Syntax *, Environ *);
+extern "C" const Syntax * error(Syntax *, const char *, ...);
 
 String gen_sym() {
   static unsigned uniq_num = 0;
@@ -547,8 +548,9 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
   printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   if (p->num_args() > 0) {
     if (p->is_a("pattern")) {
+      if (!repl) return true;
       p = p->arg(0);
-      assert(p->what() == repl->what());
+      assert(p->what().name == repl->what().name);
       bool res = match_list(m, p, p->args_begin(), p->args_end(),
                             repl, repl->args_begin(), repl->args_end());
       p = 0;
@@ -1443,7 +1445,7 @@ Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
 //
 //
 
-Environ * environ_new_scope(Environ * env) {
+Environ * temp_environ(Environ * env) {
   return new Environ(env->new_scope());
 }
 

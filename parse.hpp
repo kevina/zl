@@ -122,7 +122,8 @@ struct Parts : public Vector<const Syntax *> {
     push_back(x);
   }
   void append(const_iterator i, const_iterator end) {
-    insert(Base::end(), i, end);
+    if (i < end)
+      insert(Base::end(), i, end);
   }
   void append(const Parts & other) {
     append(other.begin(), other.end());

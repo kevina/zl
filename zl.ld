@@ -26,5 +26,6 @@
   module_symbols;
   module_have_symbol;
   ct_value;
-  environ_new_scope;
+  temp_environ;
+  error;
 };

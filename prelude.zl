@@ -106,7 +106,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   // Parse Body
   //
 
-  Environ * lenv = environ_new_scope(env);
+  Environ * lenv = temp_environ(env);
   pre_parse(replace(raw_syntax (declare_user_type (mid name)), m, mark),
             lenv);
   SyntaxEnum * itr = partly_expand_list(match(NULL, raw_syntax ({...} @body), body)->varl(syntax body),
