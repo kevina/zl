@@ -28,8 +28,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
     m = match(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
     return replace(raw_syntax (class (mid name) ({...} (mid body) (mid buffer)) (mid rest)), m, mark);
   } else {
-    return NULL;
-    //return error("sizeof class larger than fix_size");
+    return error(p, "Size of class larger than fix_size");
   }
 }
 

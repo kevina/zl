@@ -334,7 +334,7 @@ extern "C" const ModuleInfo * module_info(const Syntax *, Environ *);
 extern "C" SyntaxEnum * module_symbols(const ModuleInfo *);
 extern "C" bool module_have_symbol(const ModuleInfo *, const Syntax *);
 extern "C" Environ * temp_environ(Environ *);
-extern "C" unsigned long ct_value(const Syntax *, Environ *);
+extern "C" size_t ct_value(const Syntax *, Environ *);
 extern "C" const Syntax * error(Syntax *, const char *, ...);
 
 String gen_sym() {
@@ -1449,7 +1449,17 @@ Environ * temp_environ(Environ * env) {
   return new Environ(env->new_scope());
 }
 
-unsigned long ct_value(const Syntax * p, Environ * env) {
+size_t ct_value(const Syntax * p, Environ * env) {
   AST * ast = parse_exp(p, *env);
-  return ast->ct_value<unsigned long>();
+  return ast->ct_value<size_t>();
 }
+
+const Syntax * error(Syntax * p, const char * fmt, ...) {
+  SourceStr str = p ? p->str() : SourceStr();
+  va_list ap;
+  va_start(ap, fmt);
+  Error * res = verror(str.source, str.begin, fmt, ap);
+  va_end(ap);
+  return new Syntax(p, res);
+}
+

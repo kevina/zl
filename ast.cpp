@@ -2889,22 +2889,22 @@ namespace ast {
 
   AST * parse_top_level(const Syntax * p, Environ & env) {
     AST * res;
-    res = try_ast(p, env);
-    if (res) return res;
     p = partly_expand(p, TopLevel, env);
     //printf("Parsing top level:\n  %s\n", ~p->to_string());
+    res = try_ast(p, env);
+    if (res) return res;
     res = try_decl(p, env);
     if (res) return res;
-    throw error (p, "Unsupported primative at top level: %s", ~p->what());
+    throw error (p, "Unsupported primative at top level:: %s", ~p->what());
     //throw error (p, "Expected top level expression.");
   }
     
   AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect) {
     AST * res;
-    res = try_ast(p, env);
-    if (res) return res;
     p = partly_expand(p, TopLevel, env);
     //printf("Parsing top level fp:\n  %s\n", ~p->to_string());
+    res = try_ast(p, env);
+    if (res) return res;
     res = try_decl_first_pass(p, env, collect);
     if (res) return res;
     throw error (p, "Unsupported primative at top level: %s", ~p->what());
@@ -2913,9 +2913,9 @@ namespace ast {
 
   AST * parse_member(const Syntax * p, Environ & env) {
     AST * res;
+    p = partly_expand(p, FieldPos, env);
     res = try_ast(p, env);
     if (res) return res;
-    p = partly_expand(p, FieldPos, env);
     //printf("Parsing member:\n  %s\n", ~p->to_string());
     //res = try_decl(p, env);
     String what = p->what().name;
@@ -2944,9 +2944,9 @@ namespace ast {
 
   AST * parse_stmt(const Syntax * p, Environ & env) {
     AST * res;
+    p = partly_expand(p, StmtPos, env);
     res = try_ast(p, env);
     if (res) return res;
-    p = partly_expand(p, StmtPos, env);
     //printf("Parsing stmt:\n  %s\n", ~p->to_string());
     res = try_stmt(p, env);
     if (res) return res;
@@ -2958,9 +2958,9 @@ namespace ast {
 
   AST * parse_stmt_decl(const Syntax * p, Environ & env) {
     AST * res;
+    p = partly_expand(p, StmtDeclPos, env);
     res = try_ast(p, env);
     if (res) return res;
-    p = partly_expand(p, StmtDeclPos, env);
     //printf("Parsing stmt decl:\n  %s\n", ~p->to_string());
     res = try_decl(p, env);
     if (res) return res;
@@ -2975,9 +2975,9 @@ namespace ast {
 
   AST * parse_exp(const Syntax * p, Environ & env) {
     AST * res;
+    p = partly_expand(p, ExpPos, env);
     res = try_ast(p, env);
     if (res) return res;
-    p = partly_expand(p, ExpPos, env);
     //printf("parsing expression: %s\n", ~p->to_string());
     res = try_exp(p, env);
     if (res) return res;
@@ -2989,8 +2989,10 @@ namespace ast {
   AST * try_ast(const Syntax * p, Environ & env) {
     if (p->entity()) {
       AST * ast = dynamic_cast<AST *>(p->entity());
-      assert(ast); // FIXME Error message
-      return ast;
+      if (ast) return ast;
+      Error * err = dynamic_cast<Error *>(p->entity());
+      if (err) throw err;
+      abort(); // FIXME Error message
     }
     return 0;
   }

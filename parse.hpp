@@ -77,13 +77,10 @@ struct SourceStr : public SubStr {
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
 };
 
-struct ErrorInfo : public gc {
+struct Error : public Entity {
   const SourceInfo * source;
   const char * pos;
   String msg;
-};
-
-struct Error : public ErrorInfo {
   String message();
   String extra; // extra information after expand backtrace
 };
