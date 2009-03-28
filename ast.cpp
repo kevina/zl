@@ -789,6 +789,15 @@ namespace ast {
                                        SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN("list")))),
                                    env);
         }
+      if (TopLevelVarSymbol * tlsym = dynamic_cast<TopLevelVarSymbol *>(sym)) {
+        if (init && !init->ct_value_) {
+          tlsym->init = parse_stmt(SYN(SYN("assign"), SYN(ID, SYN(sym)), SYN(init)), env);
+          init = NULL;
+        } else if (constructor) {
+          tlsym->init = constructor;
+          constructor = NULL;
+        }
+      }
       return res;
     }
     void eval(ExecEnviron &) {}
@@ -3196,6 +3205,7 @@ namespace ast {
     cw << prelude;
 
     Vector<const TopLevelSymbol *>::const_iterator i, e = syms.end();
+    Vector<AST *> init, cleanup;
     const TopLevelVarSymbol * tl = NULL;
 
     cw << "/* type decls */\n";
@@ -3282,6 +3292,31 @@ namespace ast {
           d->compile(cw, Declaration::Body);
         }
       }
+    }
+
+    cw << "/* special */\n";
+
+    for (i = syms.begin(); i != e; ++i) {
+      if (const TopLevelVarSymbol * s = dynamic_cast<const TopLevelVarSymbol *>(*i)) {
+        if (s->init) init.push_back(s->init);
+        if (s->cleanup) cleanup.push_back(s->cleanup);
+      }
+    }
+
+    if (!init.empty()) {
+      cw << "__attribute__((constructor)) static void init$s() {\n";
+      for (Vector<AST *>::const_iterator i = init.begin(), e = init.end(); i != e; ++i) {
+        cw << adj_indent(2) << *i;
+      }
+      cw << "}\n";
+    }
+    
+    if (!cleanup.empty()) {
+      cw << "__attribute__((destructor)) static void cleanup$s() {\n";
+      for (Vector<AST *>::const_reverse_iterator i = cleanup.rbegin(), e = cleanup.rend(); i != e; ++i) {
+        cw << adj_indent(2) << *i;
+      }
+      cw << "}\n";
     }
 
     cw << "/* done */\n";

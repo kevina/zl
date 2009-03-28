@@ -82,6 +82,13 @@ namespace ast {
     }
   };
 
+  struct InitCleanup {
+    AST * init;
+    AST * cleanup;
+    InitCleanup(AST * i = NULL, AST * c = NULL)
+      : init(i), cleanup(c) {}
+  };
+
   struct Environ : public gc {
     TypeRelation * type_relation;
     Vector<const TopLevelSymbol *> * top_level_symbols;
@@ -124,7 +131,8 @@ namespace ast {
       }
     Environ(const Environ & other) 
       : type_relation(other.type_relation), 
-        top_level_symbols(other.top_level_symbols), symbols(other.symbols),
+        top_level_symbols(other.top_level_symbols), 
+        symbols(other.symbols),
         types(this), fun_labels(other.fun_labels), 
         scope(other.scope), frame(other.frame), 
         where(other.where),

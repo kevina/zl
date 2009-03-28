@@ -489,9 +489,11 @@ namespace ast {
 
   struct TopLevelVarSymbol : public VarSymbol, public TopLevelSymbol {
     const VarDeclaration * decl;
+    AST * init;
+    AST * cleanup;
     TopLevelVarSymbol(String n, const VarDeclaration * d, 
                       bool mangle, TopLevelSymbol * w) 
-      : VarSymbol(n), TopLevelSymbol(mangle ? NPOS : 0, d, w), decl(d) {}
+      : VarSymbol(n), TopLevelSymbol(mangle ? NPOS : 0, d, w), decl(d), init(), cleanup() {}
   };
 
   struct LexicalVarSymbol : public VarSymbol, public LexicalSymbol {
