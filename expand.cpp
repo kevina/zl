@@ -388,7 +388,7 @@ struct MacroSymbol : public Symbol {
   const Syntax * expand(const Syntax * s, const Syntax * p, Environ & env) const {
     static unsigned c0 = 0;
     unsigned c = ++c0;
-    printf("%d EXPAND: %s %s\n", c, ~s->sample_w_loc(), ~p->sample_w_loc());
+    //printf("%d EXPAND: %s %s\n", c, ~s->sample_w_loc(), ~p->sample_w_loc());
     try {
       MacroInfo whocares(s,def);
       const Syntax * res = expand(p, env);
@@ -422,7 +422,7 @@ struct SimpleMacro : public MacroSymbol {
   const Syntax * repl;
   const SymbolNode * env;
   SimpleMacro * parse_self(const Syntax * p, Environ & e) {
-    printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what().name, ~p->to_string());
+    //printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what().name, ~p->to_string());
     env = e.symbols.front;
     //entity = p->str().source;
     def = parse = p;
@@ -438,18 +438,18 @@ struct SimpleMacro : public MacroSymbol {
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ &) const {
-    printf("EXPANDING MAP %s\n", ~name);
+    //printf("EXPANDING MAP %s\n", ~name);
     Match * m = match_args(NULL, parms, p);
     if (free)
       m = match(m, free, replace_context(free, get_context(p)));
     const Syntax * res = replace(repl, m, new Mark(env));
-    printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
-    printf("  %s\n", ~res->sample_w_loc());
-    res->str().source->dump_info(COUT, "    ");
+    //printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
+    //printf("  %s\n", ~res->sample_w_loc());
+    //res->str().source->dump_info(COUT, "    ");
     for (unsigned i = 0; i != res->num_args(); ++i) {
-      printf("==%s\n", ~res->arg(i)->to_string());
-      printf("  %s\n", ~res->arg(i)->sample_w_loc());
-      res->arg(i)->str().source->dump_info(COUT, "    ");
+      //printf("==%s\n", ~res->arg(i)->to_string());
+      //printf("  %s\n", ~res->arg(i)->sample_w_loc());
+      //res->arg(i)->str().source->dump_info(COUT, "    ");
     }
     //printf("  macro_call = %s\n", ~macro_call->sample_w_loc());
     //macro_call->str().source->dump_info(COUT, "    ");
@@ -545,7 +545,7 @@ bool match_list(Match * m,
 
 // if match_prep sets p == 0 then there is nothing more to do
 bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
-  printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
+  //printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   if (p->num_args() > 0) {
     if (p->is_a("pattern")) {
       if (!repl) return true;
@@ -562,7 +562,7 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
       }
       p = p->arg(0);
     } else {
-      printf("??%s\n", ~p->to_string());
+      //printf("??%s\n", ~p->to_string());
       abort();
     }
   }
@@ -570,7 +570,7 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
 }
 
 bool match_parm(Match * m, const Syntax * p, const Syntax * repl) {
-  printf("match_parm <<: %s :: %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
+  //printf("match_parm <<: %s :: %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   bool cont = match_prep(m, p, repl);
   if (!cont) return true;
   if (repl) {
@@ -631,10 +631,10 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   Match * m = new Match();
   if (pattern->is_a("()"))
     pattern = reparse("MATCH_LIST", pattern->arg(0));
-  printf("MATCH\n");
-  printf("%s %s\n", ~pattern->sample_w_loc(), ~pattern->to_string());
-  printf("%s %s\n", ~with->sample_w_loc(), ~with->to_string());
-  printf("---\n");
+  //printf("MATCH\n");
+  //printf("%s %s\n", ~pattern->sample_w_loc(), ~pattern->to_string());
+  //printf("%s %s\n", ~with->sample_w_loc(), ~with->to_string());
+  //printf("---\n");
   if (pattern->simple()) {
     add_match_var(m, pattern->what(), with);
   } else {
@@ -643,14 +643,14 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
                          with, with->parts_begin() + shift, with->parts_end());
     if (!ok) return NULL;
   }
-  printf("MATCH RES:: ");
-  for (Match::const_iterator i = m->begin(), e = m->end(); i != e; ++i) {
-    printf("%s", ~i->first.to_string());
+  //printf("MATCH RES:: ");
+  //for (Match::const_iterator i = m->begin(), e = m->end(); i != e; ++i) {
+  //printf("%s", ~i->first.to_string());
     //o.printf("%s=>", ~i->first.to_string());
     //i->second->to_string(o);
-    printf(",");
-  }
-  printf("\n");
+    //printf(",");
+  //}
+  //printf("\n");
   if (orig_m) 
     m->insert(m->end(), orig_m->begin(), orig_m->end());
   return m;
@@ -706,7 +706,7 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   //new ExpandSourceInfo);
   if (match)
     rparms->table = *match;
-  printf("tREPLACE: %s\n", ~p->to_string());
+  //printf("tREPLACE: %s\n", ~p->to_string());
   //rparms->macro_call = MacroSymbol::macro_call;
   //rparms->macro_def = MacroSymbol::macro_def;
   const Syntax * res;
@@ -725,20 +725,20 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   rparms->expand_si->outer_ip = res;
   // fixme: why am i doing this? commented it out for now
   //res->str_ = p->str();
-  printf("tREPLACE res: %s\n", ~res->to_string());
+  //printf("tREPLACE res: %s\n", ~res->to_string());
   return res;
 }
 
 const Syntax * reparse(String what, const Syntax * p, ReplTable * r, const Replacements * additional_repls) {
-  printf("REPARSE %s %s AS %s\n", ~p->sample_w_loc(), ~p->to_string(), ~what);
+  //printf("REPARSE %s %s AS %s\n", ~p->sample_w_loc(), ~p->to_string(), ~what);
   const Replacements * repls = combine_repl(p->repl, r);
   Replacements combined_repls;
   if (repls) {
-    printf("repls = %s\n", ~repls->to_string());
+    //printf("repls = %s\n", ~repls->to_string());
     combined_repls = *repls;
   }
   if (additional_repls) {
-    printf("combined_repls = %s\n", ~additional_repls->to_string());
+    //printf("combined_repls = %s\n", ~additional_repls->to_string());
     combined_repls.insert(combined_repls.end(), additional_repls->begin(), additional_repls->end());
   }
   const Syntax * res;
@@ -752,18 +752,18 @@ const Syntax * reparse(String what, const Syntax * p, ReplTable * r, const Repla
     throw err;
   }
   //res = new Syntax(new ReparseAnnon(p, what), res);
-  printf("PARSED STRING %s\n", ~res->to_string());
+  //printf("PARSED STRING %s\n", ~res->to_string());
   if (repls) {
-    printf("# repls = %d\n", repls->size());
+    //printf("# repls = %d\n", repls->size());
     for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
          i != e; ++i) 
     {
       combined_repls.erase(combined_repls.begin());
-      printf("?REPLACE %i\n", i - repls->begin());
+      //printf("?REPLACE %i\n", i - repls->begin());
       //res->print();
       //printf("\n");
       res = replace(res, *i, &combined_repls);
-      printf("?replace %i\n", i - repls->begin());
+      //printf("?replace %i\n", i - repls->begin());
       //res->print();
       //printf("\n");
     }
@@ -783,22 +783,22 @@ const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs)
   // FIXME: Do I need to handle the case where the entity is a symbol name?
   static unsigned seq=0;
   unsigned seql = seq++;
-  printf("REPLACE %d: %s\n", seql, ~p->to_string());
-  r->to_string(COUT, PrintFlags());
-  printf("\n");
+  //printf("REPLACE %d: %s\n", seql, ~p->to_string());
+  //r->to_string(COUT, PrintFlags());
+  //printf("\n");
   if (p->simple()) {
     //return p;
     //printf("MARK %s\n", ~p->what());
     return new Syntax(p, r->mark, r->expand_source_info(p));
   } else if (p->is_a("mid") && r->have(*p->arg(0))) {
     const Syntax * p0 = r->lookup(*p->arg(0));
-    printf("MID ");
-    p->str().sample_w_loc(COUT);
-    printf(" ");
-    p->arg(0)->str().sample_w_loc(COUT);
-    printf("\n");
+    //printf("MID ");
+    //p->str().sample_w_loc(COUT);
+    //printf(" ");
+    //p->arg(0)->str().sample_w_loc(COUT);
+    //printf("\n");
     const Syntax * res = replace_mid(p, p0, r, rs);
-    printf("REPLACE res %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
+    //printf("REPLACE res %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
     return res;
   } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
     ChangeSrc<ExpandSourceInfo> ci(r);
@@ -814,7 +814,7 @@ const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs)
     Syntax * r0 = new Syntax(String(p->arg(0)->str()), r->expand_source_info_str(p->arg(0)->str()));
     r0->repl = res->repl;
     res->add_part(r0);
-    printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
+    //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
     return res;
   } else {
     Syntax * res = new Syntax(r->expand_source_info_str(p));
@@ -824,14 +824,14 @@ const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs)
       add_repl(q, res);
     }
     for (Flags::const_iterator i = p->flags_begin(), e = p->flags_end(); i != e; ++i) {
-      printf("~~%s\n", ~(*i)->to_string());
+      //printf("~~%s\n", ~(*i)->to_string());
       const Syntax * q = *i;
       Syntax * r0 = new Syntax(q->part(0)); // FIXME: I think I need to do more with first part
       if (q->num_args() > 0) // FIXME: Can there me more than one arg?
         r0->add_part(replace(q->arg(0), r, rs));
       res->add_flag(r0);
     }
-    printf("REPLACE Res %d: %s\n", seql, ~res->to_string());
+    //printf("REPLACE Res %d: %s\n", seql, ~res->to_string());
     return res;
   }
 }
@@ -867,18 +867,18 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     }
     return res;
   } else {
-    printf(">>%s %s\n", ~mid->sample_w_loc(), ~repl->sample_w_loc());
-    mid->str().source->dump_info(COUT, "  mid> ");
+    //printf(">>%s %s\n", ~mid->sample_w_loc(), ~repl->sample_w_loc());
+    //mid->str().source->dump_info(COUT, "  mid> ");
     if (mid->repl) {
-      printf("<mid>");
-      mid->repl->to_string(COUT, PrintFlags());
-      printf("\n");
+      //printf("<mid>");
+      //mid->repl->to_string(COUT, PrintFlags());
+      //printf("\n");
     }
     //repl->str().source->dump_info(COUT, " orep> ");
     //r->expand_si->dump_info(COUT, "  exp> ");
-    printf("<  r>");
-    r->to_string(COUT, PrintFlags());
-    printf("\n");
+    //printf("<  r>");
+    //r->to_string(COUT, PrintFlags());
+    //printf("\n");
 
     ChangeSrc<SplitSourceInfo> cs(repl, r->outer_si ? r->outer_si : new ReplaceSourceInfo(r->expand_si,mid));
     //ChangeSrc<void> cs;
@@ -886,7 +886,7 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
 
     const Syntax * orig_repl = repl;
     repl = new Syntax(cs, *repl);
-    cs.new_->dump_info(COUT, "  new> ");
+    //cs.new_->dump_info(COUT, "  new> ");
 
 //     if (rs) {
 //       printf("RSRSRSRSRS\n");
@@ -902,8 +902,8 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
 //       }
 //     }
 
-    printf(">>> %s %s\n", ~repl->sample_w_loc(), ~repl->to_string());
-    repl->str().source->dump_info(COUT, "  rep> ");
+    //printf(">>> %s %s\n", ~repl->sample_w_loc(), ~repl->to_string());
+    //repl->str().source->dump_info(COUT, "  rep> ");
 
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
@@ -911,11 +911,11 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
         what = "PARM";
       if (repl->simple() && !repl->str().empty()) {
         // if p0 has marks, they must be preserved
-        printf("REPL SIMPLE %s %s\n", ~mid->to_string(), ~repl->to_string());
+        //printf("REPL SIMPLE %s %s\n", ~mid->to_string(), ~repl->to_string());
         repl = replace_context(reparse(what, repl, NULL, rs), get_context(repl));
-        printf("REPL SIMPLE RES %s %s\n", ~mid->to_string(), ~repl->to_string());
+        //printf("REPL SIMPLE RES %s %s\n", ~mid->to_string(), ~repl->to_string());
       } else if (repl->is_a("parm") || repl->is_a("()")) {
-        printf("REPL REPARSE %s %s %s\n", ~mid->to_string(), ~repl->sample_w_loc(), ~repl->to_string());
+        //printf("REPL REPARSE %s %s %s\n", ~mid->to_string(), ~repl->sample_w_loc(), ~repl->to_string());
         if (repl->arg(0)->repl) {
           for (Replacements::const_iterator i = repl->arg(0)->repl->begin(), e = repl->arg(0)->repl->end(); 
                i != e; ++i) 
@@ -926,9 +926,9 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
           }
         }
         repl = reparse(what, repl->arg(0), NULL, rs);
-        printf("repl reparse %s %s %s\n", ~mid->to_string(), ~repl->sample_w_loc(), ~repl->to_string());
+        //printf("repl reparse %s %s %s\n", ~mid->to_string(), ~repl->sample_w_loc(), ~repl->to_string());
       } else {
-        printf("REPL OTHER %s %s\n", ~mid->to_string(), ~repl->to_string());
+        //printf("REPL OTHER %s %s\n", ~mid->to_string(), ~repl->to_string());
       }
     }
     //printf("REPLACE RES %d: %s\n", seql, ~p0->to_string());
@@ -942,9 +942,9 @@ const Context * get_context(const Syntax * p) {
 
 const Syntax * replace_context(const Syntax * p, const Context * context) {
   if (p->simple()) {
-    printf("REPLACE CONTEXT: %s\n", ~p->to_string());
+    //printf("REPLACE CONTEXT: %s\n", ~p->to_string());
     Syntax * res = new Syntax(p, context);
-    printf("REPLACE CONTEXT RES: %s\n", ~res->to_string());
+    //printf("REPLACE CONTEXT RES: %s\n", ~res->to_string());
     return res;
   } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
     return p;
@@ -1046,11 +1046,11 @@ const Syntax * e_parse_exp(const Syntax * p, Environ & env) {
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags) {
   if (p->entity()) return p;
   SymbolName what = p->what().name;
-  printf("\n>expand>%s//\n", ~what);
-  p->str().sample_w_loc(COUT);
-  COUT << "\n";
-  p->print();
-  printf("\n////\n");
+  //printf("\n>expand>%s//\n", ~what);
+  //p->str().sample_w_loc(COUT);
+  //COUT << "\n";
+  //p->print();
+  //printf("\n////\n");
   if (p->simple()) {
     fprintf(stderr, "partly_expand can't be simple: %s\n", ~p->to_string());
     //abort(); // FIXME: Error Message
@@ -1110,12 +1110,12 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     p = res;
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
-    printf("TRYING STMT PARSE on %s\n", ~p->sample_w_loc()); 
+    //printf("TRYING STMT PARSE on %s\n", ~p->sample_w_loc()); 
     const Syntax * res = parse_decl_->parse_decl(p, env);
-    printf("STMT PARSE %p on %s\n", res, ~p->sample_w_loc()); 
+    //printf("STMT PARSE %p on %s\n", res, ~p->sample_w_loc()); 
     if (!res)
       res = e_parse_exp(p, env);
-    printf("expand stmt res0 %s\n", res ? ~res->to_string() : "<?>");
+    //printf("expand stmt res0 %s\n", res ? ~res->to_string() : "<?>");
     return partly_expand(res, pos, env, flags);
   } else if (what == "exp" || what == "init") {
     assert_pos(p, pos, ExpPos);
@@ -1152,12 +1152,10 @@ struct PartlyExpandSyntaxEnum : public SyntaxEnum {
     }
     res = partly_expand(res, pos, *env);
     if (res->is_a("@")) {
-      printf("ZZZ\n");
       stack.push_back(top);
       top = new SimpleSyntaxEnum(res->args_begin(), res->args_end());
       goto try_again;
     }
-    printf("zzz %s\n", ~res->to_string());
     return res;
   }
 };
@@ -1171,7 +1169,7 @@ SyntaxEnum * partly_expand_list(SyntaxEnum * l, Position pos, Environ * env) {
 }
 
 const Syntax * pre_parse(const Syntax * p, Environ * env) {
-  printf("PRE_PARSE\n");
+  //printf("PRE_PARSE\n");
   return pre_parse_decl(p, *env);
 }
 
@@ -1192,7 +1190,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   } else if (const SymbolKeyEntity * s = dynamic_cast<const SymbolKeyEntity *>(p->entity())) {
     return s->name;
   } else {
-    printf("Unsupported Binding Form: %s\n", ~p->to_string());
+    fprintf(stderr, "Unsupported Binding Form: %s\n", ~p->to_string());
     abort();
   }
 }
@@ -1241,13 +1239,13 @@ void assert_num_args(const Syntax * p, unsigned min, unsigned max) {
 }
 
 Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
-  printf("FUN_PARMS: %s\n", ~parse->to_string());
+  //printf("FUN_PARMS: %s\n", ~parse->to_string());
   Syntax * res = new Syntax(parse->part(0));
   for (unsigned i = 0; i != parse->num_args(); ++i) {
     const Syntax * p = parse->arg(i);
     if (p->is_a("parm") || p->is_a("()"))
       p = reparse("TOKENS", p->arg(0));
-    printf("FUN_PARM: %s\n", ~p->to_string());
+    //printf("FUN_PARM: %s\n", ~p->to_string());
     if (!p->is_a("...")) {
       Syntax * r = new Syntax(p->part(0), parse_type(p->part(0), env));
       if (p->num_parts() == 2) 

@@ -609,16 +609,16 @@ namespace ast {
       const InnerNS * ns = lookup_symbol<InnerNS>(p->arg(1), INNER_NS, start);
       return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy);
     } else if (p->is_a("w/outer")) {
-      printf("w/outer %s %s\n", ~p->to_string(), ~p->sample_w_loc());
+      //printf("w/outer %s %s\n", ~p->to_string(), ~p->sample_w_loc());
       const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, start, stop, strategy);
-      printf("W/OUTER %s %p %p\n", ~p->to_string(), m, m->syms);
+      //printf("W/OUTER %s %p %p\n", ~p->to_string(), m, m->syms);
       unsigned last = p->num_args() - 1;
       //for (unsigned i = 1; i < last; ++i) {
       //  m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);
       //}
       return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather);
     } else {
-      p->print(); printf("?\n");
+      //p->print(); printf("?\n");
       return NULL;
     }
   }
@@ -637,7 +637,7 @@ namespace ast {
     try {
       return lookup_symbol<T>(p, ns, start, stop, strategy);
     } catch (Error * err) {
-      printf("note: %s\n", err->message().c_str());
+      //printf("note: %s\n", err->message().c_str());
       return NULL;
     }
   }

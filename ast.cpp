@@ -1782,12 +1782,12 @@ namespace ast {
     SymbolName name = *p->arg(0);
     UserType * t = dynamic_cast<UserType *>(env.types.inst(SymbolKey(name)));
     if (!(env.symbols.exists_this_scope(SymbolKey(name)) && (t && !t->defined /* FIXME: hack */))) {
-      printf("DECLARE: ADDING SYM %s\n", ~name.to_string());
+      //printf("DECLARE: ADDING SYM %s\n", ~name.to_string());
       UserType * s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
       add_simple_type(env.types, SymbolKey(name), s);
     } else {
-      printf("DECLARE: SYM ALREADY EXISTS: %s\n", ~name);
+      //printf("DECLARE: SYM ALREADY EXISTS: %s\n", ~name);
       if (name == "_VTable") {
         const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
         //abort();
@@ -1824,14 +1824,14 @@ namespace ast {
   AST * parse_user_type(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, 3);
     SymbolName name = *p->arg(0);
-    printf("PARSING USER TYPE %s\n", ~name);
+    //printf("PARSING USER TYPE %s\n", ~name);
     if (!env.symbols.exists_this_scope(SymbolKey(name))) {
-      printf("ADDING SYM %s\n", ~name);
+      //printf("ADDING SYM %s\n", ~name);
       UserType * s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
       add_simple_type(env.types, SymbolKey(name), s);
     } else {
-      printf("SYM ALREADY EXISTS: %s\n", ~name);
+      //printf("SYM ALREADY EXISTS: %s\n", ~name);
       if (name == "_VTable") {
         const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
         //abort();
@@ -1925,7 +1925,7 @@ namespace ast {
         c->add_flag(new Syntax(THIS, ptr_exp));
         call = c;
       }
-      printf("member: %s\n", ~call->to_string());
+      //printf("member: %s\n", ~call->to_string());
       return parse_exp(call, env);
     } else {
       abort();
@@ -2648,8 +2648,8 @@ namespace ast {
       //type_name << "struct " << what();
       sym->decl = this;
       s->env = &env;
-      if (s->members.empty())
-        printf("Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
+      //if (s->members.empty())
+      //  fprintf(stderr, "Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
       s->finalize();
       return new Empty();
     }
@@ -2810,7 +2810,7 @@ namespace ast {
     String what = p->part(0)->what().name;
     if (what == "syntax") {
       syn = p->part(1);
-      fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
+      //fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
     } else if (what == "raw_syntax") {
       using namespace parse_parse;
       Res r = parse(p->part(1)->str());
@@ -2928,7 +2928,7 @@ namespace ast {
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
-    printf("PRE PARSING %s\n", ~p->to_string());
+    //printf("PRE PARSING %s\n", ~p->to_string());
     if (what == "struct")  (new Struct)->parse_self(p, env);
     if (what == "union")   (new Union)->parse_self(p, env);
     if (what == "enum")    (new Enum)->parse_self(p, env);
@@ -3116,7 +3116,7 @@ namespace ast {
 
   void VarDeclaration::parse_flags(const Syntax * p) {
     storage_class = NONE;
-    printf("PARSING FLAGS OF %s\n", ~p->to_string());
+    //printf("PARSING FLAGS OF %s\n", ~p->to_string());
     if (p->flag("auto")) storage_class = AUTO;
     else if (p->flag("static")) storage_class = STATIC;
     else if (p->flag("extern")) storage_class = EXTERN;
