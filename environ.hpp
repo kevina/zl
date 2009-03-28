@@ -85,7 +85,7 @@ namespace ast {
   struct Environ : public gc {
     TypeRelation * type_relation;
     Vector<const TopLevelSymbol *> * top_level_symbols;
-    bool temporary() const {return top_level_symbols;}
+    bool temporary() const {return !top_level_symbols;}
     const TopLevelSymbol * find_tls(const char * to_find) const {
       if (!top_level_symbols)
         return NULL;
