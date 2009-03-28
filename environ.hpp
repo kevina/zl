@@ -85,6 +85,7 @@ namespace ast {
   struct Environ : public gc {
     TypeRelation * type_relation;
     Vector<const TopLevelSymbol *> * top_level_symbols;
+    bool temporary() const {return top_level_symbols;}
     const TopLevelSymbol * find_tls(const char * to_find) const {
       if (!top_level_symbols)
         return NULL;
@@ -113,7 +114,7 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct() 
+        deps(), for_ct()
       {
         top_level_symbols = new Vector<const TopLevelSymbol *>();
         type_relation = new_c_type_relation(); // FIXME HACK

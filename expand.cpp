@@ -1448,7 +1448,9 @@ Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
 //
 
 Environ * temp_environ(Environ * env) {
-  return new Environ(env->new_scope());
+  env = new Environ(env->new_scope());
+  env->top_level_symbols = NULL;
+  return env;
 }
 
 size_t ct_value(const Syntax * p, Environ * env) {

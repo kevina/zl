@@ -163,6 +163,7 @@ namespace ast {
   }
   
   void TopLevelSymbol::add_to_top_level_env(const SymbolKey & k, Environ & env) const {
+    if (env.temporary()) return;
     // If the symbol already exists in the table, remove it and insert
     // it in the end.  This will happen if a function was declared
     // before it was defined.  Since order matters it's where the
