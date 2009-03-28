@@ -247,6 +247,7 @@ public:
   }
   
   const Syntax * parse(const Syntax * p) {
+    //printf("ParseExpImpl::parse: %s %s\n", ~p->sample_w_loc(), ~p->to_string());
     opr_s.clear();
     val_s.clear();
     Op::Types prev = 0;

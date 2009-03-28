@@ -1017,6 +1017,7 @@ const Syntax * ESTMT = new Syntax("estmt");
 // FIXME: need to add check
 
 const Syntax * handle_paran(const Syntax * p, Environ & env) {
+  //printf("handle_paran: %s\n", ~p->to_string());
   try {
     const Syntax * exp = reparse("PARAN_EXP", p);
     const Syntax * type = parse_decl_->parse_type(exp, env);
@@ -1031,6 +1032,7 @@ const Syntax * handle_paran(const Syntax * p, Environ & env) {
 }
 
 const Syntax * e_parse_exp(const Syntax * p, Environ & env) {
+  //printf("e_parse_exp: %s\n", ~p->to_string());
   Syntax * tmp = new Syntax(p->str(), p->part(0));
   for (unsigned i = 0; i != p->num_args(); ++i) {
     const Syntax * t = p->arg(i);
@@ -1052,9 +1054,10 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   //p->print();
   //printf("\n////\n");
   if (p->simple()) {
-    fprintf(stderr, "partly_expand can't be simple: %s\n", ~p->to_string());
+    throw error(p, "partly_expand can't be simple: %s", ~p->to_string());
+    //fprintf(stderr, "partly_expand can't be simple: %s\n", ~p->to_string());
     //abort(); // FIXME: Error Message
-    return p;
+    //return p;
   } else if (what == "{}") {
     if (pos == ExpPos)
       return partly_expand(reparse("INIT", p->arg(0)), pos, env, flags);
@@ -1118,6 +1121,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     //printf("expand stmt res0 %s\n", res ? ~res->to_string() : "<?>");
     return partly_expand(res, pos, env, flags);
   } else if (what == "exp" || what == "init") {
+    //printf("PARSE EXP %s\n", ~p->to_string());
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env);
     return partly_expand(p, pos, env, flags);
