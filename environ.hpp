@@ -18,49 +18,10 @@ namespace ast {
 
   //enum Scope {STATIC, STACK};
 
-  struct VarLoc : public gc {
-    //Scope scope;
-    //unsigned offset; // offset in local block for interpreter
-  };
-
   enum Scope {OTHER, TOPLEVEL, LEXICAL};
-
   
   struct Frame : public gc {
     const TypeInst * return_type;
-#if 0
-    unsigned cur_frame_size;
-    unsigned max_frame_size;
-    unsigned frame_size_last_var; // safety measure
-    Frame() : return_type(), cur_frame_size(), max_frame_size(), frame_size_last_var() {}
-    unsigned alloc_tmp(const Type * t) {
-      unsigned diff = cur_frame_size % t->align;
-      if (diff != 0) cur_frame_size += t->align - diff;
-      unsigned loc = cur_frame_size;
-      cur_frame_size += t->size;
-      if (cur_frame_size > max_frame_size) 
-        max_frame_size = cur_frame_size;
-      return loc;
-    }
-    unsigned alloc_var(const Type * t) {
-      unsigned loc = alloc_tmp(t);
-      frame_size_last_var = cur_frame_size;
-      return loc;
-    }
-    //unsigned reserve(const Type * t) {
-    //  unsigned loc = alloc_tmp(t);
-    //  pop_tmp(t);
-    //  return loc;
-    //}
-    void pop_tmp(const Type * t) {
-      //cur_frame_size -= t->size;
-      //assert(cur_frame_size >= frame_size_last_var);
-    }
-    void pop_to(unsigned sz) {
-      //cur_frame_size = sz;
-      //assert(cur_frame_size >= frame_size_last_var);
-    }
-#endif
   };
 
   struct TopLevelVarSymbol;

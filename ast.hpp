@@ -18,94 +18,7 @@
 
 namespace ast {
 
-#if 0
-  struct Scope {
-    TypeSymbolTable * types;
-    VarSymbolTable  * vars;
-    ResolveEnviron() 
-      : types(), vars() {}
-    ResolveEnviron(TypeSymbolTable * t, 
-                   VarSymbolTable  * v)
-      : types(t), vars(v) {}
-  };
-#endif
-
-  struct PrepEvalEnviron : public gc {
-#if 0
-    SymbolTable<const Type *> * types;
-    SymbolTable<Symbol *> * sym;
-    Frame * frame;
-    ResolveEnviron() {
-      frame = new Frame();
-    }
-    ResolveEnviron new_frame(const Scope & scp) {
-      ResolveEnviron env = *this;
-      env       = scp;
-      env.frame = new Frame();
-      return env;
-    }
-#endif
-  };
-
   class AST;
-
-  struct ExecEnviron : public gc {
-    union {
-      struct {
-        char * static_ptr;
-        char * frame_ptr;
-      };
-      char * * var_ptrs[2];
-    };
-    unsigned * cur_frame_size;
-    char * stack_ptr;
-    char * end_of_stack;
-    template <typename T> T & static_var(unsigned i)
-      {return *reinterpret_cast<T *>(static_ptr + i);}
-    template <typename T> T & local_var(unsigned i)
-      {return *reinterpret_cast<T *>(frame_ptr + i);}
-    //template <typename T> T & var(const VarLoc & l)
-    //  {return *reinterpret_cast<T *>(var_ptrs[l.scope][l.offset]);}
-    template <typename T> inline T & ret(const AST *);
-    void * local_var(unsigned i)
-      {return static_cast<void *>(static_ptr + i);}
-    //void * var(const VarLoc & l) 
-    //  {return static_cast<void *>(var_ptrs[l.scope][l.offset]);}
-    inline void * ret(const AST * exp);
-    //template <typename T> T * push_tmp(const Type * t) {
-    //  T * p = reinterpret_cast<T *>(stack_ptr);
-    //  stack_ptr += t->size;
-    //  assert(stack_ptr <= end_of_stack);
-    //}
-    //template <typename T> T * pop_tmp(const Type * t) {
-    //  T * p = reinterpret_cast<T *>(stack_ptr);
-    //  stack_ptr -= t->size;
-    //}
-    //void pop_to(void * p) {
-    //  stack_ptr = static_cast<char *>(p);
-    //}
-    //ExecEnviron new_frame(unsigned offset, unsigned sz) {
-    //  ExecEnviron ret;
-    //  ret.static_ptr = static_ptr;
-    //  ret.frame_ptr = stack_ptr - offset;
-    //  ret.stack_ptr = stack_ptr + sz - offset;
-    //  ret.end_of_stack = end_of_stack;
-    //  assert(ret.stack_ptr <= end_of_stack);
-    //  return ret;
-    //}
-    ExecEnviron new_frame(unsigned start_at) {
-      ExecEnviron ret;
-      ret.static_ptr = static_ptr;
-      ret.stack_ptr = ret.frame_ptr = stack_ptr + start_at;
-      ret.end_of_stack = end_of_stack;
-      assert(ret.stack_ptr <= end_of_stack);
-      return ret;
-    }
-    void alloc(unsigned i) {
-      stack_ptr += i;
-      assert(stack_ptr <= end_of_stack);
-    }
-  };
 
   struct SyntaxC;
   struct Fun;
@@ -123,11 +36,6 @@ namespace ast {
     SymbolNode * fun_symbols;
   };
 
-  //struct MacroSepCompInfo {
-  //  Vector<const SyntaxC *> syntaxs;
-  //  bool collect;
-  //};
-    
   class CompileWriter : public FStream, public CompileEnviron {
   public:
     const Fun * in_fun;
@@ -145,10 +53,6 @@ namespace ast {
     memcpy(lhs, rhs, t->size());
   }
 
-
-  struct BreakException {};
-  struct ReturnException {};
-
   struct AST : public Entity {
     String what_;
     String what() const {return what_;}
@@ -156,9 +60,7 @@ namespace ast {
     const Syntax * parse_;
     const Type * type;
     bool lvalue;
-    unsigned return_offset; // for rhs values: NPOS if not LHS
-    VarLoc addr;            // for lhs values
-    AST(String n, const Syntax * p = 0) : what_(n), parse_(p), type(), lvalue(false), return_offset(NPOS), addr(), ct_value_(0) {}
+    AST(String n, const Syntax * p = 0) : what_(n), parse_(p), type(), lvalue(false), ct_value_(0) {}
     void assert_num_args(int p) {
       if (parse_->num_args() != p) 
         //abort();
@@ -172,8 +74,6 @@ namespace ast {
       // ^^ returns itself, to allow chaining ie 
       //      new Foo(p)->parse(env);
     virtual void finalize(FinalizeEnviron &) = 0;
-    virtual void prep_eval(PrepEvalEnviron &) {abort();}
-    virtual void eval(ExecEnviron &) {abort();}
     virtual void compile_prep(CompileEnviron &) = 0;
     virtual void compile(CompileWriter &) = 0; 
     virtual AST * resolve_to(const Type * type, Environ & env, 
@@ -214,7 +114,6 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    void eval(ExecEnviron &) {}
     void compile(CompileWriter & f) {
       // do absolutely nothing
     }
@@ -225,7 +124,6 @@ namespace ast {
     //AST * part(unsigned i);
     //long long value;
     AST * parse_self(const Syntax * p, Environ &);
-    //void eval(ExecEnviron & env);
     void compile(CompileWriter & f);
   };
 
@@ -263,7 +161,6 @@ namespace ast {
     AST * if_true;
     AST * if_false;
     AST * parse_self(const Syntax * p, Environ & env);
-    void eval(ExecEnviron & env);
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
     void compile(CompileWriter & f);
@@ -304,15 +201,6 @@ inline Syntax::Syntax(const ast::AST * e)
 namespace ast {
   
   struct OtherType {};
-
-  template <typename T>
-  T & ExecEnviron::ret(const AST * exp) {
-    return local_var<T>(exp->return_offset);
-  }
-  
-  void * ExecEnviron::ret(const AST * exp) {
-    return local_var(exp->return_offset);
-  }
 
   //
   //
@@ -454,7 +342,6 @@ namespace ast {
     unsigned frame_offset;
     unsigned frame_size;
     void finish_parse(Environ &);
-    void eval(ExecEnviron & env);
     void compile_prep(CompileEnviron &);
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);

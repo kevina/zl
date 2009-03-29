@@ -148,7 +148,6 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    void eval(ExecEnviron &) {}
     void compile(CompileWriter & f) {
       f << indent << "noop();\n";
     }
@@ -189,9 +188,6 @@ namespace ast {
       type = stmt->type;
       return this;
     }
-    void eval(ExecEnviron & env) {
-      stmt->eval(env);
-    }
     void compile_prep(CompileEnviron & env) {
       stmt->compile_prep(env);
     }
@@ -219,9 +215,6 @@ namespace ast {
       stmt = parse_stmt(p->arg(1), env);
       type = stmt->type;
       return this;
-    }
-    void eval(ExecEnviron & env) {
-      stmt->eval(env);
     }
     void finalize(FinalizeEnviron & env) {
       if (exp)
@@ -258,7 +251,6 @@ namespace ast {
     //    throw error(parse_->arg(0)->arg(0), "Unknown label %s", ~label);
     //  type = env.void_type();
     //}
-    void eval(ExecEnviron&) {abort();}
     void finalize(FinalizeEnviron & env) {
       if (!sym)
         sym = lookup_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), 
@@ -378,24 +370,6 @@ namespace ast {
       lvalue = true;
       return this;
     }
-    // these might needed to moved into eval_prep
-    //void resolve(Environ & env) {
-    //  return_offset = env.frame->alloc_tmp(type);
-    //}
-    //void resolve_lvalue(Environ & env) {
-    //  if (!env.vars->exists(name))
-    //    throw error(parse_->arg(0), "Unknown Identifier: %s", name.c_str());
-    //  sym = env.vars->lookup(name);
-    //  type = sym->type;
-    //  addr = *sym;
-    //}
-    void eval(ExecEnviron & env) {
-      //if (sym->value) { // compile time constant
-      //  copy_val(env.ret(this), sym->value, type);
-      //} else {
-      //  copy_val(env.ret(this), env.var(*sym), type);
-      // }
-    }
     void compile(CompileWriter & f) {
       f << sym;
     }
@@ -422,17 +396,6 @@ namespace ast {
       exp = exp->resolve_to(env.bool_type(), env);
       return this;
     }
-    //void resolve(Environ & env) {
-    //  env.frame->pop_tmp(exp->type);
-    // resolve_to_void(env, if_true);
-    //  resolve_to_void(env, if_false);
-    //}
-    void eval(ExecEnviron & env) {
-      exp->eval(env);
-      bool res = env.ret<int>(this);
-      if (res) if_true->eval(env);
-      else     if_false->eval(env);
-    }
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
       if_true->finalize(env);
@@ -450,13 +413,6 @@ namespace ast {
       f << adj_indent(2) << if_false;
     }
   };
-
-  void EIf::eval(ExecEnviron & env) {
-    exp->eval(env);
-    bool res = env.ret<int>(this);
-    if (res) if_true->eval(env);
-    else     if_false->eval(env);
-  }
 
   void EIf::finalize(FinalizeEnviron & env) {
     exp->finalize(env);
@@ -533,16 +489,6 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    //void resolve(Environ & env) {
-    //  resolve_to_void(env, body);
-    //}
-    void eval(ExecEnviron & env) {
-      try {
-        for (;;)
-          body->eval(env);
-      } catch (BreakException) {
-      }
-    }
     void finalize(FinalizeEnviron & env) {
       body->finalize(env);
     }
@@ -562,11 +508,6 @@ namespace ast {
       assert_num_args(0);
       type = env.void_type();
       return this;
-    }
-    //void resolve(Environ & env) {
-    //}
-    void eval(ExecEnviron &) {
-      throw BreakException();
     }
     void compile(CompileWriter & f) {
       f << indent << "break;\n";
@@ -643,7 +584,6 @@ namespace ast {
         finish_parse(env);
       return res;
     }
-    void eval(ExecEnviron &) {}
     void finalize(FinalizeEnviron & env) {
       if (init)
         init->finalize(env);
@@ -682,9 +622,6 @@ namespace ast {
       type = exp->type;
       return this;
     }
-    void eval(ExecEnviron & env) {
-      exp->eval(env);
-    };
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
     }
@@ -718,11 +655,6 @@ namespace ast {
 
       return this;
     }
-    void eval(ExecEnviron & env) {
-      for (int i = 0; i != stmts.size(); ++i) {
-        stmts[i]->eval(env);
-      }
-    };
     void finalize(FinalizeEnviron & env) {
       for (int i = 0; i != stmts.size(); ++i) {
         stmts[i]->finalize(env);
@@ -767,13 +699,6 @@ namespace ast {
       exp = exp->resolve_to(env.types.inst("int"), env);
       type = env.void_type();
       return this;
-    }
-    //void resolve(Environ & env) {
-    //  env.frame->pop_tmp(exp->type);
-    //}
-    void eval(ExecEnviron & env) {
-      exp->eval(env);
-      printf("%d\n", env.ret<int>(exp));
     }
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
@@ -1958,51 +1883,6 @@ namespace ast {
     symbols = env.symbols;
   }
 
-//   void Fun::resolve(Environ & env0) {
-//     printf("RESOLVE FUN %s\n", name.c_str());
-//     sym = new Symbol(name);
-//     env0.vars->root->add(name, sym);
-    
-//     return_offset = 0;
-    
-//     Environ env = env0.new_frame();
-//     env.labels = labels;
-//     parms = dynamic_cast<const Tuple *>(parse_type(env.types, parms_parse));
-//     assert(parms); // FIXME: Move check up to parse
-//     ret_type = parse_type(env.types, ret_type_parse);
-//     env.frame->return_type = ret_type;
-//     env.frame->alloc_var(ret_type);
-    
-// //     int num_parms = parms.size();
-// //     for (int i = 0; i != num_parms; ++i) {
-// //       String name = parms[i].name;
-// //       parms[i].type = parse_type(env.types, parms[i].type_parse);
-// //       Symbol * sym = new Symbol(name);
-// //       sym->type = parms[i].type;
-// //       env.vars->add(name, sym);
-// //       env.frame->alloc_var(sym->type);
-// //     }
-//     frame_offset = env.frame->max_frame_size;
-//     if (body)
-//       resolve_to_void(env, body);
-//     frame_size = env.frame->max_frame_size;
-
-//     type = ret_type;
-
-//     sym->type = env.function_sym()->inst(env.types, this);
-//     sym->value = this;
-//   }
-
-  void Fun::eval(ExecEnviron & env) {
-      // caller already set up a new frame, the stack pointer
-      // points to the return_value
-    env.alloc(frame_size);
-    try {
-      body->eval(env);
-    } catch (ReturnException) {
-    }
-  }
-
   void Fun::finalize(FinalizeEnviron & env0) {
     if (body) {
       FinalizeEnviron env = env0;
@@ -2052,16 +1932,6 @@ namespace ast {
       type = env.void_type();
       return this;
     }
-    //void resolve(Environ & env) {
-    //  resolve_to(env, what, env.frame->return_type);
-    //  env.frame->pop_tmp(what->type);
-    //  type = env.void_type();
-    //}
-    void eval(ExecEnviron & env) {
-      what->eval(env);
-      copy_val(env.local_var(0), env.ret(what), what->type);
-      throw ReturnException();
-    }
     void finalize(FinalizeEnviron & env) {
       what->finalize(env);
     }
@@ -2106,39 +1976,6 @@ namespace ast {
         parms[i] = parms[i]->resolve_to(ftype->parms->parms[i].type, env);
       }
       return this;
-    }
-    //void resolve(Environ & env) {
-    //  lhs->resolve(env);
-    //  env.frame->pop_tmp(lhs->type);
-    //  const Function * ftype = dynamic_cast<const Function *>(lhs->type);
-    //  if (!ftype) {
-    //    if (const Pointer * t = dynamic_cast<const Pointer *>(lhs->type))
-    //      ftype = dynamic_cast<const Function *>(t->subtype);
-    //  }
-    //  if (!ftype)
-    //    throw error (lhs->parse_, "Expected function type");
-    //  type = ftype->ret;
-    //  printf(">>RET>%s\n", ~ftype->ret->to_string());
-    //  return_offset = env.frame->alloc_tmp(ftype);
-    //  unsigned saved_size = env.frame->cur_frame_size;
-    //  if (parms.size() != ftype->parms->parms.size()) 
-    //    throw error(parse_->arg(1), 
-    //                "Wrong number of parameters, expected %u but got %u",
-    //                ftype->parms->parms.size(), parms.size());
-    //  const int num_parms = parms.size();
-    //  for (int i = 0; i != num_parms; ++i) {
-    //    resolve_to(env, parms[i], ftype->parms->parms[i].type);
-    //  }
-    //  env.frame->pop_to(saved_size);
-    //}
-    void eval(ExecEnviron & env) {
-      lhs->eval(env);
-      Fun * f = env.ret<Fun *>(lhs);
-      const int num_parms = parms.size();
-      for (int i = 0; i != num_parms; ++i)
-        parms[i]->eval(env);
-      ExecEnviron env2 = env.new_frame(return_offset);
-      f->eval(env2);
     }
     void finalize(FinalizeEnviron & env) {
       lhs->finalize(env);
