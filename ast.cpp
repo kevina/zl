@@ -748,9 +748,7 @@ namespace ast {
       if (storage_class != EXTERN && sym->type->size() == NPOS)
         throw error(name_p, "Size not known");
       env.add(name, sym);
-      if (p->num_args() > 2) {
-        collect.push_back(this);
-      }
+      collect.push_back(this); // fixme, not always the case
       deps_closed = true;
       type = env.void_type();
       if (dynamic_cast<TopLevelVarSymbol *>(sym))
@@ -759,36 +757,26 @@ namespace ast {
         return this;
     }
     void finish_parse(Environ & env) {
-      assert(parse_->num_args() > 2);
-      //env.add(name, sym, SecondPass);
-      init = parse_exp(parse_->arg(2), env);
-      //if (sym->type->is_ref && !init->lvalue) {
-      //  temp_exp = init;
-      //  SymbolKey name = expand_binding(name_p, env);
-      //  
-      //  temp_sym = new_var_symbol(...);
-      //  init = addrof(temp_sym);
-      //}
-      init = init->resolve_to(sym->type, env);
-    }
-    AST * parse_self_as_member(const Syntax * p, Environ & env) {
-      Collect collect;
-      AST * res = parse_forward(p, env, collect);
-      assert(collect.empty());
-      return res;
-    }
-    AST * parse_self(const Syntax * p, Environ & env) {
-      Collect collect;
-      AST * res = parse_forward(p, env, collect);
-      if (!collect.empty())
-        finish_parse(env);
-      if (const UserType * ut = dynamic_cast<const UserType *>(sym->type))
+      if (parse_->num_args() > 2) {
+        //env.add(name, sym, SecondPass);
+        init = parse_exp(parse_->arg(2), env);
+        //if (sym->type->is_ref && !init->lvalue) {
+        //  temp_exp = init;
+        //  SymbolKey name = expand_binding(name_p, env);
+        //  
+        //  temp_sym = new_var_symbol(...);
+        //  init = addrof(temp_sym);
+        //}
+        init = init->resolve_to(sym->type, env);
+      }
+      if (const UserType * ut = dynamic_cast<const UserType *>(sym->type)) {
         if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
           constructor = parse_stmt(SYN(SYN("member"), 
                                        SYN(ID, SYN(name_p, sym)),
                                        SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN("list")))),
                                    env);
         }
+      }
       if (TopLevelVarSymbol * tlsym = dynamic_cast<TopLevelVarSymbol *>(sym)) {
         if (init && !init->ct_value_) {
           tlsym->init = parse_stmt(SYN(SYN("assign"), SYN(ID, SYN(sym)), SYN(init)), env);
@@ -798,6 +786,18 @@ namespace ast {
           constructor = NULL;
         }
       }
+    }
+    AST * parse_self_as_member(const Syntax * p, Environ & env) {
+      Collect collect;
+      AST * res = parse_forward(p, env, collect);
+      //assert(collect.empty());
+      return res;
+    }
+    AST * parse_self(const Syntax * p, Environ & env) {
+      Collect collect;
+      AST * res = parse_forward(p, env, collect);
+      if (!collect.empty())
+        finish_parse(env);
       return res;
     }
     void eval(ExecEnviron &) {}
