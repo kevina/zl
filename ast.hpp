@@ -1,3 +1,8 @@
+#ifndef AST__HPP
+#define AST__HPP
+
+#include "ct_value.hpp"
+
 #include "environ.hpp"
 #include "gc.hpp"
 #include "hash-t.hpp" //FIXME
@@ -8,8 +13,6 @@
 #include "expand.hpp"
 
 #include <typeinfo>
-#include <map>
-#include <limits>
 
 #undef NPOS
 
@@ -146,57 +149,6 @@ namespace ast {
   struct BreakException {};
   struct ReturnException {};
 
-  struct CT_Ptr {
-    size_t val;
-    CT_Ptr(size_t v) : val(v) {}
-  };
-
-  struct CT_LValue {
-    CT_Ptr addr;
-    CT_LValue(CT_Ptr a) : addr(a) {}
-  };
-
-  struct CT_Value_Base : public gc {
-    virtual void to_string(const AST *, OStream &) const = 0;
-    virtual const char * type_name() const = 0;
-    virtual ~CT_Value_Base() {}
-  };
-
-  template <typename T> struct CT_Value : public CT_Value_Base {
-    void to_string(const AST *, OStream & o) const;
-    virtual T value(const AST *) const = 0;
-    const char * type_name() const;
-  };
-
-  template <typename T>
-  struct CT_Type_Base {typedef T type; static const char * const name;};
-  template<typename T> const char * const CT_Type_Base<T>::name = NULL;
-
-  template <typename T, bool is_int, bool is_signed, size_t size>
-  struct CT_Type_ByProp : public CT_Type_Base<T> {};
-
-  template <typename T> struct CT_Type_ByProp<T, true, true, 1> : public CT_Type_Base<int8_t> {};
-  template <typename T> struct CT_Type_ByProp<T, true, false, 1> : public CT_Type_Base<uint8_t> {};
-  template <typename T> struct CT_Type_ByProp<T, true, true, 2> : public CT_Type_Base<int16_t> {};
-  template <typename T> struct CT_Type_ByProp<T, true, false, 2> : public CT_Type_Base<uint16_t> {};
-  template <typename T> struct CT_Type_ByProp<T, true, true, 4> : public CT_Type_Base<int32_t> {};
-  template <typename T> struct CT_Type_ByProp<T, true, false, 4> : public CT_Type_Base<uint32_t> {};
-  template <typename T> struct CT_Type_ByProp<T, true, true, 8> : public CT_Type_Base<int64_t> {};
-  template <typename T> struct CT_Type_ByProp<T, true, false, 8> : public CT_Type_Base<uint64_t> {};
-
-  template <typename T> struct CT_Type
-    : public CT_Type_ByProp<T,
-                            std::numeric_limits<T>::is_integer,
-                            std::numeric_limits<T>::is_signed,
-                            sizeof(T)> {};
-
-  template <typename T> struct CT_Type<T *> : public CT_Type_Base<CT_Ptr> {};
-                                                
-  template <typename T>
-  const char * CT_Value<T>::type_name() const {
-    return CT_Type<T>::name;
-  }
-
   struct AST : public Entity {
     String what_;
     String what() const {return what_;}
@@ -252,6 +204,96 @@ namespace ast {
     void compile(CompileWriter &) {abort();}
     void compile_prep(CompileEnviron &) {abort();}
     void finalize(FinalizeEnviron &) {abort();}
+  };
+
+  struct Empty : public ASTLeaf {
+    Empty() : ASTLeaf("empty") {}
+    AST * parse_self(const Syntax * p, Environ & env) {
+      parse_ = p;
+      assert_num_args(0);
+      type = env.void_type();
+      return this;
+    }
+    void eval(ExecEnviron &) {}
+    void compile(CompileWriter & f) {
+      // do absolutely nothing
+    }
+  };
+
+  struct Literal : public ASTLeaf {
+    Literal() : ASTLeaf("literal") {}
+    //AST * part(unsigned i);
+    //long long value;
+    AST * parse_self(const Syntax * p, Environ &);
+    //void eval(ExecEnviron & env);
+    void compile(CompileWriter & f);
+  };
+
+  struct FloatC : public ASTLeaf {
+    FloatC() : ASTLeaf("float") {}
+    //AST * part(unsigned i);
+    //long double value;
+    AST * parse_self(const Syntax * p, Environ &);
+    void compile(CompileWriter & f);
+  };
+
+  struct StringC : public ASTLeaf {
+    StringC() : ASTLeaf("string") {}
+    //AST * part(unsigned i);
+    String orig;
+    String value; // unused at the moment
+    AST * parse_self(const Syntax * p, Environ &);
+    void compile(CompileWriter & f);
+  };
+
+  struct CharC : public ASTLeaf {
+    CharC() : ASTLeaf("char") {}
+    //AST * part(unsigned i);
+    String orig;
+    char value; // unused at the moment
+    AST * parse_self(const Syntax * p, Environ &);
+    void compile(CompileWriter & f);
+  };
+
+  struct EIf : public AST {
+    EIf() : AST("eif") {}
+    //AST * part(unsigned i) 
+    //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
+    AST * exp;
+    AST * if_true;
+    AST * if_false;
+    AST * parse_self(const Syntax * p, Environ & env);
+    void eval(ExecEnviron & env);
+    void finalize(FinalizeEnviron & env);
+    void compile_prep(CompileEnviron & env);
+    void compile(CompileWriter & f);
+  };
+
+  struct BinOp : public AST {
+    BinOp(String name, String op0) : AST(name), op(op0) {}
+    //AST * part(unsigned i) {return i == 0 ? lhs : rhs;}
+    AST * lhs;
+    AST * rhs;
+    String op;
+    AST * parse_self(const Syntax * p, Environ & env);
+    virtual void resolve(Environ & env) = 0;
+    virtual void make_ct_value(Environ & env);
+    void finalize(FinalizeEnviron & env);
+    void compile_prep(CompileEnviron & env);
+    void compile(CompileWriter & f);
+  };
+
+  struct UnOp : public AST {
+    UnOp(String name, String op0) : AST(name), op(op0) {}
+    //AST * part(unsigned i) {return exp;}
+    AST * exp;
+    String op;
+    AST * parse_self(const Syntax * p, Environ & env);
+    virtual void resolve(Environ & env) = 0;
+    virtual void make_ct_value(Environ & env);
+    void finalize(FinalizeEnviron & env);
+    void compile_prep(CompileEnviron & env);
+    void compile(CompileWriter & f);
   };
 
 }
@@ -418,55 +460,6 @@ namespace ast {
     void finalize(FinalizeEnviron &);
     // internal method, should only be called by parse_fun_forward
     AST * parse_forward_i(const Syntax * p, Environ &, Collect &); 
-  };
-
-  struct Literal : public ASTLeaf {
-    Literal() : ASTLeaf("literal") {}
-    //AST * part(unsigned i);
-    //long long value;
-    AST * parse_self(const Syntax * p, Environ &);
-    //void eval(ExecEnviron & env);
-    void compile(CompileWriter & f);
-  };
-
-  struct FloatC : public ASTLeaf {
-    FloatC() : ASTLeaf("float") {}
-    //AST * part(unsigned i);
-    //long double value;
-    AST * parse_self(const Syntax * p, Environ &);
-    void compile(CompileWriter & f);
-  };
-
-  struct StringC : public ASTLeaf {
-    StringC() : ASTLeaf("string") {}
-    //AST * part(unsigned i);
-    String orig;
-    String value; // unused at the moment
-    AST * parse_self(const Syntax * p, Environ &);
-    void compile(CompileWriter & f);
-  };
-
-  struct CharC : public ASTLeaf {
-    CharC() : ASTLeaf("char") {}
-    //AST * part(unsigned i);
-    String orig;
-    char value; // unused at the moment
-    AST * parse_self(const Syntax * p, Environ &);
-    void compile(CompileWriter & f);
-  };
-
-  struct Empty : public ASTLeaf {
-    Empty() : ASTLeaf("empty") {}
-    AST * parse_self(const Syntax * p, Environ & env) {
-      parse_ = p;
-      assert_num_args(0);
-      type = env.void_type();
-      return this;
-    }
-    void eval(ExecEnviron &) {}
-    void compile(CompileWriter & f) {
-      // do absolutely nothing
-    }
   };
 
   //
@@ -656,9 +649,10 @@ namespace ast {
   AST * to_ref(AST *, Environ &);
   AST * from_ref(AST *, Environ &);
 
+  typedef int target_bool;
+  typedef int target_int;
+  typedef size_t target_size_t;
+  typedef ptrdiff_t target_ptrdiff_t;
 }
-
-#if 0
-
 
 #endif
