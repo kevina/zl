@@ -109,8 +109,11 @@ struct ChangeSrc;
 struct Parts : public Vector<const Syntax *> {
   typedef Vector<const Syntax *> Base;
   typedef const value_type * const_iterator;
+  typedef value_type * iterator;
   const_iterator begin() const {return &*Base::begin();}
   const_iterator end()   const {return &*Base::end();}
+  iterator begin() {return &*Base::begin();}
+  iterator end()   {return &*Base::end();}
   void push_back(const Syntax * x) {
     assert(x);
     Base::push_back(x);

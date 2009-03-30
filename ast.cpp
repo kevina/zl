@@ -1436,22 +1436,24 @@ namespace ast {
     return new Empty();
   }
 
-  AST * parse_import(const Syntax * p, Environ & env) {
-    assert_num_args(p, 1);
-    SymbolName n = *p->arg(0);
-    GatherMarks gather;
-    const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env.symbols.front, NULL, 
-                                             NormalStrategy, gather);
-    //printf("IMPORT %p %p\n", m, m->syms);
+  void import_module(const Module * m, Environ & env, const GatherMarks & gather) {
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
       // now add marks back in reverse order;
       SymbolKey k = cur->key;
-      for (Vector<const Mark *>::reverse_iterator 
+      for (Vector<const Mark *>::const_reverse_iterator 
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
         k.marks = mark(k.marks, *i);
       env.symbols.front = new SymbolNode(k, cur->value, env.symbols.front);
     }
+  }
+
+  AST * parse_import(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    GatherMarks gather;
+    const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env.symbols.front, NULL, 
+                                             NormalStrategy, gather);
+    import_module(m, env, gather);
     return new Empty();
   }
 
@@ -1656,6 +1658,20 @@ namespace ast {
                               p->arg(1));
     return (new MemberAccess)->parse_self(res, env);
   };
+
+  AST * parse_memberdecl(const Syntax * p, Environ & env0) {
+    //printf("parse_memberdecl\n%s\n", ~p->to_string());
+    //assert_num_args(p, 2);
+    GatherMarks gather;
+    const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env0.symbols.front, NULL, 
+                                             NormalStrategy, gather);
+    const Syntax * d = p->arg(1);
+    const Symbol * s = lookup_symbol<Symbol>(d->arg(0), DEFAULT_NS, m->syms, NULL, StripMarks);
+    Environ env = env0.new_scope();
+    import_module(m, env, gather);
+    parse_top_level(d, env);
+    return new Empty();
+  }
 
   //
   //
@@ -2451,6 +2467,7 @@ namespace ast {
     if (what == "make_subtype") return parse_make_subtype(p, env);
     if (what == "declare_user_type") return parse_declare_user_type(p, env);
     if (what == "export")  return parse_export(p, env);
+    if (what == "memberdecl") return parse_memberdecl(p, env);
     return 0;
   }
 

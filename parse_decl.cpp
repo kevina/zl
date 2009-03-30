@@ -217,12 +217,12 @@ DeclWorking::DeclWorking(Parts & p)
 
 const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 {
-  Syntax * res = new Syntax(new Syntax("@"));
+  Parts res;
 
   Parts::const_iterator i = p->args_begin();
   Parts::const_iterator end = p->args_end();
 
-  DeclWorking w(res->d->parts);
+  DeclWorking w(res);
 
   {
     bool r = w.parse_first_part(i, end, env, true);
@@ -249,7 +249,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
       decl = w.make_declaration(id, t);
     }
     
-    res->add_part(decl);
+    res.push_back(decl);
 
     if (i == end) break;
 
@@ -259,10 +259,22 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     
   }
 
-  if (res->num_args() == 1)
-    return res->arg(0);
+  for (Parts::iterator i = res.begin(), e = res.end(); i != e; ++i) {
+    const Syntax * p = *i;
+    const Syntax * n = p->arg(0);
+    if (n->is_a("w/outer")) {
+      const Syntax * c = n->arg(0);
+      const Syntax * n2 = n->arg(1);
+      Syntax * p2 = new Syntax(*p);
+      p2->arg(0) = n2;
+      *i = new Syntax(new Syntax("memberdecl"), c, p2);
+    }
+  }
+
+  if (res.size() == 1)
+    return res[0];
   else
-    return res;
+    return new Syntax(new Syntax("@"), res);
 }
 
 const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
