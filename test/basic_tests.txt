@@ -59,3 +59,4 @@ test62.c
 test63.c
 test64.c
 test66.c
+test68.c

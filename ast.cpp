@@ -293,21 +293,7 @@ namespace ast {
     //env.ret<int>(this) = value;
   //}
   void Literal::compile(CompileWriter & f) {
-    ct_value_->to_string(this, f);
-    //f.printf("%lld", value);
-    String tname = type->unqualified->to_string();
-    if (tname == "unsigned int")
-      f << "u";
-    else if (tname == "long")
-      f << "l";
-    else if (tname == "unsigned long")
-      f << "ul";
-    else if (tname == "long long")
-      f << "ll";
-    else if (tname == "unsigned long long")
-      f << "ull";
-    else if (tname != "int")
-      abort(); // unsupported type;
+    ct_value_->compile(f, NULL);
   }
 
   AST * FloatC::parse_self(const Syntax * p, Environ & env) {
@@ -319,14 +305,7 @@ namespace ast {
   }
 
   void FloatC::compile(CompileWriter & f) {
-    ct_value_->to_string(this, f);
-    String tname = type->unqualified->to_string();
-    if (tname == "float")
-      f << "f";
-    else if (tname == "long double")
-      f << "l";
-    else if (tname != "double")
-      abort(); // unsupported type;
+    ct_value_->compile(f, NULL);
   }
 
   AST * StringC::parse_self(const Syntax * p, Environ & env) {
@@ -367,7 +346,7 @@ namespace ast {
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
-      lvalue = true;
+      lvalue = dynamic_cast<const TopLevelVarSymbol *>(sym) ? 2 : 1;
       return this;
     }
     void compile(CompileWriter & f) {
@@ -439,7 +418,7 @@ namespace ast {
     if_false = parse_exp(p->arg(2), env);
     if_false = if_false->resolve_to(if_true->type, env);
     type = if_true->type;
-    ct_value_ = eif_ct_value(type);
+    ct_value_ = eif_ct_value(this);
     return this;
   }
 
@@ -552,6 +531,9 @@ namespace ast {
         //  init = addrof(temp_sym);
         //}
         init = init->resolve_to(sym->type, env);
+        if (storage_class == STATIC && sym->type->read_only && init->ct_value_) {
+          sym->ct_value = init->ct_value_;
+        }
       }
       if (const UserType * ut = dynamic_cast<const UserType *>(sym->type)) {
         if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
@@ -602,8 +584,14 @@ namespace ast {
       //}
       c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
       f << buf.freeze();
-      if (init && phase != Forward)
-        f << " = " << init;
+      if (init && phase != Forward) {
+        if (init->ct_value_) {
+          f << " = ";
+          init->ct_value_->compile(f, init);
+        } else {
+          f << " = " << init;
+        }
+      }
       f << ";\n";
       if (constructor)
         f << constructor;
@@ -725,11 +713,11 @@ namespace ast {
     assert_num_args(1);
     exp = parse_exp(p->arg(0), env);
     resolve(env);
-    make_ct_value(env);
+    make_ct_value();
     return this;
   }
 
-  void UnOp::make_ct_value(Environ & env) {}
+  void UnOp::make_ct_value() {}
 
   void UnOp::finalize(FinalizeEnviron & env) {
     exp->finalize(env);
@@ -761,15 +749,15 @@ namespace ast {
 
   struct UPlus : public SimpleUnOp {
     UPlus() : SimpleUnOp("uplus", "+", NUMERIC_C) {}
-    void make_ct_value(Environ &) {
+    void make_ct_value() {
       ct_value_ = exp->ct_value_;
     }
   };
 
   struct Neg : public SimpleUnOp {
     Neg() : SimpleUnOp("neg", "-", NUMERIC_C) {}
-    void make_ct_value(Environ &) {
-      ct_value_ = neg_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = neg_ct_value(this);
     }
   };
 
@@ -779,8 +767,8 @@ namespace ast {
     struct F : public std::unary_function<T,T> {
       T operator()(T x) {return ~x;}
     };
-    void make_ct_value(Environ & env) {
-      ct_value_ = compliment_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = compliment_ct_value(this);
     }
   };
 
@@ -792,10 +780,6 @@ namespace ast {
       type = env.types.inst("int");
     }
   };
-
-  struct AddrOf_CT_Value : public CT_Value<CT_Ptr> {
-    CT_Ptr value(const AST * exp) const;
-  } addrof_ct_value;
 
   struct AddrOf : public UnOp {
     AddrOf() : UnOp("addrof", "&") {}
@@ -810,16 +794,18 @@ namespace ast {
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
     }
-    void make_ct_value(Environ & env) {
-      ct_value_ = &addrof_ct_value;
+    void make_ct_value() {
+      if (!exp->ct_value_) {
+        if (exp->lvalue > 1) 
+          ct_value_ = &ct_nval;
+      } else if (exp->ct_value_->nval()) {
+        ct_value_ = &ct_nval;
+      } else {
+        CT_LValue val = exp->ct_value<CT_LValue>();
+        ct_value_ = new CT_Value<CT_Ptr>(val.addr);
+      }
     }
   };
-
-  CT_Ptr AddrOf_CT_Value::value(const AST * exp) const {
-    const AddrOf * addrof = dynamic_cast<const AddrOf *>(exp);
-    CT_LValue val = addrof->exp->ct_value<CT_LValue>();
-    return val.addr;
-  }
 
   struct AddrOfRef : public UnOp {
     AddrOfRef() : UnOp("addrof_ref", "&") {}
@@ -835,10 +821,6 @@ namespace ast {
     }
   };
 
-  struct DeRef_CT_Value : public CT_Value<CT_LValue> {
-    CT_LValue value(const AST * exp) const;
-  } deref_ct_value;
-
   struct DeRef : public UnOp {
     DeRef() : UnOp("deref", "*") {}
     void resolve(Environ & env) {
@@ -848,16 +830,16 @@ namespace ast {
       type = t->subtype;
       lvalue = true;
     }
-    void make_ct_value(Environ & env) {
-      ct_value_ = &deref_ct_value;
+    void make_ct_value() {
+      if (!exp->ct_value_) return;
+      if (exp->ct_value_->nval()) {
+        ct_value_ = &ct_nval;
+      } else {
+        CT_Ptr val = exp->ct_value<CT_Ptr>();
+        ct_value_ = new CT_Value<CT_LValue>(CT_LValue(val));
+      }
     }
   };
-
-  CT_LValue DeRef_CT_Value::value(const AST * exp) const {
-    const DeRef * deref = dynamic_cast<const DeRef *>(exp);
-    CT_Ptr val = deref->exp->ct_value<CT_Ptr>();
-    return CT_LValue(val);
-  }
 
   struct DeRefRef : public UnOp {
     DeRefRef() : UnOp("deref_ref", "*") {}
@@ -914,10 +896,10 @@ namespace ast {
     lhs = parse_exp(p->arg(0), env);
     rhs = parse_exp(p->arg(1), env);
     resolve(env);
-    make_ct_value(env);
+    make_ct_value();
     return this;
   }
-  void BinOp::make_ct_value(Environ & env) {}
+  void BinOp::make_ct_value() {}
   void BinOp::finalize(FinalizeEnviron & env) {
     lhs->finalize(env);
     rhs->finalize(env);
@@ -930,10 +912,6 @@ namespace ast {
     f << "(" << lhs << " " << op << " " << rhs << ")";
   }
   
-  struct MemberAccess_CT_Value : public CT_Value<CT_LValue> {
-    CT_LValue value(const AST *) const;
-  } member_access_ct_value;
-
   struct MemberAccess : public AST {
     MemberAccess() : AST("member") {}
     AST * part(unsigned i) {abort();}
@@ -956,7 +934,19 @@ namespace ast {
                     ~id.to_string(), ~t->to_string());
       type = sym->type;
       lvalue = true;
-      ct_value_ = &member_access_ct_value;
+      if (exp->ct_value_) {
+        if (exp->ct_value_->nval()) {
+          ct_value_ = &ct_nval;
+        } else {
+          CT_Ptr p = exp->ct_value<CT_LValue>().addr;
+          Vector<Member>::const_iterator i = t->members.begin(), end = t->members.end();
+          while (i != end && i->sym != sym)
+            ++i;
+          assert(i != end);
+          p.val += i->offset;
+          ct_value_ = new CT_Value<CT_LValue>(CT_LValue(p));
+        }
+      }
       return this;
     };
     void finalize(FinalizeEnviron & env) {
@@ -969,18 +959,6 @@ namespace ast {
       f << exp << "." << sym->uniq_name();
     }
   };
-
-  CT_LValue MemberAccess_CT_Value::value(const AST * exp0) const {
-    const MemberAccess * e = dynamic_cast<const MemberAccess *>(exp0);
-    const StructUnionT * t = dynamic_cast<const StructUnionT *>(e->exp->type->unqualified);
-    CT_Ptr p = e->exp->ct_value<CT_LValue>().addr;
-    Vector<Member>::const_iterator i = t->members.begin(), end = t->members.end();
-    while (i != end && i->sym != e->sym)
-      ++i;
-    assert(i != end);
-    p.val += i->offset;
-    return CT_LValue(p);
-  }
 
   const Type * resolve_binop(Environ & env, TypeCategory * cat, AST *& lhs, AST *& rhs) {
     check_type(lhs, cat);
@@ -1086,16 +1064,16 @@ namespace ast {
     void resolve(Environ & env) {
       type = resolve_additive(env, lhs, rhs);
     }
-    void make_ct_value(Environ & env);
+    void make_ct_value();
   };
 
-  void Plus::make_ct_value(Environ & env) {
+  void Plus::make_ct_value() {
     if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
-      ct_value_ = plus_ct_value(type);
+      ct_value_ = plus_ct_value(this);
     else if (lhs->type->is(POINTER_C))
-      ct_value_ = ptr_plus_ct_value(rhs->type);
+      ct_value_ = ptr_plus_ct_value(this);
     else if (rhs->type->is(POINTER_C))
-      ct_value_ = plus_ptr_ct_value(lhs->type);
+      ct_value_ = plus_ptr_ct_value(this);
     else
       abort();
   }
@@ -1114,51 +1092,51 @@ namespace ast {
           throw;
       }
     }
-    void make_ct_value(Environ & env) {
+    void make_ct_value() {
       if (lhs->type->is(NUMERIC_C) && rhs->type->is(NUMERIC_C))
-        ct_value_ = minus_ct_value(type);
+        ct_value_ = minus_ct_value(this);
     }
   };
 
   struct Times : public SimpleBinOp {
     Times() : SimpleBinOp("times", "*", NUMERIC_C) {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = times_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = times_ct_value(this);
     }
   };
 
   struct Div : public SimpleBinOp {
     Div() : SimpleBinOp("div", "/", NUMERIC_C) {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = div_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = div_ct_value(this);
     }
   };
 
   struct Mod : public SimpleBinOp {
     Mod() : SimpleBinOp("mid", "%", INT_C) {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = mod_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = mod_ct_value(this);
     }
   };
 
   struct BAnd : public SimpleBinOp { 
     BAnd() : SimpleBinOp("band", "&", INT_C) {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = band_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = band_ct_value(this);
     }
   };
 
   struct BOr : public SimpleBinOp {
     BOr() : SimpleBinOp("bor", "|", INT_C) {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = bor_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = bor_ct_value(this);
     }
   };
 
   struct XOr : public SimpleBinOp {
     XOr() : SimpleBinOp("xor", "^", INT_C) {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = xor_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = xor_ct_value(this);
     }
   };
 
@@ -1174,15 +1152,15 @@ namespace ast {
   struct LeftShift : public BShift {
     LeftShift() : BShift("lshift", "<<") {}
     template <typename T>
-    void make_ct_value(Environ & env) {
-      ct_value_ = leftshift_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = leftshift_ct_value(this);
     }
   };
 
   struct RightShift : public BShift {
     RightShift() : BShift("rshift", ">>") {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = rightshift_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = rightshift_ct_value(this);
     }
   };
 
@@ -1205,43 +1183,43 @@ namespace ast {
 
   struct Eq : public CompOp {
     Eq() : CompOp("eq", "==") {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = eq_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = eq_ct_value(this);
     }
   };
 
   struct Ne : public CompOp {
     Ne() : CompOp("ne", "!=") {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = ne_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = ne_ct_value(this);
     }
   };
 
   struct Lt : public CompOp {
     Lt() : CompOp("lt", "<") {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = lt_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = lt_ct_value(this);
     }
   };
 
   struct Gt : public CompOp {
     Gt() : CompOp("gt", ">") {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = gt_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = gt_ct_value(this);
     }
   };
 
   struct Le : public CompOp {
     Le() : CompOp("le", "<=") {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = le_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = le_ct_value(this);
     }
   };
 
   struct Ge : public CompOp {
     Ge() : CompOp("ge", ">=") {}
-    void make_ct_value(Environ & env) {
-      ct_value_ = ge_ct_value(type);
+    void make_ct_value() {
+      ct_value_ = ge_ct_value(this);
     }
   };
 
@@ -2142,7 +2120,7 @@ namespace ast {
     struct Member {
       const Syntax * parse;
       VarSymbol * sym;
-      Literal_Value<target_int> ct_value;
+      CT_Value<target_int> ct_value;
       Member(const Syntax * p, VarSymbol * sym, int v) : parse(p), sym(sym), ct_value(v) {}
     };
     Vector<Member> members;
@@ -2197,7 +2175,7 @@ namespace ast {
       if (body && phase != Forward) {
         f << "{\n";
         for (int i = 0; i != members.size(); ++i) {
-          f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.v;
+          f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.val;
           if (i == members.size())
             f << "\n";
           else
@@ -2219,13 +2197,6 @@ namespace ast {
     }
   };
   
-  struct SizeOf_CT_Value : public CT_Value<target_size_t> {
-    target_size_t value(const AST * a) const {
-      const SizeOf * so = dynamic_cast<const SizeOf *>(a);
-      return so->sizeof_type->size();
-    }
-  } size_of_ct_value;
-
   AST * SizeOf::parse_self(const Syntax * p, Environ & env) {
     parse_ = p;
     assert_num_args(1);
@@ -2236,7 +2207,7 @@ namespace ast {
       sizeof_type = parse_type(new Syntax(new Syntax(".typeof"), new Syntax(exp)), env);
     }
     type = env.types.ct_const(env.types.inst(".size"));
-    ct_value_ = &size_of_ct_value;
+    ct_value_ = new CT_Value<target_size_t>(sizeof_type->size());
     return this;
   }
 
@@ -2765,74 +2736,6 @@ namespace ast {
   //
   //
   
-
-  template <typename T>
-  void CT_Value<T>::to_string(const AST * a, OStream & o) const {
-    abort();
-  }
-
-  template <>
-  void CT_Value<uint8_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%llu", (unsigned long long)value(a));
-  }
-
-  template <>
-  void CT_Value<uint16_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%llu", (unsigned long long)value(a));
-  }
-
-  template <>
-  void CT_Value<uint32_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%llu", (unsigned long long)value(a));
-  }
-
-  template <>
-  void CT_Value<uint64_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%llu", (unsigned long long)value(a));
-  }
-
-  template <>
-  void CT_Value<int8_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%lld", (long long)value(a));
-  }
-
-  template <>
-  void CT_Value<int16_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%lld", (long long)value(a));
-  }
-
-  template <>
-  void CT_Value<int32_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%lld", (long long)value(a));
-  }
-
-  template <>
-  void CT_Value<int64_t>::to_string(const AST * a, OStream & o) const {
-    o.printf("%lld", (long long)value(a));
-  }
-
-  template <>
-  void CT_Value<float>::to_string(const AST * a, OStream & o) const {
-    o.printf("%f", value(a));
-  }
-
-  template <>
-  void CT_Value<double>::to_string(const AST * a, OStream & o) const {
-    o.printf("%f", value(a));
-  }
-
-  template <>
-  void CT_Value<long double>::to_string(const AST * a, OStream & o) const {
-    o.printf("%Lf", value(a));
-  }
-
-  //template <>
-  //void CT_Value<bool>::to_string(const AST * a, OStream & o) const {
-  //  if (value(a))
-  //    o << '1';
-  //  else
-  //    o << '0';
-  //}
 
 }
 

@@ -15,6 +15,7 @@ function compile_test() {
   else
     gcc -fsyntax-only a.out.c
   fi
+  cp a.out.c test/$base.out.c
 }
 
 if [ "$#" -gt 0 ]; then

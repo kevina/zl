@@ -8,32 +8,57 @@
 namespace ast {
 
   struct AST;
+  struct Symbol;
+  struct CompileWriter;
+
+  struct CT_NVal {};
 
   struct CT_Ptr {
+    //static const size_t NVAL = (size_t)-1;
     size_t val;
+    //CT_Ptr() : val(NVAL) {}
     CT_Ptr(size_t v) : val(v) {}
   };
 
   struct CT_LValue {
     CT_Ptr addr;
+    //CT_LValue() : addr() {}
     CT_LValue(CT_Ptr a) : addr(a) {}
   };
 
   struct CT_Value_Base : public gc {
-    virtual void to_string(const AST *, OStream &) const = 0;
+    CT_Value_Base() {}
+    // nval() return true if the precise value is not known at compile time
+    // but can be determined once the executable is compiled, primary used
+    // when taking the address of a global variable
+    virtual bool nval() const {return false;}
+    // compile(...) will attempt to compile the compile time value, if
+    // nval() is true than compile the exp passed in since it doesn't
+    // have a precise value at compile time
+    virtual void compile(CompileWriter &, AST * exp) const = 0;
     virtual const char * type_name() const = 0;
     virtual ~CT_Value_Base() {}
   };
 
   template <typename T> struct CT_Value : public CT_Value_Base {
-    void to_string(const AST *, OStream & o) const;
-    virtual T value(const AST *) const = 0;
+    T val;
+    CT_Value(const T & v) : val(v) {}
+    void compile(CompileWriter &, AST *) const;
     const char * type_name() const;
   };
 
+  template <> struct CT_Value<CT_NVal> : public CT_Value_Base {
+    bool nval() const;
+    void to_string(OStream & o) const;
+    void compile(CompileWriter &, AST *) const;
+    const char * type_name() const;
+  };
+
+  extern const CT_Value<CT_NVal> ct_nval;
+
   template <typename T>
   struct CT_Type_Base {typedef T type; static const char * const name;};
-  template<typename T> const char * const CT_Type_Base<T>::name = NULL;
+  template<typename T> const char * const CT_Type_Base<T>::name = "";
 
   template <typename T, bool is_int, bool is_signed, size_t size>
   struct CT_Type_ByProp : public CT_Type_Base<T> {};

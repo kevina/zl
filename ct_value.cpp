@@ -2,31 +2,42 @@
 
 using namespace ast;
 
-namespace {
+namespace ast {
+  const CT_Value<CT_NVal> ct_nval;
+}
 
+namespace {
+  
+  template <typename AST_T>
+  struct DummyGetValue {
+    static const CT_Value_Base * get_value(const AST_T *) {return NULL;}
+  };
+
+  template <typename AST_T>
   struct CT_Value_Map {
     String type;
-    CT_Value_Base * ct_value;
+    const CT_Value_Base * (*get_value)(const AST_T *);
   };
 
   template <template <typename> class W> 
-  const CT_Value_Base * int_op_ct_value(const Type * t) {
-    static CT_Value_Map map[] = {
-      {".uint8", new W<uint8_t>},
-      {".uint16", new W<uint16_t>},
-      {".uint32", new W<uint32_t>},
-      {".uint64", new W<uint64_t>},
-      {".int8", new W<int8_t>},
-      {".int16", new W<int16_t>},
-      {".int32", new W<int32_t>},
-      {".int64", new W<int64_t>}      
+  const CT_Value_Base * (*int_op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
+    typedef CT_Value_Map<typename W<void>::AST_T> CT_VM;
+    static CT_VM map[] = {
+      {".uint8", W<uint8_t>::get_value},
+      {".uint16", W<uint16_t>::get_value},
+      {".uint32", W<uint32_t>::get_value},
+      {".uint64", W<uint64_t>::get_value},
+      {".int8", W<int8_t>::get_value},
+      {".int16", W<int16_t>::get_value},
+      {".int32", W<int32_t>::get_value},
+      {".int64", W<int64_t>::get_value}      
     };
-    static CT_Value_Map * map_end = map + sizeof(map)/sizeof(CT_Value_Map);
+    static CT_VM * map_end = map + sizeof(map)/sizeof(CT_VM);
     String n = t->ct_type_name();
-    for (const CT_Value_Map * i = map; i != map_end; ++i) {
-      if (i->type == n) return i->ct_value;
+    for (CT_VM * i = map; i != map_end; ++i) {
+      if (i->type == n) return i->get_value;
     }
-    return NULL;
+    return DummyGetValue<typename W<void>::AST_T>::get_value;
   }
 
   template <template <typename> class W, template <typename> class F>
@@ -36,27 +47,28 @@ namespace {
   };
  
   template <template <typename> class W> 
-  const CT_Value_Base * op_ct_value(const Type * t) {
-    static CT_Value_Map map[] = {
-      {"float", new W<float>},
-      {"double", new W<double>},
-      {"long double", new W<long double>},
+  const CT_Value_Base * (*op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
+    typedef CT_Value_Map<typename W<void>::AST_T> CT_VM;
+    static CT_VM map[] = {
+      {"float", W<float>::get_value},
+      {"double", W<double>::get_value},
+      {"long double", W<long double>::get_value},
     };
-    static CT_Value_Map * map_end = map + sizeof(map)/sizeof(CT_Value_Map);
+    static CT_VM * map_end = map + sizeof(map)/sizeof(CT_VM);
     String n = t->ct_type_name();
-    for (const CT_Value_Map * i = map; i != map_end; ++i) {
-      if (i->type == n) return i->ct_value;
+    for (const CT_VM * i = map; i != map_end; ++i) {
+      if (i->type == n) return i->get_value;
     }
     return int_op_ct_value<W>(t);
   }
 
   template <template <typename> class W, template <typename> class F> 
-  inline const CT_Value_Base * int_op_ct_value(const Type * t) {
+  inline const CT_Value_Base * (*int_op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
     return int_op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
   template <template <typename> class W, template <typename> class F> 
-  inline const CT_Value_Base * op_ct_value(const Type * t) {
+  inline const CT_Value_Base * (*op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
     return op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
@@ -77,13 +89,13 @@ namespace ast {
       if (value == 0) t = env.types.inst(".zero", t);
       String n = it->ct_type_name();
       if (n == ".uint8")
-        return new Literal_Value<uint8_t>(value);
+        return new CT_Value<uint8_t>(value);
       else if (n == ".uint16")
-        return new Literal_Value<uint16_t>(value);
+        return new CT_Value<uint16_t>(value);
       else if (n == ".uint32")
-        return new Literal_Value<uint32_t>(value);
+        return new CT_Value<uint32_t>(value);
       else if (n == ".uint64")
-        return new Literal_Value<uint64_t>(value);
+        return new CT_Value<uint64_t>(value);
       else
         abort();
     } else {
@@ -94,13 +106,13 @@ namespace ast {
       if (value == 0) t = env.types.inst(".zero", t);
       String n = it->ct_type_name();
       if (n == ".int8")
-        return new Literal_Value<int8_t>(value);
+        return new CT_Value<int8_t>(value);
       else if (n == ".int16")
-        return new Literal_Value<int16_t>(value);
+        return new CT_Value<int16_t>(value);
       else if (n == ".int32")
-        return new Literal_Value<int32_t>(value);
+        return new CT_Value<int32_t>(value);
       else if (n == ".int64")
-        return new Literal_Value<int64_t>(value);
+        return new CT_Value<int64_t>(value);
       else
         abort();
     }
@@ -114,41 +126,37 @@ namespace ast {
     long double value = strtold(s, &e);
     if (*e) throw error(vp, "Expected Number");
     if (n == "float")
-      return new Literal_Value<float>(value);
+      return new CT_Value<float>(value);
     else if (n == "double")
-      return new Literal_Value<double>(value);
+      return new CT_Value<double>(value);
     else if (n == "long double")
-      return new Literal_Value<long double>(value);
+      return new CT_Value<long double>(value);
     else
       abort();
   }
 
-  template <typename T> 
-  struct EIf_CT_Value : public CT_Value<T> {
-    T value(const AST * a) const {
-      const EIf * eif = dynamic_cast<const EIf *>(a);
-      if (eif->exp->ct_value<target_bool>())
-        return eif->if_true->ct_value<T>();
-      else
-        return eif->if_false->ct_value<T>();
-    }
-  };
-
-  const CT_Value_Base * eif_ct_value(const Type * t) {
-    return op_ct_value<EIf_CT_Value>(t);
+  const CT_Value_Base * eif_ct_value(const EIf * eif) {
+    if (!eif->exp->ct_value_ || eif->exp->ct_value_->nval())
+      return NULL;
+    if (eif->exp->ct_value<target_bool>())
+      return eif->if_true->ct_value_;
+    else
+      return eif->if_false->ct_value_;
   }
 
   template <typename F> 
-  struct UnOp_CT_Value : public CT_Value<typename F::result_type> {
-    typename F::result_type value(const AST * a) const {
-      const UnOp * b = dynamic_cast<const UnOp *>(a);
-      typename F::argument_type x = b->exp->ct_value<typename F::argument_type>();
-      return F()(x);
+  struct UnOp_GetValue {
+    typedef UnOp AST_T;
+    static const CT_Value_Base * get_value(const UnOp * u) {
+      if (!u->exp->ct_value_) return NULL;
+      if (u->exp->ct_value_->nval()) return NULL;
+      typename F::argument_type x = u->exp->ct_value<typename F::argument_type>();
+      return new CT_Value<typename F::result_type>(F()(x));
     }
   };
 
-  const CT_Value_Base * neg_ct_value(const Type * type) {
-    return op_ct_value<UnOp_CT_Value, std::negate>(type);
+  const CT_Value_Base * neg_ct_value(const UnOp * exp) {
+    return op_ct_value<UnOp_GetValue, std::negate>(exp->type)(exp);
   }
 
   template <typename T>
@@ -156,8 +164,8 @@ namespace ast {
       T operator()(T x) {return ~x;}
   };
 
-  const CT_Value_Base * compliment_ct_value(const Type * type) {
-    return int_op_ct_value<UnOp_CT_Value, Compliment_F>(type);
+  const CT_Value_Base * compliment_ct_value(const UnOp * exp) {
+    return int_op_ct_value<UnOp_GetValue, Compliment_F>(exp->type)(exp);
   }
 
   template <typename T>
@@ -165,324 +173,319 @@ namespace ast {
       T operator()(T x) {return !x;}
   };
 
-  const CT_Value_Base * not_ct_value(const Type * type) {
-    return op_ct_value<UnOp_CT_Value, Not_F>(type);
+  const CT_Value_Base * not_ct_value(const UnOp * exp) {
+    return op_ct_value<UnOp_GetValue, Not_F>(exp->type)(exp);
   }
 
   template <typename F> 
-  struct BinOp_CT_Value : public CT_Value<typename F::result_type> {
-    typename F::result_type value(const AST * a) const {
-      const BinOp * b = dynamic_cast<const BinOp *>(a);
+  struct BinOp_GetValue {
+    typedef BinOp AST_T;
+    static const CT_Value_Base * get_value(const BinOp * b) {
+      if (!b->lhs->ct_value_ || !b->rhs->ct_value_) return NULL;
+      if (b->lhs->ct_value_->nval() || b->rhs->ct_value_->nval()) return NULL;
       typename F::first_argument_type x = b->lhs->ct_value<typename F::first_argument_type>();
       typename F::second_argument_type y = b->rhs->ct_value<typename F::second_argument_type>();
-      return F()(x, y);
+      return new CT_Value<typename F::result_type>(F()(x, y));
     }
   };
 
   template <typename F> 
-  struct Comp_CT_Value : public CT_Value<target_bool> {
-    int value(const AST * a) const {
-      const BinOp * b = dynamic_cast<const BinOp *>(a);
+  struct Comp_GetValue {
+    typedef BinOp AST_T;
+    static const CT_Value_Base * get_value(const BinOp * b) {
+      if (!b->lhs->ct_value_ || !b->rhs->ct_value_) return NULL;
+      if (b->lhs->ct_value_->nval() || b->rhs->ct_value_->nval()) return NULL;
       typename F::first_argument_type x = b->lhs->ct_value<typename F::first_argument_type>();
       typename F::second_argument_type y = b->rhs->ct_value<typename F::second_argument_type>();
-      return F()(x, y);
+      return new CT_Value<target_bool>(F()(x, y));
     }
   };
   
   template <typename T> 
-  struct Ptr_Plus_CT_Value : public CT_Value<CT_Ptr> {
-    CT_Ptr value(const AST * a) const {
-      const BinOp * plus = dynamic_cast<const BinOp *>(a);
+  struct Ptr_Plus_GetValue {
+    typedef BinOp AST_T;
+    static const CT_Value_Base * get_value(const BinOp * plus) {
+      if (!plus->lhs->ct_value_ || !plus->rhs->ct_value_) return NULL;
+      if (plus->lhs->ct_value_->nval() || plus->rhs->ct_value_->nval()) return &ct_nval;
       CT_Ptr   lhs = plus->lhs->ct_value<CT_Ptr>();
       T        sz  = dynamic_cast<const PointerLike *>(plus->lhs->type)->subtype->size();
       T        rhs = plus->rhs->ct_value<T>();
-      return CT_Ptr(lhs.val + sz*rhs);
+      return new CT_Value<CT_Ptr>(CT_Ptr(lhs.val + sz*rhs));
     }
   };
 
   template <typename T> 
-  struct Plus_Ptr_CT_Value : public CT_Value<CT_Ptr> {
-    CT_Ptr value(const AST * a) const {
-      const BinOp * plus = dynamic_cast<const BinOp *>(a);
+  struct Plus_Ptr_GetValue {
+    typedef BinOp AST_T;
+    static const CT_Value_Base * get_value(const BinOp * plus) {
+      if (!plus->lhs->ct_value_ || !plus->rhs->ct_value_) return NULL;
+      if (plus->lhs->ct_value_->nval() || plus->rhs->ct_value_->nval()) return &ct_nval;
       T        lhs = plus->lhs->ct_value<T>();
       T        sz  = plus->rhs->type->size();
       CT_Ptr   rhs = plus->rhs->ct_value<CT_Ptr>();
-      return CT_Ptr(sz*lhs + rhs.val);
+      return new CT_Value<CT_Ptr>(CT_Ptr(sz*lhs + rhs.val));
     }
   };
 
-  const CT_Value_Base * plus_ct_value(const Type * type) {
-    return op_ct_value<BinOp_CT_Value, std::plus>(type);
+  const CT_Value_Base * plus_ct_value(const BinOp * exp) {
+    return op_ct_value<BinOp_GetValue, std::plus>(exp->type)(exp);
   }
 
-  const CT_Value_Base * ptr_plus_ct_value(const Type * type) {
-    return int_op_ct_value<Ptr_Plus_CT_Value>(type);
+  const CT_Value_Base * ptr_plus_ct_value(const BinOp * exp) {
+    return int_op_ct_value<Ptr_Plus_GetValue>(exp->rhs->type)(exp);
   }
 
-  const CT_Value_Base * plus_ptr_ct_value(const Type * type) {
-    return int_op_ct_value<Plus_Ptr_CT_Value>(type);
+  const CT_Value_Base * plus_ptr_ct_value(const BinOp * exp) {
+    return int_op_ct_value<Plus_Ptr_GetValue>(exp->lhs->type)(exp);
   }
 
-  const CT_Value_Base * minus_ct_value(const Type * type) {
-    return op_ct_value<BinOp_CT_Value, std::minus>(type);
+  const CT_Value_Base * minus_ct_value(const BinOp * exp) {
+    return op_ct_value<BinOp_GetValue, std::minus>(exp->type)(exp);
   }
   
-  const CT_Value_Base * times_ct_value(const Type * type) {
-    return op_ct_value<BinOp_CT_Value, std::multiplies>(type);
+  const CT_Value_Base * times_ct_value(const BinOp * exp) {
+    return op_ct_value<BinOp_GetValue, std::multiplies>(exp->type)(exp);
   }
 
-  const CT_Value_Base * div_ct_value(const Type * type) {
-    return op_ct_value<BinOp_CT_Value, std::divides>(type);
+  const CT_Value_Base * div_ct_value(const BinOp * exp) {
+    return op_ct_value<BinOp_GetValue, std::divides>(exp->type)(exp);
   }
 
-  const CT_Value_Base * mod_ct_value(const Type * type) {
-    return int_op_ct_value<BinOp_CT_Value, std::modulus>(type);
+  const CT_Value_Base * mod_ct_value(const BinOp * exp) {
+    return int_op_ct_value<BinOp_GetValue, std::modulus>(exp->type)(exp);
   }
 
   template <typename T>
   struct BAnd_F : public std::binary_function<T,T,T> {
     T operator()(T x, T y) {return x & y;}
   };
-  const CT_Value_Base * band_ct_value(const Type * type) {
-    return int_op_ct_value<BinOp_CT_Value, BAnd_F>(type);
+  const CT_Value_Base * band_ct_value(const BinOp * exp) {
+    return int_op_ct_value<BinOp_GetValue, BAnd_F>(exp->type)(exp);
   }
 
   template <typename T>
   struct BOr_F : public std::binary_function<T,T,T> {
     T operator()(T x, T y) {return x | y;}
   };
-  const CT_Value_Base * bor_ct_value(const Type * type) {
-    return int_op_ct_value<BinOp_CT_Value, BOr_F>(type);
+  const CT_Value_Base * bor_ct_value(const BinOp * exp) {
+    return int_op_ct_value<BinOp_GetValue, BOr_F>(exp->type)(exp);
   }
 
   template <typename T>
   struct XOr_F : public std::binary_function<T,T,T> {
     T operator()(T x, T y) {return x | y;}
   };
-  const CT_Value_Base * xor_ct_value(const Type * type) {
-    return int_op_ct_value<BinOp_CT_Value, XOr_F>(type);
+  const CT_Value_Base * xor_ct_value(const BinOp * exp) {
+    return int_op_ct_value<BinOp_GetValue, XOr_F>(exp->type)(exp);
   }
 
   template <typename T>
   struct LeftShift_F : public std::binary_function<T,T,T> {
     T operator()(T x, T y) {return x | y;}
   };
-  const CT_Value_Base * leftshift_ct_value(const Type * type) {
-    return int_op_ct_value<BinOp_CT_Value, LeftShift_F>(type);
+  const CT_Value_Base * leftshift_ct_value(const BinOp * exp) {
+    return int_op_ct_value<BinOp_GetValue, LeftShift_F>(exp->type)(exp);
   }
 
   template <typename T>
   struct RightShift_F : public std::binary_function<T,T,T> {
     T operator()(T x, T y) {return x | y;}
   };
-  const CT_Value_Base * rightshift_ct_value(const Type * type) {
-    return int_op_ct_value<BinOp_CT_Value, RightShift_F>(type);
+  const CT_Value_Base * rightshift_ct_value(const BinOp * exp) {
+    return int_op_ct_value<BinOp_GetValue, RightShift_F>(exp->type)(exp);
   }
 
-  const CT_Value_Base * eq_ct_value(const Type * type) {
-    return op_ct_value<Comp_CT_Value, std::equal_to>(type);
+  const CT_Value_Base * eq_ct_value(const BinOp * exp) {
+    return op_ct_value<Comp_GetValue, std::equal_to>(exp->lhs->type)(exp);
   }
 
-  const CT_Value_Base * ne_ct_value(const Type * type) {
-    return op_ct_value<Comp_CT_Value, std::not_equal_to>(type);
+  const CT_Value_Base * ne_ct_value(const BinOp * exp) {
+    return op_ct_value<Comp_GetValue, std::not_equal_to>(exp->lhs->type)(exp);
   }
 
-  const CT_Value_Base * lt_ct_value(const Type * type) {
-    return op_ct_value<Comp_CT_Value, std::less>(type);
+  const CT_Value_Base * lt_ct_value(const BinOp * exp) {
+    return op_ct_value<Comp_GetValue, std::less>(exp->lhs->type)(exp);
   }
 
-  const CT_Value_Base * gt_ct_value(const Type * type) {
-    return op_ct_value<Comp_CT_Value, std::greater>(type);
+  const CT_Value_Base * gt_ct_value(const BinOp * exp) {
+    return op_ct_value<Comp_GetValue, std::greater>(exp->lhs->type)(exp);
   }
 
-  const CT_Value_Base * le_ct_value(const Type * type) {
-    return op_ct_value<Comp_CT_Value, std::less_equal>(type);
+  const CT_Value_Base * le_ct_value(const BinOp * exp) {
+    return op_ct_value<Comp_GetValue, std::less_equal>(exp->lhs->type)(exp);
   }
 
-  const CT_Value_Base * ge_ct_value(const Type * type) {
-    return op_ct_value<Comp_CT_Value, std::greater_equal>(type);
+  const CT_Value_Base * ge_ct_value(const BinOp * exp) {
+    return op_ct_value<Comp_GetValue, std::greater_equal>(exp->lhs->type)(exp);
   }
 
-}
+  }
 
 namespace {
 
-  template <typename To>
-  struct Cast_CT_Value_Base : public CT_Value<To> {
-    virtual To value_direct(const AST * t) const = 0;
+  template <typename From, typename To> 
+  struct Cast_GetValue_Base {
+    static const CT_Value_Base * get_value(const AST * exp) {
+      if (!exp->ct_value_) return NULL;
+      return new CT_Value<To>(static_cast<To>(exp->ct_value<From>()));
+    }
   };
 
   template <typename From, typename To> 
-  struct Cast_CT_Value_Direct : public Cast_CT_Value_Base<To> {
-    To value_direct(const AST * exp) const {
-      return static_cast<To>(exp->ct_value<From>());
-    }
-  };
+  struct Cast_GetValue : public Cast_GetValue_Base<From,To> {};
 
-  template <typename From, typename To>
-  struct Cast_CT_Value : public  Cast_CT_Value_Direct<From, To> {
-    To value(const AST * t) const {
-      const Cast * c = dynamic_cast<const Cast *>(t);
-      return Cast_CT_Value_Direct<From,To>::value_direct(c->exp);
-    }
-  };
-
-  template <typename T>
-  struct Cast_CT_Value<T,T> : public Cast_CT_Value_Base<T> {
-    T value_direct(const AST * exp) const {
-      // this makes no sense and could lead to infinite recursion
-      abort();
-    }
-    T value(const AST * t) const {
-      const Cast * c = dynamic_cast<const Cast *>(t);
-      return c->exp->ct_value<T>();
+  template <typename T> 
+  struct Cast_GetValue<T,T> {
+    static const CT_Value_Base * get_value(const AST * exp) {
+      return exp->ct_value_;
     }
   };
 
   template <typename To>
-  struct Cast_CT_Value_Direct<CT_Ptr,To> : public Cast_CT_Value_Base<To> {
-    To value_direct(const AST * exp) const {
-      return static_cast<To>(exp->ct_value<CT_Ptr>().val);
+  struct Cast_GetValue_Base<CT_Ptr,To> {
+    static const CT_Value_Base * get_value(const AST * exp) {
+      if (!exp->ct_value_) return NULL;
+      return new CT_Value<To>(static_cast<To>(exp->ct_value<CT_Ptr>().val));
     }
   };
 
   template <typename From>
-  struct Cast_CT_Value_Direct<From,CT_Ptr> : public Cast_CT_Value_Base<CT_Ptr> {
-    CT_Ptr value_direct(const AST * exp) const {
-      return CT_Ptr(static_cast<size_t>(exp->ct_value<From>()));
+  struct Cast_GetValue_Base<From,CT_Ptr> {
+    static const CT_Value_Base * get_value(const AST * exp) {
+      if (!exp->ct_value_) return NULL;
+      return new CT_Value<CT_Ptr>(CT_Ptr(static_cast<size_t>(exp->ct_value<From>())));
     }
   };
 
   template <typename To>
-  struct Cast_CT_Value_Direct<CT_LValue,To> : public Cast_CT_Value_Base<To> {
-    To value_direct(const AST * exp) const {
+  struct Cast_GetValue_Base<CT_LValue,To> {
+    static const CT_Value_Base * get_value(const AST * exp) {
       abort();
     }
   };
 
   template <typename From>
-  struct Cast_CT_Value_Direct<From,CT_LValue> : public Cast_CT_Value_Base<CT_LValue> {
-    CT_LValue value_direct(const AST * exp) const {
+  struct Cast_GetValue_Base<From,CT_LValue> {
+    static const CT_Value_Base * get_value(const AST * exp) {
       abort();
     }
   };
 
   template <>
-  struct Cast_CT_Value_Direct<CT_LValue,CT_Ptr> : public Cast_CT_Value_Base<CT_Ptr> {
-    CT_Ptr value_direct(const AST * exp) const {
+  struct Cast_GetValue_Base<CT_LValue,CT_Ptr> {
+    static const CT_Value_Base * get_value(const AST * exp) {
+      if (!exp->ct_value_) return NULL;
       // it can only happen id exp is an array type
-      return exp->ct_value<CT_LValue>().addr;
+      return new CT_Value<CT_Ptr>(exp->ct_value<CT_LValue>().addr);
     }
   };
 
   template <>
-  struct Cast_CT_Value_Direct<CT_Ptr,CT_LValue> : public Cast_CT_Value_Base<CT_LValue> {
-    CT_LValue value_direct(const AST * exp) const {
+  struct Cast_GetValue_Base<CT_Ptr,CT_LValue> {
+    static const CT_Value_Base * get_value(const AST * exp) {
       abort();
     }
   };
 
-  struct Cast_CT_Value_Inner_Map {
+  struct Cast_GetValue_Inner_Map {
     String to;
-    const CT_Value_Base * cast;
+    const CT_Value_Base * (*get_value)(const AST *);
   };
 
   template <typename From>
-  struct Cast_CT_Value_Group {
-    static Cast_CT_Value_Inner_Map map[];
-    static Cast_CT_Value_Inner_Map * map_end;
+  struct Cast_GetValue_Group {
+    static Cast_GetValue_Inner_Map map[];
+    static Cast_GetValue_Inner_Map * map_end;
   };
 
   template <typename From>
-  Cast_CT_Value_Inner_Map Cast_CT_Value_Group<From>::map[] = {
-    {".uint8", new Cast_CT_Value<From, uint8_t>},
-    {".uint16", new Cast_CT_Value<From, uint16_t>},
-    {".uint32", new Cast_CT_Value<From, uint32_t>},
-    {".uint64", new Cast_CT_Value<From, uint64_t>},
-    {".int8", new Cast_CT_Value<From, int8_t>},
-    {".int16", new Cast_CT_Value<From, int16_t>},
-    {".int32", new Cast_CT_Value<From, int32_t>},
-    {".int64", new Cast_CT_Value<From, int64_t>},
-    {"float", new Cast_CT_Value<From, float>},
-    {"double", new Cast_CT_Value<From, double>},
-    {"long double", new Cast_CT_Value<From, long double>},
-    {".pointer", new Cast_CT_Value<From, CT_Ptr>},
-    {".lvalue", new Cast_CT_Value<From, CT_LValue>}
+  Cast_GetValue_Inner_Map Cast_GetValue_Group<From>::map[] = {
+    {".uint8", Cast_GetValue<From, uint8_t>::get_value},
+    {".uint16", Cast_GetValue<From, uint16_t>::get_value},
+    {".uint32", Cast_GetValue<From, uint32_t>::get_value},
+    {".uint64", Cast_GetValue<From, uint64_t>::get_value},
+    {".int8", Cast_GetValue<From, int8_t>::get_value},
+    {".int16", Cast_GetValue<From, int16_t>::get_value},
+    {".int32", Cast_GetValue<From, int32_t>::get_value},
+    {".int64", Cast_GetValue<From, int64_t>::get_value},
+    {"float", Cast_GetValue<From, float>::get_value},
+    {"double", Cast_GetValue<From, double>::get_value},
+    {"long double", Cast_GetValue<From, long double>::get_value},
+    {".pointer", Cast_GetValue<From, CT_Ptr>::get_value},
+    {".lvalue", Cast_GetValue<From, CT_LValue>::get_value}
   };
   template <typename From>
-  Cast_CT_Value_Inner_Map * Cast_CT_Value_Group<From>::map_end = 
-    map + sizeof(Cast_CT_Value_Group<From>::map)/sizeof(Cast_CT_Value_Inner_Map);
+  Cast_GetValue_Inner_Map * Cast_GetValue_Group<From>::map_end = 
+    map + sizeof(Cast_GetValue_Group<From>::map)/sizeof(Cast_GetValue_Inner_Map);
 
-  struct Cast_CT_Value_Map {
+  struct Cast_GetValue_Map {
     String from;
-    Cast_CT_Value_Inner_Map * map;
-    Cast_CT_Value_Inner_Map * map_end;
-    Cast_CT_Value_Map(String f, Cast_CT_Value_Inner_Map * m, Cast_CT_Value_Inner_Map * e)
+    Cast_GetValue_Inner_Map * map;
+    Cast_GetValue_Inner_Map * map_end;
+    Cast_GetValue_Map(String f, Cast_GetValue_Inner_Map * m, Cast_GetValue_Inner_Map * e)
       : from(f), map(m), map_end(e) {}
   };
 
   template <typename T>
-  static inline Cast_CT_Value_Map make_cast_ct_value_map(String n) {
-    return Cast_CT_Value_Map(n, Cast_CT_Value_Group<T>::map, Cast_CT_Value_Group<T>::map_end);
+  static inline Cast_GetValue_Map make_cast_get_value_map(String n) {
+    return Cast_GetValue_Map(n, Cast_GetValue_Group<T>::map, Cast_GetValue_Group<T>::map_end);
   }
 
-  Cast_CT_Value_Map cast_ct_value_map[] = {
-    make_cast_ct_value_map<uint8_t>(".uint8"), 
-    make_cast_ct_value_map<uint16_t>(".uint16"), 
-    make_cast_ct_value_map<uint32_t>(".uint32"), 
-    make_cast_ct_value_map<uint64_t>(".uint64"), 
-    make_cast_ct_value_map<int8_t>(".int8"), 
-    make_cast_ct_value_map<int16_t>(".int16"), 
-    make_cast_ct_value_map<int32_t>(".int32"), 
-    make_cast_ct_value_map<int64_t>(".int64"), 
-    make_cast_ct_value_map<float>("float"),
-    make_cast_ct_value_map<double>("double"),
-    make_cast_ct_value_map<long double>("long double"),
-    make_cast_ct_value_map<CT_Ptr>(".pointer"),
-    make_cast_ct_value_map<CT_LValue>(".lvalue")
+  Cast_GetValue_Map cast_get_value_map[] = {
+    make_cast_get_value_map<uint8_t>(".uint8"), 
+    make_cast_get_value_map<uint16_t>(".uint16"), 
+    make_cast_get_value_map<uint32_t>(".uint32"), 
+    make_cast_get_value_map<uint64_t>(".uint64"), 
+    make_cast_get_value_map<int8_t>(".int8"), 
+    make_cast_get_value_map<int16_t>(".int16"), 
+    make_cast_get_value_map<int32_t>(".int32"), 
+    make_cast_get_value_map<int64_t>(".int64"), 
+    make_cast_get_value_map<float>("float"),
+    make_cast_get_value_map<double>("double"),
+    make_cast_get_value_map<long double>("long double"),
+    make_cast_get_value_map<CT_Ptr>(".pointer"),
+    make_cast_get_value_map<CT_LValue>(".lvalue")
   };
-  Cast_CT_Value_Map * cast_ct_value_map_end = 
-    cast_ct_value_map + sizeof(cast_ct_value_map)/sizeof(Cast_CT_Value_Map);
+  Cast_GetValue_Map * cast_get_value_map_end = 
+    cast_get_value_map + sizeof(cast_get_value_map)/sizeof(Cast_GetValue_Map);
 
 }
 
 namespace ast {
 
-  static const CT_Value_Base * cast_ct_value(String from, String to) {
-    for (const Cast_CT_Value_Map * i = cast_ct_value_map; i != cast_ct_value_map_end; ++i) {
+  static const CT_Value_Base * (*cast_get_value(String from, String to))(const AST *) {
+    //printf("cast_get_value:: %s %s\n", ~from, ~to);
+    for (const Cast_GetValue_Map * i = cast_get_value_map; i != cast_get_value_map_end; ++i) {
       if (i->from == from) {
-        for (const Cast_CT_Value_Inner_Map * j = i->map; j != i->map_end; ++j) {
-          if (j->to == to)
-            return j->cast;
+        for (const Cast_GetValue_Inner_Map * j = i->map; j != i->map_end; ++j) {
+          if (j->to == to) {
+            return j->get_value;
+          }
         }
-        return NULL;
+        return DummyGetValue<AST>::get_value;
       }
     }
-    return NULL;
+    return DummyGetValue<AST>::get_value;
   }
 
-  const CT_Value_Base * cast_ct_value(const Type * f, const Type * t) {
-    String from = f->ct_type_name();
+  const CT_Value_Base * cast_ct_value(const AST * f, const Type * t) {
+    String from = f->type->ct_type_name();
     String to   = t->ct_type_name();
-    return cast_ct_value(from, to);
-  }
-
-  template <typename To> 
-  const Cast_CT_Value_Base<To> * cast_ct_value(String from) {
-    String to   = CT_Type<To>::name;
-    return dynamic_cast<const Cast_CT_Value_Base<To> *>(cast_ct_value(from, to));
+    return cast_get_value(from, to)(f);
   }
 
   template <typename T> 
   T AST::real_ct_value() const {
-    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression", ~what_);
+    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression <1>", ~what_);
     const CT_Value<T> * ctv = dynamic_cast<const CT_Value<T> *>(ct_value_);
     if (ctv)
-      return ctv->value(this);
-    const Cast_CT_Value_Base<T> * cast_ctv = cast_ct_value<T>(ct_value_->type_name());
-    if (cast_ctv)
-      return cast_ctv->value_direct(this);
-    abort();
+      return ctv->val;
+    const CT_Value_Base * cast_ctv = cast_get_value(ct_value_->type_name(), CT_Type<T>::name)(this);
+    ctv = dynamic_cast<const CT_Value<T> *>(cast_ctv);
+    if (ctv)
+      return ctv->val;
+    throw error(parse_, "\"%s\" can not be used in constant-expression <2>", ~what_);
+    //abort();
   }
   template uint8_t AST::real_ct_value<uint8_t>() const;
   template uint16_t AST::real_ct_value<uint16_t>() const;
@@ -497,3 +500,76 @@ namespace ast {
   template long double AST::real_ct_value<long double>() const;
 
 }
+
+namespace ast {
+
+  bool CT_Value<CT_NVal>::nval() const {
+    return true;
+  }
+
+  void CT_Value<CT_NVal>::compile(CompileWriter & cw, AST * exp) const {
+    exp->compile(cw);
+  }
+
+  const char * CT_Value<CT_NVal>::type_name() const {
+    return "";
+  }
+
+}
+
+namespace ast {
+
+  template <typename T>
+  void CT_Value<T>::compile(CompileWriter & o, AST *) const {
+    abort();
+  }
+
+  template void CT_Value<CT_LValue>::compile(CompileWriter & o, AST *) const;
+
+  template <>
+  void CT_Value<int>::compile(CompileWriter & o, AST *) const {
+    o.printf("%d", val);
+  }
+
+  template <>
+  void CT_Value<unsigned>::compile(CompileWriter & o, AST *) const {
+    o.printf("%uu", val);
+  }
+
+  template <>
+  void CT_Value<long>::compile(CompileWriter & o, AST *) const {
+    o.printf("%ldl", val);
+  }
+
+  template <>
+  void CT_Value<unsigned long>::compile(CompileWriter & o, AST *) const {
+    o.printf("%luul", val);
+  }
+
+  template <>
+  void CT_Value<long long>::compile(CompileWriter & o, AST *) const {
+    o.printf("%lldll", val);
+  }
+
+  template <>
+  void CT_Value<unsigned long long>::compile(CompileWriter & o, AST *) const {
+    o.printf("%lluull", val);
+  }
+
+  template <>
+  void CT_Value<float>::compile(CompileWriter & o, AST *) const {
+    o.printf("%af", val);
+  }
+
+  template <>
+  void CT_Value<double>::compile(CompileWriter & o, AST *) const {
+    o.printf("%a", val);
+  }
+
+  template <>
+  void CT_Value<long double>::compile(CompileWriter & o, AST *) const {
+    o.printf("%Lal", val);
+  }
+
+}
+

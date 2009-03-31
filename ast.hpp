@@ -59,7 +59,7 @@ namespace ast {
     virtual AST * part(unsigned i) {return 0;}
     const Syntax * parse_;
     const Type * type;
-    bool lvalue;
+    int lvalue; // 0 false, 1 true, 2 true and addr ct_value
     AST(String n, const Syntax * p = 0) : what_(n), parse_(p), type(), lvalue(false), ct_value_(0) {}
     void assert_num_args(int p) {
       if (parse_->num_args() != p) 
@@ -174,7 +174,7 @@ namespace ast {
     String op;
     AST * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
-    virtual void make_ct_value(Environ & env);
+    virtual void make_ct_value();
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
     void compile(CompileWriter & f);
@@ -187,7 +187,7 @@ namespace ast {
     String op;
     AST * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
-    virtual void make_ct_value(Environ & env);
+    virtual void make_ct_value();
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
     void compile(CompileWriter & f);
@@ -259,12 +259,12 @@ namespace ast {
   //
   //
 
-  const CT_Value_Base * cast_ct_value(const Type * f, const Type * t);
+  const CT_Value_Base * cast_ct_value(const AST * from, const Type * to);
 
   struct Cast : public AST {
     Cast(String s) : AST(s) {}
     Cast(AST * e, const Type * t) 
-      : AST("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(exp->type, t);}
+      : AST("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(e, t);}
     AST * exp;
     void compile_prep(CompileEnviron&);
     void compile(CompileWriter&);
