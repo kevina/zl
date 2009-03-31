@@ -91,6 +91,9 @@ namespace ast {
     template <typename T> T ct_value() const {
       return real_ct_value<typename CT_Type<T>::type>();
     }
+    template <typename T> T ct_value_direct() const {
+      return dynamic_cast<const CT_Value<T> *>(ct_value_)->val;
+    }
   };
 
   struct ASTLeaf : public AST {
@@ -122,7 +125,6 @@ namespace ast {
   struct Literal : public ASTLeaf {
     Literal() : ASTLeaf("literal") {}
     //AST * part(unsigned i);
-    //long long value;
     AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f);
   };
@@ -130,7 +132,6 @@ namespace ast {
   struct FloatC : public ASTLeaf {
     FloatC() : ASTLeaf("float") {}
     //AST * part(unsigned i);
-    //long double value;
     AST * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f);
   };

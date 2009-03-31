@@ -801,7 +801,7 @@ namespace ast {
       } else if (exp->ct_value_->nval()) {
         ct_value_ = &ct_nval;
       } else {
-        CT_LValue val = exp->ct_value<CT_LValue>();
+        CT_LValue val = exp->ct_value_direct<CT_LValue>();
         ct_value_ = new CT_Value<CT_Ptr>(val.addr);
       }
     }
@@ -835,7 +835,7 @@ namespace ast {
       if (exp->ct_value_->nval()) {
         ct_value_ = &ct_nval;
       } else {
-        CT_Ptr val = exp->ct_value<CT_Ptr>();
+        CT_Ptr val = exp->ct_value_direct<CT_Ptr>();
         ct_value_ = new CT_Value<CT_LValue>(CT_LValue(val));
       }
     }
@@ -938,7 +938,7 @@ namespace ast {
         if (exp->ct_value_->nval()) {
           ct_value_ = &ct_nval;
         } else {
-          CT_Ptr p = exp->ct_value<CT_LValue>().addr;
+          CT_Ptr p = exp->ct_value_direct<CT_LValue>().addr;
           Vector<Member>::const_iterator i = t->members.begin(), end = t->members.end();
           while (i != end && i->sym != sym)
             ++i;

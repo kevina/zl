@@ -138,7 +138,7 @@ namespace ast {
   const CT_Value_Base * eif_ct_value(const EIf * eif) {
     if (!eif->exp->ct_value_ || eif->exp->ct_value_->nval())
       return NULL;
-    if (eif->exp->ct_value<target_bool>())
+    if (eif->exp->ct_value_direct<target_bool>())
       return eif->if_true->ct_value_;
     else
       return eif->if_false->ct_value_;
@@ -150,7 +150,7 @@ namespace ast {
     static const CT_Value_Base * get_value(const UnOp * u) {
       if (!u->exp->ct_value_) return NULL;
       if (u->exp->ct_value_->nval()) return NULL;
-      typename F::argument_type x = u->exp->ct_value<typename F::argument_type>();
+      typename F::argument_type x = u->exp->ct_value_direct<typename F::argument_type>();
       return new CT_Value<typename F::result_type>(F()(x));
     }
   };
@@ -183,8 +183,8 @@ namespace ast {
     static const CT_Value_Base * get_value(const BinOp * b) {
       if (!b->lhs->ct_value_ || !b->rhs->ct_value_) return NULL;
       if (b->lhs->ct_value_->nval() || b->rhs->ct_value_->nval()) return NULL;
-      typename F::first_argument_type x = b->lhs->ct_value<typename F::first_argument_type>();
-      typename F::second_argument_type y = b->rhs->ct_value<typename F::second_argument_type>();
+      typename F::first_argument_type x = b->lhs->ct_value_direct<typename F::first_argument_type>();
+      typename F::second_argument_type y = b->rhs->ct_value_direct<typename F::second_argument_type>();
       return new CT_Value<typename F::result_type>(F()(x, y));
     }
   };
@@ -195,8 +195,8 @@ namespace ast {
     static const CT_Value_Base * get_value(const BinOp * b) {
       if (!b->lhs->ct_value_ || !b->rhs->ct_value_) return NULL;
       if (b->lhs->ct_value_->nval() || b->rhs->ct_value_->nval()) return NULL;
-      typename F::first_argument_type x = b->lhs->ct_value<typename F::first_argument_type>();
-      typename F::second_argument_type y = b->rhs->ct_value<typename F::second_argument_type>();
+      typename F::first_argument_type x = b->lhs->ct_value_direct<typename F::first_argument_type>();
+      typename F::second_argument_type y = b->rhs->ct_value_direct<typename F::second_argument_type>();
       return new CT_Value<target_bool>(F()(x, y));
     }
   };
@@ -207,9 +207,9 @@ namespace ast {
     static const CT_Value_Base * get_value(const BinOp * plus) {
       if (!plus->lhs->ct_value_ || !plus->rhs->ct_value_) return NULL;
       if (plus->lhs->ct_value_->nval() || plus->rhs->ct_value_->nval()) return &ct_nval;
-      CT_Ptr   lhs = plus->lhs->ct_value<CT_Ptr>();
+      CT_Ptr   lhs = plus->lhs->ct_value_direct<CT_Ptr>();
       T        sz  = dynamic_cast<const PointerLike *>(plus->lhs->type)->subtype->size();
-      T        rhs = plus->rhs->ct_value<T>();
+      T        rhs = plus->rhs->ct_value_direct<T>();
       return new CT_Value<CT_Ptr>(CT_Ptr(lhs.val + sz*rhs));
     }
   };
@@ -220,9 +220,9 @@ namespace ast {
     static const CT_Value_Base * get_value(const BinOp * plus) {
       if (!plus->lhs->ct_value_ || !plus->rhs->ct_value_) return NULL;
       if (plus->lhs->ct_value_->nval() || plus->rhs->ct_value_->nval()) return &ct_nval;
-      T        lhs = plus->lhs->ct_value<T>();
+      T        lhs = plus->lhs->ct_value_direct<T>();
       T        sz  = plus->rhs->type->size();
-      CT_Ptr   rhs = plus->rhs->ct_value<CT_Ptr>();
+      CT_Ptr   rhs = plus->rhs->ct_value_direct<CT_Ptr>();
       return new CT_Value<CT_Ptr>(CT_Ptr(sz*lhs + rhs.val));
     }
   };
@@ -327,7 +327,7 @@ namespace {
   struct Cast_GetValue_Base {
     static const CT_Value_Base * get_value(const AST * exp) {
       if (!exp->ct_value_) return NULL;
-      return new CT_Value<To>(static_cast<To>(exp->ct_value<From>()));
+      return new CT_Value<To>(static_cast<To>(exp->ct_value_direct<From>()));
     }
   };
 
@@ -345,7 +345,7 @@ namespace {
   struct Cast_GetValue_Base<CT_Ptr,To> {
     static const CT_Value_Base * get_value(const AST * exp) {
       if (!exp->ct_value_) return NULL;
-      return new CT_Value<To>(static_cast<To>(exp->ct_value<CT_Ptr>().val));
+      return new CT_Value<To>(static_cast<To>(exp->ct_value_direct<CT_Ptr>().val));
     }
   };
 
@@ -353,7 +353,7 @@ namespace {
   struct Cast_GetValue_Base<From,CT_Ptr> {
     static const CT_Value_Base * get_value(const AST * exp) {
       if (!exp->ct_value_) return NULL;
-      return new CT_Value<CT_Ptr>(CT_Ptr(static_cast<size_t>(exp->ct_value<From>())));
+      return new CT_Value<CT_Ptr>(CT_Ptr(static_cast<size_t>(exp->ct_value_direct<From>())));
     }
   };
 
@@ -376,7 +376,7 @@ namespace {
     static const CT_Value_Base * get_value(const AST * exp) {
       if (!exp->ct_value_) return NULL;
       // it can only happen id exp is an array type
-      return new CT_Value<CT_Ptr>(exp->ct_value<CT_LValue>().addr);
+      return new CT_Value<CT_Ptr>(exp->ct_value_direct<CT_LValue>().addr);
     }
   };
 
@@ -476,7 +476,7 @@ namespace ast {
 
   template <typename T> 
   T AST::real_ct_value() const {
-    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression <1>", ~what_);
+    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression this way", ~what_);
     const CT_Value<T> * ctv = dynamic_cast<const CT_Value<T> *>(ct_value_);
     if (ctv)
       return ctv->val;
@@ -484,7 +484,7 @@ namespace ast {
     ctv = dynamic_cast<const CT_Value<T> *>(cast_ctv);
     if (ctv)
       return ctv->val;
-    throw error(parse_, "\"%s\" can not be used in constant-expression <2>", ~what_);
+    throw error(parse_, "\"%s\" can not be used in constant-expression this way <2>", ~what_);
     //abort();
   }
   template uint8_t AST::real_ct_value<uint8_t>() const;
