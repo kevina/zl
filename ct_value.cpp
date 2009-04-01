@@ -19,7 +19,7 @@ namespace {
     const CT_Value_Base * (*get_value)(const AST_T *);
   };
 
-  template <template <typename> class W> 
+  template <template <typename> class W>
   const CT_Value_Base * (*int_op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
     typedef CT_Value_Map<typename W<void>::AST_T> CT_VM;
     static CT_VM map[] = {
@@ -525,6 +525,26 @@ namespace ast {
   }
 
   template void CT_Value<CT_LValue>::compile(CompileWriter & o, AST *) const;
+
+  template <>
+  void CT_Value<signed char>::compile(CompileWriter & o, AST *) const {
+    o.printf("%d", val);
+  }
+
+  template <>
+  void CT_Value<unsigned char>::compile(CompileWriter & o, AST *) const {
+    o.printf("%uu", val);
+  }
+
+  template <>
+  void CT_Value<short>::compile(CompileWriter & o, AST *) const {
+    o.printf("%d", val);
+  }
+
+  template <>
+  void CT_Value<unsigned short>::compile(CompileWriter & o, AST *) const {
+    o.printf("%uu", val);
+  }
 
   template <>
   void CT_Value<int>::compile(CompileWriter & o, AST *) const {
