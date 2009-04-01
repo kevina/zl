@@ -239,15 +239,18 @@ namespace ast {
   struct Module : public TopLevelSymbol {
     Module() : syms() {}
     SymbolNode * syms;
-    Vector<const Syntax *> exports; // \...
+    //Vector<const Syntax *> exports; // \...
   };
 
   struct SymbolNode {
     SymbolKey key;
     const Symbol * value;
     SymbolNode * next;
-    SymbolNode(const SymbolKey & k, const Symbol * v, SymbolNode * n) 
-      : key(k), value(v), next(n) {}
+    bool imported;
+    SymbolNode(const SymbolKey & k, const Symbol * v, SymbolNode * n = NULL) 
+      : key(k), value(v), next(n), imported(false) {}
+    SymbolNode(const SymbolNode & n, SymbolNode * nx) 
+      : key(n.key), value(n.value), next(nx), imported(n.imported) {}
   };
 
   static inline bool operator==(const SymbolName & x, const SymbolName & y) {
@@ -304,7 +307,7 @@ namespace ast {
       //if (k.ns->name == "internal") 
       //printf ("--- %s\n", ~cur->key.to_string());
       //printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
-      if (k == cur->key && cmp(cur->key, cur->value)) break;
+      if (k == cur->key && cmp(cur->key, cur->value) && (strategy != ThisScope || !cur->imported)) break;
     }
     //printf("^^^ %d\n", cur == stop);
     if (cur == stop) {
@@ -407,6 +410,30 @@ namespace ast {
     return lookup_symbol<T>(k, str, start, stop, strategy, gather, cmp);
   }
 
+  
+  // SymbolList is a helper class to make copying symbol tables, with
+  // out reversing the order, easier.  You copy the table into
+  // SymbolList than splice the list into the SymbolTable.
+  struct SymbolList {
+    SymbolNode * first;
+    SymbolNode * last;
+    SymbolList() : first(), last() {}
+    SymbolNode * push_back_i(SymbolNode * n) {
+      if (last) {
+        last->next = n;
+        last = last->next;
+      } else {
+        first = last = n;
+      }
+      return n;
+    }
+    SymbolNode * push_back(const SymbolKey & k, const Symbol * sym) {
+      return push_back_i(new SymbolNode(k, sym));
+    }
+    SymbolNode * push_back(const SymbolNode & n) {
+      return push_back_i(new SymbolNode(n, NULL));
+    }
+  };
 
   class OpenSymbolTable : public gc
   {
@@ -477,6 +504,10 @@ namespace ast {
     void add(const SymbolKey & k, const Symbol * sym) {
       //if (exists_this_scope(k)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);
+    }
+    void splice(SymbolNode * first, SymbolNode * last) {
+      last->next = front;
+      front = first;
     }
     void dump_this_scope();
   };

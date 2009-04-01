@@ -1366,16 +1366,41 @@ namespace ast {
       } else {
         parse_stmts_first_pass(p->arg(1), env, collect);
       }
-        
-      for (unsigned i = 0; i != m->exports.size(); ++i) {
-        const Syntax * p = m->exports[i];
-        for (unsigned i = 0, sz = p->num_args(); i != sz; ++i) {
-          //SymbolName n = *to_export->part(i);
-          m->syms = new SymbolNode(expand_binding(p->arg(i), env), 
-                                   env.symbols.lookup<Symbol>(p->arg(i)), m->syms);
-        }
+
+
+      //printf("%s EXPORTS:\n", ~n.to_string());
+
+      //for (unsigned i = 0; i != m->exports.size(); ++i) {
+      //  const Syntax * p = m->exports[i];
+      //  for (unsigned i = 0, sz = p->num_args(); i != sz; ++i) {
+      //    //SymbolName n = *to_export->part(i);
+      //    SymbolKey k = expand_binding(p->arg(i), env);
+      //    printf("  %s\n", ~k.to_string());
+      //    //m->syms = new SymbolNode(expand_binding(p->arg(i), env), 
+      //    //                         env.symbols.lookup<Symbol>(p->arg(i)), m->syms);
+      //  }
+      //}
+      
+      //printf("%s SYMBOLS:\n", ~n.to_string());
+
+      SymbolList l;
+      for (SymbolNode * s = env.symbols.front; s != env.symbols.back; s = s->next) {
+        //printf("  %s\n", ~s->key.to_string());
+        l.push_back(*s);
       }
-        
+      m->syms = l.first;
+
+      //if (env.symbols.front != env.symbols.back) {
+      //  SymbolNode * s = env.symbols.front;
+      //  SymbolNode * back = new SymbolNode(s->key, s->value);
+      //  m->syms = back;
+      //  s = s->next;
+      //  for (; s != env.symbols.back; s = s->next) {
+      //    back->next = new SymbolNode(s->key, s->value);
+      //    back = back->next;
+      //  }
+      //}
+
       //printf("MODULE %s\n", ~n);
       
       //printf("INTERNAL\n");
@@ -1410,20 +1435,26 @@ namespace ast {
 
   AST * parse_export(const Syntax * p, Environ & env) {
     Module * m = dynamic_cast<Module *>(env.where);
-    m->exports.push_back(flatten(p));
+    //m->exports.push_back(flatten(p));
     return new Empty();
   }
 
-  void import_module(const Module * m, Environ & env, const GatherMarks & gather) {
+  void import_module(const Module * m, Environ & env, const GatherMarks & gather, bool same_scope = false) {
+    SymbolList l;
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
-      // now add marks back in reverse order;
+      // now add marks back in reverse order
       SymbolKey k = cur->key;
       for (Vector<const Mark *>::const_reverse_iterator 
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
         k.marks = mark(k.marks, *i);
-      env.symbols.front = new SymbolNode(k, cur->value, env.symbols.front);
+      SymbolNode * r = l.push_back(k, cur->value);
+      if (same_scope) 
+        r->imported = cur->imported;
+      else
+        r->imported = true;
     }
+    env.symbols.splice(l.first, l.last);
   }
 
   AST * parse_import(const Syntax * p, Environ & env) {
@@ -1639,14 +1670,16 @@ namespace ast {
 
   AST * parse_memberdecl(const Syntax * p, Environ & env0) {
     //printf("parse_memberdecl\n%s\n", ~p->to_string());
-    //assert_num_args(p, 2);
+    assert_num_args(p, 2);
     GatherMarks gather;
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env0.symbols.front, NULL, 
                                              NormalStrategy, gather);
     const Syntax * d = p->arg(1);
     const Symbol * s = lookup_symbol<Symbol>(d->arg(0), DEFAULT_NS, m->syms, NULL, StripMarks);
     Environ env = env0.new_scope();
-    import_module(m, env, gather);
+    import_module(m, env, gather, true);
+    const Symbol * pm = find_symbol<Symbol>("_parse_memberdecl", m->syms);
+    
     parse_top_level(d, env);
     return new Empty();
   }
