@@ -781,6 +781,8 @@ namespace ast {
     }
     unsigned required_parms() const {return 0;}
     TypeParm::What parm(unsigned i) const {return TypeParm::NONE;}
+    void add_prop(SymbolName n, const Syntax * s) {abort();}
+    const Syntax * get_prop(SymbolName n) const {return type->module->get_prop(n);}
   };
 
   //

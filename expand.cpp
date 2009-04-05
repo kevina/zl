@@ -335,7 +335,8 @@ extern "C" SyntaxEnum * module_symbols(const ModuleInfo *);
 extern "C" bool module_have_symbol(const ModuleInfo *, const Syntax *);
 extern "C" Environ * temp_environ(Environ *);
 extern "C" size_t ct_value(const Syntax *, Environ *);
-extern "C" const Syntax * error(Syntax *, const char *, ...);
+extern "C" const Syntax * error(Syntax *, const char *, ...); 
+extern "C" const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env);
 
 String gen_sym() {
   static unsigned uniq_num = 0;
@@ -529,7 +530,7 @@ struct SimpleSyntaxEnum : public SyntaxEnum {
 const Syntax * syntax_enum_next(SyntaxEnum * e) {
   return e->next();
 }
-
+  
 //
 //
 //
@@ -568,6 +569,7 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
   }
   return true;
 }
+
 
 bool match_parm(Match * m, const Syntax * p, const Syntax * repl) {
   //printf("match_parm <<: %s :: %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
@@ -965,6 +967,7 @@ const Syntax * replace_context(const Syntax * p, const Context * context) {
 //
 //
 
+  
 extern "C" const UnmarkedSyntax * string_to_syntax(const char * str) {
   return parse_str("SYNTAX_STR", SourceStr(str));
 }
@@ -981,7 +984,6 @@ extern "C" void dump_syntax(const UnmarkedSyntax * s) {
   s->print();
   printf("\n");
 }
-
 
 // three type of macros, two namespaces
 // syntax macros in there own name space
@@ -1467,3 +1469,6 @@ const Syntax * error(Syntax * p, const char * fmt, ...) {
   return new Syntax(p, res);
 }
 
+extern "C" const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
+  return env->symbols.lookup<TopLevelSymbol>(sym)->get_prop(*prop);
+}

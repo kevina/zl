@@ -152,6 +152,7 @@ namespace ast {
   };
 
   struct SymbolNode;
+  struct PropNode;
 
   struct Environ;
 
@@ -183,10 +184,11 @@ namespace ast {
   struct Declaration;
   struct TopLevelSymbol : virtual public Symbol {
     TopLevelSymbol(unsigned n = 0, const Declaration * d = NULL, TopLevelSymbol * w = NULL) 
-      : num(n), decl(d), where(w) {}
+      : num(n), decl(d), where(w), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
     mutable const Declaration * decl; // NULL if internal
     TopLevelSymbol * where;           // NULL if global
+    PropNode * props;
     using Symbol::uniq_name;
     void uniq_name(OStream & o) const {
       if (num == 0)
@@ -199,6 +201,8 @@ namespace ast {
     void add_to_local_env(const SymbolKey & k, Environ &) const;
     void add_to_top_level_env(const SymbolKey & k, Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
+    virtual void add_prop(SymbolName n, const Syntax * s);
+    virtual const Syntax * get_prop(SymbolName n) const;
   };
 
   struct LexicalSymbol : virtual public Symbol {
@@ -251,6 +255,14 @@ namespace ast {
       : key(k), value(v), next(n), imported(false) {}
     SymbolNode(const SymbolNode & n, SymbolNode * nx) 
       : key(n.key), value(n.value), next(nx), imported(n.imported) {}
+  };
+
+  struct PropNode {
+    SymbolName name;
+    const Syntax * value;
+    PropNode * next;
+    PropNode(SymbolName n, const Syntax * v, PropNode * nx = NULL)
+      : name(n), value(v), next(nx) {}
   };
 
   static inline bool operator==(const SymbolName & x, const SymbolName & y) {

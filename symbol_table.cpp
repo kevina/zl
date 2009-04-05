@@ -81,4 +81,20 @@ namespace ast {
              c->value ? ~c->value->uniq_name() : "");
   }
 
+  void TopLevelSymbol::add_prop(SymbolName n, const Syntax * s) {
+    props = new PropNode(n, s, props);
+  }
+
+  const Syntax * TopLevelSymbol::get_prop(SymbolName n) const {
+    for (PropNode * cur = props; cur; cur = cur->next) {
+      if (n == cur->name) return cur->value;
+    }
+    if (n.marks) {
+      n.marks = n.marks->prev;
+      return get_prop(n);
+    } else {
+      return NULL;
+    }
+  }
+
 }

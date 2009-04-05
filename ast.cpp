@@ -1433,6 +1433,13 @@ namespace ast {
     void stripped_mark(const Mark * m) {marks.push_back(m);}
   };
 
+  AST * parse_add_prop(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    Module * m = dynamic_cast<Module *>(env.where);
+    m->add_prop(*p->arg(0), p->arg(1));
+    return new Empty();
+  }
+
   AST * parse_export(const Syntax * p, Environ & env) {
     Module * m = dynamic_cast<Module *>(env.where);
     //m->exports.push_back(flatten(p));
@@ -2471,6 +2478,7 @@ namespace ast {
     if (what == "make_subtype") return parse_make_subtype(p, env);
     if (what == "declare_user_type") return parse_declare_user_type(p, env);
     if (what == "export")  return parse_export(p, env);
+    if (what == "add_prop")  return parse_add_prop(p, env);
     if (what == "memberdecl") return parse_memberdecl(p, env);
     return 0;
   }
