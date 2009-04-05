@@ -96,11 +96,11 @@ __ct_callback void dump_syntax(UnmarkedSyntax *);
 
 user_type UserTypeInfo;
 user_type ModuleInfo;
-__ct_callback UserTypeInfo * user_type_info(const Syntax *, Environ *);
+__ct_callback UserTypeInfo * user_type_info(Syntax *, Environ *);
 __ct_callback ModuleInfo * user_type_module(UserTypeInfo *);
-__ct_callback ModuleInfo * module_info(const Syntax *, Environ *);
+__ct_callback ModuleInfo * module_info(Syntax *, Environ *);
 __ct_callback SyntaxEnum * module_symbols(ModuleInfo *);
-__ct_callback bool module_have_symbol(ModuleInfo *, const Syntax *);
+__ct_callback bool module_have_symbol(ModuleInfo *, Syntax *);
 
 struct UserTypeInfo;
 user_type UserTypeInfo {
@@ -119,9 +119,9 @@ user_type ModuleInfo {
 
 __ct_callback Environ * temp_environ(Environ *);
 
-__ct_callback size_t ct_value(const Syntax *, Environ *);
+__ct_callback size_t ct_value(Syntax *, Environ *);
 
-__ct_callback Syntax * error(const Syntax *, const char *, ...);
+__ct_callback Syntax * error(Syntax *, const char *, ...);
 
 //
 //
