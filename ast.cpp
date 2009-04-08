@@ -1529,7 +1529,7 @@ namespace ast {
     } else {
       s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
-      /*sym = */add_simple_type(env.types, SymbolKey(name), s);
+      /*sym = */env.types.add_name(SymbolKey(name), new UserTypeSymbol(s));
     }
     if (p->num_args() > 1) {
       s->type = parse_type(p->arg(1), env);
@@ -1551,7 +1551,7 @@ namespace ast {
       //printf("ADDING SYM %s\n", ~name);
       UserType * s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
-      add_simple_type(env.types, SymbolKey(name), s);
+      env.types.add_name(SymbolKey(name), new UserTypeSymbol(s));
     } else {
       //printf("SYM ALREADY EXISTS: %s\n", ~name);
       if (name == "_VTable") {

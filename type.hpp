@@ -770,6 +770,7 @@ namespace ast {
   };
   
   class UserTypeSymbol : public TypeSymbol {
+  public:
     UserTypeSymbol(UserTypeInst * t) : type(t) {
       t->type_symbol = this;
       t->finalize();

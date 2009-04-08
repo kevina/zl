@@ -123,6 +123,8 @@ __ct_callback size_t ct_value(Syntax *, Environ *);
 
 __ct_callback Syntax * error(Syntax *, const char *, ...);
 
+__ct_callback Syntax * get_symbol_prop(Syntax * sym, Syntax * prop, Environ * env);
+
 //
 //
 //

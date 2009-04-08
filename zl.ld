@@ -28,4 +28,5 @@
   ct_value;
   temp_environ;
   error;
+  get_symbol_prop;
 };

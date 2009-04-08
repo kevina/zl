@@ -15,7 +15,6 @@ function compile_test() {
   else
     gcc -fsyntax-only a.out.c
   fi
-  cp a.out.c test/$base.out.c
 }
 
 if [ "$#" -gt 0 ]; then
@@ -33,6 +32,7 @@ do
     echo $f 1>&2
     ( ./zl test/$f > test/$base.log && compile_test $base ) \
     || failed $f
+    cp a.out.c test/$base.out.c
 done
 
 if [ -n "$failed" ]; then 
