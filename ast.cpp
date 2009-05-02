@@ -1441,7 +1441,7 @@ namespace ast {
   }
 
   AST * parse_export(const Syntax * p, Environ & env) {
-    Module * m = dynamic_cast<Module *>(env.where);
+    //Module * m = dynamic_cast<Module *>(env.where);
     //m->exports.push_back(flatten(p));
     return new Empty();
   }
@@ -1694,24 +1694,6 @@ namespace ast {
   //
   //
   //
-  
-  template<> const char * const CT_Type_Base<int8_t>::name = ".int8";
-  template<> const char * const CT_Type_Base<uint8_t>::name = ".uint8";
-  template<> const char * const CT_Type_Base<int16_t>::name = ".int16";
-  template<> const char * const CT_Type_Base<uint16_t>::name = ".uint16";
-  template<> const char * const CT_Type_Base<int32_t>::name = ".int32";
-  template<> const char * const CT_Type_Base<uint32_t>::name = ".uint32";
-  template<> const char * const CT_Type_Base<int64_t>::name = ".int64";
-  template<> const char * const CT_Type_Base<uint64_t>::name = ".uint64";
-  template<> const char * const CT_Type_Base<float>::name = "float";
-  template<> const char * const CT_Type_Base<double>::name = "double";
-  template<> const char * const CT_Type_Base<long double>::name = "long double";
-  template<> const char * const CT_Type_Base<CT_Ptr>::name = ".pointer";
-  template<> const char * const CT_Type_Base<CT_LValue>::name = ".lvalue";
-
-  //
-  //
-  //
 
   AST * cast_up(AST * exp, const Type * type, Environ & env) {
     exp = exp->to_effective(env);
@@ -1811,6 +1793,9 @@ namespace ast {
 
   Fun * parse_fun_forward(const Syntax * p, Environ & env, Collect & collect) {
     assert_num_args(p,3,4);
+
+    //printf("%s\n", ~p->to_string());
+
     SymbolKey name = expand_binding(p->arg(0), env);
     
     bool previous_declared = env.symbols.exists_this_scope(name);
@@ -2403,7 +2388,9 @@ namespace ast {
 
   AST * parse_stmt(const Syntax * p, Environ & env) {
     AST * res;
+    //printf("1>%s\n", ~p->to_string());
     p = partly_expand(p, StmtPos, env);
+    //printf("2>%s\n", ~p->to_string());
     res = try_ast(p, env);
     if (res) return res;
     //printf("Parsing stmt:\n  %s\n", ~p->to_string());

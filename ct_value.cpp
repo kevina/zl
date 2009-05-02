@@ -476,15 +476,18 @@ namespace ast {
 
   template <typename T> 
   T AST::real_ct_value() const {
-    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression this way", ~what_);
+    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression this way", ~parse_->to_string());
     const CT_Value<T> * ctv = dynamic_cast<const CT_Value<T> *>(ct_value_);
     if (ctv)
       return ctv->val;
     const CT_Value_Base * cast_ctv = cast_get_value(ct_value_->type_name(), CT_Type<T>::name)(this);
+    if (!cast_ctv) {
+      throw error(parse_, "\"%s\" can not be used in constant-expression this way <1>", ~parse_->to_string());
+    }
     ctv = dynamic_cast<const CT_Value<T> *>(cast_ctv);
     if (ctv)
       return ctv->val;
-    throw error(parse_, "\"%s\" can not be used in constant-expression this way <2>", ~what_);
+    throw error(parse_, "\"%s\" can not be used in constant-expression this way <2>", ~parse_->to_string());
     //abort();
   }
   template uint8_t AST::real_ct_value<uint8_t>() const;
@@ -514,6 +517,25 @@ namespace ast {
   const char * CT_Value<CT_NVal>::type_name() const {
     return "";
   }
+
+}
+
+namespace ast {
+
+  //template<typename T> const char * const CT_Type_Base<T>::name = "";
+  template<> const char * const CT_Type_Base<int8_t>::name = ".int8";
+  template<> const char * const CT_Type_Base<uint8_t>::name = ".uint8";
+  template<> const char * const CT_Type_Base<int16_t>::name = ".int16";
+  template<> const char * const CT_Type_Base<uint16_t>::name = ".uint16";
+  template<> const char * const CT_Type_Base<int32_t>::name = ".int32";
+  template<> const char * const CT_Type_Base<uint32_t>::name = ".uint32";
+  template<> const char * const CT_Type_Base<int64_t>::name = ".int64";
+  template<> const char * const CT_Type_Base<uint64_t>::name = ".uint64";
+  template<> const char * const CT_Type_Base<float>::name = "float";
+  template<> const char * const CT_Type_Base<double>::name = "double";
+  template<> const char * const CT_Type_Base<long double>::name = "long double";
+  template<> const char * const CT_Type_Base<CT_Ptr>::name = ".pointer";
+  template<> const char * const CT_Type_Base<CT_LValue>::name = ".lvalue";
 
 }
 
@@ -591,5 +613,8 @@ namespace ast {
     o.printf("%Lal", val);
   }
 
-}
+  //
+  //
+  //
 
+}

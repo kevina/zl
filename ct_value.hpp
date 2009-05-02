@@ -58,7 +58,6 @@ namespace ast {
 
   template <typename T>
   struct CT_Type_Base {typedef T type; static const char * const name;};
-  template<typename T> const char * const CT_Type_Base<T>::name = "";
 
   template <typename T, bool is_int, bool is_signed, size_t size>
   struct CT_Type_ByProp : public CT_Type_Base<T> {};

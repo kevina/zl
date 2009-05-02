@@ -1,21 +1,18 @@
 Syntax * parse_myclass(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
-
   Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) @rest), p);
 
-  Syntax * body = m->var(syntax body);
-  Syntax * fix_size_s = m->var(syntax fix_size);
+  Syntax * body = match_var(m, syntax body);
+  Syntax * fix_size_s = match_var(m, syntax fix_size);
 
-  if (!body || !fix_size_s)
-    return parse_class(p, env);
+  if (!body || !fix_size_s) return parse_class(p, env);
 
   size_t fix_size = ct_value(fix_size_s, env);
 
   m = match(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
+  Syntax * r = replace(raw_syntax (class (mid name) ({...} (mid body) (mid dummy_decl)) (mid rest)), m, mark);
   
   Environ * lenv = temp_environ(env);
-  Syntax * r = partly_expand(replace(raw_syntax (class (mid name) ({...} (mid body) (mid dummy_decl)) (mid rest)), m, mark),
-                             TopLevel, lenv);
   pre_parse(r, lenv);
 
   size_t size = ct_value(replace(syntax (offsetof(name, dummy)), m, mark), lenv);
