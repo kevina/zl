@@ -455,7 +455,7 @@ namespace ast {
     SymbolNode * * front;
     SymbolNode * back;
   public:
-    OpenSymbolTable() // This is a placeholder, it can't be used in this statex
+    OpenSymbolTable() // This is a placeholder, it can't be used in this state
       : front(), back() {}
     OpenSymbolTable(SymbolNode * * f, SymbolNode * b)
       : front(f), back(b) {}
