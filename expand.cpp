@@ -1205,6 +1205,7 @@ namespace macro_abi {
   
   const Syntax * pre_parse(const Syntax * p, Environ * env) {
     //printf("PRE_PARSE\n");
+    p = partly_expand(p, TopLevel, env);
     return pre_parse_decl(p, *env);
   }
 
