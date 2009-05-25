@@ -83,10 +83,14 @@ namespace ast {
     AST * to_effective(Environ & env) {
       return env.type_relation->to_effective(this, env);
     }
+    AST * def_arg_prom(Environ & env) {
+      return env.type_relation->def_arg_prom(this, env);
+    }
     virtual ~AST() {}
     //void print(OStream & o) const;
 
     const CT_Value_Base * ct_value_;
+
     template <typename T> T real_ct_value() const;
     template <typename T> T ct_value() const {
       return real_ct_value<typename CT_Type<T>::type>();
@@ -528,6 +532,10 @@ namespace ast {
   template <typename T> 
   inline const T * SymbolTable::find(const Syntax * p, const InnerNS * ns) {
     return find_symbol<T>(p, ns, front);
+  }
+
+  inline bool SymbolTable::exists(const Syntax * p, const InnerNS * ns) {
+    return find_symbol<Symbol>(p, ns, front, back);
   }
 
   inline bool SymbolTable::exists_this_scope(const Syntax * p, const InnerNS * ns) {

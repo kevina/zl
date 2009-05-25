@@ -179,6 +179,7 @@ namespace ast {
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
     virtual void resolve_assign(AST * &, AST * &, Environ & env) const = 0;
     virtual AST * to_effective(AST * exp, Environ & env) const = 0;
+    virtual AST * def_arg_prom(AST * exp, Environ & env) const = 0;
     const Type * unify(int rule, AST * &, AST * &, Environ & env);
     //virtual const Type * promote(AST * exp) const = 0;
     virtual ~TypeRelation() {}

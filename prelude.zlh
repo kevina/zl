@@ -125,6 +125,8 @@ __ct_callback Syntax * error(Syntax *, const char *, ...);
 
 __ct_callback Syntax * get_symbol_prop(Syntax * sym, Syntax * prop, Environ * env);
 
+__ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, Environ *);
+
 //
 //
 //

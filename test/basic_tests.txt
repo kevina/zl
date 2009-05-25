@@ -65,3 +65,6 @@ test69.c
 test70.c
 test71.c
 test72.c
+test73.c
+test74.c
+test75.c

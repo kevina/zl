@@ -1,22 +1,23 @@
-
 macro foreach (VAR, WHAT, BODY) {
   typeof(WHAT) & what = WHAT;
-  typeof(what.begin()) i = what.begin();
-  typeof(what.end())   e = what.end();
-  while (i != e) {
+  typeof(what.begin()) i=what.begin(), e=what.end();
+  for (; i != e; ++i) {
     typeof(*i) & VAR = *i;
     BODY;
-    ++i;
   }
 }
 
-class Container {
-  typedef int * iterator;
-  iterator begin() {return NULL;}
-  iterator end() {return NULL;}
+class X {
+  int * data;
+  size_t sz;
+  int * begin() {return data;}
+  int * end() {return data + sz;}
 };
 
 int main() {
-  Container con;
-  foreach(x, con, {printf("%p", x);});
+  X x;
+  int d[4] = {1, 5, 3, 2};
+  x.data = d;
+  x.sz = 4;
+  foreach(el, x, {printf("%d\n", el);});
 }

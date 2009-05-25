@@ -339,6 +339,7 @@ namespace macro_abi {
   extern "C" size_t ct_value(Syntax *, Environ *);
   extern "C" Syntax * error(Syntax *, const char *, ...); 
   extern "C" Syntax * get_symbol_prop(Syntax * sym, Syntax * prop, Environ * env);
+  extern "C" int symbol_exists(Syntax * sym, Syntax * where, Mark * mark, Environ * env);
 }
 
 String gen_sym() {
@@ -1504,9 +1505,27 @@ namespace macro_abi {
     va_end(ap);
     return new Syntax(p, res);
   }
-  
-  extern "C" const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
+
+  const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
     return env->symbols.lookup<TopLevelSymbol>(sym)->get_prop(*prop);
+  }
+
+  int symbol_exists(Syntax * sym, Syntax * where, Mark * mark, Environ * env) {
+    if (mark)
+      sym = macro_abi::replace(sym, NULL, mark);
+    if (where) {
+      try {
+        Syntax * syn = new Syntax(new Syntax("member"), where, new Syntax(new Syntax("id"), sym));
+        //fprint("> %s\n", ~syn->to_string());
+        parse_exp(syn, *env);
+        return true;
+      } catch (Error * err) {
+        //printf("?? %s\n", err->message().c_str());
+        return false;
+      }
+    } else {
+      return env->symbols.exists(sym);
+    }
   }
 
 }

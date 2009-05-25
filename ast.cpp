@@ -1282,8 +1282,8 @@ namespace ast {
       f << "}";
     }
     virtual AST * resolve_to(const Type * type, Environ & env, TypeRelation::CastType rule) {
-      // FIXME: resolve individual components of list first...
-      return new Cast(this, type); 
+      // FIXME: resolve individual components of list
+      return this;
     }
   };
 
@@ -1991,8 +1991,13 @@ namespace ast {
                     "Not enough parameters, expected at least %u but got %u when calling %s",
                     ftype->parms->parms.size(), parms.size(), ~ftype->what());
       const int typed_parms = ftype->parms->parms.size();
-      for (int i = 0; i != typed_parms; ++i) {
+      const int num_parms = parms.size();
+      int i = 0;
+      for (;i != typed_parms; ++i) {
         parms[i] = parms[i]->resolve_to(ftype->parms->parms[i].type, env);
+      }
+      for (;i != num_parms; ++i) {
+        parms[i] = parms[i]->def_arg_prom(env);
       }
       return this;
     }
@@ -2399,7 +2404,7 @@ namespace ast {
     res = try_exp(p, env);
     if (res) return new EStmt(res);
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
-    throw error (p, "Expected statement.");
+    throw error (p, "Expected statement in %s.", ~p->to_string());
   }
 
   AST * parse_stmt_decl(const Syntax * p, Environ & env) {

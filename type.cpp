@@ -365,6 +365,7 @@ namespace ast {
   public:
     AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule) const;
     AST * to_effective(AST * exp, Environ & env) const;
+    AST * def_arg_prom(AST * exp, Environ & env) const;
     void resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const;
     const Type * unify(int rule, const Type *, const Type *) const;
   };
@@ -467,6 +468,15 @@ namespace ast {
   }
 
   AST * C_TypeRelation::to_effective(AST * exp, Environ & env) const {
+    const Reference * ref = dynamic_cast<const Reference *>(exp->type->unqualified);
+    if (ref)
+      return from_ref(exp, env);
+    else
+      return exp;
+  }
+
+  AST * C_TypeRelation::def_arg_prom(AST * exp, Environ & env) const {
+    // FIXME: Need to do more ...
     const Reference * ref = dynamic_cast<const Reference *>(exp->type->unqualified);
     if (ref)
       return from_ref(exp, env);

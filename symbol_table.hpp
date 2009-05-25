@@ -512,6 +512,7 @@ namespace ast {
     bool exists_this_scope(const SymbolKey & k) {
       return find_symbol<Symbol>(k, front, back, ThisScope);
     }
+    inline bool exists(const Syntax * p, const InnerNS * = DEFAULT_NS);
     inline bool exists_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS);
     void add(const SymbolKey & k, const Symbol * sym) {
       //if (exists_this_scope(k)) return; // FIXME: throw error

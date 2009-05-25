@@ -16,7 +16,7 @@ STMT : "statement" =
     / <while> "while" "(" {EXP} ")" {STMT}
 #    / <loop>  "loop" {STMT}
     / <do>    "do" {STMT} "while" "(" {EXP} ")" ";"
-    / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<literal 1>} ";" {<estmt> {EXP}/<noop>} ")" {STMT}
+    / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<literal 1>} ";" {<eblock> {EXP}/<noop>} ")" {STMT}
     / <break>    "break" ";"
     / <continue> "continue" ";"
     / <return>   "return" {EXP} ";"
