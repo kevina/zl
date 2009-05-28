@@ -184,7 +184,7 @@ namespace ast {
         label = new NormalLabelSymbol(n.name);
         env.add(SymbolKey(n, LABEL_NS), label);
       }
-      stmt = parse_stmt(p->arg(1), env);
+      stmt = parse_stmt_decl(p->arg(1), env);
       type = stmt->type;
       return this;
     }
@@ -192,7 +192,9 @@ namespace ast {
       stmt->compile_prep(env);
     }
     void compile(CompileWriter & o) {
-      o << adj_indent(-2) << indent << label << ":\n";
+      // note: noop() is needed because gcc won't let us put a label
+      // before a declaration
+      o << adj_indent(-2) << indent << label << ": noop();\n";
       o << stmt;
     }
     void finalize(FinalizeEnviron & env) {
@@ -2404,7 +2406,7 @@ namespace ast {
     res = try_exp(p, env);
     if (res) return new EStmt(res);
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
-    throw error (p, "Expected statement in %s.", ~p->to_string());
+    throw error (p, "Expected statement in: %s.", ~p->to_string());
   }
 
   AST * parse_stmt_decl(const Syntax * p, Environ & env) {

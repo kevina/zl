@@ -68,3 +68,4 @@ test72.c
 test73.c
 test74.c
 test75.c
+test77.c

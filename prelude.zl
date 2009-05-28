@@ -113,9 +113,17 @@ Syntax * parse_class(Syntax * p, Environ * env) {
                                         FieldPos, lenv);
   Syntax * member;
   while ((member = itr->next)) {
+  try_again:
     Match * m0 = match(m, raw_syntax (what n @_), member);
-
     const char * what = syntax_to_string(m0->var(syntax what));
+
+    // ignore access control labels for now
+    if (strcmp(what, "lstmt")==0) {
+      member = match_args(NULL, raw_syntax (_ $1), member)->var(syntax $1);
+      member = partly_expand(member, FieldPos, lenv);
+      goto try_again;
+    }
+
     if      (strcmp(what, "var")==0) parse_class_var(member, m, mark, struct_b, module_b);
     else if (strcmp(what, "fun")==0) parse_class_fun(member, m, mark, struct_b, module_b,
                                                      parent_vtable,
