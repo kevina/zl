@@ -928,8 +928,6 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
 
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
-      if (what == "TOKEN" || what == "EXP" || what == "STMT")
-        what = "PARM";
       if (repl->simple() && !repl->str().empty()) {
         // if p0 has marks, they must be preserved
         //printf("REPL SIMPLE %s %s\n", ~mid->to_string(), ~repl->to_string());

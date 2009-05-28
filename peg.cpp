@@ -496,8 +496,8 @@ public:
       return FAIL; // FIXME Inject Error
     }
   }
-  S_MId(const char * s, const char * e, Prod * p)
-    : Prod(s,e), in_named_prod(cur_named_prod), prod(new NamedCapture(s, e, p, "mid")) {capture_type.set_to_explicit();}
+  S_MId(const char * s, const char * e, Prod * p, String inp = String())
+    : Prod(s,e), in_named_prod(inp.empty() ? cur_named_prod : inp), prod(new NamedCapture(s, e, p, "mid")) {capture_type.set_to_explicit();}
   S_MId(const S_MId & o, Prod * p = 0)
     : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod->clone(p)) {}
   virtual Prod * clone(Prod * p) {return new S_MId(*this, p);}
@@ -701,6 +701,7 @@ namespace ParsePeg {
     bool named_capture = false;
     SubStr name;
     SubStr special;
+    SubStr special_arg;
     if (*str == ':') {
       capture_as_flag = true;
       named_capture = true;
@@ -710,7 +711,24 @@ namespace ParsePeg {
       named_capture = true;
       const char * str2 = str + 1;
       if (str2 != end && *str2 == '<') {
-        str = quote('>', str2, end, special);
+        str = str2;
+        ++str;
+        str = spacing(str, end);
+        special.begin = str;
+        while (str != end && *str != '>' && !asc_isspace(*str))
+          ++str;
+        special.end = str;
+        if (str == end) throw error(str, "Unterminated >");
+        if (asc_isspace(*str)) {
+          ++str;
+          str = spacing(str, end);
+          special_arg.begin = str;
+          while (str != end && *str != '>')
+            ++str;
+          special_arg.end = str;
+          if (str == end) throw error(str, "Unterminated >");
+        }
+        ++str;
         name = special;
         str = require_symbol('>', str, end);
       } else {
@@ -730,7 +748,7 @@ namespace ParsePeg {
     else
       prod = new Seq(start, str, prods);
     if (String(special) == "mid") 
-      return Res(new S_MId(start, str, prod));
+      return Res(new S_MId(start, str, prod, String(special_arg)));
     //else if (special == "map") 
     //  return Res(new S_Map(start, str, prod));
     //else if (special == "mparm") 

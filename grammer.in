@@ -8,7 +8,7 @@ SLIST = <@> SPACING {STMT}+;
 #
 
 STMT : "statement" = 
-      <<mid>> {MID} ";"
+      <<mid PARM>> {MID} ";"
     / <lcstmt> {CASE_LABEL} ":" {STMT}
     / <lstmt> {ID} ":" {STMT}
     / <if>    "if" "(" {EXP} ")" {STMT} ("else" {STMT})?
@@ -76,7 +76,7 @@ TOKEN_ : "token_" =  <<mid>> {MID} !("`" / "::") /
          / {BRACK} / {CONST}
          / <id> {ID} / <sym> {SYM};
 
-TOKEN : "token" =  <<mid>> {MID} !("`" / "::") / 
+TOKEN : "token" =  <<mid PARM>> {MID} !("`" / "::") / 
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {BRACK} / {CONST}
          / <id> {ID} / <sym> {SYM} 

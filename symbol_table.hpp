@@ -203,6 +203,7 @@ namespace ast {
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s);
     virtual const Syntax * get_prop(SymbolName n) const;
+    //virtual const Syntax * get_props(SymbolName n) const; // not implemented yet
   };
 
   struct LexicalSymbol : virtual public Symbol {
