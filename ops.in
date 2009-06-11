@@ -14,7 +14,7 @@
   (left (bin times (sym *)) (bin div (sym /)) (bin mod (sym %)))
   (left (bin plus (sym +)) (bin minus (sym -)))
   (left (bin lshift (sym <<)) (bin rshift (sym >>)))
-  (left (bin lt (sym <)) (bin le (sym <=)) (bin qt (sym >)) (bin qe (sym >=)))
+  (left (bin lt (sym <)) (bin le (sym <=)) (bin gt (sym >)) (bin ge (sym >=)))
   (left (bin eq (sym ==)) (bin ne (sym !=)))
   (left (bin band (sym &)))
   (left (bin xor  (sym ^)))
