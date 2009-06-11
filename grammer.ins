@@ -5,30 +5,54 @@
       (fluid_binding (w/inner (mid ID) syntax)))
 
 (fluid_binding this)
+(fluid_label break)
 (fluid_label continue)
 
-(smacro while (TEST BODY)
-     (loop (block 
-             (local_label (fluid continue))
-             (lstmt continue
-               (if (mid TEST) (noop) (break)))
-             (mid BODY))))
+(smacro lstmt (ID STMT)
+  (@ (label (mid ID))
+     (mid STMT)))
 
-(smacro do (BODY TEST)
-     (loop (block 
-             (local_label (fluid continue))
-             (mid BODY)
-             (lstmt continue (mid TEST) (noop) (break)))))
+(smacro lcstmt (CASE STMT)
+  (@ (mid CASE)
+     (mid STMT)))
 
-(smacro for (INIT TEST POST BODY)
-      (block 
-               (mid INIT)
-               (loop (block
-                 (local_label (fluid continue))
-                 (if (mid TEST) (noop) (break))
-                 (mid BODY)
-                 (lstmt continue
-                   (mid POST))))))
+(smacro while (TEST BODY) (block 
+    (local_label (fluid break))
+    (local_label (fluid continue))
+  (label continue)
+    (if (not (mid TEST)) (goto (id break)))
+    (mid BODY)
+    (goto (id continue))
+  (label break)))
+
+(smacro do (BODY TEST) (block
+    (local_label (fluid break))
+    (local_label (fluid continue))
+  (label continue)
+    (mid BODY)
+    (if (not (mid TEST)) (goto (id break)))
+    (goto (id continue))
+  (label break)))
+
+(smacro for (INIT TEST POST BODY) (block
+    (local_label (fluid break))
+    (local_label (fluid continue))
+    (mid INIT)
+  (label loop)
+    (if (not (mid TEST)) (goto (id break)))
+    (mid BODY)
+  (label continue)
+    (mid POST)
+    (goto (id loop))
+  (label break)))
+
+(smacro switch (EXP BODY) (block
+    (local_label (fluid break))
+    (.switch (mid EXP) (mid BODY))
+  (label break)))
+
+(smacro break ()
+       (goto (id break)))
 
 (smacro continue ()
        (goto (id continue)))

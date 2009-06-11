@@ -14,7 +14,6 @@ STMT : "statement" =
     / <if>    "if" "(" {EXP} ")" {STMT} ("else" {STMT})?
     / <switch> "switch" "(" {EXP} ")" {STMT}
     / <while> "while" "(" {EXP} ")" {STMT}
-#    / <loop>  "loop" {STMT}
     / <do>    "do" {STMT} "while" "(" {EXP} ")" ";"
     / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<literal 1>} ";" {<eblock> {EXP}/<noop>} ")" {STMT}
     / <break>    "break" ";"
@@ -41,7 +40,7 @@ STMT : "statement" =
 
 CASE_LABEL =
       <case> "case" {CASE_EXP}
-    / <default> "default";
+    / <case> "default";
 
 CASE_EXP = <exp> (!":" {TOKEN})+;
 

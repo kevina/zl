@@ -171,67 +171,53 @@ namespace ast {
     AST * parse_self(const Syntax*, Environ&) {abort();}
   };
 
-  struct LStmt : public AST {
-    LStmt() : AST("lstmt") {}
+  struct Label : public ASTLeaf {
+    Label() : ASTLeaf("label") {}
     const LabelSymbol * label;
-    AST * stmt;
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
-      assert_num_args(2);
+      assert_num_args(1);
       SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
       label = env.symbols.find<LabelSymbol>(n);
       if (!label) {
         label = new NormalLabelSymbol(n.name);
         env.add(SymbolKey(n, LABEL_NS), label);
       }
-      stmt = parse_stmt_decl(p->arg(1), env);
-      type = stmt->type;
+      type = VOID_T;
       return this;
     }
-    void compile_prep(CompileEnviron & env) {
-      stmt->compile_prep(env);
-    }
     void compile(CompileWriter & o) {
-      // note: noop() is needed because gcc won't let us put a label
+      // note: noop is needed because gcc won't let us put a label
       // before a declaration
-      o << adj_indent(-2) << indent << label << ": noop();\n";
-      o << stmt;
-    }
-    void finalize(FinalizeEnviron & env) {
-      stmt->finalize(env);
+      o << adj_indent(-2) << indent << label << ":;\n";
     }
   };
 
-  struct LCStmt : public AST {
-    LCStmt() : AST("lcstmt") {}
+  struct Case : public AST {
+    Case() : AST("case") {}
     AST * exp; 
-    AST * stmt;
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
-      assert_num_args(2);
-      if (p->arg(0)->is_a("case")) {
-        exp = parse_exp(p->arg(0)->arg(0), env);
+      if (p->num_args() == 1) {
+        exp = parse_exp(p->arg(0), env);
       } else /* default */ {
         exp = NULL;
       }
-      stmt = parse_stmt(p->arg(1), env);
-      type = stmt->type;
+      type = VOID_T;
       return this;
     }
     void finalize(FinalizeEnviron & env) {
       if (exp)
         exp->finalize(env);
-      stmt->finalize(env);
     }
     void compile_prep(CompileEnviron & env) {
-      stmt->compile_prep(env);
+      // nothing to do
     }
     void compile(CompileWriter & o) {
       if (exp)
-        o << adj_indent(-2) << indent << "case " << exp << ":\n";
+        o << adj_indent(-2) << indent << "case " << exp << ":;\n";
       else
-        o << adj_indent(-2) << indent << "default:\n";
-      o << stmt;
+        o << adj_indent(-2) << indent << "default:;\n";
     }
   };
 
@@ -425,7 +411,7 @@ namespace ast {
   }
 
   struct Switch : public AST {
-    Switch() : AST("switch") {}
+    Switch() : AST(".switch") {}
     AST * exp;
     AST * body;
     //AST * part(unsigned i) {return i == 0 ? exp : i == 1 ? body : 0;}
@@ -454,44 +440,6 @@ namespace ast {
     void compile(CompileWriter & f) {
       f << indent << "switch (" << exp << ")\n";
       f << adj_indent(2) << body;
-    }
-  };
-
-
-  struct Loop : public AST {
-    Loop() : AST("loop") {}
-    //AST * part(unsigned i) 
-    //  {return body;}
-    AST * body;
-    AST * parse_self(const Syntax * p, Environ & env) {
-      parse_ = p;
-      assert_num_args(1);
-      body = parse_stmt(p->arg(0), env);
-      type = env.void_type();
-      return this;
-    }
-    void finalize(FinalizeEnviron & env) {
-      body->finalize(env);
-    }
-    void compile_prep(CompileEnviron & env) {
-      body->compile_prep(env);
-    }
-    void compile(CompileWriter & f) {
-      f << indent << "for (;;)\n";
-      f << body;
-    }
-  };
-  
-  struct Break : public ASTLeaf {
-    Break() : ASTLeaf("break") {}
-    AST * parse_self(const Syntax * p, Environ & env) {
-      parse_ = p;
-      assert_num_args(0);
-      type = env.void_type();
-      return this;
-    }
-    void compile(CompileWriter & f) {
-      f << indent << "break;\n";
     }
   };
 
@@ -2494,12 +2442,10 @@ namespace ast {
   AST * try_stmt(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "goto")    return (new Goto)->parse_self(p, env);
-    if (what == "lstmt")   return (new LStmt)->parse_self(p, env);
-    if (what == "lcstmt")  return (new LCStmt)->parse_self(p, env);
+    if (what == "label")   return (new Label)->parse_self(p, env);
+    if (what == "case")    return (new Case)->parse_self(p, env);
     if (what == "if")      return (new If)->parse_self(p, env);
-    if (what == "loop")    return (new Loop)->parse_self(p, env);
-    if (what == "switch")  return (new Switch)->parse_self(p, env);
-    if (what == "break")   return (new Break)->parse_self(p, env);
+    if (what == ".switch") return (new Switch)->parse_self(p, env);
     if (what == "block")   return (new Block)->parse_self(p, env);
     if (what == "print")   return (new Print)->parse_self(p, env);
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
