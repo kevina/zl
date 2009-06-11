@@ -2533,7 +2533,7 @@ namespace ast {
     if (what == "eq")      return (new Eq)->parse_self(p, env);
     if (what == "ne")      return (new Ne)->parse_self(p, env);
     if (what == "lt")      return (new Lt)->parse_self(p, env);
-    if (what == "qt")      return (new Gt)->parse_self(p, env);
+    if (what == "gt")      return (new Gt)->parse_self(p, env);
     if (what == "le")      return (new Le)->parse_self(p, env);
     if (what == "ge")      return (new Ge)->parse_self(p, env);
     if (what == "not")     return (new Not)->parse_self(p, env);
