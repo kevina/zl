@@ -9,12 +9,22 @@ function compile_test() {
   o=test/$base.out
   if [ -e $f ] 
   then
-    gcc a.out.c
+    gcc a.out.c || return 1
+    ./a.out > $o
+    diff -u $f $o
+    zls a.out.zls || return 1
     ./a.out > $o
     diff -u $f $o
   else
     gcc -fsyntax-only a.out.c
+    zls -fsyntax-only a.out.zls
   fi
+  if [ $? -ne 0 ]; then return 1; fi
+  zls -S a.out.c
+  cp a.out.s test/$base.out.c.s
+  zls -S a.out.zls
+  cp a.out.s test/$base.out.zls.s
+  diff -I "\.file" -u test/$base.out.c.s test/$base.out.zls.s
 }
 
 if [ "$#" -gt 0 ]; then
@@ -33,6 +43,7 @@ do
     ( ./zl test/$f > test/$base.log && compile_test $base ) \
     || failed $f
     cp a.out.c test/$base.out.c
+    cp a.out.zls test/$base.out.zls
 done
 
 if [ -n "$failed" ]; then 

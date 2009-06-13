@@ -411,7 +411,7 @@ namespace {
     {"float", Cast_GetValue<From, float>::get_value},
     {"double", Cast_GetValue<From, double>::get_value},
     {"long double", Cast_GetValue<From, long double>::get_value},
-    {".pointer", Cast_GetValue<From, CT_Ptr>::get_value},
+    {".ptr", Cast_GetValue<From, CT_Ptr>::get_value},
     {".lvalue", Cast_GetValue<From, CT_LValue>::get_value}
   };
   template <typename From>
@@ -443,7 +443,7 @@ namespace {
     make_cast_get_value_map<float>("float"),
     make_cast_get_value_map<double>("double"),
     make_cast_get_value_map<long double>("long double"),
-    make_cast_get_value_map<CT_Ptr>(".pointer"),
+    make_cast_get_value_map<CT_Ptr>(".ptr"),
     make_cast_get_value_map<CT_LValue>(".lvalue")
   };
   Cast_GetValue_Map * cast_get_value_map_end = 
@@ -510,6 +510,10 @@ namespace ast {
     return true;
   }
 
+  void CT_Value<CT_NVal>::compile_c(CompileWriter & cw, AST * exp) const {
+    exp->compile_c(cw);
+  }
+
   void CT_Value<CT_NVal>::compile(CompileWriter & cw, AST * exp) const {
     exp->compile(cw);
   }
@@ -534,12 +538,88 @@ namespace ast {
   template<> const char * const CT_Type_Base<float>::name = "float";
   template<> const char * const CT_Type_Base<double>::name = "double";
   template<> const char * const CT_Type_Base<long double>::name = "long double";
-  template<> const char * const CT_Type_Base<CT_Ptr>::name = ".pointer";
+  template<> const char * const CT_Type_Base<CT_Ptr>::name = ".ptr";
   template<> const char * const CT_Type_Base<CT_LValue>::name = ".lvalue";
 
 }
 
 namespace ast {
+
+  template <typename T>
+  void CT_Value<T>::compile_c(CompileWriter & o, AST *) const {
+    abort();
+  }
+
+  template void CT_Value<CT_LValue>::compile_c(CompileWriter & o, AST *) const;
+
+  template <>
+  void CT_Value<signed char>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%d", val);
+  }
+
+  template <>
+  void CT_Value<unsigned char>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%uu", val);
+  }
+
+  template <>
+  void CT_Value<short>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%d", val);
+  }
+
+  template <>
+  void CT_Value<unsigned short>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%uu", val);
+  }
+
+  template <>
+  void CT_Value<int>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%d", val);
+  }
+
+  template <>
+  void CT_Value<unsigned>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%uu", val);
+  }
+
+  template <>
+  void CT_Value<long>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%ldl", val);
+  }
+
+  template <>
+  void CT_Value<unsigned long>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%luul", val);
+  }
+
+  template <>
+  void CT_Value<long long>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%lldll", val);
+  }
+
+  template <>
+  void CT_Value<unsigned long long>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%lluull", val);
+  }
+
+  template <>
+  void CT_Value<float>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%af", val);
+  }
+
+  template <>
+  void CT_Value<double>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%a", val);
+  }
+
+  template <>
+  void CT_Value<long double>::compile_c(CompileWriter & o, AST *) const {
+    o.printf("%Lal", val);
+  }
+
+  //
+  //
+  //
 
   template <typename T>
   void CT_Value<T>::compile(CompileWriter & o, AST *) const {
@@ -550,67 +630,75 @@ namespace ast {
 
   template <>
   void CT_Value<signed char>::compile(CompileWriter & o, AST *) const {
+    //o.printf("(literal %d (signed-char)", val);
     o.printf("%d", val);
   }
 
   template <>
   void CT_Value<unsigned char>::compile(CompileWriter & o, AST *) const {
-    o.printf("%uu", val);
+    //o.printf("(literal %u (unsigned-char))", val);
+    o.printf("%u", val);
   }
 
   template <>
   void CT_Value<short>::compile(CompileWriter & o, AST *) const {
+    //o.printf("(literal %d (short))", val);
     o.printf("%d", val);
   }
 
   template <>
   void CT_Value<unsigned short>::compile(CompileWriter & o, AST *) const {
-    o.printf("%uu", val);
+    //o.printf("(literal %u (unsigned-short))", val);
+    o.printf("%u", val);
   }
 
   template <>
   void CT_Value<int>::compile(CompileWriter & o, AST *) const {
+    //o.printf("(literal %d (int))", val);
     o.printf("%d", val);
   }
 
   template <>
   void CT_Value<unsigned>::compile(CompileWriter & o, AST *) const {
-    o.printf("%uu", val);
+    if (val <= INT_MAX)
+      o.printf("%u", val);
+    else
+      o.printf("(literal %u (unsigned))", val);
   }
 
   template <>
   void CT_Value<long>::compile(CompileWriter & o, AST *) const {
-    o.printf("%ldl", val);
+    o.printf("(literal %ld (long))", val);
   }
 
   template <>
   void CT_Value<unsigned long>::compile(CompileWriter & o, AST *) const {
-    o.printf("%luul", val);
+    o.printf("(literal %lu (unsigned-long))", val);
   }
 
   template <>
   void CT_Value<long long>::compile(CompileWriter & o, AST *) const {
-    o.printf("%lldll", val);
+    o.printf("(literal %lld (long-long))", val);
   }
 
   template <>
   void CT_Value<unsigned long long>::compile(CompileWriter & o, AST *) const {
-    o.printf("%lluull", val);
+    o.printf("(literal %llu (unsigned-long-long))", val);
   }
 
   template <>
   void CT_Value<float>::compile(CompileWriter & o, AST *) const {
-    o.printf("%af", val);
+    o.printf("(float %a (float))", val);
   }
 
   template <>
   void CT_Value<double>::compile(CompileWriter & o, AST *) const {
-    o.printf("%a", val);
+    o.printf("(float %a (double))", val);
   }
 
   template <>
   void CT_Value<long double>::compile(CompileWriter & o, AST *) const {
-    o.printf("%Lal", val);
+    o.printf("(float %La (long-double))", val);
   }
 
   //

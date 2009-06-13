@@ -62,15 +62,16 @@ namespace ast {
   PrintInst const * const generic_print_inst = new GenericPrintInst();
   PrintInst const * const c_print_inst = new CPrintInst();
   PrintInst const * const zl_print_inst = new ZLPrintInst();
+  PrintInst const * const zls_print_inst = new ZLSPrintInst();
   
-  void TypeParm::to_string(StringBuf & buf) const {
+  void TypeParm::to_string(const PrintInst & pi, StringBuf & buf) const {
     switch (what) {
     case NONE:
       buf << "<none>";
       break;
     case TYPE:
     case TUPLE:
-      as_type->to_string(buf);
+      pi.to_string(*as_type, buf);
       break;
     case INT:
       buf.printf("%d", as_int);
@@ -103,28 +104,67 @@ namespace ast {
     return true;
   }
 
-  void GenericPrintInst::to_string(const TypeInst & type, StringBuf & buf) const {
-    unsigned sz = type.num_parms();
+  void GenericPrintInst::to_string(const TypeInst & type0, StringBuf & buf) const {
+    const TypeInst * type = &type0;
+    for (;;) { // loop while something changed
+      if (const ZeroT * t = dynamic_cast<const ZeroT *>(type)) {
+        type = t->of;
+      } else if (const TypeOf * t = dynamic_cast<const TypeOf *>(type)) {
+        type = t->of;
+      } else if (const UserType * t = dynamic_cast<const UserType *>(type)) {
+        type = t->type;
+      } else {
+        break;
+      }
+    }
+    unsigned sz = type->num_parms();
     if (sz == 0) {
-      buf += type.type_symbol->name;
+      buf += "(";
+      if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
+        buf << t->what << " ";
+      }
+      type->type_symbol->uniq_name(buf);
+      buf += ")";
+    } else if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
+      buf << "(.t";
+      for (unsigned i = 0; i < t->parms.size();) {
+        buf << " (";
+        to_string(*t->parms[i].type, buf);
+        buf << " ";
+        buf << (t->parms[i].sym ? t->parms[i].sym->uniq_name() : t->parms[i].name.name);
+        buf << ")";
+        ++i;
+      }
+      if (t->vararg) {
+	buf << " ...";
+      }
+      buf << ")";
+    } else if (const QualifiedType * t = dynamic_cast<const QualifiedType *>(type)) {
+      buf += "(.q ";
+      to_string(*t->subtype, buf);
+      if (t->qualifiers & QualifiedType::CONST)    buf += " :const";
+      if (t->qualifiers & QualifiedType::VOLATILE) buf += " :volatile";
+      if (t->qualifiers & QualifiedType::RESTRICT) buf += " :restrict";
+      buf += ")";
+    } else if (const Reference * t = dynamic_cast<const Reference *>(type)) {
+      buf += "(.ptr ";
+      to_string(*t->subtype, buf);
+      buf += ")";
     } else {
       buf += "(";
-      buf += type.type_symbol->name;
-      buf += " ";
+      buf += type->type_symbol->name;
       for (unsigned i = 0;;) {
-        type.parm(i).to_string(buf);
+        buf += " ";
+        type->parm(i).to_string(*this, buf);
         ++i;
         if (i == sz) break;
-        buf += " ";
       }
       buf += ")";
     }
   }
 
   void GenericPrintInst::declaration(String var, const TypeInst & type, StringBuf & buf) const {
-    buf << "var ";
-    buf << var << " : ";
-    to_string(type, buf);
+    abort();
   }
 
   void CPrintInst::to_string(const TypeInst & type, StringBuf & buf) const {
@@ -198,7 +238,11 @@ namespace ast {
       if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
         buf << t->what << " ";
       }
+      unsigned i = buf.size();
       type->type_symbol->uniq_name(buf);
+      unsigned e = buf.size();
+      for (; i != e; ++i)
+        if (buf[i] == '-') buf[i] = ' ';
       buf << qualifiers;
       if (!var.empty())
 	buf << " " << var;
@@ -323,7 +367,7 @@ namespace ast {
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(qualifiers));
       q_parms.push_back(TypeParm(inst_type));
-      return types.find(".qualified")->inst(q_parms);
+      return types.find(".q")->inst(q_parms);
     } else {
       return inst_type;
     }
@@ -549,24 +593,24 @@ namespace ast {
     add_simple_type(types, ".int64", new_signed_int(8));
     add_simple_type(types, ".uint64", new_unsigned_int(8));
 
-    add_c_int(types, "signed char");
+    add_c_int(types, "signed-char");
     add_c_int(types, "short");
     add_c_int(types, "int");
     add_c_int(types, "long");
-    add_c_int(types, "long long");
+    add_c_int(types, "long-long");
 
     //types.add("signed short", types.find("short"));
     //types.add("signed int", types.find("int"));
     //types.add("signed long", types.find("long"));
     //types.add("signed long long", types.find("long long"));
 
-    add_c_int(types, "unsigned char");
-    add_c_int(types, "unsigned short");
-    add_c_int(types, "unsigned int");
-    add_c_int(types, "unsigned long");
-    add_c_int(types, "unsigned long long");
+    add_c_int(types, "unsigned-char");
+    add_c_int(types, "unsigned-short");
+    add_c_int(types, "unsigned-int");
+    add_c_int(types, "unsigned-long");
+    add_c_int(types, "unsigned-long-long");
 
-    types.add("unsigned", types.find("unsigned int"));
+    types.add("unsigned", types.find("unsigned-int"));
 
     add_c_int(types, "char");
 
@@ -575,22 +619,22 @@ namespace ast {
 
     add_simple_type(types, "float", new Float(Float::SINGLE));
     add_simple_type(types, "double", new Float(Float::DOUBLE));
-    add_simple_type(types, "long double", new Float(Float::LONG));
+    add_simple_type(types, "long-double", new Float(Float::LONG));
 
     add_simple_type(types, "<bool>", new AliasT(types.inst("int")));
 
     types.add("<void>", types.find("void"));
 
-    types.add(".size", types.find("unsigned long"));
+    types.add(".size", types.find("unsigned-long"));
     types.add(".ptrdiff", types.find("long"));
 
-    types.add_name(".pointer", new PointerSymbol);
+    types.add_name(".ptr", new PointerSymbol);
     types.add_name(".reference", new ReferenceSymbol);
     //types.add_name("<const>", new ConstSymbol);
     types.add_name(".array", new ArraySymbol);
     types.add_name(".fun", new FunctionSymbol);
     types.add_name(".tuple", new TupleSymbol);
-    types.add_name(".qualified", new QualifiedTypeSymbol);
+    types.add_name(".q", new QualifiedTypeSymbol);
     types.add_name(".zero", new ZeroTypeSymbol);
     types.add_name(".typeof", new TypeOfSymbol);
 
@@ -602,7 +646,7 @@ namespace ast {
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {
-    return inst(".qualified", TypeParm(QualifiedType::CT_CONST), TypeParm(t));
+    return inst(".q", TypeParm(QualifiedType::CT_CONST), TypeParm(t));
   }
 
   void StructT::finalize_hook() {
@@ -645,16 +689,16 @@ namespace ast {
 
   const IntMap int_map[] = {
     {"char", ".int8"},
-    {"signed char", ".int8"},
-    {"unsigned char", ".uint8"},
+    {"signed-char", ".int8"},
+    {"unsigned-char", ".uint8"},
     {"short", ".int16"},
-    {"unsigned short", ".uint16"},
+    {"unsigned-short", ".uint16"},
     {"int", ".int32"},
-    {"unsigned int", ".uint32"},
+    {"unsigned-int", ".uint32"},
     {"long", ".int32"},
-    {"unsigned long", ".uint32"},
-    {"long long", ".int64"},
-    {"unsigned long long", ".uint64"}
+    {"unsigned-long", ".uint32"},
+    {"long-long", ".int64"},
+    {"unsigned-long-long", ".uint64"}
   };
   const IntMap * int_map_end = int_map + sizeof(int_map)/sizeof(IntMap);
   

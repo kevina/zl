@@ -1315,11 +1315,11 @@ void compile_for_ct(Deps & deps, Environ & env) {
   
   printf("COMPILE FOR CT: zlfct%03d\n", cntr);
   StringBuf buf;
-  buf.printf("./zlfct%03d.c", cntr);
+  buf.printf("./zlfct%03d.zls", cntr);
   String source = buf.freeze();
   buf.printf("./zlfct%03d.so", cntr);
   String lib = buf.freeze();
-  buf.printf("gcc -g -fexceptions -shared -fpic -o zlfct%03d.so zlfct%03d.c", cntr, cntr);
+  buf.printf("zls -g -fexceptions -shared -fpic -o zlfct%03d.so zlfct%03d.zls", cntr, cntr);
   String cmd = buf.freeze();
   cntr++;
   

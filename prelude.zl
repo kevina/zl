@@ -175,7 +175,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
       // have to use raw_syntax here becuase _VTable is not defined
       // yet, it won't parse properly if I use syntax and than
       // partly_expand
-      Syntax * v = replace(raw_syntax (var (mid _vptr) (.pointer (mid _VTable))), m, mark);
+      Syntax * v = replace(raw_syntax (var (mid _vptr) (.ptr (mid _VTable))), m, mark);
       parse_class_var(v, m, mark, struct_p, module_b); // Note: beginning of structure but end of module
     }
     exports->append(replace(syntax _vptr, m, mark));
@@ -263,7 +263,7 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
 
   SyntaxList * new_parms = new_syntax_list(); 
   if (!is_static)
-    new_parms->append(replace(raw_syntax ((.pointer (mid name)) (fluid this)), m, mark));
+    new_parms->append(replace(raw_syntax ((.ptr (mid name)) (fluid this)), m, mark));
 
   SyntaxList * macro_parms = new_syntax_list();
   SyntaxList * call_parms  = new_syntax_list();
@@ -296,7 +296,7 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
                        match_local(m, macro_parms, call_parms, 0),
                        mark));
     m = match(m, syntax pfun, 
-              replace(raw_syntax (.pointer (.fun (.tuple (mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
+              replace(raw_syntax (.ptr (.fun (.tuple (mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
     if (!(parent_vtable && parent_vtable->module->have_symbol(m->var(syntax n)))) {
       vtable_b->append(replace(raw_syntax (var (mid n) (mid pfun)), m, mark));
     }

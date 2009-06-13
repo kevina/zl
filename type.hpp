@@ -19,6 +19,7 @@ namespace ast {
   // they are used as function parameters and have lots of special 
   // properties
 
+  class PrintInst;
   class TypeSymbol;
   class TypeInst;
   typedef TypeInst Type;
@@ -71,7 +72,7 @@ namespace ast {
     explicit TypeParm(What w, const Type * t, SymbolKey n = SymbolKey()) : what(w), as_type(t), name(n) {}
     explicit TypeParm(int i, SymbolKey n = SymbolKey()) : what(INT), as_int(i), name(n) {}
     explicit TypeParm(AST * exp, SymbolKey n = SymbolKey()) : what(EXP), as_exp(exp), name(n) {}
-    void to_string(StringBuf & buf) const;
+    void to_string(const PrintInst &, StringBuf & buf) const;
     static TypeParm dots() {return TypeParm(DOTS);}
   private:
     explicit TypeParm(What w) : what(w) {}
@@ -140,6 +141,11 @@ namespace ast {
     virtual void to_string(const TypeInst &, StringBuf & buf) const = 0;
     // declaration is needed to handle C types correctly, perhaps this is not 
     // the best place for it
+    String to_string(const TypeInst & t) const {
+      StringBuf buf;
+      to_string(t, buf);
+      return buf.freeze();
+    }
     virtual void declaration(String var, const TypeInst &, StringBuf & buf) const = 0;
     virtual ~PrintInst() {}
   };
@@ -166,9 +172,15 @@ namespace ast {
     ZLPrintInst() : CPrintInst(ZL_MODE) {}
   };
 
+  class ZLSPrintInst : public GenericPrintInst { 
+  public:
+    ZLSPrintInst() {}
+  };
+
   extern PrintInst const * const generic_print_inst;
   extern PrintInst const * const c_print_inst;
   extern PrintInst const * const zl_print_inst;
+  extern PrintInst const * const zls_print_inst;
 
   struct AST;
   
@@ -552,7 +564,7 @@ namespace ast {
     const Type * subtype;
     unsigned size() const {return POINTER_SIZE;}
     unsigned align() const {return POINTER_SIZE;}
-    String ct_type_name() const {return ".pointer";}
+    String ct_type_name() const {return ".ptr";}
   };
 
   class Pointer : public PointerLike {

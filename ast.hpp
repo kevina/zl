@@ -38,11 +38,12 @@ namespace ast {
 
   class CompileWriter : public FStream, public CompileEnviron {
   public:
+    bool to_c;
     const Fun * in_fun;
     unsigned indent_level;
     Deps * deps;
     bool for_compile_time() {return deps;}
-    CompileWriter() : in_fun(), indent_level(0), deps() {}
+    CompileWriter(bool to_c0 = false) : to_c(to_c0), in_fun(), indent_level(0), deps() {}
     void indent() {
       for (int i = 0; i != indent_level; ++i)
         *this << ' ';
@@ -75,6 +76,7 @@ namespace ast {
       //      new Foo(p)->parse(env);
     virtual void finalize(FinalizeEnviron &) = 0;
     virtual void compile_prep(CompileEnviron &) = 0;
+    virtual void compile_c(CompileWriter &) = 0; 
     virtual void compile(CompileWriter &) = 0; 
     virtual AST * resolve_to(const Type * type, Environ & env, 
                              TypeRelation::CastType rule = TypeRelation::Implicit) {
@@ -108,6 +110,7 @@ namespace ast {
 
   struct FakeAST : public AST {
     FakeAST(String n, const Syntax * p = 0) : AST(n,p) {}
+    void compile_c(CompileWriter &) {abort();}
     void compile(CompileWriter &) {abort();}
     void compile_prep(CompileEnviron &) {abort();}
     void finalize(FinalizeEnviron &) {abort();}
@@ -121,6 +124,9 @@ namespace ast {
       type = env.void_type();
       return this;
     }
+    void compile_c(CompileWriter & f) {
+      // do absolutely nothing
+    }
     void compile(CompileWriter & f) {
       // do absolutely nothing
     }
@@ -130,6 +136,7 @@ namespace ast {
     Literal() : ASTLeaf("literal") {}
     //AST * part(unsigned i);
     AST * parse_self(const Syntax * p, Environ &);
+    void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
@@ -137,6 +144,7 @@ namespace ast {
     FloatC() : ASTLeaf("float") {}
     //AST * part(unsigned i);
     AST * parse_self(const Syntax * p, Environ &);
+    void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
@@ -146,6 +154,7 @@ namespace ast {
     String orig;
     String value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
+    void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
@@ -155,6 +164,7 @@ namespace ast {
     String orig;
     char value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
+    void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
@@ -168,6 +178,7 @@ namespace ast {
     AST * parse_self(const Syntax * p, Environ & env);
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
+    void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
@@ -182,6 +193,7 @@ namespace ast {
     virtual void make_ct_value();
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
+    void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
@@ -195,6 +207,7 @@ namespace ast {
     virtual void make_ct_value();
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
+    void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
@@ -226,7 +239,10 @@ namespace ast {
   static inline 
   CompileWriter & operator<< (CompileWriter & o, AST * v) {
     //printf("COMPILE %s\n", ~v->name());
-    v->compile(o);
+    if (o.to_c)
+      v->compile_c(o);
+    else
+      v->compile(o);
     return o;
   }
 
@@ -272,6 +288,7 @@ namespace ast {
       : AST("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(e, t);}
     AST * exp;
     void compile_prep(CompileEnviron&);
+    void compile_c(CompileWriter&);
     void compile(CompileWriter&);
     void finalize(FinalizeEnviron &); 
     AST * parse_self(const Syntax * p, Environ &) {abort();}
@@ -300,7 +317,9 @@ namespace ast {
 
   struct Declaration : public AST {
     enum Phase {Normal, Forward, Body};
+    virtual void compile_c(CompileWriter &, Phase) const = 0;
     virtual void compile(CompileWriter &, Phase) const = 0;
+    void compile_c(CompileWriter & cw) {compile_c(cw, Normal);}
     void compile(CompileWriter & cw) {compile(cw, Normal);}
     Declaration(String n) : AST(n) {}
   };
@@ -317,6 +336,7 @@ namespace ast {
     bool ct_callback;
     bool static_constructor;
     void parse_flags(const Syntax * p);
+    void write_flags_c(CompileWriter & f) const;
     void write_flags(CompileWriter & f) const;
     //void forward_decl(CompileWriter & w) {compile(w, true);}
     void calc_deps_closure() const;
@@ -348,6 +368,7 @@ namespace ast {
     unsigned frame_size;
     void finish_parse(Environ &);
     void compile_prep(CompileEnviron &);
+    void compile_c(CompileWriter & f, Phase) const;
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
     // internal method, should only be called by parse_fun_forward
@@ -439,6 +460,7 @@ namespace ast {
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
 
+  void compile_c(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
   void compile(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
 
   AST * cast_up(AST * exp, const Type * type, Environ & env);

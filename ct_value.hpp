@@ -35,6 +35,7 @@ namespace ast {
     // compile(...) will attempt to compile the compile time value, if
     // nval() is true than compile the exp passed in since it doesn't
     // have a precise value at compile time
+    virtual void compile_c(CompileWriter &, AST * exp) const = 0;
     virtual void compile(CompileWriter &, AST * exp) const = 0;
     virtual const char * type_name() const = 0;
     virtual ~CT_Value_Base() {}
@@ -43,6 +44,7 @@ namespace ast {
   template <typename T> struct CT_Value : public CT_Value_Base {
     T val;
     CT_Value(const T & v) : val(v) {}
+    void compile_c(CompileWriter &, AST *) const;
     void compile(CompileWriter &, AST *) const;
     const char * type_name() const;
   };
@@ -50,6 +52,7 @@ namespace ast {
   template <> struct CT_Value<CT_NVal> : public CT_Value_Base {
     bool nval() const;
     void to_string(OStream & o) const;
+    void compile_c(CompileWriter &, AST *) const;
     void compile(CompileWriter &, AST *) const;
     const char * type_name() const;
   };

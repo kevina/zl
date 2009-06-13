@@ -52,12 +52,20 @@ int main(int argc, const char *argv[])
       SourceFile * prelude_body = new_source_file("prelude.zl");
       parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
-      ast::CompileWriter out;
+      ast::CompileWriter out(true);
       out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
       out.open("prelude.c", "w");
-      ast::compile(*env.top_level_symbols, out);
+      ast::compile_c(*env.top_level_symbols, out);
       out.close();
-      system("gcc -g -O -fexceptions -shared -fpic -o prelude.so prelude.c");
+      system("zls -O -S -fexceptions -o prelude.c.s prelude.c");
+      //system("gcc -g -O -fexceptions -shared -fpic -o prelude.so prelude.c");
+      ast::CompileWriter out2;
+      out2.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
+      out2.open("prelude.zls", "w");
+      ast::compile(*env.top_level_symbols, out2);
+      out2.close();
+      system("zls -O -S -fexceptions -o prelude.zls.s prelude.zls");
+      system("zls -g -O -fexceptions -shared -fpic -o prelude.so prelude.zls");
       //load_macro_lib("./prelude.so", env);
     } else {
       unsigned offset = 1;
@@ -84,9 +92,12 @@ int main(int argc, const char *argv[])
         load_macro_lib("./prelude.so", env);
       }
       parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
-      ast::CompileWriter out;
+      ast::CompileWriter out(true);
       out.open("a.out.c", "w");
-      ast::compile(*env.top_level_symbols, out);
+      ast::compile_c(*env.top_level_symbols, out);
+      ast::CompileWriter out2;
+      out2.open("a.out.zls", "w");
+      ast::compile(*env.top_level_symbols, out2);
       //AST::ExecEnviron env;
       //ast->eval(env);
     }

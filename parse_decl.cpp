@@ -16,7 +16,7 @@
   (union ID [BODY])
   -- types live in a diffrent namespace, can be wrapped my (type ...)
   -- any type have any of the qualifies as flags
-  (.pointer TYPE)
+  (.ptr TYPE)
   (.array TYPE EXP)
   (.fun PARMS RETURN_TYPE)
   (struct ID)
@@ -488,10 +488,10 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
         t = "char";
         break;
       case UNSIGNED:
-        t = "unsigned char";
+        t = "unsigned-char";
         break;
       case SIGNED:
-        t = "signed char";
+        t = "signed-char";
         break;
       }
       break;
@@ -508,7 +508,7 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
         t = "long";
         break;
       case LONG_LONG:
-        t = "long long";
+        t = "long-long";
         break;
       }
       switch (sign) {
@@ -516,7 +516,7 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
       case SIGNED:
         break;
       case UNSIGNED:
-        t.prepend("unsigned ");
+        t.prepend("unsigned-");
         break;
       }
       break;
@@ -532,7 +532,7 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
         t = "double";
         break;
       case LONG:
-        t = "long double";
+        t = "long-double";
         break;
       default:
         ignore();
@@ -653,7 +653,7 @@ const Syntax * DeclWorking::try_pointers(Parts::const_iterator & i,
 {
   while (i != end && (*i)->is_a("sym", "*")) {
     ++i;
-    Syntax * new_t = new Syntax(new Syntax(".pointer"), t);
+    Syntax * new_t = new Syntax(new Syntax(".ptr"), t);
     while (i != end && 
            (*i)->is_a("id") && try_qualifier((*i)->arg(0), new_t->d->flags))
       ++i;
