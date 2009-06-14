@@ -152,7 +152,7 @@ namespace ast {
     StringC() : ASTLeaf("s") {}
     //AST * part(unsigned i);
     String orig;
-    String value; // unused at the moment
+    //String value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
@@ -162,7 +162,7 @@ namespace ast {
     CharC() : ASTLeaf("c") {}
     //AST * part(unsigned i);
     String orig;
-    char value; // unused at the moment
+    //char value; // unused at the moment
     AST * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
@@ -449,6 +449,7 @@ namespace ast {
 
   AST * parse_top(const Syntax * p);
   AST * parse_top(const Syntax * p, Environ & env);
+  void parse_stmts_raw(SourceStr, Environ & env);
   void parse_stmts(const Syntax * p, Environ & env);
 
   AST * parse_top_level(const Syntax * p, Environ & env);

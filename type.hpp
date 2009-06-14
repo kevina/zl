@@ -152,8 +152,12 @@ namespace ast {
 
   class GenericPrintInst : public PrintInst { 
   public:
+    enum Mode {ZLS_MODE, ZL_MODE} mode;
+    GenericPrintInst(Mode m = ZL_MODE) : mode(m) {}
     void to_string(const TypeInst &, StringBuf & buf) const;
     void declaration(String var, const TypeInst &, StringBuf & buf) const;
+  private:
+    void to_string0(const TypeInst &, StringBuf & buf) const;
   };
 
   class CPrintInst : public PrintInst { 
@@ -174,7 +178,7 @@ namespace ast {
 
   class ZLSPrintInst : public GenericPrintInst { 
   public:
-    ZLSPrintInst() {}
+    ZLSPrintInst() : GenericPrintInst(ZLS_MODE) {}
   };
 
   extern PrintInst const * const generic_print_inst;
@@ -245,8 +249,10 @@ namespace ast {
       : category(p->category), 
         addressable(p->addressable), read_only(p->read_only), ct_const(p->ct_const), is_null(p->is_null)
       , exact_type() {}
-    void to_string(StringBuf & buf) const {type_symbol->print_inst->to_string(*this, buf);}
-    String to_string() const {StringBuf buf; to_string(buf); return buf.freeze();}
+    void to_string(StringBuf & buf, const PrintInst * pi = NULL) const 
+      {if (pi == NULL) pi = type_symbol->print_inst; pi->to_string(*this, buf);}
+    String to_string(const PrintInst * pi = NULL) const 
+      {StringBuf buf; to_string(buf, pi); return buf.freeze();}
     bool is(const TypeCategory * other) const {
       return category_in(category, other);
     }

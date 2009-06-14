@@ -70,10 +70,15 @@ int main(int argc, const char *argv[])
     } else {
       unsigned offset = 1;
       bool debug_mode = false;
+      bool zls_mode = false;
       if (argc > offset && strcmp(argv[offset], "-d") == 0) {
         debug_mode = true;
         offset++;
-      }
+      } 
+      if (argc > offset && strcmp(argv[offset], "-s") == 0) {
+        zls_mode = true;
+        offset++;
+      } 
       if (argc > offset) {
         code = new_source_file(argv[offset]);
       } else {
@@ -84,14 +89,19 @@ int main(int argc, const char *argv[])
       //printf("\n");
       //exit(0);
       //printf("%d\n%s", ast::MACRO_PRELUDE_END - ast::MACRO_PRELUDE, ast::MACRO_PRELUDE);
-      parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
-      if (debug_mode) {
-        SourceFile * prelude_body = new_source_file("prelude.zl");
-        parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
+      if (zls_mode) {
+        printf("ZLS MODE\n");
+        parse_stmts_raw(SourceStr(code, code->begin(), code->end()), env);
       } else {
-        load_macro_lib("./prelude.so", env);
+        parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
+        if (debug_mode) {
+          SourceFile * prelude_body = new_source_file("prelude.zl");
+          parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
+        } else {
+          load_macro_lib("./prelude.so", env);
+        }
+        parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
       }
-      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
       ast::CompileWriter out(true);
       out.open("a.out.c", "w");
       ast::compile_c(*env.top_level_symbols, out);

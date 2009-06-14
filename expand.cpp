@@ -1039,6 +1039,7 @@ void read_macro(const Syntax * p, Environ & env) {
 
 const Syntax * ID = new Syntax("id");
 const Syntax * ESTMT = new Syntax("estmt");
+const Syntax * NUM = new Syntax("n");
 
 // should't override following primatives
 //   "exp" "stmt" "estmt" and TOKENS
@@ -1082,7 +1083,12 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   //p->print();
   //printf("\n////\n");
   if (p->simple()) {
-    throw error(p, "partly_expand can't be simple: %s", ~p->to_string());
+    if (asc_isdigit(what.name[0])) {
+      return new Syntax(p->str(), NUM, p);
+    } else {
+      return partly_expand(new Syntax(p->str(), ID, p), pos, env, flags);
+    }
+    //throw error(p, "partly_expand can't be simple: %s", ~p->to_string());
     //fprintf(stderr, "partly_expand can't be simple: %s\n", ~p->to_string());
     //abort(); // FIXME: Error Message
     //return p;
@@ -1111,7 +1117,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     const Syntax * n = p;
     const MacroSymbol * m = env.symbols.find<MacroSymbol>(n->arg(0));
     if (m) { // id macro
-      Syntax * a = new Syntax(new Syntax("list"));
+      Syntax * a = new Syntax(new Syntax("."));
       a->set_flags(p);
       p = m->expand(p, a, env);
       return partly_expand(p, pos, env, flags);

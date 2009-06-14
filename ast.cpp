@@ -27,6 +27,19 @@ namespace ast {
   //
   //
 
+  static const Syntax * expand_id(const Syntax * p) {
+    if (p->simple()) {
+      return p;
+    } else {
+      if (!p->is_a("id")) throw error(p, "Expected identifier");
+      return p->arg(0);
+    }
+  }
+
+  //
+  //
+  //
+
   struct ASTList : public FakeAST {
     ASTList() : FakeAST("astlist") {}
     AST * parse_self(const Syntax * p, Environ & env) {
@@ -233,15 +246,18 @@ namespace ast {
     }
   };
 
+  
+
   struct Goto : public AST {
     Goto() : AST("goto") {}
+    const Syntax * label_s;
     SymbolName label;
     const LabelSymbol * sym;
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
-      assert(p->arg(0)->is_a("id"));
-      label = *p->arg(0)->arg(0);
+      label_s = expand_id(p->arg(0));
+      label = *label_s;
       sym = env.symbols.find<LabelSymbol>(SymbolKey(label, LABEL_NS));
       return this;
     }
@@ -254,7 +270,7 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       if (!sym)
         sym = lookup_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), 
-                                         parse_->arg(0)->arg(0)->str(), env.fun_symbols);
+                                         label_s->str(), env.fun_symbols);
     }
     void compile_prep(CompileEnviron & env) {}
     void compile_c(CompileWriter & o) {
@@ -325,15 +341,17 @@ namespace ast {
     parse_ = p;
     assert_num_args(1,2);
     orig = *p->arg(0);
+    printf("StringC: %s\n", ~p->to_string());
     type = env.types.inst(".ptr", env.types.ct_const(env.types.inst("char")));
     type = env.types.ct_const(type);
+    ct_value_ = &ct_nval;
     return this;
   }
   void StringC::compile_c(CompileWriter & f) {
-    f << orig;
+    f << '\"' << orig << '\"';
   }
   void StringC::compile(CompileWriter & f) {
-    f << "(s " << orig << ")";
+    f << "(s \"" << orig << "\")";
   }
   
   AST * CharC::parse_self(const Syntax * p, Environ & env) {
@@ -342,13 +360,14 @@ namespace ast {
     orig = *p->arg(0);
     type = env.types.inst("char");
     type = env.types.ct_const(type);
+    ct_value_ = &ct_nval;
     return this;
   }
   void CharC::compile_c(CompileWriter & f) {
-    f << orig;
+    f << '\'' << orig << '\'';
   }
   void CharC::compile(CompileWriter & f) {
-    f << "(c " << orig << ")"; // FIXME: Not right
+    f << "(c \"" << orig << "\")"; // FIXME: Not right
   }
 
   struct Id : public ASTLeaf {
@@ -544,7 +563,7 @@ namespace ast {
         if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
           constructor = parse_stmt(SYN(SYN("member"), 
                                        SYN(ID, SYN(name_p, sym)),
-                                       SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN("list")))),
+                                       SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
                                    env);
         }
       }
@@ -949,8 +968,7 @@ namespace ast {
       exp = parse_exp(p->arg(0), env);
       exp = exp->to_effective(env);
       //printf("::"); p->arg(1)->print(); printf("\n");
-      if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected identifier");
-      SymbolName id = *p->arg(1)->arg(0);
+      SymbolName id = *expand_id(p->arg(1));
       const StructUnionT * t = dynamic_cast<const StructUnionT *>(exp->type->unqualified);
       if (!t) throw error(p->arg(0), "Expected struct or union type");
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
@@ -1291,7 +1309,7 @@ namespace ast {
   };
 
   struct InitList : public AST {
-    InitList() : AST("list") {}
+    InitList() : AST("init") {}
     AST * part(unsigned i) {return parts[i];}
     Vector<AST *> parts;
     AST * parse_self(const Syntax * p, Environ & env) {
@@ -1300,6 +1318,10 @@ namespace ast {
       parts.reserve(num_args);
       add_ast_nodes(p->args_begin(), p->args_end(), parts, parse_exp, env);
       type = VOID_T;
+      ct_value_ = &ct_nval;
+      for (unsigned i = 0; i != parts.size(); ++i) {
+        if (!parts[i]->ct_value_) ct_value_ = NULL;
+      }
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -1311,16 +1333,16 @@ namespace ast {
         parts[i]->compile_prep(env);
     }
     void compile_c(CompileWriter & f) {
-      f << "{";
+      f << "{\n";
       for (unsigned i = 0; i != parts.size(); ++i)
-        f << parts[i] << ",";
-      f << "}";
+        f << indent << "  " << adj_indent(2) << parts[i] << ",\n";
+      f << indent << "}";
     }
     void compile(CompileWriter & f) {
-      f << "(init";
+      f << "(.\n";
       for (unsigned i = 0; i != parts.size(); ++i)
-        f << " " << parts[i];
-      f << ")";
+        f << indent << "  " << adj_indent(2) << parts[i] << "\n";
+      f << indent << ")";
     }
     virtual AST * resolve_to(const Type * type, Environ & env, TypeRelation::CastType rule) {
       // FIXME: resolve individual components of list
@@ -1331,6 +1353,20 @@ namespace ast {
   //
   //
   //
+
+  void parse_stmts_raw(SourceStr str, Environ & env) {
+    while (!str.empty()) {
+      parse_parse::Res r = parse_parse::parse(str);
+      AST * a = parse_top_level(r.parse, env);
+      if (dynamic_cast<ASTList *>(a)) {
+        parse_stmts(a->parse_, env);
+      } else {
+        FinalizeEnviron fenv;
+        a->finalize(fenv);
+      }
+      str.begin = r.end;
+    }
+  }
 
   void parse_stmts(const Syntax * parse, Environ & env) {
     for (unsigned i = 0; i < parse->num_args(); ++i) {
@@ -1745,7 +1781,7 @@ namespace ast {
     //printf("CAST UP: %s -> %s\n", ~from_base->to_string(), ~type->to_string());
     //const Type * to_base = from_base->parent;
     const Type * to_qualified = from_qualified
-      ? env.types.inst(".q", TypeParm(from_qualified->qualifiers), TypeParm(from_base->parent))
+      ? env.types.inst(".qualified", TypeParm(from_qualified->qualifiers), TypeParm(from_base->parent))
       : from_base->parent;
     assert(to_qualified); // FIXME: Maybe Error Message
     const Type * to_ptr = env.types.inst(".ptr", to_qualified);
@@ -1755,7 +1791,7 @@ namespace ast {
                                                     from_base->module->syms);//, NULL, NormalStrategy, gather, cmp);
     const Syntax * p = new Syntax(new Syntax("call"), 
                                   new Syntax(new Syntax("id"), new Syntax(cast->cast_macro)),
-                                  new Syntax(new Syntax("list"), new Syntax(exp)));
+                                  new Syntax(new Syntax("."), new Syntax(exp)));
     AST * res = parse_exp(p, env);
     res = res->resolve_to(to_ptr, env);
     return cast_up(res, type, env);
@@ -2156,13 +2192,31 @@ namespace ast {
     Environ env;
     AST * parse_self(const Syntax * p, Environ & env0) {
       parse_ = p;
-      assert(p->is_a(what()));
+      //assert(p->is_a(what()));
       const Syntax * name = p->arg(0);
       env = env0.new_scope();
       env.scope = OTHER;
       if (p->num_args() > 1) {
         body = new Body(which);
-        body->parse_self(p->arg(1), env);
+        if (p->what().name[0] == '.') {
+          for (unsigned i = 1; i != p->num_args(); ++i) {
+            Var * v = new Var;
+            const Syntax * q = p->arg(i);
+            assert(q);
+            v->parse_ = q;
+            v->name_p = q->part(1);
+            assert(v->name_p);
+            SymbolKey name = expand_binding(v->name_p, env);
+            v->sym = new_var_symbol(name, env.scope, v, env.where);
+            v->sym->type = parse_type(q->part(0), env);
+            env.add(name, v->sym);
+            v->deps_closed = true;
+            v->type = env.void_type();
+            body->members.push_back(v);
+          }
+        } else {
+          body->parse_self(p->arg(1), env);
+        }
       } else {
         body = NULL;
       }
@@ -2268,11 +2322,19 @@ namespace ast {
         Vector<TypeParm> q_parms;
         q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
         q_parms.push_back(TypeParm(t0));
-        const Type * t = env.types.find(".q")->inst(q_parms);
+        const Type * t = env.types.find(".qualified")->inst(q_parms);
         int val = 0;
-        const Syntax * arg1 = body = p->arg(1);
-        members.reserve(arg1->num_args());
-        for (unsigned i = 0; i != arg1->num_args(); ++i) {
+        const Syntax * arg1;
+        unsigned i;
+        if (p->what().name[0] == '.') {
+          arg1 = body = p;
+          i = 1;
+        } else {
+          arg1 = body = p->arg(1);
+          i = 0;
+        }
+        members.reserve(arg1->num_args() - i);
+        for (; i != arg1->num_args(); ++i) {
           const Syntax * arg = arg1->arg(i);
           if (arg->num_parts() > 1) {
             AST * e = parse_exp(arg->part(1), env);
@@ -2506,8 +2568,11 @@ namespace ast {
     String what = p->what().name;
     //printf("PRE PARSING %s\n", ~p->to_string());
     if (what == "struct")  (new Struct)->parse_self(p, env);
+    if (what == ".struct") (new Struct)->parse_self(p, env);
     if (what == "union")   (new Union)->parse_self(p, env);
+    if (what == ".union")  (new Union)->parse_self(p, env);
     if (what == "enum")    (new Enum)->parse_self(p, env);
+    if (what == ".enum")   (new Enum)->parse_self(p, env);
     if (what == "talias")  (new TypeAlias)->parse_self(p, env);
     if (what == "module")         pre_parse_module(p, env);
     if (what == "make_user_type") parse_make_user_type(p, env);
@@ -2578,9 +2643,12 @@ namespace ast {
   AST * try_decl_common(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "@")       return (new ASTList)->parse_self(p, env);
-    if (what == "struct")  return (new Struct)->parse_self(p, env);
+    if (what == "struct")  return (new Struct)->parse_self(p, env);    
+    if (what == ".struct")  return (new Struct)->parse_self(p, env);
     if (what == "union")   return (new Union)->parse_self(p, env);
+    if (what == ".union")   return (new Union)->parse_self(p, env);
     if (what == "enum")    return (new Enum)->parse_self(p, env);
+    if (what == ".enum")    return (new Enum)->parse_self(p, env);
     if (what == "talias")  return (new TypeAlias)->parse_self(p, env);
     if (what == "local_label") return (new LocalLabelDecl)->parse_self(p, env);
     if (what == "macro")   return parse_map(p, env);
@@ -2669,7 +2737,7 @@ namespace ast {
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
     if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
     if (what == "icast")   return parse_cast(p, env, TypeRelation::Implicit);
-    if (what == "list")    return (new InitList)->parse_self(p, env);
+    if (what == ".")       return (new InitList)->parse_self(p, env);
     if (what == "empty")   return (new Empty)->parse_self(p, env);
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
@@ -2944,7 +3012,7 @@ namespace ast {
       unsigned macro_funs_size = cw.for_macro_sep_c->macro_funs.size();
       cw << "(var _macro_funs_size (unsigned) " << macro_funs_size << ")\n";
       if (macro_funs_size  > 0 ) {
-        cw << "(var _macro_funs (.array (.ptr (.q (char) :const)) " << macro_funs_size << ") (init\n";
+        cw << "(var _macro_funs (.array (.ptr (char :const)) " << macro_funs_size << ") (.\n";
         for (Vector<Fun *>::const_iterator i = cw.for_macro_sep_c->macro_funs.begin(), 
                e = cw.for_macro_sep_c->macro_funs.end(); i != e; ++i)
         {
@@ -2956,12 +3024,12 @@ namespace ast {
       unsigned syntaxes_size = cw.for_macro_sep_c->syntaxes.size();
       if (syntaxes_size > 0) {
         cw << "(var _syntaxes_size (unsigned) " << syntaxes_size << ")\n";
-        cw << "(.struct _syntaxes ((.ptr (.q (char) :const)) str) ((.ptr (struct UnmarkedSyntax)) syn))\n";
-        cw << "(var _syntaxes (.array (struct _syntaxes) " << syntaxes_size << ") (init\n";
+        cw << "(.struct _syntaxes ((.ptr (char :const)) str) ((.ptr (struct UnmarkedSyntax)) syn))\n";
+        cw << "(var _syntaxes (.array (struct _syntaxes) " << syntaxes_size << ") (.\n";
         for (Vector<SyntaxC *>::const_iterator i = cw.for_macro_sep_c->syntaxes.begin(), 
                e = cw.for_macro_sep_c->syntaxes.end(); i != e; ++i)
         {
-          cw << "  (init (s \"";
+          cw << "  (. (s \"";
           escape(cw, (*i)->parse_->str());
           cw << "\") 0)\n";
         }

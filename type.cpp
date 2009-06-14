@@ -104,14 +104,15 @@ namespace ast {
     return true;
   }
 
-  void GenericPrintInst::to_string(const TypeInst & type0, StringBuf & buf) const {
+  void GenericPrintInst::to_string0(const TypeInst & type0, StringBuf & buf) const {
+    bool zls_mode = mode == ZLS_MODE;
     const TypeInst * type = &type0;
     for (;;) { // loop while something changed
       if (const ZeroT * t = dynamic_cast<const ZeroT *>(type)) {
         type = t->of;
       } else if (const TypeOf * t = dynamic_cast<const TypeOf *>(type)) {
         type = t->of;
-      } else if (const UserType * t = dynamic_cast<const UserType *>(type)) {
+      } else if (const UserType * t = zls_mode ? dynamic_cast<const UserType *>(type) : NULL) {
         type = t->type;
       } else {
         break;
@@ -119,14 +120,12 @@ namespace ast {
     }
     unsigned sz = type->num_parms();
     if (sz == 0) {
-      buf += "(";
       if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
         buf << t->what << " ";
       }
       type->type_symbol->uniq_name(buf);
-      buf += ")";
     } else if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
-      buf << "(.";
+      buf << ".";
       for (unsigned i = 0; i < t->parms.size();) {
         buf << " (";
         to_string(*t->parms[i].type, buf);
@@ -138,20 +137,15 @@ namespace ast {
       if (t->vararg) {
 	buf << " ...";
       }
-      buf << ")";
     } else if (const QualifiedType * t = dynamic_cast<const QualifiedType *>(type)) {
-      buf += "(.q ";
-      to_string(*t->subtype, buf);
+      to_string0(*t->subtype, buf);
       if (t->qualifiers & QualifiedType::CONST)    buf += " :const";
       if (t->qualifiers & QualifiedType::VOLATILE) buf += " :volatile";
       if (t->qualifiers & QualifiedType::RESTRICT) buf += " :restrict";
-      buf += ")";
-    } else if (const Reference * t = dynamic_cast<const Reference *>(type)) {
-      buf += "(.ptr ";
+    } else if (const Reference * t = zls_mode ? dynamic_cast<const Reference *>(type) : NULL) {
+      buf += ".ptr ";
       to_string(*t->subtype, buf);
-      buf += ")";
     } else {
-      buf += "(";
       buf += type->type_symbol->name;
       for (unsigned i = 0;;) {
         buf += " ";
@@ -159,12 +153,19 @@ namespace ast {
         ++i;
         if (i == sz) break;
       }
-      buf += ")";
     }
   }
 
+  void GenericPrintInst::to_string(const TypeInst & type, StringBuf & buf) const {
+    buf << "(";
+    to_string0(type, buf);
+    buf << ")";
+  }
+
   void GenericPrintInst::declaration(String var, const TypeInst & type, StringBuf & buf) const {
-    abort();
+    buf << "(var " << var << " ";
+    to_string(type, buf);
+    buf << ")";
   }
 
   void CPrintInst::to_string(const TypeInst & type, StringBuf & buf) const {
@@ -367,7 +368,7 @@ namespace ast {
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(qualifiers));
       q_parms.push_back(TypeParm(inst_type));
-      return types.find(".q")->inst(q_parms);
+      return types.find(".qualified")->inst(q_parms);
     } else {
       return inst_type;
     }
@@ -634,7 +635,7 @@ namespace ast {
     types.add_name(".array", new ArraySymbol);
     types.add_name(".fun", new FunctionSymbol);
     types.add_name(".", new TupleSymbol);
-    types.add_name(".q", new QualifiedTypeSymbol);
+    types.add_name(".qualified", new QualifiedTypeSymbol);
     types.add_name(".zero", new ZeroTypeSymbol);
     types.add_name(".typeof", new TypeOfSymbol);
     add_simple_type(types, "__builtin_va_list", new Void());
@@ -645,7 +646,7 @@ namespace ast {
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {
-    return inst(".q", TypeParm(QualifiedType::CT_CONST), TypeParm(t));
+    return inst(".qualified", TypeParm(QualifiedType::CT_CONST), TypeParm(t));
   }
 
   void StructT::finalize_hook() {

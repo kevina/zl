@@ -170,9 +170,9 @@ MID : "macro identifier" =
 NUM : "number" = 
     {[\d]+('.'[\d]+)?} SPACING;
 
-STRING = '"' ('\\'_/[^"])+ '"' SPACING;
+STRING = '"' {('\\'_/[^"])+} '"' SPACING;
 
-CHAR   = '\'' ('\\'_/[^'])+ '\'' SPACING;
+CHAR   = '\'' {('\\'_/[^'])+} '\'' SPACING;
 
 #SYM : "symbol" = 
 #    {[\y+^,;`]+/','} SPACING;

@@ -23,10 +23,12 @@ function compile_test() {
   fi
   if [ $? -ne 0 ]; then return 1; fi
   zls -S test/$base.out.c
-  cp a.out.s test/$base.out.c.s
+  mv $base.out.s test/$base.out.c.s
   zls -S test/$base.out.zls
-  cp a.out.s test/$base.out.zls.s
+  mv $base.out.s test/$base.out.zls.s
   diff -I "\.file" -u test/$base.out.c.s test/$base.out.zls.s
+  if [ $? -ne 0 ]; then return 1; fi
+  ./zl -s test/$base.out.zls > test/$base.log
 }
 
 if [ "$#" -gt 0 ]; then

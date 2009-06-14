@@ -30,7 +30,7 @@ namespace ast {
     CT_Value_Base() {}
     // nval() return true if the precise value is not known at compile time
     // but can be determined once the executable is compiled, primary used
-    // when taking the address of a global variable
+    // when taking the address of a global variable.  Also used for int lists.
     virtual bool nval() const {return false;}
     // compile(...) will attempt to compile the compile time value, if
     // nval() is true than compile the exp passed in since it doesn't

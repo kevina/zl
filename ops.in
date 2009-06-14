@@ -26,5 +26,5 @@
          (bin *= (sym *=)) (bin /= (sym /=)) (bin %= (sym %=))
          (bin += (sym +=)) (bin -= (sym -=))
          (bin &= (sym &=)) (bin ^= (sym ^=)) (bin |= (sym |=)))
-  (list (bin list (sym ,)))
+  (list (bin . (sym ,)))
 )

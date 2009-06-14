@@ -279,8 +279,9 @@ static const char * s_id(SourceStr str, String & res) {
       continue;
     }
     if (*str == '\\') {
+      buf += *str;
       ++str;
-      if (!str.empty())
+      if (str.empty())
         throw error(str, "Unexpected end of identifier");
     }
     buf += *str;
@@ -294,13 +295,25 @@ static const char * s_id(SourceStr str, String & res) {
 
 namespace parse_parse {
 
+  Res parse_grp_or_id(SourceStr str) 
+  {
+    if (*str == '(') {
+      return parse(str);
+    } else {
+      Syntax * r = new Syntax(str);
+      str = s_id(str, r->what_);
+      r->str_.end = str;
+      return Res(str, r);
+    }
+  }
+
   Res parse(SourceStr str)
   {
-    Syntax * res = new Syntax();
     String name;
     const char * start = str.begin;
     str = spacing(str);
     if (*str != '(') throw error(str, "Expected '('");
+    Syntax * res = new Syntax(str);
     ++str;
     str = spacing(str);
     /*const char * name_start = str.begin;
@@ -317,12 +330,11 @@ namespace parse_parse {
         res->add_part(r.parse);
       } else if (*str == ':') {
         ++str;
-        Res r = parse(str);
+        Res r = parse_grp_or_id(str);
         str = r.end;
         res->add_flag(r.parse);
       } else {
-        Syntax * r = new Syntax();
-        r->str_.begin = str;
+        Syntax * r = new Syntax(str);
         str = s_id(str, r->what_);
         r->str_.end = str;
         res->add_part(r);
@@ -331,7 +343,7 @@ namespace parse_parse {
     }
     if (str.empty() || *str != ')') throw error(str.source, start, "Unterminated '('");
     ++str;
-    res->str_.assign(start, str);
+    res->str_.end = str;
     str = spacing(str);
     return Res(str, res);
   }

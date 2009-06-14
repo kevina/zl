@@ -962,7 +962,7 @@ Error * ParseErrors::to_error(const SourceInfo * source, const SourceFile * gram
 }
 
 void ParseErrors::print(const SourceInfo * file, const SourceFile * grammer)
-{    
+{
   if (empty()) {
     printf("Parse Failed (no specific error)\n");
   } else {
