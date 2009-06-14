@@ -606,7 +606,7 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
                                               const Syntax * parms,
                                               Environ & env)
 {
-  Syntax * ps = new Syntax(new Syntax(".tuple"));
+  Syntax * ps = new Syntax(new Syntax("."));
   //printf("MAKE FUNCTION TYPE: %s %s\n", ~ret->to_string(), ~parms->to_string());
   Parts::const_iterator i = parms->args_begin();
   Parts::const_iterator end = parms->args_end();
@@ -668,7 +668,7 @@ const Syntax * DeclWorking::try_reference(Parts::const_iterator & i,
 {
   if (i != end && (*i)->is_a("sym", "&")) {
     ++i;
-    return new Syntax(new Syntax(".reference"), t);
+    return new Syntax(new Syntax(".ref"), t);
   } else {
     return t;
   }

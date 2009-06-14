@@ -271,7 +271,7 @@ static const char * s_id(SourceStr str, String & res) {
   bool in_quote = false;
   StringBuf buf;
   while (!str.empty()) {
-    if ((asc_isspace(*str) || *str == ')' || *str == '#') && !in_quote) break;
+    if ((asc_isspace(*str) || *str == '(' || *str == ')' || *str == '#') && !in_quote) break;
     if (*str == '"') {
       have_quotes = true;
       in_quote = !in_quote;

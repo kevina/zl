@@ -263,7 +263,7 @@ namespace ast {
     }
     void compile(CompileWriter & o) {
       o << indent 
-        << "(goto (id " << sym << "))\n";
+        << "(goto " << sym << ")\n";
     }
   };
   
@@ -333,7 +333,7 @@ namespace ast {
     f << orig;
   }
   void StringC::compile(CompileWriter & f) {
-    f << "(string " << orig << ")";
+    f << "(s " << orig << ")";
   }
   
   AST * CharC::parse_self(const Syntax * p, Environ & env) {
@@ -348,7 +348,7 @@ namespace ast {
     f << orig;
   }
   void CharC::compile(CompileWriter & f) {
-    f << "(char " << orig << ")"; // FIXME: Not right
+    f << "(c " << orig << ")"; // FIXME: Not right
   }
 
   struct Id : public ASTLeaf {
@@ -372,7 +372,7 @@ namespace ast {
       f << sym;
     }
     void compile(CompileWriter & f) {
-      f << "(id " << sym << ")";
+      f << sym;
     }
   };
 
@@ -391,7 +391,7 @@ namespace ast {
       if (p->num_args() == 3) {
         if_false = parse_stmt(p->arg(2), env);
       } else {
-        if_false = new NoOp;
+        if_false = NULL;
       }
       type = env.void_type();
       exp = exp->resolve_to(env.bool_type(), env);
@@ -400,24 +400,29 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
       if_true->finalize(env);
-      if_false->finalize(env);
+      if (if_false)
+        if_false->finalize(env);
     }
     void compile_prep(CompileEnviron & env) {
       exp->compile_prep(env);
       if_true->compile_prep(env);
-      if_false->compile_prep(env);
+      if (if_false)
+        if_false->compile_prep(env);
     }
     void compile_c(CompileWriter & f) {
       f << indent << "if (" << exp << ")\n";
       f << adj_indent(2) << if_true;
-      f << indent << "else\n";
-      f << adj_indent(2) << if_false;
+      if (if_false) {
+        f << indent << "else\n";
+        f << adj_indent(2) << if_false;
+      }
     }
     void compile(CompileWriter & f) {
       f << indent << "(if " << exp << "\n";
       f << adj_indent(2) << if_true;
       //f << indent << "else\n";
-      f << adj_indent(2) << if_false;
+      if (if_false)
+        f << adj_indent(2) << if_false;
       f << indent << ")\n";
     }
   };
@@ -832,7 +837,7 @@ namespace ast {
         throw error(exp->parse_, "Can not be used as lvalue");
       }
       // FIXME: add check for register qualifier
-      const TypeSymbol * t = env.types.find(".reference");
+      const TypeSymbol * t = env.types.find(".ref");
       Vector<TypeParm> p;
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
@@ -980,7 +985,7 @@ namespace ast {
       f << exp << "." << sym->uniq_name();
     }
     void compile(CompileWriter & f) {
-      f << "(member " << exp << " (id " << sym->uniq_name() << "))";
+      f << "(member " << exp << " " << sym->uniq_name() << ")";
     }
   };
 
@@ -1072,6 +1077,9 @@ namespace ast {
     BinOp * binop;
     AST * parse_self(const Syntax * p, Environ & env) {abort();}
     void resolve(Environ & env) {abort();}
+    void compile(CompileWriter & f) {
+      f << "(c-assign " << binop->what() << " " << lhs << " " << rhs << ")";
+    }
   };
 
   struct SimpleBinOp : public BinOp {
@@ -1309,7 +1317,7 @@ namespace ast {
       f << "}";
     }
     void compile(CompileWriter & f) {
-      f << "(ilist";
+      f << "(init";
       for (unsigned i = 0; i != parts.size(); ++i)
         f << " " << parts[i];
       f << ")";
@@ -2085,7 +2093,7 @@ namespace ast {
       f << ")";
     }
     void compile(CompileWriter & f) {
-      f << "(call " << lhs << " (list";
+      f << "(call " << lhs << " (.";
       int i = 0;
       while (i != parms.size()) {
         f << " ";  
@@ -2310,8 +2318,7 @@ namespace ast {
         f << "\n";
         for (int i = 0; i != members.size(); ++i)
           f << adj_indent(2) << indent 
-            << " (" << members[i].sym 
-            << " (literal " << members[i].ct_value.val << " (int)))\n";
+            << " (" << members[i].sym << " " << members[i].ct_value.val << ")\n";
       }
       f << ")\n";
     }
@@ -2326,7 +2333,7 @@ namespace ast {
       f << sizeof_type->size();
     }
     void compile(CompileWriter & f) {
-      f << "(literal " << sizeof_type->size() << "(unsigned))"; // FIXME type not right
+      f << "(n " << sizeof_type->size() << " (size_t))";
     }
   };
   
@@ -2437,9 +2444,9 @@ namespace ast {
       if (f.in_fun && f.in_fun->env_ss) 
         f.printf("(id %s$env_ss)", ~f.in_fun->sym->uniq_name());
       else if (f.for_compile_time())
-        f.printf("(cast (.ptr (struct EnvironSnapshot)) (literal %p (unsigned-long)))", env_ss); 
+        f.printf("(cast (.ptr (struct EnvironSnapshot)) (n %p (unsigned-long)))", env_ss); 
       else 
-        f.printf("(cast (.ptr (struct EnvironSnapshot)) (literal 0 (unsigned-long)))");
+        f.printf("(cast (.ptr (struct EnvironSnapshot)) (n 0 (unsigned-long)))");
     }
   };
 
@@ -2626,10 +2633,10 @@ namespace ast {
     String what = p->what().name;
     if (what == "@")       return (new ASTList)->parse_self(p, env);
     if (what == "id")      return (new Id)->parse_self(p, env);
-    if (what == "literal") return (new Literal)->parse_self(p, env);
-    if (what == "float")   return (new FloatC)->parse_self(p, env);
-    if (what == "char")    return (new CharC)->parse_self(p, env);
-    if (what == "string")  return (new StringC)->parse_self(p, env);
+    if (what == "n")       return (new Literal)->parse_self(p, env);
+    if (what == "f")       return (new FloatC)->parse_self(p, env);
+    if (what == "c")       return (new CharC)->parse_self(p, env);
+    if (what == "s")       return (new StringC)->parse_self(p, env);
     if (what == "eif")     return (new EIf)->parse_self(p, env);
     if (what == "assign")  return (new Assign)->parse_self(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
@@ -2652,7 +2659,7 @@ namespace ast {
     if (what == "le")      return (new Le)->parse_self(p, env);
     if (what == "ge")      return (new Ge)->parse_self(p, env);
     if (what == "not")     return (new Not)->parse_self(p, env);
-    if (what == "complmnt")return (new Compliment)->parse_self(p, env);
+    if (what == "bnot")    return (new Compliment)->parse_self(p, env);
     if (what == "addrof")  return parse_addrof(p, env);
     if (what == "deref")   return parse_deref(p, env);
     if (what == "member")  return parse_member_access(p, env);
@@ -2667,10 +2674,8 @@ namespace ast {
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
     if (what == "environ_snapshot") return (new EnvironSnapshot)->parse_self(p, env);
-    if (strcmp(what + what.size()-3, "_eq") == 0) {
-      // This is a bit of a hack to handle op_eq cases (ie += -=, etc)
-      StringBuf buf(what, what.size()-3);
-      AST * ast = try_exp(new Syntax(p->str(), new Syntax(buf.freeze()), p->arg(0), p->arg(1)), env);
+    if (what == "c-assign") {
+      AST * ast = try_exp(new Syntax(p->str(), p->arg(0), p->arg(1), p->arg(2)), env);
       if (!ast) return 0;
       BinOp * binop = dynamic_cast<BinOp *>(ast);
       StringBuf op;
@@ -2912,7 +2917,7 @@ namespace ast {
     Vector<AST *> init, cleanup;
     const TopLevelVarSymbol * tl = NULL;
 
-    cw << "# type declsn\n";
+    cw << "# type decls\n";
 
     for (i = syms.begin(); i != e; ++i) {
       if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
@@ -2937,30 +2942,28 @@ namespace ast {
       }
       
       unsigned macro_funs_size = cw.for_macro_sep_c->macro_funs.size();
-      cw << "(var _macro_funs_size (unsigned) (literal " << macro_funs_size << " (unsigned)))\n";
+      cw << "(var _macro_funs_size (unsigned) " << macro_funs_size << ")\n";
       if (macro_funs_size  > 0 ) {
-        cw << "(var _macro_funs (.array (.ptr (.q (char) :const)) (literal "
-           << macro_funs_size << "(unsigned))) (ilist\n";
+        cw << "(var _macro_funs (.array (.ptr (.q (char) :const)) " << macro_funs_size << ") (init\n";
         for (Vector<Fun *>::const_iterator i = cw.for_macro_sep_c->macro_funs.begin(), 
                e = cw.for_macro_sep_c->macro_funs.end(); i != e; ++i)
         {
-          cw << "  (string \"" << ~(*i)->sym->uniq_name() <<  "\")\n";
+          cw << "  (s \"" << ~(*i)->sym->uniq_name() <<  "\")\n";
         }
         cw << "))\n";
       }
 
       unsigned syntaxes_size = cw.for_macro_sep_c->syntaxes.size();
       if (syntaxes_size > 0) {
-        cw << "(var _syntaxes_size (unsigned) (literal " << syntaxes_size << " (unsigned)))\n";
+        cw << "(var _syntaxes_size (unsigned) " << syntaxes_size << ")\n";
         cw << "(.struct _syntaxes ((.ptr (.q (char) :const)) str) ((.ptr (struct UnmarkedSyntax)) syn))\n";
-        cw << "(var _syntaxes (.array (struct _syntaxes) "
-           << "(literal " << syntaxes_size << " (unsigned))) (ilist\n";
+        cw << "(var _syntaxes (.array (struct _syntaxes) " << syntaxes_size << ") (init\n";
         for (Vector<SyntaxC *>::const_iterator i = cw.for_macro_sep_c->syntaxes.begin(), 
                e = cw.for_macro_sep_c->syntaxes.end(); i != e; ++i)
         {
-          cw << "  (ilist (string \"";
+          cw << "  (init (s \"";
           escape(cw, (*i)->parse_->str());
-          cw << "\") (literal 0 (int)))\n";
+          cw << "\") 0)\n";
         }
         cw << "))\n\n";
       }

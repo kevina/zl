@@ -663,42 +663,42 @@ namespace ast {
     if (val <= INT_MAX)
       o.printf("%u", val);
     else
-      o.printf("(literal %u (unsigned))", val);
+      o.printf("(n %u (unsigned))", val);
   }
 
   template <>
   void CT_Value<long>::compile(CompileWriter & o, AST *) const {
-    o.printf("(literal %ld (long))", val);
+    o.printf("(n %ld (long))", val);
   }
 
   template <>
   void CT_Value<unsigned long>::compile(CompileWriter & o, AST *) const {
-    o.printf("(literal %lu (unsigned-long))", val);
+    o.printf("(n %lu (unsigned-long))", val);
   }
 
   template <>
   void CT_Value<long long>::compile(CompileWriter & o, AST *) const {
-    o.printf("(literal %lld (long-long))", val);
+    o.printf("(n %lld (long-long))", val);
   }
 
   template <>
   void CT_Value<unsigned long long>::compile(CompileWriter & o, AST *) const {
-    o.printf("(literal %llu (unsigned-long-long))", val);
+    o.printf("(n %llu (unsigned-long-long))", val);
   }
 
   template <>
   void CT_Value<float>::compile(CompileWriter & o, AST *) const {
-    o.printf("(float %a (float))", val);
+    o.printf("(f %a (float))", val);
   }
 
   template <>
   void CT_Value<double>::compile(CompileWriter & o, AST *) const {
-    o.printf("(float %a (double))", val);
+    o.printf("(f %a (double))", val);
   }
 
   template <>
   void CT_Value<long double>::compile(CompileWriter & o, AST *) const {
-    o.printf("(float %La (long-double))", val);
+    o.printf("(f %La (long-double))", val);
   }
 
   //

@@ -67,10 +67,10 @@
  (call f (list (mid x) (mid y))))
 
 (smacro or (x y)
-    (eif (mid x) (literal 1) (mid y)))
+    (eif (mid x) (n 1) (mid y)))
 
 (smacro and (x y)
-    (eif (mid x) (mid y) (literal 0)))
+    (eif (mid x) (mid y) (n 0)))
 
 (smacro ? (test (pattern (":" if_true if_false)))
     (eif (mid test) (mid if_true) (mid if_false)))
@@ -82,10 +82,21 @@
     (deref (plus (mid x) (mid y))))
 
 (smacro preinc (x)
-    (plus_eq (mid x) (literal 1)))
+    (c-assign plus (mid x) (n 1)))
 
-(smacro predec (x)
-    (minus_eq (mid x) (literal 1)))
+(smacro predec (x) 
+    (c-assign minus (mid x) (n 1)))
+
+(smacro += (lhs rhs) (c-assign plus (mid lhs) (mid rhs)))
+(smacro -= (lhs rhs) (c-assign minus (mid lhs) (mid rhs)))
+(smacro *= (lhs rhs) (c-assign times (mid lhs) (mid rhs)))
+(smacro /= (lhs rhs) (c-assign div (mid lhs) (mid rhs)))
+(smacro %= (lhs rhs) (c-assign mod (mid lhs) (mid rhs)))
+(smacro &= (lhs rhs) (c-assign band (mid lhs) (mid rhs)))
+(smacro |= (lhs rhs) (c-assign bor (mid lhs) (mid rhs)))
+(smacro ^= (lhs rhs) (c-assign xor (mid lhs) (mid rhs)))
+(smacro <<= (lhs rhs) (c-assign lshift (mid lhs) (mid rhs)))
+(smacro >>= (lhs rhs) (c-assign rshift (mid lhs) (mid rhs)))
 
 #(smacro postinc (x)
 #    (block (stmt (id int) (id `x) (sym =) (id x))

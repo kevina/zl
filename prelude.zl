@@ -285,7 +285,7 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
   if (!is_static)
     macro_parms->append(replace(syntax (:this this = this), m, mark));
 
-  module_b->append(replace(raw_syntax (fun (w/inner (mid n) internal) (.tuple (mid $1)) (mid ret) (mid body)),
+  module_b->append(replace(raw_syntax (fun (w/inner (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
                            match_local(m, new_parms, 0), mark));
   module_b->append(replace(syntax {macro nv ($1) {n`internal($2);}},
                            match_local(m, macro_parms, call_parms, 0), mark));
@@ -296,7 +296,7 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
                        match_local(m, macro_parms, call_parms, 0),
                        mark));
     m = match(m, syntax pfun, 
-              replace(raw_syntax (.ptr (.fun (.tuple (mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
+              replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
     if (!(parent_vtable && parent_vtable->module->have_symbol(m->var(syntax n)))) {
       vtable_b->append(replace(raw_syntax (var (mid n) (mid pfun)), m, mark));
     }

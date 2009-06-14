@@ -133,7 +133,7 @@ namespace ast {
   };
 
   struct Literal : public ASTLeaf {
-    Literal() : ASTLeaf("literal") {}
+    Literal() : ASTLeaf("n") {}
     //AST * part(unsigned i);
     AST * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
@@ -141,7 +141,7 @@ namespace ast {
   };
 
   struct FloatC : public ASTLeaf {
-    FloatC() : ASTLeaf("float") {}
+    FloatC() : ASTLeaf("f") {}
     //AST * part(unsigned i);
     AST * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
@@ -149,7 +149,7 @@ namespace ast {
   };
 
   struct StringC : public ASTLeaf {
-    StringC() : ASTLeaf("string") {}
+    StringC() : ASTLeaf("s") {}
     //AST * part(unsigned i);
     String orig;
     String value; // unused at the moment
@@ -159,7 +159,7 @@ namespace ast {
   };
 
   struct CharC : public ASTLeaf {
-    CharC() : ASTLeaf("char") {}
+    CharC() : ASTLeaf("c") {}
     //AST * part(unsigned i);
     String orig;
     char value; // unused at the moment

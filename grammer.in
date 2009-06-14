@@ -15,7 +15,7 @@ STMT : "statement" =
     / <switch> "switch" "(" {EXP} ")" {STMT}
     / <while> "while" "(" {EXP} ")" {STMT}
     / <do>    "do" {STMT} "while" "(" {EXP} ")" ";"
-    / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<literal 1>} ";" {<eblock> {EXP}/<noop>} ")" {STMT}
+    / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<n 1>} ";" {<eblock> {EXP}/<noop>} ")" {STMT}
     / <break>    "break" ";"
     / <continue> "continue" ";"
     / <return>   "return" {EXP} ";"
@@ -84,14 +84,14 @@ TOKEN : "token" =  <<mid PARM>> {MID} !("`" / "::") /
 #TOKEN : "token" = TOKEN_ / PARAN;
 
 # FIXME: Add support for hex-floats
-CONST = <float> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SPACING
-        / <literal> {'0'[xX][0-9a-fA-F]+} {INT_SUFFIX} SPACING
-        / <literal> {[1-9][0-9]*} {INT_SUFFIX} SPACING
-        / <literal> {'0'[0-7]*} {INT_SUFFIX} SPACING
-        / <string> {STRING} (<char>)
-        / <string> 'L'{STRING} (<wchar_t>)
-        / <char> {CHAR} (<char>)
-        / <char> 'L'{CHAR} (<wchar_t>);
+CONST = <f> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SPACING
+        / <n> {'0'[xX][0-9a-fA-F]+} {INT_SUFFIX} SPACING
+        / <n> {[1-9][0-9]*} {INT_SUFFIX} SPACING
+        / <n> {'0'[0-7]*} {INT_SUFFIX} SPACING
+        / <s> {STRING} (<char>)
+        / <s> 'L'{STRING} (<wchar_t>)
+        / <c> {CHAR} (<char>)
+        / <c> 'L'{CHAR} (<wchar_t>);
 
 INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
            / <"unsigned long"> ([uU][lL]/[lL][uU])
@@ -100,7 +100,7 @@ INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
            / <long> [lL] 
            / <int>;
 
-FLOATING_SUFFIX = <float> [fF] / <"long double"> [lL] / <double>;
+FLOATING_SUFFIX = <f> [fF] / <"long double"> [lL] / <double>;
 
 STRUCT_UNION = <%> {"struct"/"union"/"class"} 
                    {ID/}
@@ -208,7 +208,7 @@ COMMENT =
 
 PARAN_EXP = {EBLOCK} / "(" {EXP} ")";
 
-ARRAY_SIZE = {EXP} EOF / <literal 0>;
+ARRAY_SIZE = {EXP} EOF / <n 0>;
 
 TOKENS = <(...)> {TOKEN}*;
 

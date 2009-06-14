@@ -819,7 +819,7 @@ const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs)
     const Syntax * res = replace_mid(p, p0, r, rs);
     //printf("REPLACE res %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
     return res;
-  } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
+  } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f") || p->is_a("sym")) {
     ChangeSrc<ExpandSourceInfo> ci(r);
     return new Syntax(ci, *p);
   } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("parm")) {
@@ -961,7 +961,7 @@ const Syntax * replace_context(const Syntax * p, const Marks * context) {
     Syntax * res = new Syntax(p, context);
     //printf("REPLACE CONTEXT RES: %s\n", ~res->to_string());
     return res;
-  } else if (p->is_a("string") || p->is_a("char") || p->is_a("literal") || p->is_a("float") || p->is_a("sym")) {
+  } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f") || p->is_a("sym")) {
     return p;
   } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("parm")) {
     // raw tokens

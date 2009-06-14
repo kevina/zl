@@ -126,7 +126,7 @@ namespace ast {
       type->type_symbol->uniq_name(buf);
       buf += ")";
     } else if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
-      buf << "(.t";
+      buf << "(.";
       for (unsigned i = 0; i < t->parms.size();) {
         buf << " (";
         to_string(*t->parms[i].type, buf);
@@ -307,7 +307,7 @@ namespace ast {
         assert(t);
       }
     }
-    if (t->required_parms() == 0 && sz != 0 && name_str != ".tuple" /* HACK! */)
+    if (t->required_parms() == 0 && sz != 0 && name_str != "." /* HACK! */)
       throw error(p, "Type \"%s\" is not a paramatized type.", ~name_str);
     if (t->required_parms() > sz) 
       throw error(p, "Not enough paramaters for \"%s\" type, %d required, but got %d",
@@ -317,7 +317,7 @@ namespace ast {
     for (int i = 0; i != sz; ++i) {
       const Syntax * p0 = p->arg(i);
       SymbolKey n;
-      if (name_str == ".tuple" && !p0->part(0)->simple()) { // HACK!
+      if (name_str == "." && !p0->part(0)->simple()) { // HACK!
 	if (p0->num_parts() > 1)
 	  n = expand_binding(p0->part(1), env);
 	p0 = p0->part(0);
@@ -629,15 +629,14 @@ namespace ast {
     types.add(".ptrdiff", types.find("long"));
 
     types.add_name(".ptr", new PointerSymbol);
-    types.add_name(".reference", new ReferenceSymbol);
+    types.add_name(".ref", new ReferenceSymbol);
     //types.add_name("<const>", new ConstSymbol);
     types.add_name(".array", new ArraySymbol);
     types.add_name(".fun", new FunctionSymbol);
-    types.add_name(".tuple", new TupleSymbol);
+    types.add_name(".", new TupleSymbol);
     types.add_name(".q", new QualifiedTypeSymbol);
     types.add_name(".zero", new ZeroTypeSymbol);
     types.add_name(".typeof", new TypeOfSymbol);
-
     add_simple_type(types, "__builtin_va_list", new Void());
     //add_simple_type(types, "Match", new Void());
     //add_simple_type(types, "Syntax", new Void());
