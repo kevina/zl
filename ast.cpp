@@ -2,7 +2,6 @@
 #include <stdio.h>
 
 #include "ast.hpp"
-
 #include "parse.hpp"
 #include "parse_op.hpp"
 #include "parse_decl.hpp"
@@ -40,23 +39,54 @@ namespace ast {
   //
   //
 
-  struct ASTList : public FakeAST {
-    ASTList() : FakeAST("astlist") {}
-    AST * parse_self(const Syntax * p, Environ & env) {
-      parse_ = p;
-      return this;
+  template <Position pos, Pass pass = AllPasses>
+  struct Parse;
+
+  template <Position pos>
+  struct Parse<pos,AllPasses> {
+    Environ & env;
+    Parse(Environ & e) : env(e) {}
+    const Syntax * partly_expand(const Syntax * p) const {
+      return ::partly_expand(p, pos, env);
+    }
+    AST * finish_parse(const Syntax * p) const;
+    AST * operator() (const Syntax * p) const {
+      p = partly_expand(p);
+      return finish_parse(p);
     }
   };
 
-  template <typename C>
+  template <Position pos>
+  struct Parse<pos,FirstPass> {
+    Environ & env;
+    Collect & collect;
+    Parse(Environ & e, Collect & c) : env(e), collect(c) {}
+    const Syntax * partly_expand(const Syntax * p) const {
+      return ::partly_expand(p, pos, env);
+    }
+    AST * finish_parse(const Syntax * p) const;
+    AST * operator() (const Syntax * p) const {
+      p = partly_expand(p);
+      return finish_parse(p);
+    }
+  };
+
+  // needed here otherwise gcc gets confuses
+  template <>
+  AST * Parse<TopLevel>::finish_parse(const Syntax * p) const;
+  template <>
+  AST * Parse<TopLevel,FirstPass>::finish_parse(const Syntax * p) const;
+
+  template <typename C, typename P>
   void add_ast_nodes(Parts::const_iterator i, Parts::const_iterator end, 
-                     C & container, AST * (*f)(const Syntax *, Environ &), Environ & env) {
+                     C & container, const P & prs) {
     for (; i != end; ++i) {
-      AST * n = f(*i, env);
-      if (ASTList * list = dynamic_cast<ASTList *>(n)) {
-        add_ast_nodes(list->parse_->args_begin(), list->parse_->args_end(), container, f, env);
+      const Syntax * p = prs.partly_expand(*i);
+      if (p->is_a("@")) {
+        add_ast_nodes(p->args_begin(), p->args_end(), container, prs);
       } else {
-        container.push_back(n);
+        AST * ast = prs.finish_parse(p);
+        container.push_back(ast);
       }
     }
   }
@@ -102,11 +132,9 @@ namespace ast {
   //
   //
 
-  void Symbol::add_to_env(const SymbolKey & k, Environ & env, Pass pass) const {
-    if (pass == AllPasses || pass == FirstPass) {
-      env.symbols.add(k, this);
-      make_unique(env.symbols.front);
-    }
+  void Symbol::add_to_env(const SymbolKey & k, Environ & env) const {
+    env.symbols.add(k, this);
+    make_unique(env.symbols.front);
   }
 
   void TopLevelSymbol::add_to_local_env(const SymbolKey & k, Environ & env) const {
@@ -137,14 +165,12 @@ namespace ast {
     }
   }
   
-  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, Pass pass) const {
-    if (pass == AllPasses || pass == FirstPass)
-      add_to_local_env(k, env);
-    if (pass == AllPasses || pass == SecondPass)
-      add_to_top_level_env(k, env);
+  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
+    add_to_local_env(k, env);
+    add_to_top_level_env(k, env);
   }
 
-  void NormalLabelSymbol::add_to_env(const SymbolKey & k, Environ & env, Pass) const {
+  void NormalLabelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
     env.fun_labels.add(k, this);
     make_unique(*env.fun_labels.front);
   }
@@ -153,14 +179,16 @@ namespace ast {
   //
   //
 
-  struct NoOp : public ASTLeaf {
-    NoOp() : ASTLeaf("noop") {}
+  struct NoOp : public Stmt {
+    NoOp() : Stmt("noop") {}
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
       type = env.void_type();
       return this;
     }
+    void compile_prep(CompileEnviron &) {}
+    void finalize(FinalizeEnviron &) {}
     void compile_c(CompileWriter & f) {
       f << indent << ";\n";
     }
@@ -187,8 +215,8 @@ namespace ast {
     AST * parse_self(const Syntax*, Environ&) {abort();}
   };
 
-  struct Label : public ASTLeaf {
-    Label() : ASTLeaf("label") {}
+  struct Label : public Stmt {
+    Label() : Stmt("label") {}
     const LabelSymbol * label;
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
@@ -202,6 +230,8 @@ namespace ast {
       type = VOID_T;
       return this;
     }
+    void compile_prep(CompileEnviron &) {}
+    void finalize(FinalizeEnviron &) {}
     void compile_c(CompileWriter & o) {
       // note: noop is needed because gcc won't let us put a label
       // before a declaration
@@ -212,8 +242,8 @@ namespace ast {
     }
   };
 
-  struct Case : public AST {
-    Case() : AST("case") {}
+  struct Case : public Stmt {
+    Case() : Stmt("case") {}
     AST * exp; 
     AST * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
@@ -248,8 +278,8 @@ namespace ast {
 
   
 
-  struct Goto : public AST {
-    Goto() : AST("goto") {}
+  struct Goto : public Stmt {
+    Goto() : Stmt("goto") {}
     const Syntax * label_s;
     SymbolName label;
     const LabelSymbol * sym;
@@ -395,8 +425,8 @@ namespace ast {
     }
   };
 
-  struct If : public AST {
-    If() : AST("if") {}
+  struct If : public Stmt {
+    If() : Stmt("if") {}
     //AST * part(unsigned i) 
     //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
     AST * exp;
@@ -479,8 +509,8 @@ namespace ast {
     return this;
   }
 
-  struct Switch : public AST {
-    Switch() : AST(".switch") {}
+  struct Switch : public Stmt {
+    Switch() : Stmt(".switch") {}
     AST * exp;
     AST * body;
     //AST * part(unsigned i) {return i == 0 ? exp : i == 1 ? body : 0;}
@@ -640,9 +670,9 @@ namespace ast {
     }
   };
 
-  struct EStmt : public AST {
-    EStmt() : AST("estmt") {}
-    EStmt(AST * e) : AST("estmt"), exp(e) {type = exp->type;}
+  struct EStmt : public Stmt {
+    EStmt() : Stmt("estmt") {}
+    EStmt(AST * e) : Stmt("estmt"), exp(e) {type = exp->type;}
     //AST * part(unsigned i) {return exp;}
     AST * exp;
     AST * parse_self(const Syntax * p, Environ & env) {
@@ -676,7 +706,7 @@ namespace ast {
       parse_ = p;
       Environ env = env0.new_scope();
       if (p->num_args() > 0) {
-        add_ast_nodes(p->args_begin(), p->args_end(), stmts, parse_stmt_decl, env);
+        add_ast_nodes(p->args_begin(), p->args_end(), stmts, Parse<StmtDeclPos>(env));
       } else {
         stmts.push_back(new NoOp);
       }
@@ -1316,7 +1346,7 @@ namespace ast {
       parse_ = p;
       unsigned num_args = p->num_args();
       parts.reserve(num_args);
-      add_ast_nodes(p->args_begin(), p->args_end(), parts, parse_exp, env);
+      add_ast_nodes(p->args_begin(), p->args_end(), parts, Parse<ExpPos>(env));
       type = VOID_T;
       ct_value_ = &ct_nval;
       for (unsigned i = 0; i != parts.size(); ++i) {
@@ -1354,13 +1384,17 @@ namespace ast {
   //
   //
 
+  
+
   void parse_stmts_raw(SourceStr str, Environ & env) {
+    Parse<TopLevel> prs(env);
     while (!str.empty()) {
       parse_parse::Res r = parse_parse::parse(str);
-      AST * a = parse_top_level(r.parse, env);
-      if (dynamic_cast<ASTList *>(a)) {
-        parse_stmts(a->parse_, env);
+      const Syntax * p = prs.partly_expand(r.parse);
+      if (p->is_a("@")) {
+        parse_stmts(p, env);
       } else {
+        AST * a = prs.finish_parse(p);
         FinalizeEnviron fenv;
         a->finalize(fenv);
       }
@@ -1369,12 +1403,13 @@ namespace ast {
   }
 
   void parse_stmts(const Syntax * parse, Environ & env) {
+    Parse<TopLevel> prs(env);
     for (unsigned i = 0; i < parse->num_args(); ++i) {
-      const Syntax * p = parse->arg(i);
-      AST * a = parse_top_level(p, env);
-      if (dynamic_cast<ASTList *>(a)) {
-        parse_stmts(a->parse_, env);
+      const Syntax * p = prs.partly_expand(parse->arg(i));
+      if (p->is_a("@")) {
+        parse_stmts(p, env);
       } else {
+        AST * a = prs.finish_parse(p);
         FinalizeEnviron fenv;
         a->finalize(fenv);
       }
@@ -1389,12 +1424,13 @@ namespace ast {
   }
 
   static void parse_stmts_first_pass(const Syntax * parse, Environ & env, Collect & collect) {
+    Parse<TopLevel,FirstPass> prs(env, collect);
     for (unsigned i = 0; i < parse->num_args(); ++i) {
-      const Syntax * p = parse->arg(i);
-      AST * a = parse_top_level_first_pass(p, env, collect);
-      if (dynamic_cast<ASTList *>(a)) {
-        parse_stmts_first_pass(a->parse_, env, collect);
+      const Syntax * p = prs.partly_expand(parse->arg(i));
+      if (p->is_a("@")) {
+        parse_stmts_first_pass(p, env, collect);
       } else {
+        AST * a = prs.finish_parse(p);
         FinalizeEnviron fenv;
         a->finalize(fenv);
       }
@@ -2076,7 +2112,7 @@ namespace ast {
       assert_num_args(2);
       lhs = parse_exp(p->arg(0), env);
       p = p->arg(1);
-      add_ast_nodes(p->args_begin(), p->args_end(), parms, parse_exp, env);
+      add_ast_nodes(p->args_begin(), p->args_end(), parms, Parse<ExpPos>(env));
       const Function * ftype = dynamic_cast<const Function *>(lhs->type);
       if (!ftype) {
         if (const Pointer * t = dynamic_cast<const Pointer *>(lhs->type))
@@ -2181,7 +2217,7 @@ namespace ast {
       AST * part(unsigned i) {return members[i];}
       Vector<AST *> members;
       AST * parse_self(const Syntax * p, Environ & env) {
-        add_ast_nodes(p->parts_begin(), p->parts_end(), members, parse_member, env);
+        add_ast_nodes(p->parts_begin(), p->parts_end(), members, Parse<FieldPos>(env));
         return this;
       }
     };
@@ -2520,26 +2556,30 @@ namespace ast {
   }
 
   AST * try_ast(const Syntax * p, Environ & env);
-  AST * try_decl(const Syntax * p, Environ & env);
+  AST * try_just_decl(const Syntax * p, Environ & env);
   AST * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect);
-  AST * try_stmt(const Syntax * p, Environ & env);
-  AST * try_exp(const Syntax * p, Environ & env);
+  AST * try_just_stmt(const Syntax * p, Environ & env);
+  AST * try_just_exp(const Syntax * p, Environ & env);
 
-  AST * parse_top_level(const Syntax * p, Environ & env) {
+  template <>
+  AST * Parse<TopLevel>::finish_parse(const Syntax * p) const {
     AST * res;
-    p = partly_expand(p, TopLevel, env);
     //printf("Parsing top level:\n  %s\n", ~p->to_string());
     res = try_ast(p, env);
     if (res) return res;
-    res = try_decl(p, env);
+    res = try_just_decl(p, env);
     if (res) return res;
     throw error (p, "Unsupported primative at top level:: %s", ~p->what());
     //throw error (p, "Expected top level expression.");
   }
-    
-  AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect) {
+
+  AST * parse_top_level(const Syntax * p, Environ & env) {
+    return Parse<TopLevel>(env)(p);
+  }
+
+  template <>
+  AST * Parse<TopLevel,FirstPass>::finish_parse(const Syntax * p) const {
     AST * res;
-    p = partly_expand(p, TopLevel, env);
     //printf("Parsing top level fp:\n  %s\n", ~p->to_string());
     res = try_ast(p, env);
     if (res) return res;
@@ -2548,20 +2588,25 @@ namespace ast {
     throw error (p, "Unsupported primative at top level: %s", ~p->what());
     //throw error (p, "Expected top level expression.");
   }
+    
+  AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect) {
+    return Parse<TopLevel,FirstPass>(env,collect)(p);
+  }
 
-  AST * parse_member(const Syntax * p, Environ & env) {
+  template <>
+  AST * Parse<FieldPos>::finish_parse(const Syntax * p) const {
     AST * res;
-    p = partly_expand(p, FieldPos, env);
     res = try_ast(p, env);
     if (res) return res;
-    //printf("Parsing member:\n  %s\n", ~p->to_string());
     //res = try_decl(p, env);
     String what = p->what().name;
-    if (what == "@")   return (new ASTList)->parse_self(p, env);
     if (what == "var") return (new Var)->parse_self_as_member(p, env);
-    //if (res) return res;
     throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->what());
     //throw error (p, "Expected struct or union member.");
+  }
+
+  AST * parse_member(const Syntax * p, Environ & env) {
+    return Parse<FieldPos>(env)(p);
   }
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
@@ -2583,50 +2628,61 @@ namespace ast {
     return p;
   }
 
-  AST * parse_stmt(const Syntax * p, Environ & env) {
+  template <>
+  AST * Parse<StmtPos>::finish_parse(const Syntax * p) const {
     AST * res;
-    //printf("1>%s\n", ~p->to_string());
-    p = partly_expand(p, StmtPos, env);
-    //printf("2>%s\n", ~p->to_string());
     res = try_ast(p, env);
     if (res) return res;
-    //printf("Parsing stmt:\n  %s\n", ~p->to_string());
-    res = try_stmt(p, env);
+    res = try_just_stmt(p, env);
     if (res) return res;
-    res = try_exp(p, env);
+    res = try_just_exp(p, env);
     if (res) return new EStmt(res);
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
     throw error (p, "Expected statement in: %s.", ~p->to_string());
   }
 
-  AST * parse_stmt_decl(const Syntax * p, Environ & env) {
+  AST * parse_stmt(const Syntax * p, Environ & env) {
+    return Parse<StmtPos>(env)(p);
+  }
+
+  template <>
+  AST * Parse<StmtDeclPos>::finish_parse(const Syntax * p) const {
     AST * res;
-    p = partly_expand(p, StmtDeclPos, env);
     res = try_ast(p, env);
     if (res) return res;
-    //printf("Parsing stmt decl:\n  %s\n", ~p->to_string());
-    res = try_decl(p, env);
+    res = try_just_decl(p, env);
     if (res) return res;
-    res = try_stmt(p, env);
+    res = try_just_stmt(p, env);
     if (res) return res;
-    res = try_exp(p, env);
+    res = try_just_exp(p, env);
     if (res) return new EStmt(res);
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
     p->print(); printf("\n");
     throw error (p, "Expected statement or declaration.");
   }
 
-  AST * parse_exp(const Syntax * p, Environ & env) {
+  AST * parse_stmt_decl(const Syntax * p, Environ & env) {
+    return Parse<StmtDeclPos>(env)(p);
+  }
+
+  AST * parse_stmts(Parts::const_iterator i, Parts::const_iterator end) {
+    return NULL;
+  }
+
+  template<> 
+  AST * Parse<ExpPos>::finish_parse(const Syntax * p) const {
     AST * res;
-    p = partly_expand(p, ExpPos, env);
     res = try_ast(p, env);
     if (res) return res;
-    //printf("parsing expression: %s\n", ~p->to_string());
-    res = try_exp(p, env);
+    res = try_just_exp(p, env);
     if (res) return res;
     //abort();
     throw error (p, "Unsupported primative at expression position: %s", ~p->what());
     //throw error (p, "Expected expression.");
+  }
+
+  AST * parse_exp(const Syntax * p, Environ & env) {
+    return Parse<ExpPos>(env)(p);
   }
 
   AST * try_ast(const Syntax * p, Environ & env) {
@@ -2642,7 +2698,6 @@ namespace ast {
 
   AST * try_decl_common(const Syntax * p, Environ & env) {
     String what = p->what().name;
-    if (what == "@")       return (new ASTList)->parse_self(p, env);
     if (what == "struct")  return (new Struct)->parse_self(p, env);    
     if (what == ".struct")  return (new Struct)->parse_self(p, env);
     if (what == "union")   return (new Union)->parse_self(p, env);
@@ -2677,14 +2732,14 @@ namespace ast {
     return try_decl_common(p, env);
   }
 
-  AST * try_decl(const Syntax * p, Environ & env) {
+  AST * try_just_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "var")     return (new Var)->parse_self(p, env);
     if (what == "fun" )    return parse_fun(p, env);
     return try_decl_common(p, env);
   }
 
-  AST * try_stmt(const Syntax * p, Environ & env) {
+  AST * try_just_stmt(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "goto")    return (new Goto)->parse_self(p, env);
     if (what == "label")   return (new Label)->parse_self(p, env);
@@ -2697,9 +2752,8 @@ namespace ast {
     return 0;
   }
 
-  AST * try_exp(const Syntax * p, Environ & env) {
+  AST * try_just_exp(const Syntax * p, Environ & env) {
     String what = p->what().name;
-    if (what == "@")       return (new ASTList)->parse_self(p, env);
     if (what == "id")      return (new Id)->parse_self(p, env);
     if (what == "n")       return (new Literal)->parse_self(p, env);
     if (what == "f")       return (new FloatC)->parse_self(p, env);
@@ -2743,7 +2797,7 @@ namespace ast {
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
     if (what == "environ_snapshot") return (new EnvironSnapshot)->parse_self(p, env);
     if (what == "c-assign") {
-      AST * ast = try_exp(new Syntax(p->str(), p->arg(0), p->arg(1), p->arg(2)), env);
+      AST * ast = try_just_exp(new Syntax(p->str(), p->arg(0), p->arg(1), p->arg(2)), env);
       if (!ast) return 0;
       BinOp * binop = dynamic_cast<BinOp *>(ast);
       StringBuf op;

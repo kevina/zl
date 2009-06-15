@@ -102,6 +102,17 @@ namespace ast {
     }
   };
 
+  struct Stmt : public AST {
+  public:
+    Stmt(String n, const Syntax * p = 0) : AST(n,p) {}
+    Stmt * next;
+  };
+
+  inline void BlockInsrPoint::add(Stmt * to_add) {
+    *ptr = to_add;
+    ptr = &to_add->next;
+  }
+
   struct ASTLeaf : public AST {
     ASTLeaf(String n, const Syntax * p = 0) : AST(n,p) {}
     void compile_prep(CompileEnviron &) {}
@@ -315,13 +326,13 @@ namespace ast {
   struct Block;
   struct VarSymbol;
 
-  struct Declaration : public AST {
+  struct Declaration : public Stmt {
     enum Phase {Normal, Forward, Body};
     virtual void compile_c(CompileWriter &, Phase) const = 0;
     virtual void compile(CompileWriter &, Phase) const = 0;
     void compile_c(CompileWriter & cw) {compile_c(cw, Normal);}
     void compile(CompileWriter & cw) {compile(cw, Normal);}
-    Declaration(String n) : AST(n) {}
+    Declaration(String n) : Stmt(n) {}
   };
 
   struct VarDeclaration : public Declaration, public ForSecondPass {
@@ -418,7 +429,7 @@ namespace ast {
     void uniq_name(OStream & o) const {
       o.printf("%s$$%u", ~name, num);
     }
-    void add_to_env(const SymbolKey & k, Environ &, Pass pass) const;
+    void add_to_env(const SymbolKey & k, Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
       assign_uniq_num<NormalLabelSymbol>(self, stop);
     }

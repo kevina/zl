@@ -8,6 +8,7 @@
 namespace ast {
 
   struct AST;
+  struct Stmt;
   struct VarDeclaration;
 
   //class TypeSymbol;
@@ -50,6 +51,15 @@ namespace ast {
       : init(i), cleanup(c) {}
   };
 
+  struct BlockInsrPoint {
+    BlockInsrPoint() : ptr() {}
+    Stmt * * ptr;
+    void clear() {
+      ptr = NULL;
+    }
+    inline void add(Stmt *); // defined in ast.hpp
+  };
+
   struct Environ : public gc {
     TypeRelation * type_relation;
     Vector<const TopLevelSymbol *> * top_level_symbols;
@@ -74,6 +84,7 @@ namespace ast {
     SymbolNode * const * top_level_environ;
     Deps * deps;
     bool * for_ct; // set if this function uses a ct primitive such as syntax
+    BlockInsrPoint ip;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
     Type * bool_type() {return types.inst("int");}
@@ -98,19 +109,21 @@ namespace ast {
         scope(other.scope), frame(other.frame), 
         where(other.where),
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
-        deps(other.deps), for_ct(other.for_ct) {}
+        deps(other.deps), for_ct(other.for_ct), ip(other.ip) {}
     Environ new_scope() {
       Environ env = *this;
+      env.ip.clear();
       env.symbols = symbols.new_scope();
       return env;
     }
 
-    void add(const SymbolKey & k, const Symbol * sym, Pass pass = AllPasses) {
-      sym->add_to_env(k, *this, pass);
+    void add(const SymbolKey & k, const Symbol * sym) {
+      sym->add_to_env(k, *this);
     }
 
     Environ new_frame() {
       Environ env = *this;
+      env.ip.clear();
       env.scope = LEXICAL;
       env.symbols = symbols.new_scope(env.fun_labels);
       env.frame = new Frame();

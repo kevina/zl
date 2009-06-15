@@ -173,7 +173,7 @@ namespace ast {
       uniq_name_ = buf.freeze();
       return uniq_name_;
     }
-    virtual void add_to_env(const SymbolKey & k, Environ &, Pass = AllPasses) const;
+    virtual void add_to_env(const SymbolKey & k, Environ &) const;
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
   };
@@ -197,7 +197,7 @@ namespace ast {
         o.printf("%s$$%u", ~name, num);
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
-    void add_to_env(const SymbolKey & k, Environ &, Pass = AllPasses) const;
+    void add_to_env(const SymbolKey & k, Environ &) const;
     void add_to_local_env(const SymbolKey & k, Environ &) const;
     void add_to_top_level_env(const SymbolKey & k, Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
