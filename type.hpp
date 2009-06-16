@@ -28,7 +28,7 @@ namespace ast {
 
   struct VarSymbol;
 
-  struct AST;
+  struct Exp;
 
   //struct ExpectedType {
   //  Vector<TypeCategory *> expected;
@@ -63,7 +63,7 @@ namespace ast {
     union {
       const Type * as_type;
       int          as_int;
-      AST        * as_exp;
+      Exp        * as_exp;
     };
     SymbolKey name;
     bool is_type() {return what == TYPE || what == TUPLE;}
@@ -71,7 +71,7 @@ namespace ast {
     explicit TypeParm(const Type * t, SymbolKey n = SymbolKey()) : what(TYPE), as_type(t), name(n) {}
     explicit TypeParm(What w, const Type * t, SymbolKey n = SymbolKey()) : what(w), as_type(t), name(n) {}
     explicit TypeParm(int i, SymbolKey n = SymbolKey()) : what(INT), as_int(i), name(n) {}
-    explicit TypeParm(AST * exp, SymbolKey n = SymbolKey()) : what(EXP), as_exp(exp), name(n) {}
+    explicit TypeParm(Exp * exp, SymbolKey n = SymbolKey()) : what(EXP), as_exp(exp), name(n) {}
     void to_string(const PrintInst &, StringBuf & buf) const;
     static TypeParm dots() {return TypeParm(DOTS);}
   private:
@@ -186,18 +186,16 @@ namespace ast {
   extern PrintInst const * const zl_print_inst;
   extern PrintInst const * const zls_print_inst;
 
-  struct AST;
-  
   class TypeRelation : public gc_cleanup {
   public:
     enum CastType {Implicit, Explicit};
-    virtual AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;
+    virtual Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
-    virtual void resolve_assign(AST * &, AST * &, Environ & env) const = 0;
-    virtual AST * to_effective(AST * exp, Environ & env) const = 0;
-    virtual AST * def_arg_prom(AST * exp, Environ & env) const = 0;
-    const Type * unify(int rule, AST * &, AST * &, Environ & env);
-    //virtual const Type * promote(AST * exp) const = 0;
+    virtual void resolve_assign(Exp * &, Exp * &, Environ & env) const = 0;
+    virtual Exp * to_effective(Exp * exp, Environ & env) const = 0;
+    virtual Exp * def_arg_prom(Exp * exp, Environ & env) const = 0;
+    const Type * unify(int rule, Exp * &, Exp * &, Environ & env);
+    //virtual const Type * promote(Exp * exp) const = 0;
     virtual ~TypeRelation() {}
   };
 
@@ -825,8 +823,6 @@ namespace ast {
   //
   //
 
-  struct AST;
-
   class TypeOfSymbol : public TypeSymbol {
   public:
     TypeOfSymbol() {}
@@ -837,8 +833,8 @@ namespace ast {
 
   class TypeOf : public SimpleTypeInst {
   public:
-    inline TypeOf(AST * a);
-    AST * of_ast;
+    inline TypeOf(Exp * a);
+    Exp * of_ast;
     const Type * of;
     unsigned size() const {return of->size();}
     unsigned align() const {return of->align();}

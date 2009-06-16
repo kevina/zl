@@ -1238,7 +1238,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   }
 }
 
-AST * parse_map(const Syntax * p, Environ & env) {
+Stmt * parse_map(const Syntax * p, Environ & env) {
   //printf("MAP>>%s\n", ~p->to_string());
   SimpleMacro * m = new SimpleMacro;
   m->parse_self(p, env);
@@ -1249,7 +1249,7 @@ AST * parse_map(const Syntax * p, Environ & env) {
   return new Empty();
 }
 
-AST * parse_macro(const Syntax * p, Environ & env) {
+Stmt * parse_macro(const Syntax * p, Environ & env) {
   Macro * m = new Macro;
   m->parse_self(p, env);
   if (p->is_a("make_syntax_macro"))
@@ -1396,7 +1396,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
 }
 
 
-AST * parse_fluid_binding(const Syntax * p, Environ & env) {
+Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
   assert_num_args(p, 1);
   SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
   FluidBinding * b = new FluidBinding(n.name, mark(n, new Mark(NULL)));
@@ -1497,7 +1497,7 @@ namespace macro_abi {
   }
   
   size_t ct_value(const Syntax * p, Environ * env) {
-    AST * ast = parse_exp(p, *env);
+    Exp * ast = parse_exp(p, *env);
     return ast->ct_value<size_t>();
   }
   

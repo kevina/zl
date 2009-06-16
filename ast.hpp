@@ -60,8 +60,7 @@ namespace ast {
     virtual AST * part(unsigned i) {return 0;}
     const Syntax * parse_;
     const Type * type;
-    int lvalue; // 0 false, 1 true, 2 true and addr ct_value
-    AST(String n, const Syntax * p = 0) : what_(n), parse_(p), type(), lvalue(false), ct_value_(0) {}
+    AST(String n, const Syntax * p = 0) : what_(n), parse_(p), type() {}
     void assert_num_args(int p) {
       if (parse_->num_args() != p) 
         //abort();
@@ -78,20 +77,29 @@ namespace ast {
     virtual void compile_prep(CompileEnviron &) = 0;
     virtual void compile_c(CompileWriter &) = 0; 
     virtual void compile(CompileWriter &) = 0; 
-    virtual AST * resolve_to(const Type * type, Environ & env, 
+    virtual ~AST() {}
+    //void print(OStream & o) const;
+  };
+
+  struct Stmt;
+
+  struct Exp : public AST {
+    static const int ast_type = 1;
+    Exp(String n, const Syntax * p = 0) : AST(n,p), lvalue(false), ct_value_(0), temps() {}
+    int lvalue; // 0 false, 1 true, 2 true and addr ct_value
+    const CT_Value_Base * ct_value_;
+    Stmt * temps; // temporaries bound to res
+
+    virtual Exp * resolve_to(const Type * type, Environ & env, 
                              TypeRelation::CastType rule = TypeRelation::Implicit) {
       return env.type_relation->resolve_to(this, type, env, rule);
     }
-    AST * to_effective(Environ & env) {
+    Exp * to_effective(Environ & env) {
       return env.type_relation->to_effective(this, env);
     }
-    AST * def_arg_prom(Environ & env) {
+    Exp * def_arg_prom(Environ & env) {
       return env.type_relation->def_arg_prom(this, env);
     }
-    virtual ~AST() {}
-    //void print(OStream & o) const;
-
-    const CT_Value_Base * ct_value_;
 
     template <typename T> T real_ct_value() const;
     template <typename T> T ct_value() const {
@@ -102,22 +110,29 @@ namespace ast {
     }
   };
 
-  struct Stmt : public AST {
-  public:
-    Stmt(String n, const Syntax * p = 0) : AST(n,p) {}
-    Stmt * next;
-  };
-
-  inline void BlockInsrPoint::add(Stmt * to_add) {
-    *ptr = to_add;
-    ptr = &to_add->next;
-  }
-
-  struct ASTLeaf : public AST {
-    ASTLeaf(String n, const Syntax * p = 0) : AST(n,p) {}
+  struct ExpLeaf : public Exp {
+    ExpLeaf(String n, const Syntax * p = 0) : Exp(n,p) {}
     void compile_prep(CompileEnviron &) {}
     void finalize(FinalizeEnviron &) {}
   };
+
+  struct Stmt : public AST {
+  public:
+    static const int ast_type = 2;
+    Stmt(String n, const Syntax * p = 0) : AST(n,p), next() {}
+    Stmt * next;
+  };
+
+  struct StmtLeaf : public Stmt {
+    StmtLeaf(String n, const Syntax * p = 0) : Stmt(n,p) {}
+    void compile_prep(CompileEnviron &) {}
+    void finalize(FinalizeEnviron &) {}
+  };
+
+  inline void InsrPoint::add(Stmt * to_add) {
+    *ptr = to_add;
+    ptr = &to_add->next;
+  }
 
   struct FakeAST : public AST {
     FakeAST(String n, const Syntax * p = 0) : AST(n,p) {}
@@ -127,9 +142,9 @@ namespace ast {
     void finalize(FinalizeEnviron &) {abort();}
   };
 
-  struct Empty : public ASTLeaf {
-    Empty() : ASTLeaf("empty") {}
-    AST * parse_self(const Syntax * p, Environ & env) {
+  struct Empty : public StmtLeaf {
+    Empty() : StmtLeaf("empty") {}
+    Empty * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
       type = env.void_type();
@@ -143,63 +158,63 @@ namespace ast {
     }
   };
 
-  struct Literal : public ASTLeaf {
-    Literal() : ASTLeaf("n") {}
+  struct Literal : public ExpLeaf {
+    Literal() : ExpLeaf("n") {}
     //AST * part(unsigned i);
-    AST * parse_self(const Syntax * p, Environ &);
+    Literal * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
-  struct FloatC : public ASTLeaf {
-    FloatC() : ASTLeaf("f") {}
+  struct FloatC : public ExpLeaf {
+    FloatC() : ExpLeaf("f") {}
     //AST * part(unsigned i);
-    AST * parse_self(const Syntax * p, Environ &);
+    FloatC * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
-  struct StringC : public ASTLeaf {
-    StringC() : ASTLeaf("s") {}
+  struct StringC : public ExpLeaf {
+    StringC() : ExpLeaf("s") {}
     //AST * part(unsigned i);
     String orig;
     //String value; // unused at the moment
-    AST * parse_self(const Syntax * p, Environ &);
+    StringC * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
-  struct CharC : public ASTLeaf {
-    CharC() : ASTLeaf("c") {}
+  struct CharC : public ExpLeaf {
+    CharC() : ExpLeaf("c") {}
     //AST * part(unsigned i);
     String orig;
     //char value; // unused at the moment
-    AST * parse_self(const Syntax * p, Environ &);
+    CharC * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
-  struct EIf : public AST {
-    EIf() : AST("eif") {}
+  struct EIf : public Exp {
+    EIf() : Exp("eif") {}
     //AST * part(unsigned i) 
     //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
-    AST * exp;
-    AST * if_true;
-    AST * if_false;
-    AST * parse_self(const Syntax * p, Environ & env);
+    Exp * exp;
+    Exp * if_true;
+    Exp * if_false;
+    EIf * parse_self(const Syntax * p, Environ & env);
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
     void compile_c(CompileWriter & f);
     void compile(CompileWriter & f);
   };
 
-  struct BinOp : public AST {
-    BinOp(String name, String op0) : AST(name), op(op0) {}
+  struct BinOp : public Exp {
+    BinOp(String name, String op0) : Exp(name), op(op0) {}
     //AST * part(unsigned i) {return i == 0 ? lhs : rhs;}
-    AST * lhs;
-    AST * rhs;
+    Exp * lhs;
+    Exp * rhs;
     String op;
-    AST * parse_self(const Syntax * p, Environ & env);
+    BinOp * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
     virtual void make_ct_value();
     void finalize(FinalizeEnviron & env);
@@ -208,12 +223,12 @@ namespace ast {
     void compile(CompileWriter & f);
   };
 
-  struct UnOp : public AST {
-    UnOp(String name, String op0) : AST(name), op(op0) {}
+  struct UnOp : public Exp {
+    UnOp(String name, String op0) : Exp(name), op(op0) {}
     //AST * part(unsigned i) {return exp;}
-    AST * exp;
+    Exp * exp;
     String op;
-    AST * parse_self(const Syntax * p, Environ & env);
+    UnOp * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
     virtual void make_ct_value();
     void finalize(FinalizeEnviron & env);
@@ -291,18 +306,18 @@ namespace ast {
   //
   //
 
-  const CT_Value_Base * cast_ct_value(const AST * from, const Type * to);
+  const CT_Value_Base * cast_ct_value(const Exp * from, const Type * to);
 
-  struct Cast : public AST {
-    Cast(String s) : AST(s) {}
-    Cast(AST * e, const Type * t) 
-      : AST("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(e, t);}
-    AST * exp;
+  struct Cast : public Exp {
+    Cast(String s) : Exp(s) {}
+    Cast(Exp * e, const Type * t) 
+      : Exp("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(e, t);}
+    Exp * exp;
     void compile_prep(CompileEnviron&);
     void compile_c(CompileWriter&);
     void compile(CompileWriter&);
     void finalize(FinalizeEnviron &); 
-    AST * parse_self(const Syntax * p, Environ &) {abort();}
+    Cast * parse_self(const Syntax * p, Environ &) {abort();}
   };
 
   //
@@ -463,19 +478,19 @@ namespace ast {
   void parse_stmts_raw(SourceStr, Environ & env);
   void parse_stmts(const Syntax * p, Environ & env);
 
-  AST * parse_top_level(const Syntax * p, Environ & env);
-  AST * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect);
-  AST * parse_member(const Syntax * p, Environ & env);
-  AST * parse_stmt(const Syntax * p, Environ & env);
-  AST * parse_stmt_decl(const Syntax * p, Environ & env);
-  AST * parse_exp(const Syntax * p, Environ & env);
+  Stmt * parse_top_level(const Syntax * p, Environ & env);
+  Stmt * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect);
+  Stmt * parse_member(const Syntax * p, Environ & env);
+  Stmt * parse_stmt(const Syntax * p, Environ & env);
+  Stmt * parse_stmt_decl(const Syntax * p, Environ & env);
+  Exp * parse_exp(const Syntax * p, Environ & env);
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
 
   void compile_c(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
   void compile(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
 
-  AST * cast_up(AST * exp, const Type * type, Environ & env);
+  Exp * cast_up(Exp * exp, const Type * type, Environ & env);
 
   const Syntax * parse_syntax_c(const Syntax * p);
 
@@ -576,8 +591,8 @@ namespace ast {
     return find_symbol<Symbol>(p, ns, front, back, ThisScope);
   }
 
-  AST * to_ref(AST *, Environ &);
-  AST * from_ref(AST *, Environ &);
+  Exp * to_ref(Exp *, Environ &);
+  Exp * from_ref(Exp *, Environ &);
 
   typedef int target_bool;
   typedef int target_int;

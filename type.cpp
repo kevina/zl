@@ -260,7 +260,7 @@ namespace ast {
     return t;
   }
 
-  inline TypeOf::TypeOf(AST * a) 
+  inline TypeOf::TypeOf(Exp * a) 
     : SimpleTypeInst(a->type->effective), of_ast(a), of(a->type->effective) {type_symbol = of->type_symbol;}
 
   Type * parse_type(const Syntax * p, Environ & env) {
@@ -287,7 +287,7 @@ namespace ast {
       name_str = buf.freeze();
       --sz;
     } else if (name_str == ".typeof") {
-      AST * ast = parse_exp(p->arg(0), env);
+      Exp * ast = parse_exp(p->arg(0), env);
       Type * t = new TypeOf(ast);
       t->finalize();
       return t;
@@ -334,7 +334,7 @@ namespace ast {
         break;
       }
       case TypeParm::INT: {
-        AST * exp = parse_exp(p0, env);
+        Exp * exp = parse_exp(p0, env);
         exp = exp->resolve_to(types.inst("int"), env);
         parms.push_back(TypeParm(exp->ct_value<int>()));
         break;
@@ -348,7 +348,7 @@ namespace ast {
         break;
       }
       case TypeParm::EXP: {
-        AST * exp = parse_exp(p0, env); // FIXME: Do I really need to parse here....
+        Exp * exp = parse_exp(p0, env); // FIXME: Do I really need to parse here....
         parms.push_back(TypeParm(exp));
         break;
       }
@@ -396,7 +396,7 @@ namespace ast {
   }
 #endif
 
-  const Type * TypeRelation::unify(int rule, AST * & x, AST * & y, Environ & env) {
+  const Type * TypeRelation::unify(int rule, Exp * & x, Exp * & y, Environ & env) {
     const Type * t = unify(rule, x->type, y->type);
     //printf("UNIFY %d to \"\%s\"\n", x->parse_->str().source->get_pos(x->parse_->str().begin).line, ~t->to_string());
     //if (t != xt) {x = new Cast(x, t);}
@@ -408,17 +408,17 @@ namespace ast {
 
   class C_TypeRelation : public TypeRelation {
   public:
-    AST * resolve_to(AST * exp, const Type * type, Environ & env, CastType rule) const;
-    AST * to_effective(AST * exp, Environ & env) const;
-    AST * def_arg_prom(AST * exp, Environ & env) const;
-    void resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const;
+    Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule) const;
+    Exp * to_effective(Exp * exp, Environ & env) const;
+    Exp * def_arg_prom(Exp * exp, Environ & env) const;
+    void resolve_assign(Exp * & lhs, Exp * & rhs, Environ & env) const;
     const Type * unify(int rule, const Type *, const Type *) const;
   };
 
-  AST * C_TypeRelation::resolve_to(AST * orig_exp, const Type * type, Environ & env, CastType rule) const {
+  Exp * C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule) const {
     static int i = -1;
     ++i;
-    AST * exp = orig_exp;
+    Exp * exp = orig_exp;
     const Type * have = exp->type->unqualified;
     const Type * need = type->unqualified;
     
@@ -512,7 +512,7 @@ namespace ast {
                 ~type->to_string(), ~orig_exp->type->to_string());
   }
 
-  AST * C_TypeRelation::to_effective(AST * exp, Environ & env) const {
+  Exp * C_TypeRelation::to_effective(Exp * exp, Environ & env) const {
     const Reference * ref = dynamic_cast<const Reference *>(exp->type->unqualified);
     if (ref)
       return from_ref(exp, env);
@@ -520,7 +520,7 @@ namespace ast {
       return exp;
   }
 
-  AST * C_TypeRelation::def_arg_prom(AST * exp, Environ & env) const {
+  Exp * C_TypeRelation::def_arg_prom(Exp * exp, Environ & env) const {
     // FIXME: Need to do more ...
     const Reference * ref = dynamic_cast<const Reference *>(exp->type->unqualified);
     if (ref)
@@ -529,7 +529,7 @@ namespace ast {
       return exp;
   }
 
-  void C_TypeRelation::resolve_assign(AST * & lhs, AST * & rhs, Environ & env) const {
+  void C_TypeRelation::resolve_assign(Exp * & lhs, Exp * & rhs, Environ & env) const {
     if (!lhs->lvalue)
       throw error(lhs->parse_, "Can not be used as lvalue");
     //throw error(parse_->arg(1), "Can not be used as lvalue");

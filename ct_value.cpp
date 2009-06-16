@@ -8,20 +8,20 @@ namespace ast {
 
 namespace {
   
-  template <typename AST_T>
+  template <typename Exp_T>
   struct DummyGetValue {
-    static const CT_Value_Base * get_value(const AST_T *) {return NULL;}
+    static const CT_Value_Base * get_value(const Exp_T *) {return NULL;}
   };
 
-  template <typename AST_T>
+  template <typename Exp_T>
   struct CT_Value_Map {
     String type;
-    const CT_Value_Base * (*get_value)(const AST_T *);
+    const CT_Value_Base * (*get_value)(const Exp_T *);
   };
 
   template <template <typename> class W>
-  const CT_Value_Base * (*int_op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
-    typedef CT_Value_Map<typename W<void>::AST_T> CT_VM;
+  const CT_Value_Base * (*int_op_ct_value(const Type * t))(const typename W<void>::Exp_T *) {
+    typedef CT_Value_Map<typename W<void>::Exp_T> CT_VM;
     static CT_VM map[] = {
       {".uint8", W<uint8_t>::get_value},
       {".uint16", W<uint16_t>::get_value},
@@ -37,7 +37,7 @@ namespace {
     for (CT_VM * i = map; i != map_end; ++i) {
       if (i->type == n) return i->get_value;
     }
-    return DummyGetValue<typename W<void>::AST_T>::get_value;
+    return DummyGetValue<typename W<void>::Exp_T>::get_value;
   }
 
   template <template <typename> class W, template <typename> class F>
@@ -47,8 +47,8 @@ namespace {
   };
  
   template <template <typename> class W> 
-  const CT_Value_Base * (*op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
-    typedef CT_Value_Map<typename W<void>::AST_T> CT_VM;
+  const CT_Value_Base * (*op_ct_value(const Type * t))(const typename W<void>::Exp_T *) {
+    typedef CT_Value_Map<typename W<void>::Exp_T> CT_VM;
     static CT_VM map[] = {
       {"float", W<float>::get_value},
       {"double", W<double>::get_value},
@@ -63,12 +63,12 @@ namespace {
   }
 
   template <template <typename> class W, template <typename> class F> 
-  inline const CT_Value_Base * (*int_op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
+  inline const CT_Value_Base * (*int_op_ct_value(const Type * t))(const typename W<void>::Exp_T *) {
     return int_op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
   template <template <typename> class W, template <typename> class F> 
-  inline const CT_Value_Base * (*op_ct_value(const Type * t))(const typename W<void>::AST_T *) {
+  inline const CT_Value_Base * (*op_ct_value(const Type * t))(const typename W<void>::Exp_T *) {
     return op_ct_value<OCTV_Proxy<W,F>::template Type>(t);
   }
 
@@ -146,7 +146,7 @@ namespace ast {
 
   template <typename F> 
   struct UnOp_GetValue {
-    typedef UnOp AST_T;
+    typedef UnOp Exp_T;
     static const CT_Value_Base * get_value(const UnOp * u) {
       if (!u->exp->ct_value_) return NULL;
       if (u->exp->ct_value_->nval()) return NULL;
@@ -179,7 +179,7 @@ namespace ast {
 
   template <typename F> 
   struct BinOp_GetValue {
-    typedef BinOp AST_T;
+    typedef BinOp Exp_T;
     static const CT_Value_Base * get_value(const BinOp * b) {
       if (!b->lhs->ct_value_ || !b->rhs->ct_value_) return NULL;
       if (b->lhs->ct_value_->nval() || b->rhs->ct_value_->nval()) return NULL;
@@ -191,7 +191,7 @@ namespace ast {
 
   template <typename F> 
   struct Comp_GetValue {
-    typedef BinOp AST_T;
+    typedef BinOp Exp_T;
     static const CT_Value_Base * get_value(const BinOp * b) {
       if (!b->lhs->ct_value_ || !b->rhs->ct_value_) return NULL;
       if (b->lhs->ct_value_->nval() || b->rhs->ct_value_->nval()) return NULL;
@@ -203,7 +203,7 @@ namespace ast {
   
   template <typename T> 
   struct Ptr_Plus_GetValue {
-    typedef BinOp AST_T;
+    typedef BinOp Exp_T;
     static const CT_Value_Base * get_value(const BinOp * plus) {
       if (!plus->lhs->ct_value_ || !plus->rhs->ct_value_) return NULL;
       if (plus->lhs->ct_value_->nval() || plus->rhs->ct_value_->nval()) return &ct_nval;
@@ -216,7 +216,7 @@ namespace ast {
 
   template <typename T> 
   struct Plus_Ptr_GetValue {
-    typedef BinOp AST_T;
+    typedef BinOp Exp_T;
     static const CT_Value_Base * get_value(const BinOp * plus) {
       if (!plus->lhs->ct_value_ || !plus->rhs->ct_value_) return NULL;
       if (plus->lhs->ct_value_->nval() || plus->rhs->ct_value_->nval()) return &ct_nval;
@@ -325,7 +325,7 @@ namespace {
 
   template <typename From, typename To> 
   struct Cast_GetValue_Base {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       if (!exp->ct_value_) return NULL;
       return new CT_Value<To>(static_cast<To>(exp->ct_value_direct<From>()));
     }
@@ -336,14 +336,14 @@ namespace {
 
   template <typename T> 
   struct Cast_GetValue<T,T> {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       return exp->ct_value_;
     }
   };
 
   template <typename To>
   struct Cast_GetValue_Base<CT_Ptr,To> {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       if (!exp->ct_value_) return NULL;
       return new CT_Value<To>(static_cast<To>(exp->ct_value_direct<CT_Ptr>().val));
     }
@@ -351,7 +351,7 @@ namespace {
 
   template <typename From>
   struct Cast_GetValue_Base<From,CT_Ptr> {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       if (!exp->ct_value_) return NULL;
       return new CT_Value<CT_Ptr>(CT_Ptr(static_cast<size_t>(exp->ct_value_direct<From>())));
     }
@@ -359,21 +359,21 @@ namespace {
 
   template <typename To>
   struct Cast_GetValue_Base<CT_LValue,To> {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       abort();
     }
   };
 
   template <typename From>
   struct Cast_GetValue_Base<From,CT_LValue> {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       abort();
     }
   };
 
   template <>
   struct Cast_GetValue_Base<CT_LValue,CT_Ptr> {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       if (!exp->ct_value_) return NULL;
       // it can only happen id exp is an array type
       return new CT_Value<CT_Ptr>(exp->ct_value_direct<CT_LValue>().addr);
@@ -382,14 +382,14 @@ namespace {
 
   template <>
   struct Cast_GetValue_Base<CT_Ptr,CT_LValue> {
-    static const CT_Value_Base * get_value(const AST * exp) {
+    static const CT_Value_Base * get_value(const Exp * exp) {
       abort();
     }
   };
 
   struct Cast_GetValue_Inner_Map {
     String to;
-    const CT_Value_Base * (*get_value)(const AST *);
+    const CT_Value_Base * (*get_value)(const Exp *);
   };
 
   template <typename From>
@@ -453,7 +453,7 @@ namespace {
 
 namespace ast {
 
-  static const CT_Value_Base * (*cast_get_value(String from, String to))(const AST *) {
+  static const CT_Value_Base * (*cast_get_value(String from, String to))(const Exp *) {
     //printf("cast_get_value:: %s %s\n", ~from, ~to);
     for (const Cast_GetValue_Map * i = cast_get_value_map; i != cast_get_value_map_end; ++i) {
       if (i->from == from) {
@@ -462,20 +462,20 @@ namespace ast {
             return j->get_value;
           }
         }
-        return DummyGetValue<AST>::get_value;
+        return DummyGetValue<Exp>::get_value;
       }
     }
-    return DummyGetValue<AST>::get_value;
+    return DummyGetValue<Exp>::get_value;
   }
 
-  const CT_Value_Base * cast_ct_value(const AST * f, const Type * t) {
+  const CT_Value_Base * cast_ct_value(const Exp * f, const Type * t) {
     String from = f->type->ct_type_name();
     String to   = t->ct_type_name();
     return cast_get_value(from, to)(f);
   }
 
   template <typename T> 
-  T AST::real_ct_value() const {
+  T Exp::real_ct_value() const {
     if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression this way", ~parse_->to_string());
     const CT_Value<T> * ctv = dynamic_cast<const CT_Value<T> *>(ct_value_);
     if (ctv)
@@ -490,17 +490,17 @@ namespace ast {
     throw error(parse_, "\"%s\" can not be used in constant-expression this way <2>", ~parse_->to_string());
     //abort();
   }
-  template uint8_t AST::real_ct_value<uint8_t>() const;
-  template uint16_t AST::real_ct_value<uint16_t>() const;
-  template uint32_t AST::real_ct_value<uint32_t>() const;
-  template uint64_t AST::real_ct_value<uint64_t>() const;
-  template int8_t AST::real_ct_value<int8_t>() const;
-  template int16_t AST::real_ct_value<int16_t>() const;
-  template int32_t AST::real_ct_value<int32_t>() const;
-  template int64_t AST::real_ct_value<int64_t>() const;
-  template float AST::real_ct_value<float>() const;
-  template double AST::real_ct_value<double>() const;
-  template long double AST::real_ct_value<long double>() const;
+  template uint8_t Exp::real_ct_value<uint8_t>() const;
+  template uint16_t Exp::real_ct_value<uint16_t>() const;
+  template uint32_t Exp::real_ct_value<uint32_t>() const;
+  template uint64_t Exp::real_ct_value<uint64_t>() const;
+  template int8_t Exp::real_ct_value<int8_t>() const;
+  template int16_t Exp::real_ct_value<int16_t>() const;
+  template int32_t Exp::real_ct_value<int32_t>() const;
+  template int64_t Exp::real_ct_value<int64_t>() const;
+  template float Exp::real_ct_value<float>() const;
+  template double Exp::real_ct_value<double>() const;
+  template long double Exp::real_ct_value<long double>() const;
 
 }
 
@@ -510,11 +510,11 @@ namespace ast {
     return true;
   }
 
-  void CT_Value<CT_NVal>::compile_c(CompileWriter & cw, AST * exp) const {
+  void CT_Value<CT_NVal>::compile_c(CompileWriter & cw, Exp * exp) const {
     exp->compile_c(cw);
   }
 
-  void CT_Value<CT_NVal>::compile(CompileWriter & cw, AST * exp) const {
+  void CT_Value<CT_NVal>::compile(CompileWriter & cw, Exp * exp) const {
     exp->compile(cw);
   }
 
@@ -546,74 +546,74 @@ namespace ast {
 namespace ast {
 
   template <typename T>
-  void CT_Value<T>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<T>::compile_c(CompileWriter & o, Exp *) const {
     abort();
   }
 
-  template void CT_Value<CT_LValue>::compile_c(CompileWriter & o, AST *) const;
+  template void CT_Value<CT_LValue>::compile_c(CompileWriter & o, Exp *) const;
 
   template <>
-  void CT_Value<signed char>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<signed char>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%d", val);
   }
 
   template <>
-  void CT_Value<unsigned char>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned char>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%uu", val);
   }
 
   template <>
-  void CT_Value<short>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<short>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%d", val);
   }
 
   template <>
-  void CT_Value<unsigned short>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned short>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%uu", val);
   }
 
   template <>
-  void CT_Value<int>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<int>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%d", val);
   }
 
   template <>
-  void CT_Value<unsigned>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%uu", val);
   }
 
   template <>
-  void CT_Value<long>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<long>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%ldl", val);
   }
 
   template <>
-  void CT_Value<unsigned long>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned long>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%luul", val);
   }
 
   template <>
-  void CT_Value<long long>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<long long>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%lldll", val);
   }
 
   template <>
-  void CT_Value<unsigned long long>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned long long>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%lluull", val);
   }
 
   template <>
-  void CT_Value<float>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<float>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%af", val);
   }
 
   template <>
-  void CT_Value<double>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<double>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%a", val);
   }
 
   template <>
-  void CT_Value<long double>::compile_c(CompileWriter & o, AST *) const {
+  void CT_Value<long double>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%Lal", val);
   }
 
@@ -622,44 +622,44 @@ namespace ast {
   //
 
   template <typename T>
-  void CT_Value<T>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<T>::compile(CompileWriter & o, Exp *) const {
     abort();
   }
 
-  template void CT_Value<CT_LValue>::compile(CompileWriter & o, AST *) const;
+  template void CT_Value<CT_LValue>::compile(CompileWriter & o, Exp *) const;
 
   template <>
-  void CT_Value<signed char>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<signed char>::compile(CompileWriter & o, Exp *) const {
     //o.printf("(literal %d (signed-char)", val);
     o.printf("%d", val);
   }
 
   template <>
-  void CT_Value<unsigned char>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned char>::compile(CompileWriter & o, Exp *) const {
     //o.printf("(literal %u (unsigned-char))", val);
     o.printf("%u", val);
   }
 
   template <>
-  void CT_Value<short>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<short>::compile(CompileWriter & o, Exp *) const {
     //o.printf("(literal %d (short))", val);
     o.printf("%d", val);
   }
 
   template <>
-  void CT_Value<unsigned short>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned short>::compile(CompileWriter & o, Exp *) const {
     //o.printf("(literal %u (unsigned-short))", val);
     o.printf("%u", val);
   }
 
   template <>
-  void CT_Value<int>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<int>::compile(CompileWriter & o, Exp *) const {
     //o.printf("(literal %d (int))", val);
     o.printf("%d", val);
   }
 
   template <>
-  void CT_Value<unsigned>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned>::compile(CompileWriter & o, Exp *) const {
     if (val <= INT_MAX)
       o.printf("%u", val);
     else
@@ -667,37 +667,37 @@ namespace ast {
   }
 
   template <>
-  void CT_Value<long>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<long>::compile(CompileWriter & o, Exp *) const {
     o.printf("(n %ld (long))", val);
   }
 
   template <>
-  void CT_Value<unsigned long>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned long>::compile(CompileWriter & o, Exp *) const {
     o.printf("(n %lu (unsigned-long))", val);
   }
 
   template <>
-  void CT_Value<long long>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<long long>::compile(CompileWriter & o, Exp *) const {
     o.printf("(n %lld (long-long))", val);
   }
 
   template <>
-  void CT_Value<unsigned long long>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<unsigned long long>::compile(CompileWriter & o, Exp *) const {
     o.printf("(n %llu (unsigned-long-long))", val);
   }
 
   template <>
-  void CT_Value<float>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<float>::compile(CompileWriter & o, Exp *) const {
     o.printf("(f %a (float))", val);
   }
 
   template <>
-  void CT_Value<double>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<double>::compile(CompileWriter & o, Exp *) const {
     o.printf("(f %a (double))", val);
   }
 
   template <>
-  void CT_Value<long double>::compile(CompileWriter & o, AST *) const {
+  void CT_Value<long double>::compile(CompileWriter & o, Exp *) const {
     o.printf("(f %La (long-double))", val);
   }
 

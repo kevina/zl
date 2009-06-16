@@ -44,15 +44,8 @@ namespace ast {
     }
   };
 
-  struct InitCleanup {
-    AST * init;
-    AST * cleanup;
-    InitCleanup(AST * i = NULL, AST * c = NULL)
-      : init(i), cleanup(c) {}
-  };
-
-  struct BlockInsrPoint {
-    BlockInsrPoint() : ptr() {}
+  struct InsrPoint {
+    InsrPoint() : ptr() {}
     Stmt * * ptr;
     void clear() {
       ptr = NULL;
@@ -84,7 +77,7 @@ namespace ast {
     SymbolNode * const * top_level_environ;
     Deps * deps;
     bool * for_ct; // set if this function uses a ct primitive such as syntax
-    BlockInsrPoint ip;
+    InsrPoint ip;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
     Type * bool_type() {return types.inst("int");}
@@ -115,6 +108,10 @@ namespace ast {
       env.ip.clear();
       env.symbols = symbols.new_scope();
       return env;
+    }
+
+    void add_stmt(Stmt * stmt) {
+      ip.add(stmt);
     }
 
     void add(const SymbolKey & k, const Symbol * sym) {

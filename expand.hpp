@@ -9,6 +9,7 @@
 namespace ast {
   struct Environ;
   struct AST;
+  struct Stmt;
   class TypeSymbol;
   class TypeInst;
   typedef TypeInst Type;
@@ -82,9 +83,9 @@ static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
 const Syntax * reparse(String what, const Syntax * p, ReplTable * r = NULL, 
                        const Replacements * additional_repls = NULL);
 
-ast::AST * parse_map(const Syntax * p, Environ & env);
-ast::AST * parse_macro(const Syntax * p, Environ & env);
-ast::AST * parse_fluid_binding(const Syntax *, Environ &);
+ast::Stmt * parse_map(const Syntax * p, Environ & env);
+ast::Stmt * parse_macro(const Syntax * p, Environ & env);
+ast::Stmt * parse_fluid_binding(const Syntax *, Environ &);
 
 void assert_num_args(const Syntax * p, unsigned num);
 void assert_num_args(const Syntax * p, unsigned min, unsigned max);
