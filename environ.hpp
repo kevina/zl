@@ -9,7 +9,6 @@ namespace ast {
 
   struct AST;
   struct Stmt;
-  struct VarDeclaration;
 
   //class TypeSymbol;
   //class TypeInst;

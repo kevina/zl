@@ -378,7 +378,7 @@ namespace ast {
     Vector<TypeParm> p;
     p.clear();
     p.push_back(TypeParm(TypeParm::TUPLE, f->parms));
-    p.push_back(TypeParm(f->type));
+    p.push_back(TypeParm(f->ret_type));
     return static_cast<Function *>(inst(p));
   }
   

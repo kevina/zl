@@ -59,8 +59,7 @@ namespace ast {
     String what() const {return what_;}
     virtual AST * part(unsigned i) {return 0;}
     const Syntax * parse_;
-    const Type * type;
-    AST(String n, const Syntax * p = 0) : what_(n), parse_(p), type() {}
+    AST(String n, const Syntax * p = 0) : what_(n), parse_(p) {}
     void assert_num_args(int p) {
       if (parse_->num_args() != p) 
         //abort();
@@ -85,7 +84,8 @@ namespace ast {
 
   struct Exp : public AST {
     static const int ast_type = 1;
-    Exp(String n, const Syntax * p = 0) : AST(n,p), lvalue(false), ct_value_(0), temps() {}
+    Exp(String n, const Syntax * p = 0) : AST(n,p), type(), lvalue(false), ct_value_(0), temps() {}
+    const Type * type;
     int lvalue; // 0 false, 1 true, 2 true and addr ct_value
     const CT_Value_Base * ct_value_;
     Stmt * temps; // temporaries bound to res
@@ -147,7 +147,6 @@ namespace ast {
     Empty * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
-      type = env.void_type();
       return this;
     }
     void compile_c(CompileWriter & f) {
@@ -354,11 +353,11 @@ namespace ast {
     VarDeclaration(String n) : Declaration(n) {}
     enum StorageClass {NONE, AUTO, STATIC, EXTERN, REGISTER};
     StorageClass storage_class;
-    bool inline_;
     VarSymbol * sym;
     mutable bool deps_closed;
     mutable Deps deps_;       // only valid if deps_closed
     mutable bool for_ct_;     // if false, only valid if deps_closed
+    bool inline_;
     bool ct_callback;
     bool static_constructor;
     void parse_flags(const Syntax * p);
@@ -376,7 +375,7 @@ namespace ast {
     }
     void finish_parse(Environ & env) {abort();}
   };
-  
+
   typedef Vector<ForSecondPass *> Collect;
 
   struct Fun : public VarDeclaration {
@@ -409,10 +408,9 @@ namespace ast {
     //SourceStr str;
     const Type * type;
     const struct CT_Value_Base * ct_value;
-    mutable void * ct_ptr; // ...
   protected:
     friend VarSymbol * new_var_symbol(SymbolName n, Scope s);
-    VarSymbol(String n) : ct_value(), ct_ptr() {name = n;}
+    VarSymbol(String n) : ct_value() /*, ct_ptr()*/ {name = n;}
   };
 
   struct OtherVarSymbol : public VarSymbol, public OtherSymbol {
@@ -420,12 +418,14 @@ namespace ast {
   };
 
   struct TopLevelVarSymbol : public VarSymbol, public TopLevelSymbol {
+    mutable void * ct_ptr; // no relation to ct_value, pointer to
+                           // compiled symbol, used for proc. macros
     const VarDeclaration * decl;
     AST * init;
     AST * cleanup;
     TopLevelVarSymbol(String n, const VarDeclaration * d, 
                       bool mangle, TopLevelSymbol * w) 
-      : VarSymbol(n), TopLevelSymbol(mangle ? NPOS : 0, d, w), decl(d), init(), cleanup() {}
+      : VarSymbol(n), TopLevelSymbol(mangle ? NPOS : 0, d, w), ct_ptr(), decl(d), init(), cleanup() {}
   };
 
   struct LexicalVarSymbol : public VarSymbol, public LexicalSymbol {

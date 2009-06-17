@@ -206,7 +206,6 @@ namespace ast {
     NoOp * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(0);
-      type = env.void_type();
       return this;
     }
     void compile_prep(CompileEnviron &) {}
@@ -249,7 +248,6 @@ namespace ast {
         label = new NormalLabelSymbol(n.name);
         env.add(SymbolKey(n, LABEL_NS), label);
       }
-      type = VOID_T;
       return this;
     }
     void compile_prep(CompileEnviron &) {}
@@ -274,7 +272,6 @@ namespace ast {
       } else /* default */ {
         exp = NULL;
       }
-      type = VOID_T;
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -344,7 +341,6 @@ namespace ast {
       SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
       label = new LocalLabelSymbol(n.name);
       env.add(n, label);
-      type = env.void_type();
       return this;
     }
     void finalize(FinalizeEnviron & env) {}
@@ -466,7 +462,6 @@ namespace ast {
       } else {
         if_false = NULL;
       }
-      type = env.void_type();
       exp = exp->resolve_to(env.bool_type(), env);
       return this;
     }
@@ -544,7 +539,6 @@ namespace ast {
       exp = parse_exp(p->arg(0), env);
       exp = exp->resolve_to(env.bool_type(), env);  
       body = parse_stmt(p->arg(1), env);
-      type = env.void_type();
       return this;
     }
     //void resolve(Environ & env) {
@@ -574,10 +568,9 @@ namespace ast {
   struct Var : public VarDeclaration {
     Var() : VarDeclaration("var"), init(), constructor() {}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
-    SymbolKey name;
     const Syntax * name_p;
     Exp * init;
-    AST * constructor;
+    Stmt * constructor;
     Stmt * parse_forward(const Syntax * p, Environ & env, Collect & collect) {
       parse_ = p;
       assert_num_args(2,3);
@@ -591,7 +584,6 @@ namespace ast {
       env.add(name, sym);
       collect.push_back(this); // fixme, not always the case
       deps_closed = true;
-      type = env.void_type();
       if (dynamic_cast<TopLevelVarSymbol *>(sym))
         return new Empty();
       else
@@ -696,14 +688,14 @@ namespace ast {
 
   struct EStmt : public Stmt {
     EStmt() : Stmt("estmt") {}
-    EStmt(Exp * e) : Stmt("estmt"), exp(e) {type = exp->type;}
+    EStmt(Exp * e) : Stmt("estmt"), exp(e) {}
     //AST * part(unsigned i) {return exp;}
     Exp * exp;
     EStmt * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
       assert_num_args(1);
       exp = parse_exp(p->arg(0), env);
-      type = exp->type;
+      //type = exp->type;
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -723,12 +715,12 @@ namespace ast {
   template <typename T> 
   struct BlockBase : public T {
     using T::parse_;
-    using T::type;
     BlockBase(String name) : T(name) {}
     static const bool as_exp = T::ast_type == Exp::ast_type;
     //AST * part(unsigned i) {return stmts[i];}
     SymbolTable symbols; // not valid until done parsing block
     Stmt * stmts;
+    inline void set_type_if_exp(Stmt * t);
     T * parse_self(const Syntax * p, Environ & env0) {
       parse_ = p;
       Environ env = env0.new_scope();
@@ -741,11 +733,7 @@ namespace ast {
         last = stmts = new Empty();
       }
       symbols = env.symbols;
-      if (as_exp) 
-        type = last->type;
-      else
-        type = env.void_type();
-
+      set_type_if_exp(last);
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -785,6 +773,16 @@ namespace ast {
         f << indent << ")\n";
     }
   };
+
+  template <>
+  inline void BlockBase<Stmt>::set_type_if_exp(Stmt *) {}
+
+  template <>
+  inline void BlockBase<Exp>::set_type_if_exp(Stmt * stmt) {
+    EStmt * estmt = dynamic_cast<EStmt *>(stmt);
+    assert(estmt); // FIXME Error Message
+    type = estmt->exp->type;
+  }
 
   struct Block : public BlockBase<Stmt> {
     Block() : BlockBase<Stmt>("block") {}
@@ -1997,7 +1995,6 @@ namespace ast {
     parms = expand_fun_parms(p->arg(1), env);
 
     ret_type = parse_type(p->arg(2), env);
-    type = ret_type;
     sym->type = env.function_sym()->inst(env.types, this);
 
     body = 0;
@@ -2112,7 +2109,6 @@ namespace ast {
       assert_num_args(1);
       what = parse_exp(p->arg(0), env);
       what = what->resolve_to(env.frame->return_type, env);
-      type = env.void_type();
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -2133,7 +2129,7 @@ namespace ast {
   struct Call : public Exp {
     Call() : Exp("call") {} 
     //AST * part(unsigned i) {return i == 0 ? lhs : new Generic(parse_->arg(1), parms);}
-    AST * lhs;
+    Exp * lhs;
     Vector<Exp *> parms;
     Call * parse_self(const Syntax * p, Environ & env) {
       parse_ = p;
@@ -2275,7 +2271,6 @@ namespace ast {
             v->sym->type = parse_type(q->part(0), env);
             env.add(name, v->sym);
             v->deps_closed = true;
-            v->type = env.void_type();
             body->members.push_back(v);
           }
         } else {
@@ -2859,12 +2854,13 @@ namespace ast {
   
   void VarDeclaration::write_flags_c(CompileWriter & f) const {
     StorageClass sc = storage_class;
-    if (f.for_compile_time() && dynamic_cast<TopLevelVarSymbol *>(sym)) {
-      if (sym->ct_ptr)
-        sc = EXTERN;
-      else if (sc == STATIC)
-        sc = NONE;
-    }
+    if (f.for_compile_time())
+      if (TopLevelVarSymbol * tl = dynamic_cast<TopLevelVarSymbol *>(sym)) {
+        if (tl->ct_ptr)
+          sc = EXTERN;
+        else if (sc == STATIC)
+          sc = NONE;
+      }
     switch (sc) {
     case AUTO: 
         f << "auto "; break;
@@ -2883,12 +2879,13 @@ namespace ast {
 
   void VarDeclaration::write_flags(CompileWriter & f) const {
     StorageClass sc = storage_class;
-    if (f.for_compile_time() && dynamic_cast<TopLevelVarSymbol *>(sym)) {
-      if (sym->ct_ptr)
-        sc = EXTERN;
-      else if (sc == STATIC)
-        sc = NONE;
-    }
+    if (f.for_compile_time())
+      if (TopLevelVarSymbol * tl = dynamic_cast<TopLevelVarSymbol *>(sym)) {
+        if (tl->ct_ptr)
+          sc = EXTERN;
+        else if (sc == STATIC)
+          sc = NONE;
+      }
     switch (sc) {
     case AUTO: 
         f << " :auto"; break;
@@ -3024,7 +3021,7 @@ namespace ast {
       if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
         if (cw.for_compile_time()) {
           tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl) && !d->sym->ct_ptr) {
+          if (cw.deps->have(tl) && !tl->ct_ptr) {
             d->compile_c(cw, Declaration::Body);
           }
         } else if (cw.for_macro_sep_c || !d->for_ct()) {
@@ -3140,7 +3137,7 @@ namespace ast {
       if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
         if (cw.for_compile_time()) {
           tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl) && !d->sym->ct_ptr) {
+          if (cw.deps->have(tl) && !tl->ct_ptr) {
             d->compile(cw, Declaration::Body);
           }
         } else if (cw.for_macro_sep_c || !d->for_ct()) {
