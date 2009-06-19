@@ -99,7 +99,7 @@ namespace ast {
 
   Stmt * add_stmts(Parts::const_iterator i, Parts::const_iterator end, Environ & env)
   {
-    Stmt * a;
+    Stmt * a = NULL;
     Parse<StmtDeclPos> prs(env);
     for (; i != end; ++i) {
       const Syntax * p = prs.partly_expand(*i);

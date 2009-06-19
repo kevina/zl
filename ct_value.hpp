@@ -3,6 +3,7 @@
 
 #include "util.hpp"
 
+#include <stdint.h>
 #include <limits>
 
 namespace ast {

@@ -341,7 +341,7 @@ namespace ast {
   }
 
   template <typename T/*, typename ExtraCmp*/>
-  static inline
+  inline
   const SymbolNode * find_symbol_p2(const SymbolNode * s, SymbolKey k, 
                                     const SymbolNode * start, const SymbolNode * stop,
                                     Strategy strategy)
@@ -353,7 +353,7 @@ namespace ast {
     return s;
   }
   template <>
-  static inline
+  inline
   const SymbolNode * find_symbol_p2<FluidBinding>(const SymbolNode * s, SymbolKey, 
                                                   const SymbolNode *, const SymbolNode *,
                                                   Strategy)

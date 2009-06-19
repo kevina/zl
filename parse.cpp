@@ -160,7 +160,7 @@ void Syntax::set_src_from_parts() const {
       break;
     }
   }
-  assert((!s.begin && !s.end) || s.begin && s.end);
+  assert((!s.begin && !s.end) || (s.begin && s.end));
   if (s.source) {
     str_ = s;
   } else if (d->parts.size() > 0) { // FIXME: Is this check really necessary ...
