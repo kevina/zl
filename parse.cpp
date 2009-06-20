@@ -238,8 +238,8 @@ void Syntax::print() const {
 }
 
 void Syntax::to_string(OStream & o, PrintFlags f) const {
-  if (!d) { 
-    if (entity_)
+  if (!d.have_d()) { 
+    if (have_entity())
       o.printf("(%s)", ~escape(what_.to_string()));
     else if (!what_.defined()) 
       o.printf("()");
@@ -439,12 +439,6 @@ namespace parse_common {
 }
 
 
-static inline Syntax::D * make_as_entity() {
-  Syntax::D * d = new Syntax::D;
-  d->parts.push_back(new Syntax("<entity>"));
-  return d;
-}
-Syntax::D * const Syntax::AS_ENTITY = make_as_entity();
 
 
 

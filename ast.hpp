@@ -54,7 +54,12 @@ namespace ast {
     memcpy(lhs, rhs, t->size());
   }
 
-  struct AST : public Entity {
+  struct AST {
+    typedef ::TypeInfo<AST> TypeInfo;
+    virtual void set_syntax_data(Syntax::Data & d) {
+      d.type_id = TypeInfo::id;
+      d.data = this;
+    }
     String what_;
     String what() const {return what_;}
     virtual AST * part(unsigned i) {return 0;}
@@ -83,6 +88,14 @@ namespace ast {
   struct Stmt;
 
   struct Exp : public AST {
+    struct TypeInfo {
+      typedef Exp type; 
+      static const unsigned id = AST::TypeInfo::id | 1;
+    };
+    void set_syntax_data(Syntax::Data & d) {
+      d.type_id = TypeInfo::id;
+      d.data = this;
+    }
     static const int ast_type = 1;
     Exp(String n, const Syntax * p = 0) : AST(n,p), type(), lvalue(false), ct_value_(0), temps() {}
     const Type * type;
@@ -118,6 +131,14 @@ namespace ast {
 
   struct Stmt : public AST {
   public:
+    struct TypeInfo {
+      typedef Stmt type; 
+      static const unsigned id = AST::TypeInfo::id | 2;
+    };
+    void set_syntax_data(Syntax::Data & d) {
+      d.type_id = TypeInfo::id;
+      d.data = this;
+    }
     static const int ast_type = 2;
     Stmt(String n, const Syntax * p = 0) : AST(n,p), next() {}
     Stmt * next;
@@ -237,9 +258,6 @@ namespace ast {
   };
 
 }
-
-inline Syntax::Syntax(const ast::AST * e)
-  : what_("<entity>"), str_(e->parse_->str()), d(), repl(), entity_(const_cast<ast::AST*>(e)) {}
 
 namespace ast {
   
@@ -526,11 +544,11 @@ namespace ast {
   {
     if (p->simple()) {
       return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy, gather, cmp);
-    } else if (p->entity()) {
+    } else if (p->entity<Symbol>()) {
       //printf(">%s\n", typeid(*p->entity()).name());
-      if (const T * s = dynamic_cast<const T *>(p->entity())) {
+      if (const T * s = dynamic_cast<const T *>(p->entity<Symbol>())) {
         return s;
-      } else if (const SymbolKeyEntity * s = dynamic_cast<const SymbolKeyEntity *>(p->entity())) {
+      } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
         return lookup_symbol<T>(s->name, p->str(), start, stop, strategy, gather, cmp);
       } else {
         throw error(p, "Wrong type of symbol found...");

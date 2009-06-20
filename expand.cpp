@@ -613,7 +613,7 @@ bool match_list(Match * m,
       if (v.name[0] == '@') {
         v.name = v.name.c_str() + 1;
         Syntax * n = new Syntax(new Syntax("@"), r_i, r_end);
-        if (with->d) {
+        if (with->d.have_d()) {
           const Flags & flags = with->d->flags;
           for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
             if (!pattern->flag((*i)->what()))
@@ -1075,7 +1075,7 @@ const Syntax * e_parse_exp(const Syntax * p, Environ & env) {
 }
 
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags) {
-  if (p->entity()) return p;
+  if (p->have_entity()) return p;
   SymbolName what = p->what().name;
   //printf("\n>expand>%s//\n", ~what);
   //p->str().sample_w_loc(COUT);
@@ -1230,7 +1230,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     return expand_binding(p->arg(0), ns, env);
   } else if (p->is_a("w/outer")) {
     throw error(p, "Can not use outer namespaces in binding form");
-  } else if (const SymbolKeyEntity * s = dynamic_cast<const SymbolKeyEntity *>(p->entity())) {
+  } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
     return s->name;
   } else {
     fprintf(stderr, "Unsupported Binding Form: %s\n", ~p->to_string());
@@ -1451,8 +1451,7 @@ template <typename T>
 Syntax::Syntax(ChangeSrc<T> & f, const Syntax & other)
   : what_(other.what_), 
     str_(f(other.str_.source), other.str_), 
-    d(other.d ? new D(f, *other.d) : 0), 
-    entity_(other.entity_) 
+    d(other.d)
 {
   if (other.repl) {
     repl = new Replacements(*other.repl);

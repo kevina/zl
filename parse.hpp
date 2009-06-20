@@ -6,8 +6,8 @@
 #include "gc.hpp"
 #include "util.hpp"
 #include "string_buf.hpp" // FIXME: elim dep
-#include "entity.hpp"
 #include "symbol_table.hpp"
+#include "type_info.hpp"
 
 // common structure used for parse results
 
@@ -77,7 +77,8 @@ struct SourceStr : public SubStr {
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
 };
 
-struct Error : public Entity {
+struct Error {
+  typedef ::TypeInfo<Error> TypeInfo;
   const SourceInfo * source;
   const char * pos;
   String msg;
@@ -174,14 +175,68 @@ struct Flags : public gc {
 struct Replacements;
 
 struct Syntax : public gc {
+  static const unsigned D_T = 1;
   struct D : public gc_cleanup {
+    struct TypeInfo {typedef D type; static const int id = D_T;};
     Parts parts;
     Flags flags;
     D() {}
     template <typename T> D(ChangeSrc<T> & f, const D & o)
       : parts(f, o.parts), flags(f, o.flags) {}
   };
-  static D * const AS_ENTITY;
+  struct Data : public gc {
+    unsigned type_id;
+    void * data;
+    Data() : type_id(), data() {}
+    Data(const Data & o)
+      : type_id(o.type_id)
+      , data(o.type_id == D_T ? new D(*static_cast<D *>(o.data)) : o.data) 
+      {}
+    Data & operator=(const Data & o) {
+      type_id = o.type_id;
+      data = o.type_id == D_T ? new D(*static_cast<D *>(o.data)) : o.data;
+      return *this;
+    }
+    bool empty() const {return type_id == 0;}
+    bool have_d() const {return type_id == D_T;}
+    bool have_entity() const {return type_id != 0 && type_id != D_T;}
+    template <typename T, bool base> struct Set;
+    template <typename T> struct Set<T, false> {
+      static void f(Data & ths, T * d) {
+        ths.type_id = T::TypeInfo::id;
+        ths.data = static_cast<typename T::TypeInfo::type *>(d);
+      }
+    };
+    template <typename T> struct Set<T, true> {
+      static void f(Data & ths, T * d) {
+        d->set_syntax_data(ths);
+      }
+    };
+    template <typename T> void set(T * d) {
+      Set<T, (T::TypeInfo::id & 0xFFu) == 0>::f(*this, d);
+    }
+    template <typename T> Data(T * d) {set(d);}
+    template <typename T> Data(const T * d) {set(const_cast<T *>(d));}
+    template <typename T> Data & operator=(T * d) {
+      set(d);
+      return *this;
+    }
+    template <typename T> bool is_a() const {
+      return type_id == T::TypeInfo::id || (type_id & ~0xFFu) == T::TypeInfo::id;
+    }
+    template <typename T> operator T * () const {
+      if (is_a<T>()) 
+        return static_cast<typename T::TypeInfo::type *>(data);
+      else 
+        return NULL;
+    }
+    D * operator-> () {
+      return static_cast<D *>(data);
+    }
+    const D * operator-> () const {
+      return static_cast<const D *>(data);
+    }
+  };
   SymbolName what_;
   SymbolName what() const {return what_;}
   String as_string() const {assert(simple() || part(0)->simple()); return what_;}
@@ -191,71 +246,70 @@ struct Syntax : public gc {
   const char * operator ~ () const {return ~as_string();}
   SymbolName string_if_simple() const {return simple() ? what() : SymbolName();}
   mutable SourceStr str_;
-  const SourceStr & str() const {if (d && str_.empty()) set_src_from_parts(); return str_;}
-  D * d;
+  const SourceStr & str() const {if (d.have_d() && str_.empty()) set_src_from_parts(); return str_;}
+  Data d;
   mutable const Syntax * self; // hack, see parts_begin()
   const Replacements * repl;
-  Entity * entity_;
-  Entity * entity() const {return entity_;}
+  bool have_entity() const {return d.have_entity();}
+  template <typename T> T * entity() const {return d;}
 
   Syntax(const Syntax & other) 
-    : what_(other.what_), str_(other.str_), d(other.d ? new D(*other.d) : 0), repl(other.repl), entity_(other.entity_)
+    : what_(other.what_), str_(other.str_), d(other.d), repl(other.repl)
   {}
   template <typename T> Syntax(ChangeSrc<T> & f, const Syntax & other); // defined in expand.cpp
   Syntax & operator= (const Syntax & other) {
     what_ = other.what_;
     str_ = other.str_;
-    d = other.d ? new D(*other.d) : 0;
+    d = other.d;
     repl = other.repl;
-    entity_ = other.entity_;
     return *this;
   }
 
-  Syntax() : d(), repl(0), entity_() {}
-  explicit Syntax(const char * n) : what_(n), d(), repl(), entity_() {}
-  explicit Syntax(String n) : what_(n), d(), repl(), entity_() {}
-  explicit Syntax(SymbolName n) : what_(n), d(), repl(), entity_() {}
+  Syntax() : d(), repl(0) {}
+  explicit Syntax(const char * n) : what_(n), d(), repl() {}
+  explicit Syntax(String n) : what_(n), d(), repl() {}
+  explicit Syntax(SymbolName n) : what_(n), d(), repl() {}
   Syntax(SymbolName n, const SourceStr & s) 
-    : what_(n), str_(s), d(), repl(), entity_() {}
+    : what_(n), str_(s), d(), repl() {}
   Syntax(SymbolName n, const SourceStr & s, const char * e)
-    : what_(n), str_(s.source, s.begin, e), d(), repl(), entity_() {}
+    : what_(n), str_(s.source, s.begin, e), d(), repl() {}
   Syntax(SymbolName n, const SourceStr & s, const char * b, const char * e)
-    : what_(n), str_(s.source, b, e), d(), repl(), entity_() {}
+    : what_(n), str_(s.source, b, e), d(), repl() {}
   Syntax(const SourceStr & s) 
-    : str_(s), d(), repl(0), entity_() {}
+    : str_(s), d(), repl(0) {}
 
   Syntax(const Syntax * o, const ast::Mark * m, const SourceInfo * s)
-    : what_(ast::mark(o->what_, m)), str_(s, o->str_), d(), repl(), entity_()
+    : what_(ast::mark(o->what_, m)), str_(s, o->str_), d(), repl()
     {assert(o->simple()); /*printf(">>%s %p\n", ~what_, what_.marks);*/}
 
   Syntax(const Syntax * o, const ast::Marks * m)
-    : what_(o->what_.name, m), str_(o->str_), d(), repl(), entity_()
+    : what_(o->what_.name, m), str_(o->str_), d(), repl()
     {assert(o->simple()); /*printf(">>%s %p\n", ~what_, what_.marks);*/}
 
-  Syntax(const SourceStr & s, const Syntax * p) : str_(s), repl(), entity_() {
+  Syntax(const SourceStr & s, const Syntax * p) : str_(s), repl() {
     d = new D; 
     what_ = p->string_if_simple();
     d->parts.push_back(p);
   }
-  explicit Syntax(const Syntax * p) : repl(), entity_() {
+  explicit Syntax(const Syntax * p) : repl() {
     d = new D; 
     what_ = p->string_if_simple();
     d->parts.push_back(p);
   }
-  Syntax(const Syntax * p, const Syntax * x) : repl(0), entity_() {
+  Syntax(const Syntax * p, const Syntax * x) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
   }
-  Syntax(const Syntax * p, const Syntax * x, const Syntax * y) : repl(0), entity_() {
+  Syntax(const Syntax * p, const Syntax * x, const Syntax * y) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
     d->parts.push_back(y);
   }
-  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : repl(0), entity_() {
+  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
@@ -263,7 +317,7 @@ struct Syntax : public gc {
     d->parts.push_back(y);
     d->parts.push_back(z);
   }
-  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a) : repl(0), entity_() {
+  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
@@ -272,7 +326,7 @@ struct Syntax : public gc {
     d->parts.push_back(z);
     d->parts.push_back(a);
   }
-  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a, const Syntax * b) : repl(0), entity_() {
+  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a, const Syntax * b) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
@@ -282,20 +336,20 @@ struct Syntax : public gc {
     d->parts.push_back(a);
     d->parts.push_back(b);
   }
-  Syntax(const SourceStr & s, const Syntax * p, const Syntax * x) : str_(s), repl(0), entity_() {
+  Syntax(const SourceStr & s, const Syntax * p, const Syntax * x) : str_(s), repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
   }
-  Syntax(const SourceStr & s, const Syntax * p, const Syntax * x, const Syntax * y) : str_(s), repl(0), entity_()  {
+  Syntax(const SourceStr & s, const Syntax * p, const Syntax * x, const Syntax * y) : str_(s), repl(0)  {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
     d->parts.push_back(x);
     d->parts.push_back(y);
   }
-  Syntax(const SourceStr & s, const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : str_(s), repl(0), entity_()  {
+  Syntax(const SourceStr & s, const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : str_(s), repl(0)  {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p); 
@@ -303,33 +357,34 @@ struct Syntax : public gc {
     d->parts.push_back(y);
     d->parts.push_back(z);
   }
-  Syntax(const Entity * e) 
-    : what_("<entity>"), str_(), d(), repl(), entity_(const_cast<Entity*>(e)) {}
-  Syntax(const Syntax * s, const Entity * e) 
-    : what_("<entity>"), str_(s->str()), d(), repl(), entity_(const_cast<Entity*>(e)) {}
-  inline Syntax(const ast::AST * e);
-  Syntax(const Parts & ps) : repl(0), entity_() {
+  template <typename T>
+  Syntax(const T * e) 
+    : what_("<entity>"), str_(), d(e), repl() {}
+  template <typename T>
+  Syntax(const Syntax * s, const T * e) 
+    : what_("<entity>"), str_(s->str()), d(e), repl() {}
+  Syntax(const Parts & ps) : repl(0) {
     d = new D;
     d->parts.append(ps);
   }
-  Syntax(const Syntax * p, Parts::const_iterator b, Parts::const_iterator e) : repl(0), entity_() {
+  Syntax(const Syntax * p, Parts::const_iterator b, Parts::const_iterator e) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p);
     d->parts.append(b, e);
   }
-  Syntax(const Syntax * p, const Parts & ps) : repl(0), entity_() {
+  Syntax(const Syntax * p, const Parts & ps) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p);
     d->parts.append(ps);
   }
-  Syntax(const Parts & ps, const Parts & ps2) : repl(0), entity_() {
+  Syntax(const Parts & ps, const Parts & ps2) : repl(0) {
     d = new D;
     d->parts.append(ps);
     d->parts.append(ps2);
   }
-  Syntax(const Syntax * p, const Parts & ps, const Parts & ps2) : repl(0), entity_() {
+  Syntax(const Syntax * p, const Parts & ps, const Parts & ps2) : repl(0) {
     d = new D;
     what_ = p->string_if_simple();
     d->parts.push_back(p);
@@ -337,14 +392,13 @@ struct Syntax : public gc {
     d->parts.append(ps2);
   }
 
-  bool simple() const {return !d && !entity_;}
+  bool simple() const {return d.empty();}
   void make_branch() {
-    if (entity_) {
+    if (have_entity()) {
       const Syntax * p = new Syntax(*this);
       d = new D;
       d->parts.push_back(p);
       what_ = String();
-      entity_ = NULL;
     } else if (what_.defined()) {
       const Syntax * p = new Syntax(*this);
       d = new D;
@@ -354,15 +408,15 @@ struct Syntax : public gc {
     }
   }
   const Syntax * ensure_branch() const {
-    if (d) return this;
+    if (d.have_d()) return this;
     Syntax * s = new Syntax(*this);
     s->make_branch();
     return s;
   }
 
   unsigned num_parts() const {
-    if (!d && what_.defined()) return 1;
-    if (!d) return 0;
+    if (!d.have_d() && what_.defined()) return 1;
+    if (!d.have_d()) return 0;
     else return d->parts.size();
   }
   unsigned num_args() const {
@@ -370,7 +424,7 @@ struct Syntax : public gc {
     return num_parts() - 1;
   }
   const Syntax * part(unsigned i) const {
-    if (!d) return this;
+    if (!d.have_d()) return this;
     else return d->parts[i];
   }
   const Syntax * arg(unsigned i) const {
@@ -383,50 +437,50 @@ struct Syntax : public gc {
     return d->parts[i+1];
   }
   Parts::const_iterator parts_begin() const {
-    if (d) return d->parts.begin();
+    if (d.have_d()) return d->parts.begin();
     self = this;
     return &self;
   }
   Parts::const_iterator parts_end()   const {
-    if (d) return d->parts.end();
+    if (d.have_d()) return d->parts.end();
     self = this;
     if (what_.defined()) return &self + 1;
     else return &self;
   }
   Parts::const_iterator args_begin() const {
-    if (d) return d->parts.begin() + 1;
+    if (d.have_d()) return d->parts.begin() + 1;
     return &self + 1;
   }
   Parts::const_iterator args_end()   const {
-    if (d) return d->parts.end();
+    if (d.have_d()) return d->parts.end();
     return &self + 1;
   }
   const Syntax * flag(SymbolName n) const {
-    if (!d) return NULL;
+    if (!d.have_d()) return NULL;
     else return d->flags.lookup(n);
   }
   Flags::const_iterator flags_begin() const {
-    if (d) return d->flags.begin();
+    if (d.have_d()) return d->flags.begin();
     else return Flags::EMPTY.begin();
   }
   Flags::const_iterator flags_end()   const {
-    if (d) return d->flags.end();
+    if (d.have_d()) return d->flags.end();
     else return Flags::EMPTY.end();
   }
 
   void add_part(const Syntax * p) {
-    if (!d) make_branch();
+    if (!d.have_d()) make_branch();
     if (d->parts.empty()) what_ = p->string_if_simple();
     d->parts.push_back(p);
   }
   void add_args(const Syntax * other) {
-    if (!d) make_branch();
+    if (!d.have_d()) make_branch();
     assert(what_.defined());
     d->parts.append(other->args_begin(), other->args_end());
   }
   void add_parts(Parts::const_iterator i, Parts::const_iterator end) {
     if (i == end) return;
-    if (!d) make_branch();
+    if (!d.have_d()) make_branch();
     if (d->parts.empty()) what_ = (*i)->string_if_simple();
     d->parts.append(i, end);
   }
@@ -435,26 +489,26 @@ struct Syntax : public gc {
   }
 
   void add_flag(const Syntax * p) {
-    if (!d) make_branch();
+    if (!d.have_d()) make_branch();
     d->flags.insert(p);
   }
   void add_flags(const Flags & f) {
-    if (!d) make_branch();
+    if (!d.have_d()) make_branch();
     d->flags.merge(f);
   }
   void add_flags(const Syntax * p) {
-    if (!p->d) return;
-    if (!d) make_branch();
+    if (!p->d.have_d()) return;
+    if (!d.have_d()) make_branch();
     d->flags.merge(p->d->flags);
   }
   void set_flags(const Flags & p) {
     if (p.empty()) return;
-    if (!d) make_branch();
+    if (!d.have_d()) make_branch();
     d->flags = p;
   }
   void set_flags(const Syntax * p) {
-    if (!p->d) return;
-    if (!d) make_branch();
+    if (!p->d.have_d()) return;
+    if (!d.have_d()) make_branch();
     d->flags = p->d->flags;
   }
   void set_src_from_parts() const; // const is a lie

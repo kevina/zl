@@ -8,7 +8,7 @@
 #include "ostream.hpp"
 #include "vector.hpp"
 #include "string_buf.hpp"
-#include "entity.hpp"
+#include "type_info.hpp"
 
 struct Syntax;
 struct Error;
@@ -146,7 +146,8 @@ namespace ast {
     }
   };
 
-  struct SymbolKeyEntity : public Entity {
+  struct SymbolKeyEntity {
+    typedef ::TypeInfo<SymbolKeyEntity> TypeInfo;
     SymbolKeyEntity(const SymbolKey n) : name(n) {}
     SymbolKey name;
   };
@@ -158,7 +159,8 @@ namespace ast {
 
   enum Pass {AllPasses, FirstPass, SecondPass};
 
-  struct Symbol : public Entity {
+  struct Symbol {
+    typedef ::TypeInfo<Symbol> TypeInfo;
     String name;
     mutable String uniq_name_;
     Symbol() {}

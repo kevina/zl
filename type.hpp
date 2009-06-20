@@ -4,7 +4,6 @@
 #include <typeinfo>
 #include <stdint.h>
 
-#include "entity.hpp"
 #include "util.hpp"
 #include "symbol_table.hpp"
 #include "string_buf.hpp"
@@ -224,8 +223,9 @@ namespace ast {
     return category_in(x->parent1, y);
   }
 
-  class TypeInst : public Entity {
+  class TypeInst {
   public:
+    typedef ::TypeInfo<TypeInst> TypeInfo;
     String what() const {return type_symbol->name;}  
     Syntax * syntax_obj() const {return type_symbol->parse;}
     TypeCategory * category;

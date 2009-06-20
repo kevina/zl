@@ -264,8 +264,8 @@ namespace ast {
     : SimpleTypeInst(a->type->effective), of_ast(a), of(a->type->effective) {type_symbol = of->type_symbol;}
 
   Type * parse_type(const Syntax * p, Environ & env) {
-    if (p->entity()) {
-      Type * type = dynamic_cast<Type *>(p->entity());
+    if (p->have_entity()) {
+      Type * type = p->entity<Type>();
       assert(type);
       return type;
     }

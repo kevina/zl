@@ -2585,12 +2585,14 @@ namespace ast {
 
   template <typename T>
   T * try_ast(const Syntax * p, Environ & env) {
-    if (p->entity()) {
-      T * ast = dynamic_cast<T *>(p->entity());
-      if (ast) return ast;
-      Error * err = dynamic_cast<Error *>(p->entity());
-      if (err) throw err;
-      abort(); // FIXME Error message
+    if (p->have_entity()) {
+      if (T * ast = p->entity<T>()) {
+        return ast;
+      } else if (Error * err = p->entity<Error>()) {
+        throw err;
+      } else {
+        abort(); // FIXME Error message
+      }
     }
     return 0;
   }
