@@ -418,8 +418,8 @@ namespace ast {
   };
 
   struct TopLevelVarSymbol : public VarSymbol, public TopLevelSymbol {
-    mutable void * ct_ptr; // no relation to ct_value, pointer to
-                           // compiled symbol, used for proc. macros
+    mutable void * ct_ptr; // No relation to ct_value.  Pointer to
+                           // compiled symbol, used for proc. macros.
     const VarDeclaration * decl;
     AST * init;
     AST * cleanup;
