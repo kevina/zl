@@ -430,13 +430,13 @@ namespace ast {
     }
     if (n_r) {
       if (!exp->lvalue) 
-        throw error(orig_exp->parse_, 
+        throw error(orig_exp->syn, 
                     "Can not take a reference of temporary (yet) in conversion from \"%s\" to \"%s\"",
                     ~orig_exp->type->to_string(), ~type->to_string());
       if (have != n_r->subtype->unqualified) 
         goto fail;
       if (exp->type->read_only && !n_r->subtype->read_only)
-        throw error(orig_exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+        throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                     ~orig_exp->type->to_string(), ~type->to_string());
       return to_ref(exp, env);
     }
@@ -487,7 +487,7 @@ namespace ast {
           dynamic_cast<const Void *>(n_subtype->unqualified) /* this one is C only */)  
       {
         if (h_subtype->read_only && !n_subtype->read_only)
-          throw error(orig_exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+          throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
         else
           return exp;
@@ -496,7 +496,7 @@ namespace ast {
                  h_subtype->is(n_subtype->category)) 
       { // this is C++ only
         if (h_subtype->read_only && !n_subtype->read_only)
-          throw error(orig_exp->parse_, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+          throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
         else 
           return cast_up(exp, n_subtype, env);
@@ -508,7 +508,7 @@ namespace ast {
 
   fail:
     //abort();
-    throw error(orig_exp->parse_, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
+    throw error(orig_exp->syn, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
                 ~type->to_string(), ~orig_exp->type->to_string());
   }
 
@@ -531,10 +531,10 @@ namespace ast {
 
   void C_TypeRelation::resolve_assign(Exp * & lhs, Exp * & rhs, Environ & env) const {
     if (!lhs->lvalue)
-      throw error(lhs->parse_, "Can not be used as lvalue");
-    //throw error(parse_->arg(1), "Can not be used as lvalue");
+      throw error(lhs->syn, "Can not be used as lvalue");
+    //throw error(syn->arg(1), "Can not be used as lvalue");
     if (lhs->type->read_only) 
-      throw error (lhs->parse_, "Assignment to read-only location");
+      throw error (lhs->syn, "Assignment to read-only location");
     const Reference * lhs_r = dynamic_cast<const Reference *>(lhs->type->unqualified);
     if (lhs_r) {
       lhs = from_ref(lhs, env);
@@ -544,7 +544,7 @@ namespace ast {
     } catch (Error * err) {
       StringBuf buf;
       buf = err->msg;
-      buf.printf(" in assignment of %s.", ~lhs->parse_->sample_w_loc());
+      buf.printf(" in assignment of %s.", ~lhs->syn->sample_w_loc());
       err->msg = buf.freeze();
       throw err;
     }

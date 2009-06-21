@@ -478,7 +478,7 @@ struct Macro : public MacroSymbol {
     name = real_name.name;
     fun = e.symbols.lookup<TopLevelVarSymbol>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
     dynamic_cast<const Fun *>(fun->decl)->is_macro = true;
-    def = fun->decl->parse_;
+    def = fun->decl->syn;
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ & env) const {

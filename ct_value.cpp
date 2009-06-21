@@ -476,18 +476,18 @@ namespace ast {
 
   template <typename T> 
   T Exp::real_ct_value() const {
-    if (!ct_value_) throw error(parse_, "\"%s\" can not be used in constant-expression this way", ~parse_->to_string());
+    if (!ct_value_) throw error(syn, "\"%s\" can not be used in constant-expression this way", ~syn->to_string());
     const CT_Value<T> * ctv = dynamic_cast<const CT_Value<T> *>(ct_value_);
     if (ctv)
       return ctv->val;
     const CT_Value_Base * cast_ctv = cast_get_value(ct_value_->type_name(), CT_Type<T>::name)(this);
     if (!cast_ctv) {
-      throw error(parse_, "\"%s\" can not be used in constant-expression this way <1>", ~parse_->to_string());
+      throw error(syn, "\"%s\" can not be used in constant-expression this way <1>", ~syn->to_string());
     }
     ctv = dynamic_cast<const CT_Value<T> *>(cast_ctv);
     if (ctv)
       return ctv->val;
-    throw error(parse_, "\"%s\" can not be used in constant-expression this way <2>", ~parse_->to_string());
+    throw error(syn, "\"%s\" can not be used in constant-expression this way <2>", ~syn->to_string());
     //abort();
   }
   template uint8_t Exp::real_ct_value<uint8_t>() const;

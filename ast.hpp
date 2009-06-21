@@ -60,21 +60,20 @@ namespace ast {
       d.type_id = TypeInfo::id;
       d.data = this;
     }
-    String what_;
-    String what() const {return what_;}
+    virtual const char * what() const = 0;
     virtual AST * part(unsigned i) {return 0;}
-    const Syntax * parse_;
-    AST(String n, const Syntax * p = 0) : what_(n), parse_(p) {}
+    const Syntax * syn;
+    AST(const Syntax * p = 0) : syn(p) {}
     void assert_num_args(int p) {
-      if (parse_->num_args() != p) 
+      if (syn->num_args() != p) 
         //abort();
-        throw error(parse_, "%s: Wrong Number of Arguments", ~what_);
+        throw error(syn, "%s: Wrong Number of Arguments", what());
     };
     void assert_num_args(int min, int max) {
-      if (parse_->num_args() < min || parse_->num_args() > max) 
-        throw error(0, parse_->str(), "%s: Wrong Number of Arguments", ~what_);
+      if (syn->num_args() < min || syn->num_args() > max) 
+        throw error(0, syn->str(), "%s: Wrong Number of Arguments", what());
     };
-    //virtual AST * parse_self(const Syntax * p, Environ &) = 0;
+    //virtual AST * synself(const Syntax * p, Environ &) = 0;
       // ^^ returns itself, to allow chaining ie 
       //      new Foo(p)->parse(env);
     virtual void finalize(FinalizeEnviron &) = 0;
@@ -97,7 +96,7 @@ namespace ast {
       d.data = this;
     }
     static const int ast_type = 1;
-    Exp(String n, const Syntax * p = 0) : AST(n,p), type(), lvalue(false), ct_value_(0), temps() {}
+    Exp(const Syntax * p = 0) : AST(p), type(), lvalue(false), ct_value_(0), temps() {}
     const Type * type;
     int lvalue; // 0 false, 1 true, 2 true and addr ct_value
     const CT_Value_Base * ct_value_;
@@ -124,7 +123,7 @@ namespace ast {
   };
 
   struct ExpLeaf : public Exp {
-    ExpLeaf(String n, const Syntax * p = 0) : Exp(n,p) {}
+    ExpLeaf(const Syntax * p = 0) : Exp(p) {}
     void compile_prep(CompileEnviron &) {}
     void finalize(FinalizeEnviron &) {}
   };
@@ -140,12 +139,12 @@ namespace ast {
       d.data = this;
     }
     static const int ast_type = 2;
-    Stmt(String n, const Syntax * p = 0) : AST(n,p), next() {}
+    Stmt(const Syntax * p = 0) : AST(p), next() {}
     Stmt * next;
   };
 
   struct StmtLeaf : public Stmt {
-    StmtLeaf(String n, const Syntax * p = 0) : Stmt(n,p) {}
+    StmtLeaf(const Syntax * p = 0) : Stmt(p) {}
     void compile_prep(CompileEnviron &) {}
     void finalize(FinalizeEnviron &) {}
   };
@@ -156,7 +155,7 @@ namespace ast {
   }
 
   struct FakeAST : public AST {
-    FakeAST(String n, const Syntax * p = 0) : AST(n,p) {}
+    FakeAST(const Syntax * p = 0) : AST(p) {}
     void compile_c(CompileWriter &) {abort();}
     void compile(CompileWriter &) {abort();}
     void compile_prep(CompileEnviron &) {abort();}
@@ -164,9 +163,10 @@ namespace ast {
   };
 
   struct Empty : public StmtLeaf {
-    Empty() : StmtLeaf("empty") {}
+    Empty() {}
+    const char * what() const {return "empty";}
     Empty * parse_self(const Syntax * p, Environ & env) {
-      parse_ = p;
+      syn = p;
       assert_num_args(0);
       return this;
     }
@@ -179,7 +179,8 @@ namespace ast {
   };
 
   struct Literal : public ExpLeaf {
-    Literal() : ExpLeaf("n") {}
+    Literal() {}
+    const char * what() const {return "n";}
     //AST * part(unsigned i);
     Literal * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
@@ -187,7 +188,8 @@ namespace ast {
   };
 
   struct FloatC : public ExpLeaf {
-    FloatC() : ExpLeaf("f") {}
+    FloatC() {}
+    const char * what() const {return "f";}
     //AST * part(unsigned i);
     FloatC * parse_self(const Syntax * p, Environ &);
     void compile_c(CompileWriter & f);
@@ -195,7 +197,8 @@ namespace ast {
   };
 
   struct StringC : public ExpLeaf {
-    StringC() : ExpLeaf("s") {}
+    StringC() {}
+    const char * what() const {return "s";}
     //AST * part(unsigned i);
     String orig;
     //String value; // unused at the moment
@@ -205,7 +208,8 @@ namespace ast {
   };
 
   struct CharC : public ExpLeaf {
-    CharC() : ExpLeaf("c") {}
+    CharC() {}
+    const char * what() const {return "c";}
     //AST * part(unsigned i);
     String orig;
     //char value; // unused at the moment
@@ -215,7 +219,8 @@ namespace ast {
   };
 
   struct EIf : public Exp {
-    EIf() : Exp("eif") {}
+    EIf() {}
+    const char * what() const {return "eif";}
     //AST * part(unsigned i) 
     //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
     Exp * exp;
@@ -229,11 +234,13 @@ namespace ast {
   };
 
   struct BinOp : public Exp {
-    BinOp(String name, String op0) : Exp(name), op(op0) {}
+    BinOp(const char * name, String op0) : what_(name), op(op0) {}
     //AST * part(unsigned i) {return i == 0 ? lhs : rhs;}
+    const char * what_;
     Exp * lhs;
     Exp * rhs;
     String op;
+    const char * what() const {return what_;}
     BinOp * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
     virtual void make_ct_value();
@@ -244,10 +251,12 @@ namespace ast {
   };
 
   struct UnOp : public Exp {
-    UnOp(String name, String op0) : Exp(name), op(op0) {}
+    UnOp(const char * name, String op0) : what_(name), op(op0) {}
+    const char * what_;
     //AST * part(unsigned i) {return exp;}
     Exp * exp;
     String op;
+    const char * what() const {return what_;}
     UnOp * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
     virtual void make_ct_value();
@@ -326,9 +335,11 @@ namespace ast {
   const CT_Value_Base * cast_ct_value(const Exp * from, const Type * to);
 
   struct Cast : public Exp {
-    Cast(String s) : Exp(s) {}
+    Cast(const char * s) : what_(s) {}
+    const char * what_;
+    const char * what() const {return what_;}
     Cast(Exp * e, const Type * t) 
-      : Exp("<cast>") {parse_ = e->parse_; exp = e; type = t; ct_value_ = cast_ct_value(e, t);}
+      : what_("<cast>") {syn = e->syn; exp = e; type = t; ct_value_ = cast_ct_value(e, t);}
     Exp * exp;
     void compile_prep(CompileEnviron&);
     void compile_c(CompileWriter&);
@@ -364,11 +375,11 @@ namespace ast {
     virtual void compile(CompileWriter &, Phase) const = 0;
     void compile_c(CompileWriter & cw) {compile_c(cw, Normal);}
     void compile(CompileWriter & cw) {compile(cw, Normal);}
-    Declaration(String n) : Stmt(n) {}
+    Declaration() {}
   };
 
   struct VarDeclaration : public Declaration, public ForSecondPass {
-    VarDeclaration(String n) : Declaration(n) {}
+    VarDeclaration() {}
     enum StorageClass {NONE, AUTO, STATIC, EXTERN, REGISTER};
     StorageClass storage_class;
     VarSymbol * sym;
@@ -397,7 +408,8 @@ namespace ast {
   typedef Vector<ForSecondPass *> Collect;
 
   struct Fun : public VarDeclaration {
-    Fun() : VarDeclaration("fun"), env_ss(), is_macro() {}
+    Fun() : env_ss(), is_macro() {}
+    const char * what() const {return "fun";}
     //AST * part(unsigned i);
     SymbolKey name;
     SymbolTable symbols;
