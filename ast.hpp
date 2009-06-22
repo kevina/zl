@@ -128,7 +128,7 @@ namespace ast {
     void finalize(FinalizeEnviron &) {}
   };
 
-  struct Stmt : public AST {
+  struct Stmt : virtual public AST {
   public:
     struct TypeInfo {
       typedef Stmt type; 
@@ -149,11 +149,6 @@ namespace ast {
     void finalize(FinalizeEnviron &) {}
   };
 
-  inline void InsrPoint::add(Stmt * to_add) {
-    *ptr = to_add;
-    ptr = &to_add->next;
-  }
-
   struct FakeAST : public AST {
     FakeAST(const Syntax * p = 0) : AST(p) {}
     void compile_c(CompileWriter &) {abort();}
@@ -162,21 +157,14 @@ namespace ast {
     void finalize(FinalizeEnviron &) {abort();}
   };
 
-  struct Empty : public StmtLeaf {
-    Empty() {}
-    const char * what() const {return "empty";}
-    Empty * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(0);
-      return this;
-    }
-    void compile_c(CompileWriter & f) {
-      // do absolutely nothing
-    }
-    void compile(CompileWriter & f) {
-      // do absolutely nothing
-    }
-  };
+  extern Stmt * const EMPTY_STMT;
+  static inline Stmt * empty_stmt() {return EMPTY_STMT;}
+
+  inline void InsrPoint::add(Stmt * to_add) {
+    if (to_add == EMPTY_STMT) return;
+    *ptr = to_add;
+    ptr = &to_add->next;
+  }
 
   struct Literal : public ExpLeaf {
     Literal() {}
@@ -369,7 +357,7 @@ namespace ast {
   struct Block;
   struct VarSymbol;
 
-  struct Declaration : public Stmt {
+  struct Declaration : virtual public AST {
     enum Phase {Normal, Forward, Body};
     virtual void compile_c(CompileWriter &, Phase) const = 0;
     virtual void compile(CompileWriter &, Phase) const = 0;

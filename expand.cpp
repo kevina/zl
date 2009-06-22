@@ -1246,7 +1246,7 @@ Stmt * parse_map(const Syntax * p, Environ & env) {
     env.add(SymbolKey(m->real_name, SYNTAX_NS), m);
   else
     env.add(m->real_name, m);
-  return new Empty();
+  return empty_stmt();
 }
 
 Stmt * parse_macro(const Syntax * p, Environ & env) {
@@ -1256,7 +1256,7 @@ Stmt * parse_macro(const Syntax * p, Environ & env) {
     env.add(SymbolKey(m->real_name, SYNTAX_NS), m);
   else
     env.add(m->real_name, m);
-  return new Empty();
+  return empty_stmt();
 }
 
 void assert_pos(const Syntax * p, Position have, unsigned need) {
@@ -1401,7 +1401,7 @@ Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
   SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
   FluidBinding * b = new FluidBinding(n.name, mark(n, new Mark(NULL)));
   env.add(n, b);
-  return new Empty();
+  return empty_stmt();
 }
 
 
