@@ -2501,7 +2501,7 @@ namespace ast {
     SyntaxC() {}
     const char * what() const {return "syntax";}
     static Vector<const Syntax *> keep_me;
-    const Syntax * syn;
+    const Syntax * syn_p;
     unsigned syn_num;
     SyntaxC * parse_self(const Syntax * p, Environ & env);
     void compile_prep(CompileEnviron & env);
@@ -2531,9 +2531,9 @@ namespace ast {
   }
 
   SyntaxC * SyntaxC::parse_self(const Syntax * p, Environ & env) {
-    AST::syn = p;
+    syn = p;
     assert_num_args(1);
-    syn = parse_syntax_c(p);
+    syn_p = parse_syntax_c(p);
     syn_num = (unsigned)-1;
     *env.for_ct = true;
     type = env.types.inst(".ptr", env.types.inst("UnmarkedSyntax"));
@@ -2550,7 +2550,7 @@ namespace ast {
     if (f.for_macro_sep_c) {
       f.printf("_syntaxes[%d].syn", syn_num);
     } else if (f.for_compile_time()) 
-      f.printf("(struct UnmarkedSyntax *)%p", syn); 
+      f.printf("(struct UnmarkedSyntax *)%p", syn_p); 
     else
       f.printf("(struct UnmarkedSyntax *)0");
   }
@@ -2558,7 +2558,7 @@ namespace ast {
     if (f.for_macro_sep_c) {
       f.printf("(member (deref (plus _syntaxes %d)) syn)", syn_num);
     } else if (f.for_compile_time()) 
-      f.printf("(cast (.ptr (struct UnmarkedSyntax)) %p)", syn); 
+      f.printf("(cast (.ptr (struct UnmarkedSyntax)) %p)", syn_p); 
     else
       f.printf("(cast (.ptr (struct UnmarkedSyntax)) 0)");
   }
