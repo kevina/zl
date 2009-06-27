@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 
+#include <cxxabi.h>
+
 #include <typeinfo>
 #include <utility>
 #include "ostream.hpp"
@@ -185,8 +187,7 @@ namespace ast {
   // global
   struct Declaration;
   struct TopLevelSymbol : virtual public Symbol {
-    TopLevelSymbol(unsigned n = 0, const Declaration * d = NULL, TopLevelSymbol * w = NULL) 
-      : num(n), decl(d), where(w), props() {}
+    TopLevelSymbol(const Declaration * d = NULL) : num(), decl(d), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
     mutable const Declaration * decl; // NULL if internal
     TopLevelSymbol * where;           // NULL if global
@@ -201,13 +202,14 @@ namespace ast {
     // if num is zero than leave alone, if NPOS assign uniq num.
     void add_to_env(const SymbolKey & k, Environ &) const;
     void add_to_local_env(const SymbolKey & k, Environ &) const;
-    void add_to_top_level_env(const SymbolKey & k, Environ &) const;
+    void add_to_top_level_env(Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s);
     virtual const Syntax * get_prop(SymbolName n) const;
     //virtual const Syntax * get_props(SymbolName n) const; // not implemented yet
   };
 
+#if 0
   struct LexicalSymbol : virtual public Symbol {
     LexicalSymbol() : num () {}
     mutable unsigned num;
@@ -231,6 +233,7 @@ namespace ast {
     // if num is zero than leave alone, if NPOS assign uniq num.
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
   };
+#endif
 
   struct FluidBinding : public TopLevelSymbol {
     FluidBinding(String n, SymbolName r) : rebind(r) {name = n;}
@@ -398,7 +401,9 @@ namespace ast {
       //fprintf(stderr, "Identifier \"%s\" is of the wrong type.", ~k.name); abort();
       //throw error(str, "Identifier \"%s\" is of the wrong type.", ~k.name);
       throw error(str, "Identifier \"%s\" is of the wrong type (expected %s got %s).", 
-                  ~k.name, typeid(const T).name(), typeid(*s1->value).name());
+                  ~k.name, 
+                  abi::__cxa_demangle(typeid(const T).name(), NULL, NULL, NULL), 
+                  abi::__cxa_demangle(typeid(*s1->value).name(), NULL, NULL, NULL));
     }
     return s2;
   }

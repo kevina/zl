@@ -24,7 +24,8 @@ namespace ast {
     const TypeInst * return_type;
   };
 
-  struct TopLevelVarSymbol;
+  struct TopLevelVarDecl;
+  typedef TopLevelVarDecl TopLevelVarSymbol;
 
   struct Deps : public Vector<const TopLevelVarSymbol *> {
     void insert(const TopLevelVarSymbol * sym) {

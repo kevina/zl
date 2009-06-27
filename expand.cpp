@@ -1311,7 +1311,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
   static unsigned cntr = 0;
   
   for (unsigned i = 0, sz = deps.size(); i != sz; ++i) {
-    deps.merge(deps[i]->decl->deps());
+    deps.merge(deps[i]->deps());
   }
 
   //printf("COMPILE FOR CT DEPS: %d\n", deps.size());

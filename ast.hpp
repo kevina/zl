@@ -356,7 +356,22 @@ namespace ast {
   };
 
   struct Block;
-  struct VarSymbol;
+  struct TopLevelVarDecl;
+
+  struct BasicVar : virtual public Symbol {
+    //SourceStr str;
+    const Syntax * name_p;
+    const Type * type;
+    const struct CT_Value_Base * ct_value;
+    virtual const TopLevelVarDecl * top_level() const {return NULL;}
+  protected:
+    BasicVar() : name_p(), ct_value() {}
+    BasicVar(String n, const Type * t) : name_p(), type(t), ct_value() {name = n;}
+    //protected:
+    //friend VarSymbol * new_var_symbol(SymbolName n, Scope s);
+  };
+
+  typedef BasicVar VarSymbol;
 
   struct Declaration : virtual public AST {
     enum Phase {Normal, Forward, Body};
@@ -367,11 +382,12 @@ namespace ast {
     Declaration() {}
   };
 
-  struct VarDeclaration : public Declaration, public ForSecondPass {
-    VarDeclaration() {}
-    enum StorageClass {NONE, AUTO, STATIC, EXTERN, REGISTER};
+  enum StorageClass {SC_NONE, SC_AUTO, SC_STATIC, SC_EXTERN, SC_REGISTER};
+
+  struct VarDeclaration : public Declaration, public BasicVar, public ForSecondPass {
+    VarDeclaration() : deps_closed(), for_ct_(false), inline_(), ct_callback(), static_constructor() {}
     StorageClass storage_class;
-    VarSymbol * sym;
+    //VarSymbol * sym;
     mutable bool deps_closed;
     mutable Deps deps_;       // only valid if deps_closed
     mutable bool for_ct_;     // if false, only valid if deps_closed
@@ -394,13 +410,24 @@ namespace ast {
     void finish_parse(Environ & env) {abort();}
   };
 
+  typedef VarDeclaration VarDecl;
+
+  struct TopLevelVarDecl : virtual public VarDecl, public TopLevelSymbol {
+    mutable void * ct_ptr; // No relation to ct_value.  Pointer to
+                           // compiled symbol, used for proc. macros.
+    const TopLevelVarDecl * top_level() const {return this;}
+    TopLevelVarDecl() : TopLevelSymbol(this), ct_ptr() {}
+  };
+
+  
+
+
   typedef Vector<ForSecondPass *> Collect;
 
-  struct Fun : public VarDeclaration {
+  struct Fun : public TopLevelVarDecl {
     Fun() : env_ss(), is_macro() {}
     const char * what() const {return "fun";}
     //AST * part(unsigned i);
-    SymbolKey name;
     SymbolTable symbols;
     SymbolNode * env_ss;
     mutable bool is_macro;
@@ -423,6 +450,7 @@ namespace ast {
   //
   //
 
+#if 0
   struct VarSymbol : virtual public Symbol {
     //SourceStr str;
     const Type * type;
@@ -454,6 +482,7 @@ namespace ast {
   VarSymbol * new_var_symbol(SymbolName n, Scope s = OTHER, 
                              const VarDeclaration * d = NULL, 
                              TopLevelSymbol * w = NULL);
+#endif
 
   //
   //

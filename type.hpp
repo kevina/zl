@@ -25,7 +25,8 @@ namespace ast {
   class Tuple;
   struct Environ;
 
-  struct VarSymbol;
+  struct BasicVar;
+  typedef BasicVar VarSymbol;
 
   struct Exp;
 

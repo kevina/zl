@@ -53,11 +53,11 @@ namespace ast {
   //
   //
 
-  struct Var;
+  struct BasicVar;
   
   template <Position pos> struct PositionTypeInfo {typedef Stmt t;};
   template <> struct PositionTypeInfo<ExpPos> {typedef Exp t;};
-  template <> struct PositionTypeInfo<FieldPos> {typedef Var t;};
+  template <> struct PositionTypeInfo<FieldPos> {typedef BasicVar t;};
 
   template <Position pos, Pass pass = AllPasses>
   struct Parse;
@@ -147,7 +147,7 @@ namespace ast {
   //
   //
   //
-
+#if 0
   VarSymbol * new_var_symbol(SymbolName n, Scope s, 
                              const VarDeclaration * d, TopLevelSymbol * w) 
   {
@@ -166,7 +166,7 @@ namespace ast {
       return new TopLevelVarSymbol(n.name,d,mangle,w);
     }
   }
-  
+#endif
   //
   //
   //
@@ -180,7 +180,7 @@ namespace ast {
     env.symbols.add(k, this);
   }
   
-  void TopLevelSymbol::add_to_top_level_env(const SymbolKey & k, Environ & env) const {
+  void TopLevelSymbol::add_to_top_level_env(Environ & env) const {
     if (env.temporary()) return;
     // If the symbol already exists in the table, remove it and insert
     // it in the end.  This will happen if a function was declared
@@ -206,7 +206,7 @@ namespace ast {
   
   void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
     add_to_local_env(k, env);
-    add_to_top_level_env(k, env);
+    add_to_top_level_env(env);
   }
 
   //
@@ -472,13 +472,13 @@ namespace ast {
       syn = p;
       assert_num_args(1);
       sym = env.symbols.lookup<VarSymbol>(p->arg(0));
-      const TopLevelVarSymbol * tl = NULL;
-      if (env.deps && (tl = dynamic_cast<const TopLevelVarSymbol *>(sym)))
+      const TopLevelVarDecl * tl = NULL;
+      if (env.deps && (tl = sym->top_level()))
         env.deps->insert(tl);
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
-      lvalue = dynamic_cast<const TopLevelVarSymbol *>(sym) ? 2 : 1;
+      lvalue = sym->top_level() ? 2 : 1;
       return this;
     }
     void compile_c(CompileWriter & f) {
@@ -611,31 +611,12 @@ namespace ast {
     }
   };
 
-  struct Var : public Stmt, public VarDeclaration {
+  struct Var : public Stmt, virtual public VarDecl {
     Var() : init(), constructor() {}
     const char * what() const {return "var";}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
-    const Syntax * name_p;
     Exp * init;
     Stmt * constructor;
-    Stmt * parse_forward(const Syntax * p, Environ & env, Collect & collect) {
-      syn = p;
-      assert_num_args(2,3);
-      name_p = p->arg(0);
-      SymbolKey name = expand_binding(name_p, env);
-      parse_flags(p);
-      sym = new_var_symbol(name, env.scope, this, env.where);
-      sym->type = parse_type(p->arg(1), env);
-      if (storage_class != EXTERN && sym->type->size() == NPOS)
-        throw error(name_p, "Size not known");
-      env.add(name, sym);
-      collect.push_back(this); // fixme, not always the case
-      deps_closed = true;
-      if (dynamic_cast<TopLevelVarSymbol *>(sym))
-        return empty_stmt();
-      else
-        return this;
-    }
     void finish_parse(Environ & env) {
       if (syn->num_args() > 2) {
         //env.add(name, sym, SecondPass);
@@ -647,41 +628,19 @@ namespace ast {
         //  temp_sym = new_var_symbol(...);
         //  init = addrof(temp_sym);
         //}
-        init = init->resolve_to(sym->type, env);
-        if (storage_class == STATIC && sym->type->read_only && init->ct_value_) {
-          sym->ct_value = init->ct_value_;
+        init = init->resolve_to(type, env);
+        if (storage_class == SC_STATIC && type->read_only && init->ct_value_) {
+          ct_value = init->ct_value_;
         }
       }
-      if (const UserType * ut = dynamic_cast<const UserType *>(sym->type)) {
+      if (const UserType * ut = dynamic_cast<const UserType *>(type)) {
         if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
           constructor = parse_stmt(SYN(SYN("member"), 
-                                       SYN(ID, SYN(name_p, sym)),
+                                       SYN(ID, SYN(name_p, this)),
                                        SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
                                    env);
         }
       }
-      if (TopLevelVarSymbol * tlsym = dynamic_cast<TopLevelVarSymbol *>(sym)) {
-        if (init && !init->ct_value_) {
-          tlsym->init = parse_stmt(SYN(SYN("assign"), SYN(ID, SYN(sym)), SYN(init)), env);
-          init = NULL;
-        } else if (constructor) {
-          tlsym->init = constructor;
-          constructor = NULL;
-        }
-      }
-    }
-    Var * parse_self_as_member(const Syntax * p, Environ & env) {
-      Collect collect;
-      Stmt * res = parse_forward(p, env, collect);
-      //assert(collect.empty());
-      return this;
-    }
-    Stmt * parse_self(const Syntax * p, Environ & env) {
-      Collect collect;
-      Stmt * res = parse_forward(p, env, collect);
-      if (!collect.empty())
-        finish_parse(env);
-      return res;
     }
     void finalize(FinalizeEnviron & env) {
       if (init)
@@ -699,7 +658,7 @@ namespace ast {
       //  c_print_inst->declaration(temp_sym->uniq_name(), *temp_sym->type, buf);
       //  f << " = " << temp_exp << ";\n";
       //}
-      c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
+      c_print_inst->declaration(uniq_name(), *type, buf);
       f << buf.freeze();
       if (init && phase != Forward) {
         if (init->ct_value_) {
@@ -710,14 +669,12 @@ namespace ast {
         }
       }
       f << ";\n";
-      if (constructor)
-        f << constructor;
     }
     void compile(CompileWriter & f, Phase phase) const {
       f << indent;
       f << "(var";
-      f << ' ' << sym->uniq_name();
-      f << ' ' << zls_print_inst->to_string(*sym->type);
+      f << ' ' << uniq_name();
+      f << ' ' << zls_print_inst->to_string(*type);
       write_flags(f);
       if (init && phase != Forward) {
         if (init->ct_value_) {
@@ -728,10 +685,128 @@ namespace ast {
         }
       }
       f << ")\n";        
+    }
+  };
+
+  struct OtherVar : public BasicVar {
+    OtherVar() : num() {}
+    OtherVar(String n, const Type * t, bool mangle) : BasicVar(n, t), num(mangle ? NPOS : 0) {}
+    mutable unsigned num; // 0 to avoid renaming, NPOS needs uniq num
+    void uniq_name(OStream & o) const {
+      if (num == 0)
+        o << name;
+      else
+        o.printf("%s$%u", ~name, num);
+    }
+    void make_unique(SymbolNode * self, SymbolNode * stop) const {
+      if (num == NPOS)
+        assign_uniq_num<OtherVar>(self, stop);
+    }
+  };
+
+  static OtherVar * new_other_var(SymbolName n, const Type * t) {
+    bool mangle = n.marks;
+    return new OtherVar(n.name, t, mangle);
+  }
+
+  struct AutoVar : public Var {
+    AutoVar() : num() {}
+    mutable unsigned num;
+    void compile_c(CompileWriter & f, Phase phase) const {
+      Var::compile_c(f, phase);
       if (constructor)
         f << constructor;
     }
+    void compile(CompileWriter & f, Phase phase) const {
+      Var::compile(f, phase);
+      if (constructor)
+        f << constructor;
+    }
+    void uniq_name(OStream & o) const {
+      o.printf("%s$%u", ~name, num);
+    }
+    void make_unique(SymbolNode * self, SymbolNode * stop) const {
+      assign_uniq_num<AutoVar>(self, stop);
+    }
   };
+
+  struct TopLevelVar : public Var, public TopLevelVarDecl {
+    void finish_parse(Environ & env) {
+      Var::finish_parse(env);
+      if (init && !init->ct_value_) {
+        constructor = parse_stmt(SYN(SYN("assign"), SYN(ID, SYN(this)), SYN(init)), env);
+        init = NULL;
+      } 
+    }
+  };
+
+  static StorageClass get_storage_class(const Syntax * p) {
+    if (p->flag("auto")) return SC_AUTO;
+    if (p->flag("static")) return SC_STATIC;
+    if (p->flag("extern")) return SC_EXTERN;
+    if (p->flag("register")) return SC_REGISTER;
+    return SC_NONE;
+  }
+  
+  static Stmt * parse_var_forward(const Syntax * p, Environ & env, Collect & collect) {
+    assert_num_args(p, 2,3);
+    const Syntax * name_p = p->arg(0);
+    SymbolKey name = expand_binding(name_p, env);
+    StorageClass storage_class = get_storage_class(p);
+    bool top_level;
+    Var * var;
+    if (env.scope == LEXICAL && (storage_class == SC_NONE ||
+                                 storage_class == SC_AUTO ||
+                                 storage_class == SC_REGISTER)) 
+    {
+      top_level = false;
+      var = new AutoVar;
+    } else {
+      top_level = true;
+      bool mangle = env.scope == LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
+      TopLevelVar * v = new TopLevelVar;
+      v->num = mangle ? NPOS : 0;
+      v->where = env.where;
+      var = v;
+    }
+    var->syn = p;
+    var->name = name.name;
+    var->name_p = name_p;
+    var->type = parse_type(p->arg(1), env);
+    var->storage_class = storage_class;
+    if (storage_class != SC_EXTERN && var->type->size() == NPOS)
+      throw error(name_p, "Size not known");
+    env.add(name, var);
+    collect.push_back(var); // fixme, not always the case
+    var->deps_closed = true;
+    if (top_level)
+      return empty_stmt();
+    else
+      return var;
+  }
+
+  static Stmt * parse_var(const Syntax * p, Environ & env) {
+    Collect collect;
+    Stmt * res = parse_var_forward(p, env, collect);
+    for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
+      (*i)->finish_parse(env);
+    }
+    return res;
+  }
+
+  static BasicVar * parse_field_var(const Syntax * p, Environ & env) {
+    assert_num_args(p,2);
+    const Syntax * name_p = p->arg(0);
+    SymbolKey name = expand_binding(name_p, env);
+    const Type * type = parse_type(p->arg(1), env);
+    OtherVar * var = new_other_var(name, type);
+    var->name_p = name_p;
+    if (var->type->size() == NPOS)
+      throw error(name_p, "Size not known");
+    env.add(name, var);
+    return var;
+  }
+
 
   struct EStmt : public Stmt {
     EStmt() {}
@@ -1990,13 +2065,9 @@ namespace ast {
     SymbolKey name = expand_binding(p->arg(0), env);
     
     bool previous_declared = env.symbols.exists_this_scope(name);
-    VarSymbol * sym;
-    TopLevelSymbol * tlsym = NULL;
     Fun * f = NULL;
     if (previous_declared) {
-      sym = const_cast<VarSymbol *>(env.symbols.find<VarSymbol>(name));
-      tlsym = dynamic_cast<TopLevelSymbol *>(sym);
-      f = const_cast<Fun *>(dynamic_cast<const Fun *>(tlsym->decl));
+      f = const_cast<Fun *>(env.symbols.find<Fun>(name));
       if (f->body) goto foo; // FIXME: This is a hack, to allow
                              // functions to shadow an imported
                              // function.
@@ -2005,10 +2076,12 @@ namespace ast {
     } else {
     foo:
       f = new Fun;
-      f->name = name;
-      f->sym = sym = new_var_symbol(name, env.scope, f, env.where);
-      tlsym = dynamic_cast<TopLevelSymbol *>(sym);
-      tlsym->add_to_local_env(name, env);
+      f->name = name.name;
+      f->storage_class = get_storage_class(p);
+      bool mangle = name.marks || env.where || f->storage_class == SC_STATIC;
+      f->num = mangle ? NPOS : 0;
+      f->where = env.where;
+      f->add_to_local_env(name, env);
       f->parse_forward_i(p, env, collect);
     }
     return f;
@@ -2025,8 +2098,6 @@ namespace ast {
   AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect & collect) {
     syn = p;
 
-    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);    
-
     parse_flags(p);
 
     if (p->flag("__need_snapshot"))
@@ -2036,20 +2107,20 @@ namespace ast {
     //        to expand/parse the _paramaters_.  Of cource is needed for
     //        the body that that is done in parse_body.
     Environ env = env0.new_frame();
-    env.where = tlsym;
+    env.where = this;
     env.deps = &deps_;
     env.for_ct = &for_ct_;
 
     parms = expand_fun_parms(p->arg(1), env);
 
     ret_type = parse_type(p->arg(2), env);
-    sym->type = env.function_sym()->inst(env.types, this);
+    type = env.function_sym()->inst(env.types, this);
 
     body = 0;
     if (p->num_args() > 3) {
       collect.push_back(this);
     } else {
-      tlsym->add_to_top_level_env(name, env0);
+      add_to_top_level_env(env0);
       symbols = env.symbols;
     }
 
@@ -2061,10 +2132,8 @@ namespace ast {
   void Fun::finish_parse(Environ & env0) {
     assert(syn->num_args() > 3);
 
-    TopLevelSymbol * tlsym = dynamic_cast<TopLevelSymbol *>(sym);
-
     Environ env = env0.new_frame();
-    env.where = tlsym;
+    env.where = this;
     env.deps = &deps_;
     env.for_ct = &for_ct_;
     env.frame->return_type = ret_type;
@@ -2073,9 +2142,8 @@ namespace ast {
          i != e; ++i)
     {
       SymbolName n = i->name;
-      VarSymbol * sym = new_var_symbol(n);
+      BasicVar * sym = new_other_var(n, i->type);
       i->sym = sym;
-      sym->type = i->type;
       env.add(n, sym);
       //env.symbols.add(n, sym);
     }
@@ -2083,7 +2151,7 @@ namespace ast {
     body = dynamic_cast<Block *>(parse_stmt(syn->arg(3), env));
     assert(body); // FiXME
 
-    tlsym->add_to_top_level_env(name, env0);
+    add_to_top_level_env(env0);
     symbols = env.symbols;
 
     FinalizeEnviron fenv;
@@ -2116,11 +2184,11 @@ namespace ast {
     if (!body && phase == Body)
       return;
     if (env_ss && phase != Forward) {
-      f << "struct EnvironSnapshot * " << sym->uniq_name() << '$' << "env_ss" << ";\n";
+      f << "struct EnvironSnapshot * " << uniq_name() << '$' << "env_ss" << ";\n";
     }
     write_flags_c(f);
     StringBuf buf;
-    c_print_inst->declaration(sym->uniq_name(), *sym->type, buf);
+    c_print_inst->declaration(uniq_name(), *type, buf);
     f << buf.freeze();
     if (body && phase != Forward) {
       f.in_fun = this;
@@ -2137,9 +2205,9 @@ namespace ast {
     if (!body && phase == Body)
       return;
     if (env_ss && phase != Forward) {
-      f << "(var " << sym->uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
+      f << "(var " << uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
     }
-    f << "(fun " << sym->uniq_name();
+    f << "(fun " << uniq_name();
     f << " " << zls_print_inst->to_string(*parms);
     f << " " << zls_print_inst->to_string(*ret_type);
     write_flags(f);
@@ -2295,8 +2363,7 @@ namespace ast {
     struct Body : public FakeAST {
       Body(Which w) {}
       const char * what() const {return "struct_union_body";}
-      AST * part(unsigned i) {return members[i];}
-      Vector<Var *> members;
+      Vector<BasicVar *> members;
       Body * parse_self(const Syntax * p, Environ & env) {
         add_ast_nodes(p->parts_begin(), p->parts_end(), members, Parse<FieldPos>(env));
         return this;
@@ -2317,17 +2384,15 @@ namespace ast {
         body = new Body(which);
         if (p->what().name[0] == '.') {
           for (unsigned i = 1; i != p->num_args(); ++i) {
-            Var * v = new Var;
             const Syntax * q = p->arg(i);
             assert(q);
-            v->syn = q;
-            v->name_p = q->part(1);
-            assert(v->name_p);
-            SymbolKey name = expand_binding(v->name_p, env);
-            v->sym = new_var_symbol(name, env.scope, v, env.where);
-            v->sym->type = parse_type(q->part(0), env);
-            env.add(name, v->sym);
-            v->deps_closed = true;
+            const Syntax * name_p = q->part(1);
+            assert(name_p);
+            SymbolKey name = expand_binding(name_p, env);
+            const Type * type = parse_type(q->part(0), env);
+            OtherVar * v = new_other_var(name, type);
+            v->name_p = name_p;
+            env.add(name, v);
             body->members.push_back(v);
           }
         } else {
@@ -2349,9 +2414,8 @@ namespace ast {
       }
       if (body)
         for (unsigned i = 0; i != body->members.size(); ++i) {
-          Var * v = dynamic_cast<Var *>(body->members[i]);
-          assert(v);
-          s->members.push_back(Member(v->sym));
+          BasicVar * v = body->members[i];
+          s->members.push_back(Member(v));
         }
       //StringBuf type_name;
       //type_name << "struct " << what();
@@ -2362,25 +2426,18 @@ namespace ast {
       s->finalize();
       return empty_stmt();
     }
-    void finalize(FinalizeEnviron & e) {
-      if (body)
-        for (int i = 0; i != body->members.size(); ++i) {
-          body->members[i]->finalize(e);
-        }
-    }
-    void compile_prep(CompileEnviron & e) {
-      if (body)
-        for (int i = 0; i != body->members.size(); ++i) {
-          body->members[i]->compile_prep(e);
-        }
-    }
+    void finalize(FinalizeEnviron & e) {}
+    void compile_prep(CompileEnviron & e) {}
     void compile_c(CompileWriter & f, Phase phase) const {
       if (!body && phase == Declaration::Body) return;
       f << indent << what() << " " << sym;
       if (body && phase != Forward) {
         f << " {\n";
+        StringBuf buf;
         for (int i = 0; i != body->members.size(); ++i) {
-          f << adj_indent(2) << body->members[i];
+          BasicVar * v = body->members[i];
+          c_print_inst->declaration(v->uniq_name(), *v->type, buf);
+          f << adj_indent(2) << indent << buf.freeze() << ";\n";
         }
         f << indent << "}";
       } 
@@ -2392,9 +2449,9 @@ namespace ast {
       if (body && phase != Forward) {
         f << "\n";
         for (int i = 0; i != body->members.size(); ++i) {
-          Var * v = dynamic_cast<Var *>(body->members[i]);
+          BasicVar * v = body->members[i];
           f << adj_indent(2) << indent;
-          f << "(" << zls_print_inst->to_string(*v->sym->type) << " " << v->sym->uniq_name() << ")\n";
+          f << "(" << zls_print_inst->to_string(*v->type) << " " << v->uniq_name() << ")\n";
         }
       }
       f << ")\n";
@@ -2459,10 +2516,9 @@ namespace ast {
             val = e->ct_value<target_int>();
           }
           SymbolName n = *arg->part(0);
-          Member mem(arg1, new_var_symbol(n), val);
+          Member mem(arg1, new_other_var(n, t), val);
           VarSymbol * sym = mem.sym;
           val++;
-          sym->type = t;
           members.push_back(mem);
           sym->ct_value = &members.back().ct_value;
           sym->add_to_env(n, env);
@@ -2616,7 +2672,7 @@ namespace ast {
     }
     void compile_c(CompileWriter & f) {
       if (f.in_fun && f.in_fun->env_ss) 
-        f.printf("%s$env_ss", ~f.in_fun->sym->uniq_name());
+        f.printf("%s$env_ss", ~f.in_fun->uniq_name());
       else if (f.for_compile_time())
         f.printf("(struct EnvironSnapshot *)%p", env_ss); 
       else 
@@ -2624,7 +2680,7 @@ namespace ast {
     }
     void compile(CompileWriter & f) {
       if (f.in_fun && f.in_fun->env_ss) 
-        f.printf("(id %s$env_ss)", ~f.in_fun->sym->uniq_name());
+        f.printf("(id %s$env_ss)", ~f.in_fun->uniq_name());
       else if (f.for_compile_time())
         f.printf("(cast (.ptr (struct EnvironSnapshot)) (n %p (unsigned-long)))", env_ss); 
       else 
@@ -2706,20 +2762,16 @@ namespace ast {
   }
 
   template <>
-  Var * Parse<FieldPos>::finish_parse(const Syntax * p) const {
+  BasicVar * Parse<FieldPos>::finish_parse(const Syntax * p) const {
     Stmt * res;
     // FIXME
     //res = try_ast<Stmt>(p, env);
     //if (res) return res;
     //res = try_decl(p, env);
     String what = p->what().name;
-    if (what == "var") return (new Var)->parse_self_as_member(p, env);
+    if (what == "var") return parse_field_var(p, env);
     throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->what());
     //throw error (p, "Expected struct or union member.");
-  }
-
-  Stmt * parse_member(const Syntax * p, Environ & env) {
-    return Parse<FieldPos>(env)(p);
   }
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
@@ -2829,14 +2881,14 @@ namespace ast {
 
   Stmt * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect) {
     String what = p->what().name;
-    if (what == "var")     return (new Var)->parse_forward(p, env, collect);
+    if (what == "var")     return parse_var_forward(p, env, collect);
     if (what == "fun" )    return parse_fun_forward(p, env, collect), empty_stmt();
     return try_decl_common(p, env);
   }
 
   Stmt * try_just_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
-    if (what == "var")     return (new Var)->parse_self(p, env);
+    if (what == "var")     return parse_var(p, env);
     if (what == "fun" )    return parse_fun(p, env), empty_stmt();
     return try_decl_common(p, env);
   }
@@ -2914,12 +2966,7 @@ namespace ast {
   //
 
   void VarDeclaration::parse_flags(const Syntax * p) {
-    storage_class = NONE;
     //printf("PARSING FLAGS OF %s\n", ~p->to_string());
-    if (p->flag("auto")) storage_class = AUTO;
-    else if (p->flag("static")) storage_class = STATIC;
-    else if (p->flag("extern")) storage_class = EXTERN;
-    else if (p->flag("register")) storage_class = REGISTER;
     inline_ = false;
     if (p->flag("inline")) inline_ = true;
     ct_callback = false;
@@ -2934,20 +2981,20 @@ namespace ast {
   void VarDeclaration::write_flags_c(CompileWriter & f) const {
     StorageClass sc = storage_class;
     if (f.for_compile_time())
-      if (TopLevelVarSymbol * tl = dynamic_cast<TopLevelVarSymbol *>(sym)) {
+      if (const TopLevelVarDecl * tl = top_level()) {
         if (tl->ct_ptr)
-          sc = EXTERN;
-        else if (sc == STATIC)
-          sc = NONE;
+          sc = SC_EXTERN;
+        else if (sc == SC_STATIC)
+          sc = SC_NONE;
       }
     switch (sc) {
-    case AUTO: 
+    case SC_AUTO: 
         f << "auto "; break;
-    case STATIC: 
+    case SC_STATIC: 
       f << "static "; break;
-    case EXTERN: 
+    case SC_EXTERN: 
       f << "extern "; break;
-    case REGISTER: 
+    case SC_REGISTER: 
       f << "register "; break;
     default:
       break;
@@ -2959,20 +3006,20 @@ namespace ast {
   void VarDeclaration::write_flags(CompileWriter & f) const {
     StorageClass sc = storage_class;
     if (f.for_compile_time())
-      if (TopLevelVarSymbol * tl = dynamic_cast<TopLevelVarSymbol *>(sym)) {
+      if (const TopLevelVarDecl * tl = top_level()) {
         if (tl->ct_ptr)
-          sc = EXTERN;
-        else if (sc == STATIC)
-          sc = NONE;
+          sc = SC_EXTERN;
+        else if (sc == SC_STATIC)
+          sc = SC_NONE;
       }
     switch (sc) {
-    case AUTO: 
+    case SC_AUTO: 
         f << " :auto"; break;
-    case STATIC: 
+    case SC_STATIC: 
       f << " :static"; break;
-    case EXTERN: 
+    case SC_EXTERN: 
       f << " :extern"; break;
-    case REGISTER: 
+    case SC_REGISTER: 
       f << " :register"; break;
     default:
       break;
@@ -2984,7 +3031,7 @@ namespace ast {
   void VarDeclaration::calc_deps_closure() const {  
     deps_closed = true;
     for (unsigned i = 0, sz = deps_.size(); i < sz; ++i) {
-      const VarDeclaration * d = deps_[i]->decl;
+      const VarDeclaration * d = deps_[i];
       if (!d->deps_closed) d->calc_deps_closure();
       deps_.merge(d->deps_);
       if (!d->deps_closed) deps_closed = false;
@@ -3054,7 +3101,7 @@ namespace ast {
         for (Vector<Fun *>::const_iterator i = cw.for_macro_sep_c->macro_funs.begin(), 
                e = cw.for_macro_sep_c->macro_funs.end(); i != e; ++i)
         {
-          cw.printf("  \"%s\"%s\n", ~(*i)->sym->uniq_name(), i + 1 != e ? "," : "");
+          cw.printf("  \"%s\"%s\n", ~(*i)->uniq_name(), i + 1 != e ? "," : "");
         }
         cw << "};\n";
       }
@@ -3084,8 +3131,7 @@ namespace ast {
     for (i = syms.begin(); i != e; ++i) {
       if (const Fun * d = dynamic_cast<const Fun *>((*i)->decl)) {
         if (cw.for_compile_time()) {
-          tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl)) {
+          if (cw.deps->have(d)) {
             d->compile_c(cw, Declaration::Forward);
           }
         } else if (cw.for_macro_sep_c || !d->for_ct()) {
@@ -3097,10 +3143,9 @@ namespace ast {
     cw << "/* definitions */\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
+      if (const TopLevelVarDecl * d = dynamic_cast<const TopLevelVarDecl *>((*i)->decl)) {
         if (cw.for_compile_time()) {
-          tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl) && !tl->ct_ptr) {
+          if (cw.deps->have(d) && !d->ct_ptr) {
             d->compile_c(cw, Declaration::Body);
           }
         } else if (cw.for_macro_sep_c || !d->for_ct()) {
@@ -3112,9 +3157,9 @@ namespace ast {
     cw << "/* special */\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TopLevelVarSymbol * s = dynamic_cast<const TopLevelVarSymbol *>(*i)) {
-        if (s->init) init.push_back(s->init);
-        if (s->cleanup) cleanup.push_back(s->cleanup);
+      if (const TopLevelVar * s = dynamic_cast<const TopLevelVar *>(*i)) {
+        if (s->constructor) init.push_back(s->constructor);
+        //if (s->cleanup) cleanup.push_back(s->cleanup);
       }
     }
 
@@ -3174,7 +3219,7 @@ namespace ast {
         for (Vector<Fun *>::const_iterator i = cw.for_macro_sep_c->macro_funs.begin(), 
                e = cw.for_macro_sep_c->macro_funs.end(); i != e; ++i)
         {
-          cw << "  (s \"" << ~(*i)->sym->uniq_name() <<  "\")\n";
+          cw << "  (s \"" << ~(*i)->uniq_name() <<  "\")\n";
         }
         cw << "))\n";
       }
@@ -3200,8 +3245,7 @@ namespace ast {
     for (i = syms.begin(); i != e; ++i) {
       if (const Fun * d = dynamic_cast<const Fun *>((*i)->decl)) {
         if (cw.for_compile_time()) {
-          tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl)) {
+          if (cw.deps->have(d)) {
             d->compile(cw, Declaration::Forward);
           }
         } else if (cw.for_macro_sep_c || !d->for_ct()) {
@@ -3213,10 +3257,9 @@ namespace ast {
     cw << "# definitions\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
+      if (const TopLevelVarDecl * d = dynamic_cast<const TopLevelVarDecl *>((*i)->decl)) {
         if (cw.for_compile_time()) {
-          tl = dynamic_cast<const TopLevelVarSymbol *>(d->sym);
-          if (cw.deps->have(tl) && !tl->ct_ptr) {
+          if (cw.deps->have(d) && !d->ct_ptr) {
             d->compile(cw, Declaration::Body);
           }
         } else if (cw.for_macro_sep_c || !d->for_ct()) {
@@ -3228,9 +3271,9 @@ namespace ast {
     cw << "# special\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TopLevelVarSymbol * s = dynamic_cast<const TopLevelVarSymbol *>(*i)) {
-        if (s->init) init.push_back(s->init);
-        if (s->cleanup) cleanup.push_back(s->cleanup);
+      if (const TopLevelVar * s = dynamic_cast<const TopLevelVar *>(*i)) {
+        if (s->constructor) init.push_back(s->constructor);
+        //if (s->cleanup) cleanup.push_back(s->cleanup);
       }
     }
 
