@@ -64,17 +64,6 @@ namespace ast {
       assign_uniq_num<TopLevelSymbol>(self, stop);
   }
 
-#if 0
-  void LexicalSymbol::make_unique(SymbolNode * self, SymbolNode * stop) const {
-    assign_uniq_num<LexicalSymbol>(self, stop);
-  }
-
-  void OtherSymbol::make_unique(SymbolNode * self, SymbolNode * stop) const {
-    if (num == NPOS)
-      assign_uniq_num<OtherSymbol>(self, stop);
-  }
-#endif
-
   void SymbolTable::dump_this_scope() {
     for (SymbolNode * c = front; c != back; c = c->next)
       printf("  %s %p %s %s\n", ~c->key.to_string(), 

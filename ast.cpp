@@ -147,29 +147,6 @@ namespace ast {
   //
   //
   //
-#if 0
-  VarSymbol * new_var_symbol(SymbolName n, Scope s, 
-                             const VarDeclaration * d, TopLevelSymbol * w) 
-  {
-    if (s == OTHER) {
-      bool mangle = n.marks;
-      return new OtherVarSymbol(n.name, mangle);
-    } else if (s == LEXICAL && (!d || 
-                                d->storage_class == VarDeclaration::NONE || 
-                                d->storage_class == VarDeclaration::AUTO || 
-                                d->storage_class == VarDeclaration::REGISTER)) 
-    {
-      return new LexicalVarSymbol(n.name);
-    } else {
-      assert(d);
-      bool mangle = s == LEXICAL || n.marks || w || d->storage_class == VarDeclaration::STATIC;
-      return new TopLevelVarSymbol(n.name,d,mangle,w);
-    }
-  }
-#endif
-  //
-  //
-  //
 
   void Symbol::add_to_env(const SymbolKey & k, Environ & env) const {
     env.symbols.add(k, this);

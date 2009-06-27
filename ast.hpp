@@ -450,44 +450,6 @@ namespace ast {
   //
   //
 
-#if 0
-  struct VarSymbol : virtual public Symbol {
-    //SourceStr str;
-    const Type * type;
-    const struct CT_Value_Base * ct_value;
-  protected:
-    friend VarSymbol * new_var_symbol(SymbolName n, Scope s);
-    VarSymbol(String n) : ct_value() /*, ct_ptr()*/ {name = n;}
-  };
-
-  struct OtherVarSymbol : public VarSymbol, public OtherSymbol {
-    OtherVarSymbol(String n, bool mangle) : VarSymbol(n), OtherSymbol(mangle ? NPOS : 0) {}
-  };
-
-  struct TopLevelVarSymbol : public VarSymbol, public TopLevelSymbol {
-    mutable void * ct_ptr; // No relation to ct_value.  Pointer to
-                           // compiled symbol, used for proc. macros.
-    const VarDeclaration * decl;
-    AST * init;
-    AST * cleanup;
-    TopLevelVarSymbol(String n, const VarDeclaration * d, 
-                      bool mangle, TopLevelSymbol * w) 
-      : VarSymbol(n), TopLevelSymbol(mangle ? NPOS : 0, d, w), ct_ptr(), decl(d), init(), cleanup() {}
-  };
-
-  struct LexicalVarSymbol : public VarSymbol, public LexicalSymbol {
-    LexicalVarSymbol(String n) : VarSymbol(n) {}
-  };
-
-  VarSymbol * new_var_symbol(SymbolName n, Scope s = OTHER, 
-                             const VarDeclaration * d = NULL, 
-                             TopLevelSymbol * w = NULL);
-#endif
-
-  //
-  //
-  //
-
   //template <typename T>
   //static inline void resolve_to(Environ & env, AST * & exp, const Type * type) {
   //exp = exp->resolve_to(type, env);

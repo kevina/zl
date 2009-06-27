@@ -209,32 +209,6 @@ namespace ast {
     //virtual const Syntax * get_props(SymbolName n) const; // not implemented yet
   };
 
-#if 0
-  struct LexicalSymbol : virtual public Symbol {
-    LexicalSymbol() : num () {}
-    mutable unsigned num;
-    using Symbol::uniq_name;
-    void uniq_name(OStream & o) const {
-      o.printf("%s$%u", ~name, num);
-    }
-    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
-  };
-
-  struct OtherSymbol : virtual public Symbol {
-    OtherSymbol(unsigned n = 0) : num(n) {}
-    mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
-    using Symbol::uniq_name;
-    void uniq_name(OStream & o) const {
-      if (num == 0)
-        o << name;
-      else
-        o.printf("%s$%u", ~name, num);
-    }
-    // if num is zero than leave alone, if NPOS assign uniq num.
-    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
-  };
-#endif
-
   struct FluidBinding : public TopLevelSymbol {
     FluidBinding(String n, SymbolName r) : rebind(r) {name = n;}
     SymbolName rebind;
