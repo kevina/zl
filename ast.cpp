@@ -588,7 +588,32 @@ namespace ast {
     }
   };
 
-  struct Var : public Stmt, virtual public VarDecl {
+  //
+  //
+  //
+
+  struct OtherVar : public BasicVar {
+    OtherVar() : num() {}
+    OtherVar(String n, const Type * t, bool mangle) : BasicVar(n, t), num(mangle ? NPOS : 0) {}
+    mutable unsigned num; // 0 to avoid renaming, NPOS needs uniq num
+    void uniq_name(OStream & o) const {
+      if (num == 0)
+        o << name;
+      else
+        o.printf("%s$%u", ~name, num);
+    }
+    void make_unique(SymbolNode * self, SymbolNode * stop) const {
+      if (num == NPOS)
+        assign_uniq_num<OtherVar>(self, stop);
+    }
+  };
+
+  static OtherVar * new_other_var(SymbolName n, const Type * t) {
+    bool mangle = n.marks;
+    return new OtherVar(n.name, t, mangle);
+  }
+
+  struct Var : virtual public VarDecl {
     Var() : init(), constructor() {}
     const char * what() const {return "var";}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
@@ -665,36 +690,17 @@ namespace ast {
     }
   };
 
-  struct OtherVar : public BasicVar {
-    OtherVar() : num() {}
-    OtherVar(String n, const Type * t, bool mangle) : BasicVar(n, t), num(mangle ? NPOS : 0) {}
-    mutable unsigned num; // 0 to avoid renaming, NPOS needs uniq num
-    void uniq_name(OStream & o) const {
-      if (num == 0)
-        o << name;
-      else
-        o.printf("%s$%u", ~name, num);
-    }
-    void make_unique(SymbolNode * self, SymbolNode * stop) const {
-      if (num == NPOS)
-        assign_uniq_num<OtherVar>(self, stop);
-    }
-  };
-
-  static OtherVar * new_other_var(SymbolName n, const Type * t) {
-    bool mangle = n.marks;
-    return new OtherVar(n.name, t, mangle);
-  }
-
-  struct AutoVar : public Var {
+  struct AutoVar : public Stmt, public Var {
     AutoVar() : num() {}
     mutable unsigned num;
     void compile_c(CompileWriter & f, Phase phase) const {
+      assert(phase == Normal);
       Var::compile_c(f, phase);
       if (constructor)
         f << constructor;
     }
     void compile(CompileWriter & f, Phase phase) const {
+      assert(phase == Normal);
       Var::compile(f, phase);
       if (constructor)
         f << constructor;
@@ -730,22 +736,23 @@ namespace ast {
     const Syntax * name_p = p->arg(0);
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
-    bool top_level;
     Var * var;
+    Stmt * res;
     if (env.scope == LEXICAL && (storage_class == SC_NONE ||
                                  storage_class == SC_AUTO ||
                                  storage_class == SC_REGISTER)) 
     {
-      top_level = false;
-      var = new AutoVar;
+      AutoVar * v = new AutoVar;
+      var = v;
+      res = v;
     } else {
-      top_level = true;
-      bool mangle = env.scope == LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
       TopLevelVar * v = new TopLevelVar;
+      bool mangle = env.scope == LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
       v->num = mangle ? NPOS : 0;
       v->where = env.where;
       v->deps_closed = true;
       var = v;
+      res = empty_stmt();
     }
     var->syn = p;
     var->name = name.name;
@@ -756,10 +763,7 @@ namespace ast {
       throw error(name_p, "Size not known");
     env.add(name, var);
     collect.push_back(var); // fixme, not always the case
-    if (top_level)
-      return empty_stmt();
-    else
-      return var;
+    return res;
   }
 
   static Stmt * parse_var(const Syntax * p, Environ & env) {
@@ -783,7 +787,10 @@ namespace ast {
     env.add(name, var);
     return var;
   }
-
+  
+  //
+  //
+  //
 
   struct EStmt : public Stmt {
     EStmt() {}
