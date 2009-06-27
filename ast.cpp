@@ -450,7 +450,7 @@ namespace ast {
       assert_num_args(1);
       sym = env.symbols.lookup<VarSymbol>(p->arg(0));
       const TopLevelVarDecl * tl = sym->top_level();
-      if (env.deps && tl)
+      if (tl && env.deps)
         env.deps->insert(tl);
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
