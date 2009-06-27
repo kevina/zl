@@ -449,13 +449,13 @@ namespace ast {
       syn = p;
       assert_num_args(1);
       sym = env.symbols.lookup<VarSymbol>(p->arg(0));
-      const TopLevelVarDecl * tl = NULL;
-      if (env.deps && (tl = sym->top_level()))
+      const TopLevelVarDecl * tl = sym->top_level();
+      if (env.deps && tl)
         env.deps->insert(tl);
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
-      lvalue = sym->top_level() ? 2 : 1;
+      lvalue = tl ? 2 : 1;
       return this;
     }
     void compile_c(CompileWriter & f) {
