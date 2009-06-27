@@ -629,7 +629,7 @@ namespace ast {
     }
     void compile_c(CompileWriter & f, Phase phase) const {
       f << indent;
-      write_flags_c(f);
+      write_storage_class_c(f);
       StringBuf buf;
       //if (temp_sym) {
       //  c_print_inst->declaration(temp_sym->uniq_name(), *temp_sym->type, buf);
@@ -652,7 +652,7 @@ namespace ast {
       f << "(var";
       f << ' ' << uniq_name();
       f << ' ' << zls_print_inst->to_string(*type);
-      write_flags(f);
+      write_storage_class(f);
       if (init && phase != Forward) {
         if (init->ct_value_) {
           f << " ";
@@ -744,6 +744,7 @@ namespace ast {
       TopLevelVar * v = new TopLevelVar;
       v->num = mangle ? NPOS : 0;
       v->where = env.where;
+      v->deps_closed = true;
       var = v;
     }
     var->syn = p;
@@ -755,7 +756,6 @@ namespace ast {
       throw error(name_p, "Size not known");
     env.add(name, var);
     collect.push_back(var); // fixme, not always the case
-    var->deps_closed = true;
     if (top_level)
       return empty_stmt();
     else
@@ -2075,7 +2075,16 @@ namespace ast {
   AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect & collect) {
     syn = p;
 
-    parse_flags(p);
+    //printf("PARSING FLAGS OF %s\n", ~p->to_string());
+    inline_ = false;
+    if (p->flag("inline")) inline_ = true;
+    ct_callback = false;
+    if (p->flag("__ct_callback")) ct_callback = true;
+    for_ct_ = ct_callback;
+    if (p->flag("__for_ct")) for_ct_ = true;
+    deps_closed = ct_callback;
+    static_constructor = false;
+    if (p->flag("__static_constructor")) static_constructor = true;
 
     if (p->flag("__need_snapshot"))
       env_ss = *env0.top_level_environ;
@@ -2163,7 +2172,9 @@ namespace ast {
     if (env_ss && phase != Forward) {
       f << "struct EnvironSnapshot * " << uniq_name() << '$' << "env_ss" << ";\n";
     }
-    write_flags_c(f);
+    write_storage_class_c(f);
+    if (inline_)
+        f << "inline ";
     StringBuf buf;
     c_print_inst->declaration(uniq_name(), *type, buf);
     f << buf.freeze();
@@ -2187,7 +2198,9 @@ namespace ast {
     f << "(fun " << uniq_name();
     f << " " << zls_print_inst->to_string(*parms);
     f << " " << zls_print_inst->to_string(*ret_type);
-    write_flags(f);
+    write_storage_class(f);
+    if (inline_)
+        f << " :inline";
     if (static_constructor)
       f << " :__constructor__";
     if (body && phase != Forward) {
@@ -2942,20 +2955,7 @@ namespace ast {
   // VarDeclaration methods
   //
 
-  void VarDeclaration::parse_flags(const Syntax * p) {
-    //printf("PARSING FLAGS OF %s\n", ~p->to_string());
-    inline_ = false;
-    if (p->flag("inline")) inline_ = true;
-    ct_callback = false;
-    if (p->flag("__ct_callback")) ct_callback = true;
-    for_ct_ = ct_callback;
-    if (p->flag("__for_ct")) for_ct_ = true;
-    deps_closed = ct_callback;
-    static_constructor = false;
-    if (p->flag("__static_constructor")) static_constructor = true;
-  }
-  
-  void VarDeclaration::write_flags_c(CompileWriter & f) const {
+  void VarDeclaration::write_storage_class_c(CompileWriter & f) const {
     StorageClass sc = storage_class;
     if (f.for_compile_time())
       if (const TopLevelVarDecl * tl = top_level()) {
@@ -2976,11 +2976,9 @@ namespace ast {
     default:
       break;
     }
-    if (inline_)
-        f << "inline ";
   }
 
-  void VarDeclaration::write_flags(CompileWriter & f) const {
+  void VarDeclaration::write_storage_class(CompileWriter & f) const {
     StorageClass sc = storage_class;
     if (f.for_compile_time())
       if (const TopLevelVarDecl * tl = top_level()) {
@@ -3001,14 +2999,12 @@ namespace ast {
     default:
       break;
     }
-    if (inline_)
-        f << " :inline";
   }
   
-  void VarDeclaration::calc_deps_closure() const {  
+  void TopLevelVarDecl::calc_deps_closure() const {  
     deps_closed = true;
     for (unsigned i = 0, sz = deps_.size(); i < sz; ++i) {
-      const VarDeclaration * d = deps_[i];
+      const TopLevelVarDecl * d = deps_[i];
       if (!d->deps_closed) d->calc_deps_closure();
       deps_.merge(d->deps_);
       if (!d->deps_closed) deps_closed = false;

@@ -385,19 +385,21 @@ namespace ast {
   enum StorageClass {SC_NONE, SC_AUTO, SC_STATIC, SC_EXTERN, SC_REGISTER};
 
   struct VarDeclaration : public Declaration, public BasicVar, public ForSecondPass {
-    VarDeclaration() : deps_closed(), for_ct_(false), inline_(), ct_callback(), static_constructor() {}
+    VarDeclaration() {}
     StorageClass storage_class;
     //VarSymbol * sym;
+    void write_storage_class_c(CompileWriter & f) const;
+    void write_storage_class(CompileWriter & f) const;
+    //void forward_decl(CompileWriter & w) {compile(w, true);}
+    void finish_parse(Environ & env) {abort();}
+  };
+
+  typedef VarDeclaration VarDecl;
+
+  struct TopLevelVarDecl : virtual public VarDecl, public TopLevelSymbol {
     mutable bool deps_closed;
     mutable Deps deps_;       // only valid if deps_closed
     mutable bool for_ct_;     // if false, only valid if deps_closed
-    bool inline_;
-    bool ct_callback;
-    bool static_constructor;
-    void parse_flags(const Syntax * p);
-    void write_flags_c(CompileWriter & f) const;
-    void write_flags(CompileWriter & f) const;
-    //void forward_decl(CompileWriter & w) {compile(w, true);}
     void calc_deps_closure() const;
     const Deps & deps() const {
       if (!deps_closed) calc_deps_closure();
@@ -407,20 +409,11 @@ namespace ast {
       if (!deps_closed) calc_deps_closure();
       return for_ct_;
     }
-    void finish_parse(Environ & env) {abort();}
-  };
-
-  typedef VarDeclaration VarDecl;
-
-  struct TopLevelVarDecl : virtual public VarDecl, public TopLevelSymbol {
     mutable void * ct_ptr; // No relation to ct_value.  Pointer to
                            // compiled symbol, used for proc. macros.
     const TopLevelVarDecl * top_level() const {return this;}
-    TopLevelVarDecl() : TopLevelSymbol(this), ct_ptr() {}
+    TopLevelVarDecl() : TopLevelSymbol(this), deps_closed(false), for_ct_(false), ct_ptr() {}
   };
-
-  
-
 
   typedef Vector<ForSecondPass *> Collect;
 
@@ -434,9 +427,10 @@ namespace ast {
     const Tuple * parms;
     const Type * ret_type;
     Block * body;
+    bool inline_;
+    bool ct_callback;
+    bool static_constructor;
     //LabelSymbolTable * labels;
-    unsigned frame_offset;
-    unsigned frame_size;
     void finish_parse(Environ &);
     void compile_prep(CompileEnviron &);
     void compile_c(CompileWriter & f, Phase) const;
