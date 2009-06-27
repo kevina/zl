@@ -209,11 +209,6 @@ namespace ast {
     add_to_top_level_env(k, env);
   }
 
-  void NormalLabelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
-    env.fun_labels.add(k, this);
-    make_unique(*env.fun_labels.front);
-  }
-
   //
   //
   //
@@ -254,30 +249,80 @@ namespace ast {
 //     Generic * parse_self(const Syntax*, Environ&) {abort();}
 //   };
 
-  struct Label : public Stmt {
+  struct Label : public Stmt, public Symbol {
     Label() {}
     const char * what() const {return "label";}
-    const LabelSymbol * label;
-    Label * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(1);
-      SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
-      label = env.symbols.find<LabelSymbol>(n);
-      if (!label) {
-        label = new NormalLabelSymbol(n.name);
-        env.add(SymbolKey(n, LABEL_NS), label);
-      }
-      return this;
-    }
     void compile_prep(CompileEnviron &) {}
     void finalize(FinalizeEnviron &) {}
     void compile_c(CompileWriter & o) {
       // note: noop is needed because gcc won't let us put a label
       // before a declaration
-      o << adj_indent(-2) << indent << label << ":;\n";
+      o << adj_indent(-2) << indent << uniq_name() << ":;\n";
     }
     void compile(CompileWriter & o) {
-      o << adj_indent(-2) << indent << "(label " << label << ")\n";
+      o << adj_indent(-2) << indent << "(label " << uniq_name() << ")\n";
+    }
+  };
+
+  struct NormalLabel : public Label {
+    mutable unsigned num;
+    NormalLabel(String n) : num() {name = n;}
+    void uniq_name(OStream & o) const {
+      o.printf("%s$$%u", ~name, num);
+    }
+    void add_to_env(const SymbolKey & k, Environ &) const;
+    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
+      assign_uniq_num<NormalLabel>(self, stop);
+    }
+  };
+
+  void NormalLabel::add_to_env(const SymbolKey & k, Environ & env) const {
+    env.fun_labels.add(k, this);
+    make_unique(*env.fun_labels.front);
+  }
+
+  struct LocalLabel : public Label {
+    mutable unsigned num;
+    LocalLabel(String n) : num() {name = n;}
+    void uniq_name(OStream & o) const {
+      o.printf("%s$%u", ~name, num);
+    }
+    void make_unique(SymbolNode * self, SymbolNode * stop) const {
+      assign_uniq_num<LocalLabel>(self, stop);
+    }
+  };
+
+  Stmt * parse_label(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
+    Label * label = const_cast<Label *>(env.symbols.find<Label>(n));
+    if (!label) {
+      label = new NormalLabel(n.name);
+      env.add(SymbolKey(n, LABEL_NS), label);
+    }
+    label->syn = p;
+    return label;
+  }
+
+  struct LocalLabelDecl : public Stmt {
+    LocalLabelDecl() {}
+    const char * what() const {return "local_label";}
+    const LocalLabel * label;
+    LocalLabelDecl * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      assert_num_args(1);
+      SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
+      label = new LocalLabel(n.name);
+      env.add(n, label);
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {}
+    void compile_prep(CompileEnviron & env) {}
+    void compile_c(CompileWriter & o) {
+      o << indent << "__label__ " << label << ";\n";
+    }
+    void compile(CompileWriter & o) {
+      o << indent << "(local_label " << label << ")\n";
     }
   };
 
@@ -315,20 +360,18 @@ namespace ast {
     }
   };
 
-  
-
   struct Goto : public Stmt {
     Goto() {}
     const char * what() const {return "goto";}
     const Syntax * label_s;
     SymbolName label;
-    const LabelSymbol * sym;
+    const Label * sym;
     Goto * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       assert_num_args(1);
       label_s = expand_id(p->arg(0));
       label = *label_s;
-      sym = env.symbols.find<LabelSymbol>(SymbolKey(label, LABEL_NS));
+      sym = env.symbols.find<Label>(SymbolKey(label, LABEL_NS));
       return this;
     }
     // FIXME, move into compile ...
@@ -339,8 +382,8 @@ namespace ast {
     //}
     void finalize(FinalizeEnviron & env) {
       if (!sym)
-        sym = lookup_symbol<LabelSymbol>(SymbolKey(label, LABEL_NS), 
-                                         label_s->str(), env.fun_symbols);
+        sym = lookup_symbol<Label>(SymbolKey(label, LABEL_NS), 
+                                  label_s->str(), env.fun_symbols);
     }
     void compile_prep(CompileEnviron & env) {}
     void compile_c(CompileWriter & o) {
@@ -353,28 +396,6 @@ namespace ast {
     }
   };
   
-  struct LocalLabelDecl : public Stmt {
-    LocalLabelDecl() {}
-    const char * what() const {return "local_label";}
-    const LabelSymbol * label;
-    LocalLabelDecl * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(1);
-      SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
-      label = new LocalLabelSymbol(n.name);
-      env.add(n, label);
-      return this;
-    }
-    void finalize(FinalizeEnviron & env) {}
-    void compile_prep(CompileEnviron & env) {}
-    void compile_c(CompileWriter & o) {
-      o << indent << "__label__ " << label << ";\n";
-    }
-    void compile(CompileWriter & o) {
-      o << indent << "(local_label " << label << ")\n";
-    }
-  };
-
   //AST * Literal::part(unsigned i) {return new Terminal(parse_->arg(0));}
   
   Literal * Literal::parse_self(const Syntax * p, Environ & env) {
@@ -2502,7 +2523,7 @@ namespace ast {
     if (p->arg(0)->is_a("(type)")) {
       sizeof_type = parse_type(p->arg(0)->arg(0), env);
     } else {
-      AST * exp = parse_exp(p->arg(0), env);
+      Exp * exp = parse_exp(p->arg(0), env);
       sizeof_type = parse_type(new Syntax(new Syntax(".typeof"), new Syntax(exp)), env);
     }
     type = env.types.ct_const(env.types.inst(".size"));
@@ -2626,7 +2647,22 @@ namespace ast {
   template <typename T>
   T * try_ast(const Syntax * p, Environ & env) {
     if (p->have_entity()) {
-      if (T * ast = p->entity<T>()) {
+      /*if (T * ast = p->entity<T>()) {
+        return ast;
+        } else */
+      if (Error * err = p->entity<Error>()) {
+        throw err;
+      } else {
+        abort(); // FIXME Error message
+      }
+    }
+    return 0;
+  }
+
+  template <>
+  Exp * try_ast<Exp>(const Syntax * p, Environ & env) {
+    if (p->have_entity()) {
+      if (Exp * ast = p->entity<Exp>()) {
         return ast;
       } else if (Error * err = p->entity<Error>()) {
         throw err;
@@ -2808,7 +2844,7 @@ namespace ast {
   Stmt * try_just_stmt(const Syntax * p, Environ & env) {
     String what = p->what().name;
     if (what == "goto")    return (new Goto)->parse_self(p, env);
-    if (what == "label")   return (new Label)->parse_self(p, env);
+    if (what == "label")   return parse_label(p, env);
     if (what == "case")    return (new Case)->parse_self(p, env);
     if (what == "if")      return (new If)->parse_self(p, env);
     if (what == ".switch") return (new Switch)->parse_self(p, env);

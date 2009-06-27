@@ -55,11 +55,11 @@ namespace ast {
   }
 
   struct AST {
-    typedef ::TypeInfo<AST> TypeInfo;
-    virtual void set_syntax_data(Syntax::Data & d) {
-      d.type_id = TypeInfo::id;
-      d.data = this;
-    }
+    //typedef ::TypeInfo<AST> TypeInfo;
+    //virtual void set_syntax_data(Syntax::Data & d) {
+    //  d.type_id = TypeInfo::id;
+    //  d.data = this;
+    //}
     virtual const char * what() const = 0;
     virtual AST * part(unsigned i) {return 0;}
     const Syntax * syn;
@@ -87,10 +87,11 @@ namespace ast {
   struct Stmt;
 
   struct Exp : public AST {
-    struct TypeInfo {
-      typedef Exp type; 
-      static const unsigned id = AST::TypeInfo::id | 1;
-    };
+    typedef ::TypeInfo<Exp> TypeInfo;
+    //struct TypeInfo {
+    //  typedef Exp type; 
+    //  static const unsigned id = AST::TypeInfo::id | 1;
+    //};
     void set_syntax_data(Syntax::Data & d) {
       d.type_id = TypeInfo::id;
       d.data = this;
@@ -130,14 +131,14 @@ namespace ast {
 
   struct Stmt : virtual public AST {
   public:
-    struct TypeInfo {
-      typedef Stmt type; 
-      static const unsigned id = AST::TypeInfo::id | 2;
-    };
-    void set_syntax_data(Syntax::Data & d) {
-      d.type_id = TypeInfo::id;
-      d.data = this;
-    }
+    //struct TypeInfo {
+    //  typedef Stmt type; 
+    //  static const unsigned id = AST::TypeInfo::id | 2;
+    //};
+    //void set_syntax_data(Syntax::Data & d) {
+    //  d.type_id = TypeInfo::id;
+    //  d.data = this;
+    //}
     static const int ast_type = 2;
     Stmt(const Syntax * p = 0) : AST(p), next() {}
     Stmt * next;
@@ -453,31 +454,6 @@ namespace ast {
   VarSymbol * new_var_symbol(SymbolName n, Scope s = OTHER, 
                              const VarDeclaration * d = NULL, 
                              TopLevelSymbol * w = NULL);
-
-  struct LabelSymbol : public Symbol {};
-
-  struct NormalLabelSymbol : public LabelSymbol {
-    mutable unsigned num;
-    NormalLabelSymbol(String n) : num() {name = n;}
-    void uniq_name(OStream & o) const {
-      o.printf("%s$$%u", ~name, num);
-    }
-    void add_to_env(const SymbolKey & k, Environ &) const;
-    void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
-      assign_uniq_num<NormalLabelSymbol>(self, stop);
-    }
-  };
-  
-  struct LocalLabelSymbol : public LabelSymbol {
-    mutable unsigned num;
-    LocalLabelSymbol(String n) : num() {name = n;}
-    void uniq_name(OStream & o) const {
-      o.printf("%s$%u", ~name, num);
-    }
-    void make_unique(SymbolNode * self, SymbolNode * stop) const {
-      assign_uniq_num<LocalLabelSymbol>(self, stop);
-    }
-  };
 
   //
   //
