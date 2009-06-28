@@ -120,8 +120,8 @@ namespace ast {
     }
     unsigned sz = type->num_parms();
     if (sz == 0) {
-      if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
-        buf << t->what << " ";
+      if (const char * tag = type->tag()) {
+        buf << tag << " ";
       }
       type->type_symbol->uniq_name(buf);
     } else if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
@@ -236,8 +236,8 @@ namespace ast {
       declaration("", *t->parms, lbuf);
       declaration(lbuf.freeze(), *t->ret, buf);
     } else if (type->num_parms() == 0) {
-      if (const TaggedType * t = dynamic_cast<const TaggedType *>(type)) {
-        buf << t->what << " ";
+      if (const char * tag = type->tag()) {
+        buf << tag << " ";
       }
       unsigned i = buf.size();
       type->type_symbol->uniq_name(buf);
@@ -622,7 +622,9 @@ namespace ast {
     add_simple_type(types, new Float("double", Float::DOUBLE));
     add_simple_type(types, new Float("long-double", Float::LONG));
 
-    add_simple_type(types, "<bool>", new AliasT(types.inst("int")));
+    //add_simple_type(types, "<bool>", new AliasT(types.inst("int")));
+
+    
 
     types.add("<void>", types.find("void"));
 

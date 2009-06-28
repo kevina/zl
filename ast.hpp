@@ -18,6 +18,11 @@
 
 namespace ast {
 
+  typedef int target_bool;
+  typedef int target_int;
+  typedef size_t target_size_t;
+  typedef ptrdiff_t target_ptrdiff_t;
+
   class AST;
 
   struct SyntaxC;
@@ -440,6 +445,71 @@ namespace ast {
   //
   //
 
+  struct TypeDeclaration : public Declaration {
+    TypeDeclaration() {}
+  };
+
+  struct TypeAlias : public TypeDeclaration, public SimpleType {
+    TypeAlias(const Type * st) : SimpleType(st), of(st) {}
+    const Type * of;
+    const char * what() const {return "talias";}
+    void finalize(FinalizeEnviron &) {}
+    void compile_prep(CompileEnviron &) {}
+    void compile_c(CompileWriter & f, Phase phase) const;
+    void compile(CompileWriter & f, Phase phase) const;
+    unsigned size() const {return of->size();}
+    unsigned align() const {return of->align();}
+  protected:
+    const Type * find_root() {return of->root;}
+  };
+
+  struct StructUnion : public TypeDeclaration {
+    const char * what() const {return which == STRUCT ? "struct" : "union";}
+    enum Which {STRUCT, UNION} which;
+    struct Body;
+    StructUnion(Which w) : which(w), env(OTHER)  {}
+    AST * part(unsigned i) {return 0; /* FIXME */}
+    const TypeSymbol * sym;
+    Body * body;
+    Environ env;
+    Stmt * parse_self(const Syntax * p, Environ & env0);
+    void finalize(FinalizeEnviron & e) {}
+    void compile_prep(CompileEnviron & e) {}
+    void compile_c(CompileWriter & f, Phase phase) const;
+    void compile(CompileWriter & f, Phase phase) const;
+  };
+
+  struct Struct : public StructUnion {
+    Struct() : StructUnion(STRUCT) {}
+  };
+
+  struct Union : public StructUnion {
+    Union() : StructUnion(UNION) {}
+  };
+
+  struct Enum : public TypeDeclaration {
+    Enum() {}
+    const char * what() const {return "enum";}
+    const TypeSymbol * sym;
+    const Syntax * body;
+    struct Member {
+      const Syntax * parse;
+      VarSymbol * sym;
+      CT_Value<target_int> ct_value;
+      Member(const Syntax * p, VarSymbol * sym, int v) : parse(p), sym(sym), ct_value(v) {}
+    };
+    Vector<Member> members;
+    Stmt * parse_self(const Syntax * p, Environ & env);
+    void finalize(FinalizeEnviron &) {}
+    void compile_prep(CompileEnviron &) {}
+    void compile_c(CompileWriter & f, Phase phase) const;
+    void compile(CompileWriter & f, Phase phase) const;
+  };
+
+  //
+  //
+  //
+
   //template <typename T>
   //static inline void resolve_to(Environ & env, AST * & exp, const Type * type) {
   //exp = exp->resolve_to(type, env);
@@ -569,10 +639,6 @@ namespace ast {
   Exp * to_ref(Exp *, Environ &);
   Exp * from_ref(Exp *, Environ &);
 
-  typedef int target_bool;
-  typedef int target_int;
-  typedef size_t target_size_t;
-  typedef ptrdiff_t target_ptrdiff_t;
 }
 
 #endif

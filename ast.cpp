@@ -2320,243 +2320,212 @@ namespace ast {
       f << "))";
     }
   };
+  
+  //
+  //
+  //
+  
+  Stmt * parse_type_alias(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
+    Type * of = parse_type(p->arg(1), env);
+    TypeAlias * decl = new TypeAlias(of);
+    decl->syn = p;
+    SimpleType * talias = add_simple_type(env.types, n, decl, decl, env.where);
+    return empty_stmt();
+  }
 
-  struct TypeDeclaration : public Declaration {
-    TypeDeclaration() {}
-  };
-
-  struct TypeAlias : public TypeDeclaration {
-    TypeAlias() {}
-    const char * what() const {return "talias";}
-    TypeSymbol * name_sym;
-    const Type * type;
-    AST * part(unsigned i) {abort();}
-    Stmt * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(2);
-      SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
-      type = parse_type(p->arg(1), env);
-      name_sym = add_simple_type(env.types, n, new AliasT(type), this, env.where);
-      return empty_stmt();
-    }
-    void finalize(FinalizeEnviron &) {}
-    void compile_prep(CompileEnviron &) {}
-    void compile_c(CompileWriter & f, Phase phase) const {
-      if (phase == Body) return;
+  void TypeAlias::compile_c(CompileWriter & f, Phase phase) const {
+    if (phase == Body) return;
       f << indent << "typedef ";
       StringBuf buf;
-      c_print_inst->declaration(name_sym->uniq_name(), *type, buf);
+      c_print_inst->declaration(uniq_name(), *of, buf);
       f << buf.freeze();
       f << ";\n";
-    }
-    void compile(CompileWriter & f, Phase phase) const {
-      if (phase == Body) return;
-      f << indent << "(talias " << name_sym->uniq_name() << " " 
-        << zls_print_inst->to_string(*type) << ")\n";
+  }
+  
+  void TypeAlias::compile(CompileWriter & f, Phase phase) const {
+    if (phase == Body) return;
+    f << indent << "(talias " << uniq_name() << " " 
+      << zls_print_inst->to_string(*of) << ")\n";
+  }
+
+  struct StructUnion::Body : public FakeAST {
+    Body(Which w) {}
+    const char * what() const {return "struct_union_body";}
+    Vector<BasicVar *> members;
+    Body * parse_self(const Syntax * p, Environ & env) {
+      add_ast_nodes(p->parts_begin(), p->parts_end(), members, Parse<FieldPos>(env));
+      return this;
     }
   };
 
-  struct StructUnion : public TypeDeclaration {
-    const char * what() const {return which == STRUCT ? "struct" : "union";}
-    enum Which {STRUCT, UNION} which;
-    struct Body : public FakeAST {
-      Body(Which w) {}
-      const char * what() const {return "struct_union_body";}
-      Vector<BasicVar *> members;
-      Body * parse_self(const Syntax * p, Environ & env) {
-        add_ast_nodes(p->parts_begin(), p->parts_end(), members, Parse<FieldPos>(env));
-        return this;
-      }
-    };
-    StructUnion(Which w) : which(w), env(OTHER)  {}
-    AST * part(unsigned i) {return 0; /* FIXME */}
-    const TypeSymbol * sym;
-    Body * body;
-    Environ env;
-    Stmt * parse_self(const Syntax * p, Environ & env0) {
-      syn = p;
-      //assert(p->is_a(what()));
-      const Syntax * name = p->arg(0);
-      env = env0.new_scope();
-      env.scope = OTHER;
-      if (p->num_args() > 1) {
-        body = new Body(which);
-        if (p->what().name[0] == '.') {
-          for (unsigned i = 1; i != p->num_args(); ++i) {
-            const Syntax * q = p->arg(i);
-            assert(q);
-            const Syntax * name_p = q->part(1);
-            assert(name_p);
-            SymbolKey name = expand_binding(name_p, env);
-            const Type * type = parse_type(q->part(0), env);
-            OtherVar * v = new_other_var(name, type);
-            v->name_p = name_p;
-            env.add(name, v);
-            body->members.push_back(v);
-          }
-        } else {
-          body->parse_self(p->arg(1), env);
+  Stmt * StructUnion::parse_self(const Syntax * p, Environ & env0) {
+    syn = p;
+    //assert(p->is_a(what()));
+    const Syntax * name = p->arg(0);
+    env = env0.new_scope();
+    env.scope = OTHER;
+    if (p->num_args() > 1) {
+      body = new Body(which);
+      if (p->what().name[0] == '.') {
+        for (unsigned i = 1; i != p->num_args(); ++i) {
+          const Syntax * q = p->arg(i);
+          assert(q);
+          const Syntax * name_p = q->part(1);
+          assert(name_p);
+          SymbolKey name = expand_binding(name_p, env);
+          const Type * type = parse_type(q->part(0), env);
+          OtherVar * v = new_other_var(name, type);
+          v->name_p = name_p;
+          env.add(name, v);
+          body->members.push_back(v);
         }
       } else {
-        body = NULL;
+        body->parse_self(p->arg(1), env);
       }
-      StructUnionT * s;
-      if (env0.symbols.exists_this_scope(name, TAG_NS)) {
-        const Type * t0 = env0.types.inst(name, TAG_NS);
-        s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
-        sym = s->type_symbol;
-      } else {
-        SymbolKey n = expand_binding(name, TAG_NS, env);
-        if (which == STRUCT) s = new StructT(n);
-        else                 s = new UnionT(n);
-        sym = add_simple_type(env0.types, n, s, this, env.where);
-      }
-      if (body)
-        for (unsigned i = 0; i != body->members.size(); ++i) {
-          BasicVar * v = body->members[i];
-          s->members.push_back(Member(v));
-        }
-      //StringBuf type_name;
-      //type_name << "struct " << what();
-      sym->decl = this;
-      s->env = &env;
-      //if (s->members.empty())
-      //  fprintf(stderr, "Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
-      s->finalize();
-      return empty_stmt();
-    }
-    void finalize(FinalizeEnviron & e) {}
-    void compile_prep(CompileEnviron & e) {}
-    void compile_c(CompileWriter & f, Phase phase) const {
-      if (!body && phase == Declaration::Body) return;
-      f << indent << what() << " " << sym;
-      if (body && phase != Forward) {
-        f << " {\n";
-        StringBuf buf;
-        for (int i = 0; i != body->members.size(); ++i) {
-          BasicVar * v = body->members[i];
-          c_print_inst->declaration(v->uniq_name(), *v->type, buf);
-          f << adj_indent(2) << indent << buf.freeze() << ";\n";
-        }
-        f << indent << "}";
-      } 
-      f << ";\n";
-    }
-    void compile(CompileWriter & f, Phase phase) const {
-      if (!body && phase == Declaration::Body) return;
-      f << indent << "(." << what() << " " << sym;
-      if (body && phase != Forward) {
-        f << "\n";
-        for (int i = 0; i != body->members.size(); ++i) {
-          BasicVar * v = body->members[i];
-          f << adj_indent(2) << indent;
-          f << "(" << zls_print_inst->to_string(*v->type) << " " << v->uniq_name() << ")\n";
-        }
-      }
-      f << ")\n";
-    }
-  };
-
-  struct Struct : public StructUnion {
-    Struct() : StructUnion(STRUCT) {}
-  };
-
-  struct Union : public StructUnion {
-    Union() : StructUnion(UNION) {}
-  };
-
-  struct Enum : public TypeDeclaration {
-    Enum() {}
-    const char * what() const {return "enum";}
-    const TypeSymbol * sym;
-    const Syntax * body;
-    struct Member {
-      const Syntax * parse;
-      VarSymbol * sym;
-      CT_Value<target_int> ct_value;
-      Member(const Syntax * p, VarSymbol * sym, int v) : parse(p), sym(sym), ct_value(v) {}
-    };
-    Vector<Member> members;
-    Stmt * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      SymbolName name = *p->arg(0);
-      EnumT * t0;
-      if (env.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
-        t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
-                                  (env.types.inst(SymbolKey(name, TAG_NS)))));
-        sym = t0->type_symbol;
-      } else {
-        t0 = new EnumT(name.name);
-        t0->exact_type = env.types.inst("int")->exact_type;
-        sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0, this, env.where);
-      }
+    } else {
       body = NULL;
-      if (p->num_args() > 1) {
-        Vector<TypeParm> q_parms;
-        q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
-        q_parms.push_back(TypeParm(t0));
-        const Type * t = env.types.find(".qualified")->inst(q_parms);
-        int val = 0;
-        const Syntax * arg1;
-        unsigned i;
-        if (p->what().name[0] == '.') {
-          arg1 = body = p;
-          i = 1;
-        } else {
-          arg1 = body = p->arg(1);
-          i = 0;
-        }
-        members.reserve(arg1->num_args() - i);
-        for (; i != arg1->num_args(); ++i) {
-          const Syntax * arg = arg1->arg(i);
-          if (arg->num_parts() > 1) {
-            Exp * e = parse_exp(arg->part(1), env);
-            e = e->resolve_to(env.types.inst("int"), env);
-            val = e->ct_value<target_int>();
-          }
-          SymbolName n = *arg->part(0);
-          Member mem(arg1, new_other_var(n, t), val);
-          VarSymbol * sym = mem.sym;
-          val++;
-          members.push_back(mem);
-          sym->ct_value = &members.back().ct_value;
-          sym->add_to_env(n, env);
-        }
-      }
-      sym->decl = this;
-      t0->finalize();
-      return empty_stmt();
     }
-    void finalize(FinalizeEnviron &) {}
-    void compile_prep(CompileEnviron &) {}
-    void compile_c(CompileWriter & f, Phase phase) const {
-      if (!body && phase == Body) return;
-      f << indent << what() << " " << sym;
-      if (body && phase != Forward) {
-        f << "{\n";
-        for (int i = 0; i != members.size(); ++i) {
-          f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.val;
-          if (i == members.size())
-            f << "\n";
-          else
-            f << ",\n";
+    StructUnionT * s;
+    if (env0.symbols.exists_this_scope(name, TAG_NS)) {
+      const Type * t0 = env0.types.inst(name, TAG_NS);
+      s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
+      sym = s->type_symbol;
+    } else {
+      SymbolKey n = expand_binding(name, TAG_NS, env);
+      if (which == STRUCT) s = new StructT(n);
+      else                 s = new UnionT(n);
+      sym = add_simple_type(env0.types, n, s, this, env.where);
+    }
+    if (body)
+      for (unsigned i = 0; i != body->members.size(); ++i) {
+        BasicVar * v = body->members[i];
+        s->members.push_back(Member(v));
+      }
+    //StringBuf type_name;
+    //type_name << "struct " << what();
+    sym->decl = this;
+    s->env = &env;
+    //if (s->members.empty())
+    //  fprintf(stderr, "Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
+    s->finalize();
+    return empty_stmt();
+  }
+
+  void StructUnion::compile_c(CompileWriter & f, Phase phase) const {
+    if (!body && phase == Declaration::Body) return;
+    f << indent << what() << " " << sym;
+    if (body && phase != Forward) {
+      f << " {\n";
+      StringBuf buf;
+      for (int i = 0; i != body->members.size(); ++i) {
+        BasicVar * v = body->members[i];
+        c_print_inst->declaration(v->uniq_name(), *v->type, buf);
+        f << adj_indent(2) << indent << buf.freeze() << ";\n";
+      }
+      f << indent << "}";
+    } 
+    f << ";\n";
+  }
+
+  void StructUnion::compile(CompileWriter & f, Phase phase) const {
+    if (!body && phase == Declaration::Body) return;
+    f << indent << "(." << what() << " " << sym;
+    if (body && phase != Forward) {
+      f << "\n";
+      for (int i = 0; i != body->members.size(); ++i) {
+        BasicVar * v = body->members[i];
+        f << adj_indent(2) << indent;
+        f << "(" << zls_print_inst->to_string(*v->type) << " " << v->uniq_name() << ")\n";
+      }
+    }
+    f << ")\n";
+  }
+
+  Stmt * Enum::parse_self(const Syntax * p, Environ & env) {
+    syn = p;
+    SymbolName name = *p->arg(0);
+    EnumT * t0;
+    if (env.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
+      t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
+                                (env.types.inst(SymbolKey(name, TAG_NS)))));
+      sym = t0->type_symbol;
+    } else {
+      t0 = new EnumT(name.name);
+      t0->exact_type = env.types.inst("int")->exact_type;
+      sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0, this, env.where);
+    }
+    body = NULL;
+    if (p->num_args() > 1) {
+      Vector<TypeParm> q_parms;
+      q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
+      q_parms.push_back(TypeParm(t0));
+      const Type * t = env.types.find(".qualified")->inst(q_parms);
+      int val = 0;
+      const Syntax * arg1;
+      unsigned i;
+      if (p->what().name[0] == '.') {
+        arg1 = body = p;
+        i = 1;
+      } else {
+        arg1 = body = p->arg(1);
+        i = 0;
+      }
+      members.reserve(arg1->num_args() - i);
+      for (; i != arg1->num_args(); ++i) {
+        const Syntax * arg = arg1->arg(i);
+        if (arg->num_parts() > 1) {
+          Exp * e = parse_exp(arg->part(1), env);
+          e = e->resolve_to(env.types.inst("int"), env);
+          val = e->ct_value<target_int>();
         }
-        f << indent << "}";
+        SymbolName n = *arg->part(0);
+        Member mem(arg1, new_other_var(n, t), val);
+        VarSymbol * sym = mem.sym;
+        val++;
+        members.push_back(mem);
+        sym->ct_value = &members.back().ct_value;
+        sym->add_to_env(n, env);
       }
-      f << ";\n";
     }
-    void compile(CompileWriter & f, Phase phase) const {
-      if (!body && phase == Body) return;
-      f << indent << "(.enum " << sym;
-      if (body && phase != Forward) {
-        f << "\n";
-        for (int i = 0; i != members.size(); ++i)
-          f << adj_indent(2) << indent 
-            << " (" << members[i].sym << " " << members[i].ct_value.val << ")\n";
+    sym->decl = this;
+    t0->finalize();
+    return empty_stmt();
+  }
+
+  void Enum::compile_c(CompileWriter & f, Phase phase) const {
+    if (!body && phase == Body) return;
+    f << indent << what() << " " << sym;
+    if (body && phase != Forward) {
+      f << "{\n";
+      for (int i = 0; i != members.size(); ++i) {
+        f << adj_indent(2) << indent << members[i].sym << " = " << members[i].ct_value.val;
+        if (i == members.size())
+          f << "\n";
+        else
+          f << ",\n";
       }
-      f << ")\n";
+      f << indent << "}";
     }
-  };
+    f << ";\n";
+  }
+
+  void Enum::compile(CompileWriter & f, Phase phase) const {
+    if (!body && phase == Body) return;
+    f << indent << "(.enum " << sym;
+    if (body && phase != Forward) {
+      f << "\n";
+      for (int i = 0; i != members.size(); ++i)
+        f << adj_indent(2) << indent 
+          << " (" << members[i].sym << " " << members[i].ct_value.val << ")\n";
+    }
+    f << ")\n";
+  }
+
+  //
+  //
+  //
 
   struct SizeOf : public ExpLeaf {
     SizeOf() {}
@@ -2782,7 +2751,7 @@ namespace ast {
     if (what == ".union")  (new Union)->parse_self(p, env);
     if (what == "enum")    (new Enum)->parse_self(p, env);
     if (what == ".enum")   (new Enum)->parse_self(p, env);
-    if (what == "talias")  (new TypeAlias)->parse_self(p, env);
+    if (what == "talias")  parse_type_alias(p, env);
     if (what == "module")         pre_parse_module(p, env);
     if (what == "make_user_type") parse_make_user_type(p, env);
     if (what == "user_type")          parse_user_type(p, env);
@@ -2857,7 +2826,7 @@ namespace ast {
     if (what == ".union")   return (new Union)->parse_self(p, env);
     if (what == "enum")    return (new Enum)->parse_self(p, env);
     if (what == ".enum")    return (new Enum)->parse_self(p, env);
-    if (what == "talias")  return (new TypeAlias)->parse_self(p, env);
+    if (what == "talias")  return parse_type_alias(p, env);
     if (what == "local_label") return (new LocalLabelDecl)->parse_self(p, env);
     if (what == "macro")   return parse_map(p, env);
     if (what == "smacro")  return parse_map(p, env);

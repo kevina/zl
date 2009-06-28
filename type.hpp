@@ -268,6 +268,7 @@ namespace ast {
     }
     virtual unsigned num_parms() const = 0;
     virtual TypeParm parm(unsigned i) const = 0;
+    virtual const char * tag() const {return NULL;}
     virtual ~TypeInst() {}
   protected:
     virtual void finalize_hook() {} 
@@ -708,32 +709,24 @@ namespace ast {
   //
   //
 
-  class TaggedType : public gc {
-  public:
-    String what;
-    bool defined;
-    TaggedType(String w) : what(w), defined(false) {}
-  };
-  
-  //
-  //
-  //
-
   struct Member {
     VarSymbol * sym;
     unsigned offset;
     Member(VarSymbol * s) : sym(s), offset(INT_MAX) {}
   };
 
-  class StructUnionT : public TaggedType, public SimpleType {
+  class StructUnionT : public SimpleType {
   public:
+    String tag_;
+    const char * tag() const {return ~tag_;}
+    bool defined;
     String what;
     String name;
     Vector<Member> members;
     unsigned size_;
     unsigned align_;
     StructUnionT(String w, String n) 
-      : TaggedType(w), SimpleType(n), name(n), size_(NPOS), align_(NPOS) {}
+      : SimpleType(n), tag_(w), defined(false), name(n), size_(NPOS), align_(NPOS) {}
     Environ * env;
     unsigned size() const {return size_;}
     unsigned align() const {return align_;}
@@ -755,10 +748,12 @@ namespace ast {
   //
   //
 
-  class EnumT : public TaggedType, public Int {
+  class EnumT : public Int {
   public:
     String name;
-    EnumT(String n) : TaggedType("enum"), Int(n, INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), name(n) {}
+    EnumT(String n) : Int(n, INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), name(n), defined(false) {}
+    const char * tag() const {return "enum";}
+    bool defined;
     void finalize_hook();
     unsigned size() const {return defined ? exact_type->size() : NPOS;}
     unsigned align() const {return defined ? exact_type->align() : NPOS;}
@@ -768,13 +763,9 @@ namespace ast {
   //
   //
 
-  typedef class UserTypeInst UserType;
-
-  class UserTypeInst : public SimpleType {
+  class UserType : public SimpleType {
   public:
-    //UserTypeInst(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {}
-    //UserTypeInst(const Type * p) : TypeInst(p) {}
-    UserTypeInst() : SimpleType(USER_C), parent(), type(), module(), defined() {}
+    UserType() : SimpleType(USER_C), parent(), type(), module(), defined() {}
     const Type * parent;
     const Type * type;
     const Module * module;
@@ -785,37 +776,6 @@ namespace ast {
     const Syntax * get_prop(SymbolName n) const {return module->get_prop(n);}
   };
   
-  //class UserTypeSymbol : public TypeSymbol {
-  //public:
-  //  UserTypeSymbol(UserTypeInst * t) : type(t) {
-  //    t->type_symbol = this;
-  //    t->finalize();
-  //  }
-  //  UserTypeInst * type;
-  //  UserTypeInst * inst(Vector<TypeParm> & d) const {
-  //    assert(d.empty());
-  //    return type;
-  //  }
-  //  unsigned required_parms() const {return 0;}
-  //  TypeParm::What parmt(unsigned i) const {return TypeParm::NONE;}
-  //};
-
-  //
-  //
-  //
-
-  class AliasT : public SimpleType {
-  public:
-    AliasT(const Type * st) : SimpleType(st), of(st) {}
-    const Type * of;
-    unsigned size() const {return of->size();}
-    unsigned align() const {return of->align();}
-  protected:
-    const Type * find_root() {
-      return of->root; 
-    }
-  };
-
   //
   //
   //
