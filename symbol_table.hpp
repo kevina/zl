@@ -477,25 +477,25 @@ namespace ast {
       return SymbolTable(placeholder, front);
     }
     template <typename T> 
-    const T * find(const SymbolKey & k, Strategy ms = NormalStrategy) {
+    const T * find(const SymbolKey & k, Strategy ms = NormalStrategy) const {
       return find_symbol<T>(k, front, NULL, ms);
     }
     template <typename T> 
-    const T * lookup(const SymbolKey & k, const SourceStr & str, Strategy ms = NormalStrategy) {
+    const T * lookup(const SymbolKey & k, const SourceStr & str, Strategy ms = NormalStrategy) const {
       return lookup_symbol<T>(k, str, front, NULL, ms);
     }
     template <typename T> 
-    inline const T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS);
+    inline const T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     template <typename T> 
-    inline const T * find(const Syntax * p, const InnerNS * = DEFAULT_NS);
-    bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) {
+    inline const T * find(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
+    bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) const {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }
-    bool exists_this_scope(const SymbolKey & k) {
+    bool exists_this_scope(const SymbolKey & k) const {
       return find_symbol<Symbol>(k, front, back, ThisScope);
     }
-    inline bool exists(const Syntax * p, const InnerNS * = DEFAULT_NS);
-    inline bool exists_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS);
+    inline bool exists(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
+    inline bool exists_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     void add(const SymbolKey & k, const Symbol * sym) {
       //if (exists_this_scope(k)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, front);

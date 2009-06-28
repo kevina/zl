@@ -299,9 +299,9 @@ namespace ast {
       } else {
         SimpleType * ti;
         SymbolKey n = expand_binding(name, TAG_NS, env);
-        if (tag == "struct")     ti = new StructT(n);
-        else if (tag == "union") ti = new UnionT(n);
-        else if (tag == "enum")  ti = new EnumT(n);
+        if (tag == "struct")     ti = new Struct(n);
+        else if (tag == "union") ti = new Union(n);
+        else if (tag == "enum")  ti = new Enum(n);
         else abort();
         add_simple_type(types, n, ti, NULL, env.where);
         t = types.find(n);
@@ -651,35 +651,6 @@ namespace ast {
     return inst(".qualified", TypeParm(QualifiedType::CT_CONST), TypeParm(t));
   }
 
-  void StructT::finalize_hook() {
-    size_ = 0;
-    align_ = 0;
-    for (unsigned i = 0; i != members.size(); ++i) {
-      members[i].offset = size_;
-      const Type * t = members[i].sym->type;
-      if (t->storage_align() > align_) align_ = t->storage_align();
-      unsigned align_offset = size_ % t->storage_align();
-      if (align_offset != 0) size_ += t->storage_align() - align_offset;
-      size_ += t->storage_size();
-    }
-    defined = true;
-  }
-
-  void UnionT::finalize_hook() {
-    size_ = 0;
-    align_ = 0;
-    for (unsigned i = 0; i != members.size(); ++i) {
-      members[i].offset = 0;
-      const Type * t = members[i].sym->type;
-      if (t->storage_align() > align_) align_ = t->storage_align();
-      if (t->storage_size() > size_) size_ = t->storage_size();
-    }
-    defined = true;
-  }
-
-  void EnumT::finalize_hook() {
-    defined = true;
-  }
 }
 
 namespace ast {

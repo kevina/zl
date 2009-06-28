@@ -203,10 +203,9 @@ namespace ast {
   
   class TypeSymbol : public TopLevelSymbol {
   public:
-    Syntax * parse;
     const PrintInst * print_inst;
     TypeSymbol() 
-      : TopLevelSymbol(), parse(), print_inst(zl_print_inst) {}
+      : TopLevelSymbol(), print_inst(zl_print_inst) {}
     virtual Type * inst(Vector<TypeParm> & d) const = 0;
     //virtual Type * inst(const Syntax *) const = 0;
     virtual unsigned required_parms() const = 0;
@@ -225,7 +224,6 @@ namespace ast {
   class TypeInst {
   public:
     typedef ::TypeInfo<TypeInst> TypeInfo;
-    String what() const {return type_symbol->name;}
     TypeCategory * category;
     const TypeSymbol * type_symbol;
     virtual unsigned size() const = 0;
@@ -705,60 +703,6 @@ namespace ast {
     }
   };
 
-  //
-  //
-  //
-
-  struct Member {
-    VarSymbol * sym;
-    unsigned offset;
-    Member(VarSymbol * s) : sym(s), offset(INT_MAX) {}
-  };
-
-  class StructUnionT : public SimpleType {
-  public:
-    String tag_;
-    const char * tag() const {return ~tag_;}
-    bool defined;
-    String what;
-    String name;
-    Vector<Member> members;
-    unsigned size_;
-    unsigned align_;
-    StructUnionT(String w, String n) 
-      : SimpleType(n), tag_(w), defined(false), name(n), size_(NPOS), align_(NPOS) {}
-    Environ * env;
-    unsigned size() const {return size_;}
-    unsigned align() const {return align_;}
-  };
-
-  class StructT : public StructUnionT {
-  public:
-    StructT(String n) : StructUnionT("struct", n) {}
-    void finalize_hook();
-  };
-
-  class UnionT : public StructUnionT {
-  public:
-    UnionT(String n) : StructUnionT("union", n) {}
-    void finalize_hook();
-  };
-
-  //
-  //
-  //
-
-  class EnumT : public Int {
-  public:
-    String name;
-    EnumT(String n) : Int(n, INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), name(n), defined(false) {}
-    const char * tag() const {return "enum";}
-    bool defined;
-    void finalize_hook();
-    unsigned size() const {return defined ? exact_type->size() : NPOS;}
-    unsigned align() const {return defined ? exact_type->align() : NPOS;}
-  };
-  
   //
   //
   //

@@ -463,34 +463,51 @@ namespace ast {
     const Type * find_root() {return of->root;}
   };
 
-  struct StructUnion : public TypeDeclaration {
-    const char * what() const {return which == STRUCT ? "struct" : "union";}
+  struct Member {
+    VarSymbol * sym;
+    unsigned offset;
+    Member(VarSymbol * s) : sym(s), offset(INT_MAX) {}
+  };
+
+  struct StructUnion : public TypeDeclaration, public SimpleType {
     enum Which {STRUCT, UNION} which;
-    struct Body;
-    StructUnion(Which w) : which(w), env(OTHER)  {}
-    AST * part(unsigned i) {return 0; /* FIXME */}
-    const TypeSymbol * sym;
-    Body * body;
+    Vector<Member> members;
+    StructUnion(Which w, String n) 
+      : SimpleType(n), which(w), have_body(false), env(OTHER), 
+        defined(false), size_(NPOS), align_(NPOS) {}
+    bool have_body; // fixme: redundent, fixup "defined" and elinimate
     Environ env;
     Stmt * parse_self(const Syntax * p, Environ & env0);
     void finalize(FinalizeEnviron & e) {}
     void compile_prep(CompileEnviron & e) {}
     void compile_c(CompileWriter & f, Phase phase) const;
     void compile(CompileWriter & f, Phase phase) const;
+    bool defined;
+    unsigned size_;
+    unsigned align_;
+    unsigned size() const {return size_;}
+    unsigned align() const {return align_;}
   };
 
   struct Struct : public StructUnion {
-    Struct() : StructUnion(STRUCT) {}
+    Struct(String n) : StructUnion(STRUCT, n) {}
+    const char * what() const {return "struct";}
+    const char * tag() const {return "struct";}
+    void finalize_hook();
   };
 
   struct Union : public StructUnion {
-    Union() : StructUnion(UNION) {}
+    Union(String n) : StructUnion(UNION, n) {}
+    const char * what() const {return "union";}
+    const char * tag() const {return "union";}
+    void finalize_hook();
   };
 
-  struct Enum : public TypeDeclaration {
-    Enum() {}
+  struct Enum : public TypeDeclaration, public Int {
+    Enum(String n) 
+      : Int(n, INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), defined(false) {}
     const char * what() const {return "enum";}
-    const TypeSymbol * sym;
+    bool defined;
     const Syntax * body;
     struct Member {
       const Syntax * parse;
@@ -499,11 +516,15 @@ namespace ast {
       Member(const Syntax * p, VarSymbol * sym, int v) : parse(p), sym(sym), ct_value(v) {}
     };
     Vector<Member> members;
-    Stmt * parse_self(const Syntax * p, Environ & env);
+    //Stmt * parse_self(const Syntax * p, Environ & env);
     void finalize(FinalizeEnviron &) {}
     void compile_prep(CompileEnviron &) {}
     void compile_c(CompileWriter & f, Phase phase) const;
     void compile(CompileWriter & f, Phase phase) const;
+    const char * tag() const {return "enum";}
+    void finalize_hook();
+    unsigned size() const {return defined ? exact_type->size() : NPOS;}
+    unsigned align() const {return defined ? exact_type->align() : NPOS;}
   };
 
   //
@@ -605,7 +626,7 @@ namespace ast {
   }
 
   template <typename T> 
-  inline const T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns) {
+  inline const T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns) const {
     return lookup_symbol<T>(p, ns, front);
   }
 
@@ -624,15 +645,15 @@ namespace ast {
   }
 
   template <typename T> 
-  inline const T * SymbolTable::find(const Syntax * p, const InnerNS * ns) {
+  inline const T * SymbolTable::find(const Syntax * p, const InnerNS * ns) const {
     return find_symbol<T>(p, ns, front);
   }
 
-  inline bool SymbolTable::exists(const Syntax * p, const InnerNS * ns) {
+  inline bool SymbolTable::exists(const Syntax * p, const InnerNS * ns) const {
     return find_symbol<Symbol>(p, ns, front, back);
   }
 
-  inline bool SymbolTable::exists_this_scope(const Syntax * p, const InnerNS * ns) {
+  inline bool SymbolTable::exists_this_scope(const Syntax * p, const InnerNS * ns) const {
     return find_symbol<Symbol>(p, ns, front, back, ThisScope);
   }
 

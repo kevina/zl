@@ -1136,10 +1136,10 @@ namespace ast {
       exp = exp->to_effective(env);
       //printf("::"); p->arg(1)->print(); printf("\n");
       SymbolName id = *expand_id(p->arg(1));
-      const StructUnionT * t = dynamic_cast<const StructUnionT *>(exp->type->unqualified);
+      const StructUnion * t = dynamic_cast<const StructUnion *>(exp->type->unqualified);
       if (!t) throw error(p->arg(0), "Expected struct or union type");
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
-      sym = t->env->symbols.find<VarSymbol>(id, StripMarks);
+      sym = t->env.symbols.find<VarSymbol>(id, StripMarks);
       if (!sym)
         throw error(p->arg(1), "\"%s\" is not a member of \"%s\"", 
                     ~id.to_string(), ~t->to_string());
@@ -1860,7 +1860,7 @@ namespace ast {
     user_cast->cast_macro = env.symbols.lookup<Symbol>(up_cast);
     assert(!child_t->parent);
     child_t->parent = parent_t;
-    child_t->category = new TypeCategory(child_t->what(), parent_t->category);
+    child_t->category = new TypeCategory(child_t->name, parent_t->category);
     env.symbols.add(SymbolKey("up_cast", CAST_NS), user_cast);
     m->syms = new SymbolNode(SymbolKey("up_cast", CAST_NS), user_cast, m->syms);
     return empty_stmt();
@@ -1873,7 +1873,7 @@ namespace ast {
     Exp * exp = parse_exp(p->arg(0), env);
     exp = exp->to_effective(env);
     Syntax * ptr_exp = new Syntax(new Syntax("addrof"), new Syntax(exp));
-    if (dynamic_cast<const StructUnionT *>(exp->type->unqualified)) {
+    if (dynamic_cast<const StructUnion *>(exp->type->unqualified)) {
       const Syntax * np = new Syntax(p->str(), p->part(0), new Syntax(exp), p->arg(1));
       return (new MemberAccess)->parse_self(np, env);
     } else if (const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified)) {
@@ -2270,11 +2270,11 @@ namespace ast {
       if (!ftype->parms->vararg && parms.size() != ftype->parms->parms.size()) 
         throw error(syn->arg(1), 
                     "Wrong number of parameters, expected %u but got %u when calling %s",
-                    ftype->parms->parms.size(), parms.size(), ~ftype->what());
+                    ftype->parms->parms.size(), parms.size(), "??");
       else if (ftype->parms->vararg && parms.size() < ftype->parms->parms.size())
         throw error(syn->arg(1),
                     "Not enough parameters, expected at least %u but got %u when calling %s",
-                    ftype->parms->parms.size(), parms.size(), ~ftype->what());
+                    ftype->parms->parms.size(), parms.size(), "??");
       const int typed_parms = ftype->parms->parms.size();
       const int num_parms = parms.size();
       int i = 0;
@@ -2350,77 +2350,71 @@ namespace ast {
       << zls_print_inst->to_string(*of) << ")\n";
   }
 
-  struct StructUnion::Body : public FakeAST {
-    Body(Which w) {}
-    const char * what() const {return "struct_union_body";}
-    Vector<BasicVar *> members;
-    Body * parse_self(const Syntax * p, Environ & env) {
-      add_ast_nodes(p->parts_begin(), p->parts_end(), members, Parse<FieldPos>(env));
-      return this;
-    }
-  };
-
-  Stmt * StructUnion::parse_self(const Syntax * p, Environ & env0) {
-    syn = p;
+  Stmt * parse_struct_union(StructUnion::Which which, const Syntax * p, Environ & env0) {
     //assert(p->is_a(what()));
     const Syntax * name = p->arg(0);
-    env = env0.new_scope();
-    env.scope = OTHER;
+    StructUnion * decl;
+    if (env0.symbols.exists_this_scope(name, TAG_NS)) {
+      const Type * t0 = env0.types.inst(name, TAG_NS);
+      decl = const_cast<StructUnion *>(dynamic_cast<const StructUnion *>(t0));
+    } else {
+      SymbolKey n = expand_binding(name, TAG_NS, env0);
+      if (which == Struct::STRUCT) decl = new Struct(n);
+      else                         decl = new Union(n);
+      // fixme: add_simple_type calls finalize() which it probably
+      // should't do since we do explicitly latter
+      add_simple_type(env0.types, n, decl, decl, env0.where);
+    }
+    decl->syn = p;
+    decl->env = env0.new_scope();
+    decl->env.scope = OTHER;
     if (p->num_args() > 1) {
-      body = new Body(which);
+      decl->have_body = true;
       if (p->what().name[0] == '.') {
         for (unsigned i = 1; i != p->num_args(); ++i) {
           const Syntax * q = p->arg(i);
           assert(q);
           const Syntax * name_p = q->part(1);
           assert(name_p);
-          SymbolKey name = expand_binding(name_p, env);
-          const Type * type = parse_type(q->part(0), env);
+          SymbolKey name = expand_binding(name_p, decl->env);
+          const Type * type = parse_type(q->part(0), decl->env);
           OtherVar * v = new_other_var(name, type);
           v->name_p = name_p;
-          env.add(name, v);
-          body->members.push_back(v);
+          decl->env.add(name, v);
+          decl->members.push_back(v);
         }
       } else {
-        body->parse_self(p->arg(1), env);
+        const Syntax * q = p->arg(1);
+        add_ast_nodes(q->parts_begin(), q->parts_end(), decl->members, Parse<FieldPos>(decl->env));
       }
     } else {
-      body = NULL;
+      decl->have_body = false;
     }
-    StructUnionT * s;
-    if (env0.symbols.exists_this_scope(name, TAG_NS)) {
-      const Type * t0 = env0.types.inst(name, TAG_NS);
-      s = const_cast<StructUnionT *>(dynamic_cast<const StructUnionT *>(t0));
-      sym = s->type_symbol;
-    } else {
-      SymbolKey n = expand_binding(name, TAG_NS, env);
-      if (which == STRUCT) s = new StructT(n);
-      else                 s = new UnionT(n);
-      sym = add_simple_type(env0.types, n, s, this, env.where);
-    }
-    if (body)
-      for (unsigned i = 0; i != body->members.size(); ++i) {
-        BasicVar * v = body->members[i];
-        s->members.push_back(Member(v));
-      }
     //StringBuf type_name;
     //type_name << "struct " << what();
-    sym->decl = this;
-    s->env = &env;
+    decl->decl = decl;
     //if (s->members.empty())
     //  fprintf(stderr, "Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
-    s->finalize();
+    decl->SimpleType::finalize();
     return empty_stmt();
   }
 
+  Stmt * parse_struct(const Syntax * p, Environ & env) {
+    return parse_struct_union(Struct::STRUCT, p, env);
+  }
+
+  Stmt * parse_union(const Syntax * p, Environ & env) {
+    return parse_struct_union(Union::UNION, p, env);
+  }
+
   void StructUnion::compile_c(CompileWriter & f, Phase phase) const {
-    if (!body && phase == Declaration::Body) return;
-    f << indent << what() << " " << sym;
-    if (body && phase != Forward) {
+    if (!have_body && phase == Declaration::Body) return;
+    f << indent << what() << " " << uniq_name();
+    if (have_body && phase != Forward) {
       f << " {\n";
       StringBuf buf;
-      for (int i = 0; i != body->members.size(); ++i) {
-        BasicVar * v = body->members[i];
+      for (int i = 0; i != members.size(); ++i) {
+        BasicVar * v = members[i].sym;
         c_print_inst->declaration(v->uniq_name(), *v->type, buf);
         f << adj_indent(2) << indent << buf.freeze() << ";\n";
       }
@@ -2430,12 +2424,12 @@ namespace ast {
   }
 
   void StructUnion::compile(CompileWriter & f, Phase phase) const {
-    if (!body && phase == Declaration::Body) return;
-    f << indent << "(." << what() << " " << sym;
-    if (body && phase != Forward) {
+    if (!have_body && phase == Declaration::Body) return;
+    f << indent << "(." << what() << " " << uniq_name();
+    if (have_body && phase != Forward) {
       f << "\n";
-      for (int i = 0; i != body->members.size(); ++i) {
-        BasicVar * v = body->members[i];
+      for (int i = 0; i != members.size(); ++i) {
+        BasicVar * v = members[i].sym;
         f << adj_indent(2) << indent;
         f << "(" << zls_print_inst->to_string(*v->type) << " " << v->uniq_name() << ")\n";
       }
@@ -2443,36 +2437,64 @@ namespace ast {
     f << ")\n";
   }
 
-  Stmt * Enum::parse_self(const Syntax * p, Environ & env) {
-    syn = p;
-    SymbolName name = *p->arg(0);
-    EnumT * t0;
-    if (env.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
-      t0 = (const_cast<EnumT *>(dynamic_cast<const EnumT *>
-                                (env.types.inst(SymbolKey(name, TAG_NS)))));
-      sym = t0->type_symbol;
-    } else {
-      t0 = new EnumT(name.name);
-      t0->exact_type = env.types.inst("int")->exact_type;
-      sym = add_simple_type(env.types, SymbolKey(name, TAG_NS), t0, this, env.where);
+  void Struct::finalize_hook() {
+    size_ = 0;
+    align_ = 0;
+    for (unsigned i = 0; i != members.size(); ++i) {
+      members[i].offset = size_;
+      const Type * t = members[i].sym->type;
+      if (t->storage_align() > align_) align_ = t->storage_align();
+      unsigned align_offset = size_ % t->storage_align();
+      if (align_offset != 0) size_ += t->storage_align() - align_offset;
+      size_ += t->storage_size();
     }
-    body = NULL;
+    defined = true;
+  }
+
+  void Union::finalize_hook() {
+    size_ = 0;
+    align_ = 0;
+    for (unsigned i = 0; i != members.size(); ++i) {
+      members[i].offset = 0;
+      const Type * t = members[i].sym->type;
+      if (t->storage_align() > align_) align_ = t->storage_align();
+      if (t->storage_size() > size_) size_ = t->storage_size();
+    }
+    defined = true;
+  }
+
+
+  Stmt * parse_enum(const Syntax * p, Environ & env) {
+    SymbolName name = *p->arg(0);
+    Enum * decl;
+    if (env.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
+      decl = (const_cast<Enum *>(dynamic_cast<const Enum *>
+                                (env.types.inst(SymbolKey(name, TAG_NS)))));
+    } else {
+      decl = new Enum(name.name);
+      decl->exact_type = env.types.inst("int")->exact_type;
+      // fixme: add_simple_type calls finalize() which it probably
+      // should't do since we do explicitly latter
+      add_simple_type(env.types, SymbolKey(name, TAG_NS), decl, decl, env.where);
+    }
+    decl->syn = p;
+    decl->body = NULL;
     if (p->num_args() > 1) {
       Vector<TypeParm> q_parms;
       q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
-      q_parms.push_back(TypeParm(t0));
+      q_parms.push_back(TypeParm(decl));
       const Type * t = env.types.find(".qualified")->inst(q_parms);
       int val = 0;
       const Syntax * arg1;
       unsigned i;
       if (p->what().name[0] == '.') {
-        arg1 = body = p;
+        arg1 = decl->body = p;
         i = 1;
       } else {
-        arg1 = body = p->arg(1);
+        arg1 = decl->body = p->arg(1);
         i = 0;
       }
-      members.reserve(arg1->num_args() - i);
+      decl->members.reserve(arg1->num_args() - i);
       for (; i != arg1->num_args(); ++i) {
         const Syntax * arg = arg1->arg(i);
         if (arg->num_parts() > 1) {
@@ -2481,22 +2503,22 @@ namespace ast {
           val = e->ct_value<target_int>();
         }
         SymbolName n = *arg->part(0);
-        Member mem(arg1, new_other_var(n, t), val);
+        Enum::Member mem(arg1, new_other_var(n, t), val);
         VarSymbol * sym = mem.sym;
         val++;
-        members.push_back(mem);
-        sym->ct_value = &members.back().ct_value;
+        decl->members.push_back(mem);
+        sym->ct_value = &decl->members.back().ct_value;
         sym->add_to_env(n, env);
       }
     }
-    sym->decl = this;
-    t0->finalize();
+    decl->decl = decl;
+    decl->Int::finalize();
     return empty_stmt();
   }
 
   void Enum::compile_c(CompileWriter & f, Phase phase) const {
     if (!body && phase == Body) return;
-    f << indent << what() << " " << sym;
+    f << indent << what() << " " << uniq_name();
     if (body && phase != Forward) {
       f << "{\n";
       for (int i = 0; i != members.size(); ++i) {
@@ -2513,7 +2535,7 @@ namespace ast {
 
   void Enum::compile(CompileWriter & f, Phase phase) const {
     if (!body && phase == Body) return;
-    f << indent << "(.enum " << sym;
+    f << indent << "(.enum " << uniq_name();
     if (body && phase != Forward) {
       f << "\n";
       for (int i = 0; i != members.size(); ++i)
@@ -2521,6 +2543,10 @@ namespace ast {
           << " (" << members[i].sym << " " << members[i].ct_value.val << ")\n";
     }
     f << ")\n";
+  }
+
+  void Enum::finalize_hook() {
+    defined = true;
   }
 
   //
@@ -2745,12 +2771,12 @@ namespace ast {
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
     //printf("PRE PARSING %s\n", ~p->to_string());
-    if (what == "struct")  (new Struct)->parse_self(p, env);
-    if (what == ".struct") (new Struct)->parse_self(p, env);
-    if (what == "union")   (new Union)->parse_self(p, env);
-    if (what == ".union")  (new Union)->parse_self(p, env);
-    if (what == "enum")    (new Enum)->parse_self(p, env);
-    if (what == ".enum")   (new Enum)->parse_self(p, env);
+    if (what == "struct")  parse_struct(p, env);
+    if (what == ".struct") parse_struct(p, env);
+    if (what == "union")   parse_union(p, env);
+    if (what == ".union")  parse_union(p, env);
+    if (what == "enum")    parse_enum(p, env);
+    if (what == ".enum")   parse_enum(p, env);
     if (what == "talias")  parse_type_alias(p, env);
     if (what == "module")         pre_parse_module(p, env);
     if (what == "make_user_type") parse_make_user_type(p, env);
@@ -2820,12 +2846,12 @@ namespace ast {
 
   Stmt * try_decl_common(const Syntax * p, Environ & env) {
     String what = p->what().name;
-    if (what == "struct")  return (new Struct)->parse_self(p, env);    
-    if (what == ".struct")  return (new Struct)->parse_self(p, env);
-    if (what == "union")   return (new Union)->parse_self(p, env);
-    if (what == ".union")   return (new Union)->parse_self(p, env);
-    if (what == "enum")    return (new Enum)->parse_self(p, env);
-    if (what == ".enum")    return (new Enum)->parse_self(p, env);
+    if (what == "struct")  return parse_struct(p, env);    
+    if (what == ".struct")  return parse_struct(p, env);
+    if (what == "union")   return parse_union(p, env);
+    if (what == ".union")   return parse_union(p, env);
+    if (what == "enum")    return parse_enum(p, env);
+    if (what == ".enum")    return parse_enum(p, env);
     if (what == "talias")  return parse_type_alias(p, env);
     if (what == "local_label") return (new LocalLabelDecl)->parse_self(p, env);
     if (what == "macro")   return parse_map(p, env);
