@@ -350,11 +350,6 @@ namespace ast {
   };
   */
 
-  struct ForSecondPass {
-    virtual void finish_parse(Environ & env) = 0;
-    virtual ~ForSecondPass() {}
-  };
-
   struct Block;
   struct TopLevelVarDecl;
 
@@ -374,6 +369,7 @@ namespace ast {
   typedef BasicVar VarSymbol;
 
   struct Declaration : virtual public AST {
+    virtual void finish_parse(Environ & env) {};
     enum Phase {Normal, Forward, Body};
     virtual void compile_c(CompileWriter &, Phase) const = 0;
     virtual void compile(CompileWriter &, Phase) const = 0;
@@ -384,7 +380,7 @@ namespace ast {
 
   enum StorageClass {SC_NONE, SC_AUTO, SC_STATIC, SC_EXTERN, SC_REGISTER};
 
-  struct VarDeclaration : public Declaration, public BasicVar, public ForSecondPass {
+  struct VarDeclaration : public Declaration, public BasicVar {
     VarDeclaration() {}
     StorageClass storage_class;
     //VarSymbol * sym;
@@ -415,7 +411,7 @@ namespace ast {
     TopLevelVarDecl() : TopLevelSymbol(this), deps_closed(false), for_ct_(false), ct_ptr() {}
   };
 
-  typedef Vector<ForSecondPass *> Collect;
+  typedef Vector<Declaration *> Collect;
 
   struct Fun : public TopLevelVarDecl {
     Fun() : env_ss(), is_macro() {}
