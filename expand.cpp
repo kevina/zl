@@ -466,7 +466,7 @@ struct SimpleMacro : public MacroSymbol {
 
 struct Macro : public MacroSymbol {
   const Syntax * parse;
-  const TopLevelVarSymbol * fun;
+  const Fun * fun;
   typedef const Syntax * (*MacroCall)(const Syntax *, Environ * env);
   Macro * parse_self(const Syntax * p, Environ & e) {
     //printf("PARSING MACRO %s\n", ~p->arg(0)->name);
@@ -476,9 +476,9 @@ struct Macro : public MacroSymbol {
     assert_num_args(p, 1, 2);
     real_name = expand_binding(p->arg(0), e);
     name = real_name.name;
-    fun = e.symbols.lookup<TopLevelVarSymbol>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
-    dynamic_cast<const Fun *>(fun->decl)->is_macro = true;
-    def = fun->decl->syn;
+    fun = e.symbols.lookup<Fun>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
+    fun->is_macro = true;
+    def = fun->syn;
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ & env) const {
@@ -1349,7 +1349,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
       void * p = dlsym(lh, (*i)->uniq_name());
       //assert(p);
       (*i)->ct_ptr = p;
-      SymbolNode * env_ss = dynamic_cast<const Fun *>((*i)->decl)->env_ss;
+      SymbolNode * env_ss = dynamic_cast<const Fun *>(*i)->env_ss;
       if (env_ss) {
         StringBuf buf;
         buf.printf("%s$env_ss", ~(*i)->uniq_name());
@@ -1373,11 +1373,10 @@ void load_macro_lib(ParmString lib, Environ & env) {
     const char * * i = (const char * *)dlsym(lh, "_macro_funs");
     const char * * e = i + macro_funs_size;
     for (; i != e; ++i) {
-      const TopLevelVarSymbol * sym = dynamic_cast<const TopLevelVarSymbol *>(env.find_tls(*i));
-      const Fun * fun = dynamic_cast<const Fun *>(sym->decl);
-      String uniq_name = sym->uniq_name();
+      const Fun * fun = dynamic_cast<const Fun *>(env.find_tls(*i));
+      String uniq_name = fun->uniq_name();
       if (fun->is_macro) {
-        sym->ct_ptr = dlsym(lh, ~uniq_name);
+        fun->ct_ptr = dlsym(lh, ~uniq_name);
       }
       if (fun->env_ss) {
         void * * p = (void * *)dlsym(lh, ~sbprintf("%s$env_ss", ~uniq_name));

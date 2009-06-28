@@ -187,10 +187,9 @@ namespace ast {
   // global
   struct Declaration;
   struct TopLevelSymbol : virtual public Symbol {
-    TopLevelSymbol(const Declaration * d = NULL) : num(), decl(d), props() {}
+    TopLevelSymbol(const Declaration * d = NULL) : num(), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
-    mutable const Declaration * decl; // NULL if internal
-    TopLevelSymbol * where;           // NULL if global
+    TopLevelSymbol * where;   // NULL if global
     PropNode * props;
     using Symbol::uniq_name;
     void uniq_name(OStream & o) const {

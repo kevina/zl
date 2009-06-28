@@ -313,11 +313,9 @@ namespace ast {
 
   static inline SimpleType *  
   add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
-                  const Declaration * decl = NULL, TopLevelSymbol * where = NULL)
+                  TopLevelSymbol * where = NULL)
   {
     t->finalize();
-    if (decl) 
-      t->decl = decl;
     if (where) {
       t->where = where;
       t->num = NPOS;

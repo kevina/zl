@@ -2331,7 +2331,7 @@ namespace ast {
     Type * of = parse_type(p->arg(1), env);
     TypeAlias * decl = new TypeAlias(of);
     decl->syn = p;
-    SimpleType * talias = add_simple_type(env.types, n, decl, decl, env.where);
+    SimpleType * talias = add_simple_type(env.types, n, decl, env.where);
     return empty_stmt();
   }
 
@@ -2363,7 +2363,7 @@ namespace ast {
       else                         decl = new Union(n);
       // fixme: add_simple_type calls finalize() which it probably
       // should't do since we do explicitly latter
-      add_simple_type(env0.types, n, decl, decl, env0.where);
+      add_simple_type(env0.types, n, decl, env0.where);
     }
     decl->syn = p;
     decl->env = env0.new_scope();
@@ -2392,7 +2392,6 @@ namespace ast {
     }
     //StringBuf type_name;
     //type_name << "struct " << what();
-    decl->decl = decl;
     //if (s->members.empty())
     //  fprintf(stderr, "Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
     decl->SimpleType::finalize();
@@ -2475,7 +2474,7 @@ namespace ast {
       decl->exact_type = env.types.inst("int")->exact_type;
       // fixme: add_simple_type calls finalize() which it probably
       // should't do since we do explicitly latter
-      add_simple_type(env.types, SymbolKey(name, TAG_NS), decl, decl, env.where);
+      add_simple_type(env.types, SymbolKey(name, TAG_NS), decl, env.where);
     }
     decl->syn = p;
     decl->body = NULL;
@@ -2511,7 +2510,6 @@ namespace ast {
         sym->add_to_env(n, env);
       }
     }
-    decl->decl = decl;
     decl->Int::finalize();
     return empty_stmt();
   }
@@ -3050,14 +3048,14 @@ namespace ast {
     cw << "/* type decls */\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
+      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>(*i))
         d->compile_c(cw, Declaration::Forward);
     }
 
     cw << "/* type definitions */\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
+      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>(*i))
         d->compile_c(cw, Declaration::Body);
     }
 
@@ -3066,7 +3064,7 @@ namespace ast {
       cw << "/* macro sep. c. stuff */\n";
 
       for (i = syms.begin(); i != e; ++i) {
-        if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
+        if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>(*i)) {
           const_cast<VarDeclaration *>(d)->compile_prep(cw); // evil I know...
         }
       }
@@ -3106,7 +3104,7 @@ namespace ast {
     cw << "/* function decls */\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const Fun * d = dynamic_cast<const Fun *>((*i)->decl)) {
+      if (const Fun * d = dynamic_cast<const Fun *>(*i)) {
         if (cw.for_compile_time()) {
           if (cw.deps->have(d)) {
             d->compile_c(cw, Declaration::Forward);
@@ -3120,7 +3118,7 @@ namespace ast {
     cw << "/* definitions */\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TopLevelVarDecl * d = dynamic_cast<const TopLevelVarDecl *>((*i)->decl)) {
+      if (const TopLevelVarDecl * d = dynamic_cast<const TopLevelVarDecl *>(*i)) {
         if (cw.for_compile_time()) {
           if (cw.deps->have(d) && !d->ct_ptr) {
             d->compile_c(cw, Declaration::Body);
@@ -3168,14 +3166,14 @@ namespace ast {
     cw << "# type decls\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
+      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>(*i))
         d->compile(cw, Declaration::Forward);
     }
 
     cw << "# type definitions\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>((*i)->decl))
+      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>(*i))
         d->compile(cw, Declaration::Body);
     }
 
@@ -3184,7 +3182,7 @@ namespace ast {
       cw << "# macro sep. c. stuff\n";
 
       for (i = syms.begin(); i != e; ++i) {
-        if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>((*i)->decl)) {
+        if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>(*i)) {
           const_cast<VarDeclaration *>(d)->compile_prep(cw); // evil I know...
         }
       }
@@ -3220,7 +3218,7 @@ namespace ast {
     cw << "# function decls\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const Fun * d = dynamic_cast<const Fun *>((*i)->decl)) {
+      if (const Fun * d = dynamic_cast<const Fun *>(*i)) {
         if (cw.for_compile_time()) {
           if (cw.deps->have(d)) {
             d->compile(cw, Declaration::Forward);
@@ -3234,7 +3232,7 @@ namespace ast {
     cw << "# definitions\n";
 
     for (i = syms.begin(); i != e; ++i) {
-      if (const TopLevelVarDecl * d = dynamic_cast<const TopLevelVarDecl *>((*i)->decl)) {
+      if (const TopLevelVarDecl * d = dynamic_cast<const TopLevelVarDecl *>(*i)) {
         if (cw.for_compile_time()) {
           if (cw.deps->have(d) && !d->ct_ptr) {
             d->compile(cw, Declaration::Body);

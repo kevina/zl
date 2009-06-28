@@ -303,7 +303,7 @@ namespace ast {
         else if (tag == "union") ti = new Union(n);
         else if (tag == "enum")  ti = new Enum(n);
         else abort();
-        add_simple_type(types, n, ti, NULL, env.where);
+        add_simple_type(types, n, ti, env.where);
         t = types.find(n);
         assert(t);
       }
@@ -616,7 +616,7 @@ namespace ast {
     add_c_int(types, "char");
 
     VOID_T = new Void();
-    add_simple_type(types, static_cast<SimpleType *>(VOID_T));
+    add_simple_type(types, static_cast<Void *>(VOID_T));
 
     add_simple_type(types, new Float("float", Float::SINGLE));
     add_simple_type(types, new Float("double", Float::DOUBLE));
