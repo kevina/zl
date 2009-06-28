@@ -204,15 +204,13 @@ namespace ast {
   class TypeSymbol : public TopLevelSymbol {
   public:
     Syntax * parse;
-    Syntax * syntax_obj() const {return parse;}
-    String what() const {return name;}
     const PrintInst * print_inst;
     TypeSymbol() 
       : TopLevelSymbol(), parse(), print_inst(zl_print_inst) {}
     virtual Type * inst(Vector<TypeParm> & d) const = 0;
     //virtual Type * inst(const Syntax *) const = 0;
     virtual unsigned required_parms() const = 0;
-    virtual TypeParm::What parm(unsigned i) const = 0; // return TypeParm::NONE if off end
+    virtual TypeParm::What parmt(unsigned i) const = 0; // return TypeParm::NONE if off end
     virtual ~TypeSymbol() {}
   };
 
@@ -227,8 +225,7 @@ namespace ast {
   class TypeInst {
   public:
     typedef ::TypeInfo<TypeInst> TypeInfo;
-    String what() const {return type_symbol->name;}  
-    Syntax * syntax_obj() const {return type_symbol->parse;}
+    String what() const {return type_symbol->name;}
     TypeCategory * category;
     const TypeSymbol * type_symbol;
     virtual unsigned size() const = 0;
@@ -293,34 +290,33 @@ namespace ast {
   //
   //
 
-  class SimpleTypeInst : public TypeInst {
+  class SimpleType : public TypeInst, public TypeSymbol {
   public:
-    SimpleTypeInst(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {}
-    SimpleTypeInst(const Type * p) : TypeInst(p) {}
+    SimpleType(String n, TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {name = n; type_symbol = this;}
+    SimpleType(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {type_symbol = this;}
+    SimpleType(const Type * p) : TypeInst(p) {type_symbol = this;}
     unsigned num_parms() const {return 0;}
     TypeParm parm(unsigned i) const {abort();}
-  };
-
-  class SimpleTypeSymbol : public TypeSymbol {
-  public:
-    SimpleTypeSymbol(SimpleTypeInst * t) : type(t) {
-      t->type_symbol = this;
-      t->finalize();
-    }
-    SimpleTypeInst * type;
-    SimpleTypeInst * inst(Vector<TypeParm> & d) const {
+    SimpleType * inst(Vector<TypeParm> & d) const {
       assert(d.empty());
-      return type;
+      return const_cast<SimpleType *>(this);
     }
     unsigned required_parms() const {return 0;}
-    TypeParm::What parm(unsigned i) const {return TypeParm::NONE;}
+    TypeParm::What parmt(unsigned i) const {return TypeParm::NONE;}
   };
 
-  static inline SimpleTypeSymbol *  
-  add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleTypeInst * type, 
+  static inline void
+  add_simple_type(TypeSymbolTable sym, SimpleType * t)
+  {
+    t->finalize();
+    sym.add(t->name, t);
+  }
+
+  static inline SimpleType *  
+  add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
                   const Declaration * decl = NULL, TopLevelSymbol * where = NULL)
   {
-    SimpleTypeSymbol * t = new SimpleTypeSymbol(type);
+    t->finalize();
     if (decl) 
       t->decl = decl;
     if (where) {
@@ -384,7 +380,7 @@ namespace ast {
     }
     virtual ParmTypeInst * inst_p(Vector<TypeParm> &) const = 0;
     virtual unsigned required_parms() const = 0;
-    virtual TypeParm::What parm(unsigned i) const = 0; // return TypeParm::NONE if off end
+    virtual TypeParm::What parmt(unsigned i) const = 0; // return TypeParm::NONE if off end
   };
 
   //
@@ -416,7 +412,7 @@ namespace ast {
       return new ZeroT(p[0].as_type);
     }
     unsigned required_parms() const {return 1;}
-    TypeParm::What parm(unsigned i) const {
+    TypeParm::What parmt(unsigned i) const {
       if (i == 0) return TypeParm::TYPE;
       else return TypeParm::NONE;
     }
@@ -455,7 +451,7 @@ namespace ast {
   class TupleSymbol : public TypeSymbol {
   public:
     unsigned required_parms() const {return 0;}
-    virtual TypeParm::What parm(unsigned i) const {return TypeParm::TYPE;}
+    virtual TypeParm::What parmt(unsigned i) const {return TypeParm::TYPE;}
     virtual Type * inst(Vector<TypeParm> & p) const {
       Tuple * r = new Tuple();
       for (int i = 0; i != p.size(); ++i) {
@@ -483,9 +479,9 @@ namespace ast {
   //
   //
 
-  class Void : public SimpleTypeInst {
+  class Void : public SimpleType {
   public:
-    Void() {}
+    Void(String n = "void") : SimpleType(n) {}
     unsigned size() const {return 0;}
     unsigned align() const {return 1;}
   };
@@ -503,14 +499,14 @@ namespace ast {
   //
   //
 
-  class Int : public SimpleTypeInst {
+  class Int : public SimpleType {
   public:
     enum Overflow {UNDEFINED, MODULE, SATURATED, EXCEPTION};
     enum Signed {UNSIGNED = 0, SIGNED = 1};
-    Int(int64_t mn, uint64_t mx, Overflow o, unsigned sz)
-      : SimpleTypeInst(INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o), rank() {}
-    Int(const Int * t) 
-      : SimpleTypeInst(INT_C), size_(t->size_), min(t->min), max(t->max), signed_(t->signed_), overflow(t->overflow), rank() {exact_type = t;}
+    Int(String n, int64_t mn, uint64_t mx, Overflow o, unsigned sz)
+      : SimpleType(n, INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o), rank() {}
+    Int(String n, const Int * t) 
+      : SimpleType(n, INT_C), size_(t->size_), min(t->min), max(t->max), signed_(t->signed_), overflow(t->overflow), rank() {exact_type = t;}
     const Int * exact_type_;
     unsigned size_;
     int64_t  min;
@@ -526,30 +522,30 @@ namespace ast {
     unsigned align() const {return size_;}
   };
   
-  static Int signed_int(unsigned sz) {
+  static Int signed_int(String n, unsigned sz) {
     uint64_t sz0 = sz;
-    return Int(-(1<<(sz0*8-1)), (1<<(sz0*8-1))-1, Int::UNDEFINED, sz);
+    return Int(n, -(1<<(sz0*8-1)), (1<<(sz0*8-1))-1, Int::UNDEFINED, sz);
   }
-  static Int unsigned_int(unsigned sz) {
+  static Int unsigned_int(String n, unsigned sz) {
     uint64_t sz0 = sz;
-    return Int(0, (1<<(sz0*8))-1, Int::MODULE, sz);
+    return Int(n, 0, (1<<(sz0*8))-1, Int::MODULE, sz);
   }
 
-  static inline Int * new_signed_int(unsigned sz) {
-    return new Int(signed_int(sz));
+  static inline Int * new_signed_int(String n, unsigned sz) {
+    return new Int(signed_int(n, sz));
   }
   
-  static inline Int * new_unsigned_int(unsigned sz) {
-    return new Int(unsigned_int(sz));
+  static inline Int * new_unsigned_int(String n, unsigned sz) {
+    return new Int(unsigned_int(n, sz));
   }
-
-  class Float : public SimpleTypeInst {
+ 
+  class Float : public SimpleType {
   public:
     enum Precision {SINGLE, DOUBLE, LONG} precision;
     unsigned size_;
     unsigned size() const {return size_;}
     unsigned align() const {return size_;}
-    Float(Precision p) : SimpleTypeInst(FLOAT_C),  size_(p == SINGLE ? 4 : DOUBLE ? 8 : 16) {}
+    Float(String n, Precision p) : SimpleType(n, FLOAT_C),  size_(p == SINGLE ? 4 : DOUBLE ? 8 : 16) {}
   };
 
   //
@@ -587,7 +583,7 @@ namespace ast {
       return new Pointer(p[0].as_type);
     }
     unsigned required_parms() const {return 1;}
-    TypeParm::What parm(unsigned i) const {
+    TypeParm::What parmt(unsigned i) const {
       if (i == 0) return TypeParm::TYPE;
       else return TypeParm::NONE;
     }
@@ -620,7 +616,7 @@ namespace ast {
       return new Reference(p[0].as_type);
     }
     unsigned required_parms() const {return 1;}
-    TypeParm::What parm(unsigned i) const {
+    TypeParm::What parmt(unsigned i) const {
       if (i == 0) return TypeParm::TYPE;
       else return TypeParm::NONE;
     }
@@ -667,7 +663,7 @@ namespace ast {
       return new QualifiedType(qualifiers, subtype);
     }
     unsigned required_parms() const {return 2;}
-    TypeParm::What parm(unsigned i) const {
+    TypeParm::What parmt(unsigned i) const {
       if (i == 0) return TypeParm::INT;
       if (i == 1) return TypeParm::TYPE;
       else return TypeParm::NONE;
@@ -698,7 +694,7 @@ namespace ast {
       return new Array(p[0].as_type, p[1].as_int);
     }
     unsigned required_parms() const {return 2;}
-    TypeParm::What parm(unsigned i) const {
+    TypeParm::What parmt(unsigned i) const {
       switch (i) {
       case 0: return TypeParm::TYPE;
       case 1: return TypeParm::INT;
@@ -729,7 +725,7 @@ namespace ast {
     Member(VarSymbol * s) : sym(s), offset(INT_MAX) {}
   };
 
-  class StructUnionT : public TaggedType, public SimpleTypeInst {
+  class StructUnionT : public TaggedType, public SimpleType {
   public:
     String what;
     String name;
@@ -737,7 +733,7 @@ namespace ast {
     unsigned size_;
     unsigned align_;
     StructUnionT(String w, String n) 
-      : TaggedType(w), name(n), size_(NPOS), align_(NPOS) {}
+      : TaggedType(w), SimpleType(n), name(n), size_(NPOS), align_(NPOS) {}
     Environ * env;
     unsigned size() const {return size_;}
     unsigned align() const {return align_;}
@@ -762,7 +758,7 @@ namespace ast {
   class EnumT : public TaggedType, public Int {
   public:
     String name;
-    EnumT(String n) : TaggedType("enum"), Int(INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), name(n) {}
+    EnumT(String n) : TaggedType("enum"), Int(n, INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), name(n) {}
     void finalize_hook();
     unsigned size() const {return defined ? exact_type->size() : NPOS;}
     unsigned align() const {return defined ? exact_type->align() : NPOS;}
@@ -774,43 +770,43 @@ namespace ast {
 
   typedef class UserTypeInst UserType;
 
-  class UserTypeInst : public SimpleTypeInst {
+  class UserTypeInst : public SimpleType {
   public:
     //UserTypeInst(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {}
     //UserTypeInst(const Type * p) : TypeInst(p) {}
-    UserTypeInst() : SimpleTypeInst(USER_C), parent(), type(), module(), defined() {}
+    UserTypeInst() : SimpleType(USER_C), parent(), type(), module(), defined() {}
     const Type * parent;
     const Type * type;
     const Module * module;
     bool defined;
     unsigned size() const {return type ? type->size() : NPOS;}
     unsigned align() const {return type ? type->align() : NPOS;}
+    void add_prop(SymbolName n, const Syntax * s) {abort();}
+    const Syntax * get_prop(SymbolName n) const {return module->get_prop(n);}
   };
   
-  class UserTypeSymbol : public TypeSymbol {
-  public:
-    UserTypeSymbol(UserTypeInst * t) : type(t) {
-      t->type_symbol = this;
-      t->finalize();
-    }
-    UserTypeInst * type;
-    UserTypeInst * inst(Vector<TypeParm> & d) const {
-      assert(d.empty());
-      return type;
-    }
-    unsigned required_parms() const {return 0;}
-    TypeParm::What parm(unsigned i) const {return TypeParm::NONE;}
-    void add_prop(SymbolName n, const Syntax * s) {abort();}
-    const Syntax * get_prop(SymbolName n) const {return type->module->get_prop(n);}
-  };
+  //class UserTypeSymbol : public TypeSymbol {
+  //public:
+  //  UserTypeSymbol(UserTypeInst * t) : type(t) {
+  //    t->type_symbol = this;
+  //    t->finalize();
+  //  }
+  //  UserTypeInst * type;
+  //  UserTypeInst * inst(Vector<TypeParm> & d) const {
+  //    assert(d.empty());
+  //    return type;
+  //  }
+  //  unsigned required_parms() const {return 0;}
+  //  TypeParm::What parmt(unsigned i) const {return TypeParm::NONE;}
+  //};
 
   //
   //
   //
 
-  class AliasT : public SimpleTypeInst {
+  class AliasT : public SimpleType {
   public:
-    AliasT(const Type * st) : SimpleTypeInst(st), of(st) {}
+    AliasT(const Type * st) : SimpleType(st), of(st) {}
     const Type * of;
     unsigned size() const {return of->size();}
     unsigned align() const {return of->align();}
@@ -829,16 +825,18 @@ namespace ast {
     TypeOfSymbol() {}
     Type * inst(Vector<TypeParm> & d) const;
     unsigned required_parms() const {return 1;}
-    TypeParm::What parm(unsigned i) const {return i == 0 ? TypeParm::EXP : TypeParm::NONE;}
+    TypeParm::What parmt(unsigned i) const {return i == 0 ? TypeParm::EXP : TypeParm::NONE;}
   };
 
-  class TypeOf : public SimpleTypeInst {
+  class TypeOf : public TypeInst {
   public:
     inline TypeOf(Exp * a);
     Exp * of_ast;
     const Type * of;
     unsigned size() const {return of->size();}
     unsigned align() const {return of->align();}
+    virtual unsigned num_parms() const {return 0;}
+    virtual TypeParm parm(unsigned i) const {abort();}
   protected:
     const Type * find_root() {
       return of->root; 
@@ -885,7 +883,7 @@ namespace ast {
   class FunctionSymbol : public ParmTypeSymbol {
   public:
     virtual unsigned required_parms() const {return 2;}
-    virtual TypeParm::What parm(unsigned i) const {
+    virtual TypeParm::What parmt(unsigned i) const {
       switch (i) {
       case 0: return TypeParm::TUPLE; // parms
       case 1: return TypeParm::TYPE;

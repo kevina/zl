@@ -261,7 +261,7 @@ namespace ast {
   }
 
   inline TypeOf::TypeOf(Exp * a) 
-    : SimpleTypeInst(a->type->effective), of_ast(a), of(a->type->effective) {type_symbol = of->type_symbol;}
+    : TypeInst(a->type->effective), of_ast(a), of(a->type->effective) {type_symbol = of->type_symbol;}
 
   Type * parse_type(const Syntax * p, Environ & env) {
     if (p->have_entity()) {
@@ -297,7 +297,7 @@ namespace ast {
       if (tag.empty()) {
         throw error(p, "Unknown type: %s", ~name_str);
       } else {
-        SimpleTypeInst * ti;
+        SimpleType * ti;
         SymbolKey n = expand_binding(name, TAG_NS, env);
         if (tag == "struct")     ti = new StructT(n);
         else if (tag == "union") ti = new UnionT(n);
@@ -323,7 +323,7 @@ namespace ast {
 	  n = expand_binding(p0->part(1), env);
 	p0 = p0->part(0);
       }
-      switch(t->parm(i)) {
+      switch(t->parmt(i)) {
       case TypeParm::TYPE: {
 	if (*p0 == "...") {
 	  parms.push_back(TypeParm::dots());
@@ -585,14 +585,14 @@ namespace ast {
   void add_c_int(TypeSymbolTable types, String n);
 
   void create_c_types(TypeSymbolTable types) {
-    add_simple_type(types, ".int8", new_signed_int(1));
-    add_simple_type(types, ".uint8", new_unsigned_int(1));
-    add_simple_type(types, ".int16", new_signed_int(2));
-    add_simple_type(types, ".uint16", new_unsigned_int(2));
-    add_simple_type(types, ".int32", new_signed_int(4));
-    add_simple_type(types, ".uint32", new_unsigned_int(4));
-    add_simple_type(types, ".int64", new_signed_int(8));
-    add_simple_type(types, ".uint64", new_unsigned_int(8));
+    add_simple_type(types, new_signed_int(".int8", 1));
+    add_simple_type(types, new_unsigned_int(".uint8", 1));
+    add_simple_type(types, new_signed_int(".int16", 2));
+    add_simple_type(types, new_unsigned_int(".uint16", 2));
+    add_simple_type(types, new_signed_int(".int32", 4));
+    add_simple_type(types, new_unsigned_int(".uint32", 4));
+    add_simple_type(types, new_signed_int(".int64", 8));
+    add_simple_type(types, new_unsigned_int(".uint64", 8));
 
     add_c_int(types, "signed-char");
     add_c_int(types, "short");
@@ -616,11 +616,11 @@ namespace ast {
     add_c_int(types, "char");
 
     VOID_T = new Void();
-    add_simple_type(types, "void", static_cast<SimpleTypeInst *>(VOID_T));
+    add_simple_type(types, static_cast<SimpleType *>(VOID_T));
 
-    add_simple_type(types, "float", new Float(Float::SINGLE));
-    add_simple_type(types, "double", new Float(Float::DOUBLE));
-    add_simple_type(types, "long-double", new Float(Float::LONG));
+    add_simple_type(types, new Float("float", Float::SINGLE));
+    add_simple_type(types, new Float("double", Float::DOUBLE));
+    add_simple_type(types, new Float("long-double", Float::LONG));
 
     add_simple_type(types, "<bool>", new AliasT(types.inst("int")));
 
@@ -638,7 +638,7 @@ namespace ast {
     types.add_name(".qualified", new QualifiedTypeSymbol);
     types.add_name(".zero", new ZeroTypeSymbol);
     types.add_name(".typeof", new TypeOfSymbol);
-    add_simple_type(types, "__builtin_va_list", new Void());
+    add_simple_type(types, new Void("__builtin_va_list"));
     //add_simple_type(types, "Match", new Void());
     //add_simple_type(types, "Syntax", new Void());
     //add_simple_type(types, "Mark", new Void());
@@ -710,7 +710,7 @@ namespace ast {
   }
   
   void add_c_int(TypeSymbolTable types, String n) {
-    add_simple_type(types, n, new Int(static_cast<const Int *>(types.inst(c_type_to_exact(n)))));
+    add_simple_type(types, new Int(n, static_cast<const Int *>(types.inst(c_type_to_exact(n)))));
   }
 
 }
