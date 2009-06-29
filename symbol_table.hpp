@@ -441,10 +441,10 @@ namespace ast {
     OpenSymbolTable(SymbolNode * * f, SymbolNode * b)
       : front(f), back(b) {}
     template <typename T> 
-    const T * find(const SymbolKey & k) {
+    const T * find(const SymbolKey & k) const {
       return find_symbol<T>(k, *front);
     }
-    bool exists(const SymbolKey & k) {
+    bool exists(const SymbolKey & k) const {
       return find_symbol<Symbol>(k, *front);
     }
     template <typename T>
