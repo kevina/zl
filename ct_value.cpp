@@ -511,7 +511,7 @@ namespace ast {
   }
 
   void CT_Value<CT_NVal>::compile_c(CompileWriter & cw, Exp * exp) const {
-    exp->compile_c(cw);
+    abort();
   }
 
   void CT_Value<CT_NVal>::compile(CompileWriter & cw, Exp * exp) const {

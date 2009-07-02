@@ -7,27 +7,18 @@ function compile_test() {
   base=$1
   f=test/$base.res
   o=test/$base.out
-  cp a.out.c test/$base.out.c
   cp a.out.zls test/$base.out.zls
   if [ -e $f ] 
   then
-    gcc test/$base.out.c || return 1
-    ./a.out > $o
-    diff -u $f $o
     zls test/$base.out.zls || return 1
     ./a.out > $o
     diff -u $f $o
   else
-    gcc -fsyntax-only test/$base.out.c
     zls -fsyntax-only test/$base.out.zls
   fi
   if [ $? -ne 0 ]; then return 1; fi
-  zls -S test/$base.out.c
-  mv $base.out.s test/$base.out.c.s
   zls -S test/$base.out.zls
   mv $base.out.s test/$base.out.zls.s
-  diff -I "\.file" -u test/$base.out.c.s test/$base.out.zls.s
-  if [ $? -ne 0 ]; then return 1; fi
   ./zl -s test/$base.out.zls > test/$base.log
 }
 
