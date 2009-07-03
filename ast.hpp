@@ -265,7 +265,7 @@ namespace ast {
 
   static inline
   CompileWriter & operator<< (CompileWriter & o, const Symbol * sym) {
-    sym->uniq_name(o);
+    o << sym->uniq_name();
     return o;
   }
 

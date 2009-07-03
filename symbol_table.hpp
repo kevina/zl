@@ -166,9 +166,6 @@ namespace ast {
     String name;
     mutable String uniq_name_;
     Symbol() {}
-    virtual void uniq_name(OStream & o) const {
-      o << name;
-    }
     String uniq_name() const {
       if (uniq_name_.defined())
         return uniq_name_;
@@ -180,6 +177,10 @@ namespace ast {
     virtual void add_to_env(const SymbolKey & k, Environ &) const;
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
+  protected:
+    virtual void uniq_name(OStream & o) const {
+      o << name;
+    }
   };
 
   // This if for any symbol which is not lexical and _might_
@@ -507,6 +508,27 @@ namespace ast {
   };
 
   template <typename T>
+  unsigned existing_uniq_num(T * sym) {
+    unsigned num;
+    int pos;
+    int res = sscanf(~sym->name, "%*[^$]%*[$]%u%n", &num, &pos);
+    if (pos == sym->name.size()) return num;
+    else return NPOS;
+  }
+
+  template <typename T>
+  void assign_uniq_num(unsigned num, T * sym) {
+    unsigned existing_num = existing_uniq_num(sym);
+    if (existing_num != NPOS) {
+      assert(existing_num >= num);
+      sym->uniq_name_ = sym->name;
+      sym->num = existing_num;
+    } else {
+      sym->num = num;
+    }
+  }
+
+  template <typename T>
   void assign_uniq_num(SymbolNode * cur, SymbolNode * stop = NULL) {
     const T * t = NULL;
     // we need to compare the actual symbol name, since it may be
@@ -519,7 +541,8 @@ namespace ast {
     unsigned num = 1;
     assert(!t || t->num != NPOS);
     if (t) num = t->num + 1;
-    dynamic_cast<const T *>(cur->value)->num = num;
+    const T * c = dynamic_cast<const T *>(cur->value);
+    assign_uniq_num(num, dynamic_cast<const T *>(cur->value));
   }
 
   template <typename T>
@@ -534,8 +557,9 @@ namespace ast {
     unsigned num = 1;
     assert(!t || t->num != NPOS);
     if (t) num = t->num + 1;
-    cur->num = num;
+    assign_uniq_num(num, cur);
   }
+
 }
 
 #endif

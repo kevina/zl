@@ -123,7 +123,7 @@ namespace ast {
       if (const char * tag = type->tag()) {
         buf << tag << " ";
       }
-      type->type_symbol->uniq_name(buf);
+      buf << type->type_symbol->uniq_name();
     } else if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
       buf << ".";
       for (unsigned i = 0; i < t->parms.size();) {
@@ -240,7 +240,7 @@ namespace ast {
         buf << tag << " ";
       }
       unsigned i = buf.size();
-      type->type_symbol->uniq_name(buf);
+      buf << type->type_symbol->uniq_name();
       unsigned e = buf.size();
       for (; i != e; ++i)
         if (buf[i] == '-') buf[i] = ' ';

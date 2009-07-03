@@ -173,7 +173,7 @@ namespace ast {
       env.top_level_symbols->push_back(this);
     } else {
       env.top_level_symbols->push_back(this);
-      if (num == NPOS)
+      if (num == NPOS) 
         assign_uniq_num<TopLevelSymbol>(*env.top_level_symbols);
     }
   }
@@ -1972,6 +1972,7 @@ namespace ast {
     deps_closed = ct_callback;
     static_constructor = false;
     if (p->flag("__static_constructor")) static_constructor = true;
+    if (p->flag("__constructor__")) static_constructor = true;
 
     if (p->flag("__need_snapshot"))
       env_ss = *env0.top_level_environ;

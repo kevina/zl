@@ -20,6 +20,7 @@ function compile_test() {
   zls -S test/$base.out.zls
   mv $base.out.s test/$base.out.zls.s
   ./zl -s test/$base.out.zls > test/$base.log
+  mv a.out.zls test/$base.out2.zls
 }
 
 if [ "$#" -gt 0 ]; then
