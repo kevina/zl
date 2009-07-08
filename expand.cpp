@@ -370,8 +370,9 @@ const Syntax * flatten(const Syntax * p) {
 
 const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs);
 
-struct MacroSymbol : public Symbol {
+struct Macro : public Declaration, public Symbol {
   SymbolName real_name;
+  bool syntax_macro;
   static const Syntax * macro_call;
   static const Syntax * macro_def;
   struct MacroInfo {
@@ -416,12 +417,12 @@ struct MacroSymbol : public Symbol {
   }
 };
 
-const Syntax * MacroSymbol::macro_call = NULL;
-const Syntax * MacroSymbol::macro_def = NULL;
+const Syntax * Macro::macro_call = NULL;
+const Syntax * Macro::macro_def = NULL;
 
-struct SimpleMacro : public MacroSymbol {
+struct SimpleMacro : public Macro {
+  const char * what() const {return "simple-macro";}
   //const SourceFile * entity;
-  const Syntax * parse;
   const Syntax * parms;
   const Syntax * free;
   const Syntax * repl;
@@ -430,8 +431,8 @@ struct SimpleMacro : public MacroSymbol {
     //printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what().name, ~p->to_string());
     env = e.symbols.front;
     //entity = p->str().source;
-    def = parse = p;
-    assert_num_args(p, 3);
+    def = syn = p;
+    assert_num_args(3);
     real_name = expand_binding(p->arg(0), e);
     name = real_name.name;
     parms = flatten(p->arg(1));
@@ -462,18 +463,25 @@ struct SimpleMacro : public MacroSymbol {
     //macro_call->str().source->dump_info(COUT, "    ");
     return res;
   }
+  void compile(CompileWriter & f, Phase phase) const {
+    f << "(" << (syntax_macro ? "macro" : "smacro");
+    parms->to_string(f);
+    f << "\n";
+    repl->to_string(f);
+    f << ")\n";
+  }
 };
 
-struct Macro : public MacroSymbol {
-  const Syntax * parse;
+struct ProcMacro : public Macro {
+  const char * what() const {return "proc-macro";}
   const Fun * fun;
   typedef const Syntax * (*MacroCall)(const Syntax *, Environ * env);
-  Macro * parse_self(const Syntax * p, Environ & e) {
+  ProcMacro * parse_self(const Syntax * p, Environ & e) {
     //printf("PARSING MACRO %s\n", ~p->arg(0)->name);
     //p->print();
     //printf("\n");
-    parse = p;
-    assert_num_args(p, 1, 2);
+    syn = p;
+    assert_num_args(1, 2);
     real_name = expand_binding(p->arg(0), e);
     name = real_name.name;
     fun = e.symbols.lookup<Fun>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
@@ -493,6 +501,10 @@ struct Macro : public MacroSymbol {
     //res->print();
     //printf("\n");
     return res;
+  }
+  void compile(CompileWriter & f, Phase phase) const {
+    f << indent << "(" << (syntax_macro ? "make_syntax_macro" : "make_macro")
+      << uniq_name() << " " << fun->uniq_name() << ")";
   }
 };
 
@@ -717,13 +729,13 @@ namespace macro_abi {
 const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   ReplTable * rparms 
     = new ReplTable(mark, 
-                    new ExpandSourceInfo(MacroSymbol::macro_call, MacroSymbol::macro_def));
+                    new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
   //new ExpandSourceInfo);
   if (match)
     rparms->table = *match;
   //printf("tREPLACE: %s\n", ~p->to_string());
-  //rparms->macro_call = MacroSymbol::macro_call;
-  //rparms->macro_def = MacroSymbol::macro_def;
+  //rparms->macro_call = Macro::macro_call;
+  //rparms->macro_def = Macro::macro_def;
   const Syntax * res;
   if (p->is_a("{}")) {
     res = reparse("STMTS", p->arg(0), rparms);
@@ -1108,14 +1120,14 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     else
       return partly_expand(reparse("STMT", p), pos, env, flags);
   } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
-    p = env.symbols.lookup<MacroSymbol>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, p, env);
+    p = env.symbols.lookup<Macro>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, p, env);
     return partly_expand(p, pos, env, flags);
   } else if (what == "id" && !(flags & EXPAND_NO_ID_MACRO_CALL)) { 
     // NOTE: ID macros can have flags, since there is no parameter list
     //       they are passed in as flags as (id <id> :(flag1 val1))
     assert_num_args(p, 1);
     const Syntax * n = p;
-    const MacroSymbol * m = env.symbols.find<MacroSymbol>(n->arg(0));
+    const Macro * m = env.symbols.find<Macro>(n->arg(0));
     if (m) { // id macro
       Syntax * a = new Syntax(new Syntax("."));
       a->set_flags(p);
@@ -1129,7 +1141,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     if (a->is_a("()")) a = reparse("SPLIT", p->arg(1)->arg(0));
     if (n && n->is_a("id")) {
       if (!(flags & EXPAND_NO_FUN_MACRO_CALL)) {
-        const MacroSymbol * m = env.symbols.find<MacroSymbol>(n->arg(0));
+        const Macro * m = env.symbols.find<Macro>(n->arg(0));
         if (m) { // function macros
           //  (call (id fun) (list parm1 parm2 ...))?
           p = m->expand(p, a, env);
@@ -1242,20 +1254,26 @@ Stmt * parse_map(const Syntax * p, Environ & env) {
   //printf("MAP>>%s\n", ~p->to_string());
   SimpleMacro * m = new SimpleMacro;
   m->parse_self(p, env);
-  if (p->is_a("smacro"))
+  if (p->is_a("smacro")) {
+    m->syntax_macro = true;
     env.add(SymbolKey(m->real_name, SYNTAX_NS), m);
-  else
+  } else {
+    m->syntax_macro = false;
     env.add(m->real_name, m);
+  }
   return empty_stmt();
 }
 
 Stmt * parse_macro(const Syntax * p, Environ & env) {
-  Macro * m = new Macro;
+  ProcMacro * m = new ProcMacro;
   m->parse_self(p, env);
-  if (p->is_a("make_syntax_macro"))
+  if (p->is_a("make_syntax_macro")) {
+    m->syntax_macro = true;
     env.add(SymbolKey(m->real_name, SYNTAX_NS), m);
-  else
+  } else {
+    m->syntax_macro = false;
     env.add(m->real_name, m);
+  }
   return empty_stmt();
 }
 

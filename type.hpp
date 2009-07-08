@@ -181,10 +181,16 @@ namespace ast {
     ZLSPrintInst() : GenericPrintInst(ZLS_MODE) {}
   };
 
+  class ZLEPrintInst : public GenericPrintInst { 
+  public:
+    ZLEPrintInst() : GenericPrintInst(ZL_MODE) {}
+  };
+
   extern PrintInst const * const generic_print_inst;
   extern PrintInst const * const c_print_inst;
   extern PrintInst const * const zl_print_inst;
   extern PrintInst const * const zls_print_inst;
+  extern PrintInst const * const zle_print_inst;
 
   class TypeRelation : public gc_cleanup {
   public:
@@ -701,23 +707,6 @@ namespace ast {
     }
   };
 
-  //
-  //
-  //
-
-  class UserType : public SimpleType {
-  public:
-    UserType() : SimpleType(USER_C), parent(), type(), module(), defined() {}
-    const Type * parent;
-    const Type * type;
-    const Module * module;
-    bool defined;
-    unsigned size() const {return type ? type->size() : NPOS;}
-    unsigned align() const {return type ? type->align() : NPOS;}
-    void add_prop(SymbolName n, const Syntax * s) {abort();}
-    const Syntax * get_prop(SymbolName n) const {return module->get_prop(n);}
-  };
-  
   //
   //
   //

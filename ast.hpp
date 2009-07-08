@@ -276,9 +276,41 @@ namespace ast {
   }
 
   static inline 
+  CompileWriter & operator<< (CompileWriter & o, String str) {
+    static_cast<FStream &>(o) << str;
+    return o;
+  }
+
+  static inline 
+  CompileWriter & operator<< (CompileWriter & o, const SymbolKey & key) {
+    assert(!key.marks);
+    if (key.ns && key.ns != DEFAULT_NS) {
+      assert(o.target_lang == CompileWriter::ZLE);
+      o << "(w/inner " << key.name << " " << key.ns->name << ")";
+    } else {
+      o << key.name;
+    }
+    return o;
+  }
+
+  static inline 
   CompileWriter & operator<< (CompileWriter & o, AST * v) {
     //printf("COMPILE %s\n", ~v->name());
     v->compile(o);
+    return o;
+  }
+
+  static inline 
+  CompileWriter & operator<< (CompileWriter & o, const Type * v) {
+    //printf("COMPILE %s\n", ~v->name());
+    switch (o.target_lang) {
+    case CompileWriter::ZLS:
+      o << zls_print_inst->to_string(*v);
+      break;
+    case CompileWriter::ZLE:
+      o << zle_print_inst->to_string(*v);
+      break;
+    }
     return o;
   }
 
@@ -367,6 +399,8 @@ namespace ast {
     enum Phase {Normal, Forward, Body};
     virtual void compile(CompileWriter &, Phase) const = 0;
     void compile(CompileWriter & cw) {compile(cw, Normal);}
+    void finalize(FinalizeEnviron &) {};
+    void compile_prep(CompileEnviron &) {};
     Declaration() {}
   };
 
@@ -439,8 +473,6 @@ namespace ast {
     TypeAlias(const Type * st) : SimpleType(st), of(st) {}
     const Type * of;
     const char * what() const {return "talias";}
-    void finalize(FinalizeEnviron &) {}
-    void compile_prep(CompileEnviron &) {}
     void compile(CompileWriter & f, Phase phase) const;
     unsigned size() const {return of->size();}
     unsigned align() const {return of->align();}
@@ -463,8 +495,6 @@ namespace ast {
     bool have_body; // fixme: redundent, fixup "defined" and elinimate
     Environ env;
     Stmt * parse_self(const Syntax * p, Environ & env0);
-    void finalize(FinalizeEnviron & e) {}
-    void compile_prep(CompileEnviron & e) {}
     void compile(CompileWriter & f, Phase phase) const;
     bool defined;
     unsigned size_;
@@ -501,8 +531,6 @@ namespace ast {
     };
     Vector<Member> members;
     //Stmt * parse_self(const Syntax * p, Environ & env);
-    void finalize(FinalizeEnviron &) {}
-    void compile_prep(CompileEnviron &) {}
     void compile(CompileWriter & f, Phase phase) const;
     const char * tag() const {return "enum";}
     void finalize_hook();
@@ -510,6 +538,38 @@ namespace ast {
     unsigned align() const {return defined ? exact_type->align() : NPOS;}
   };
 
+  //
+  //
+  //
+
+  struct Module : public Declaration, public TopLevelSymbol {
+    Module() : syms() {}
+    SymbolNode * syms;
+    //Vector<const Syntax *> exports; // \...
+    const char * what() const {return "module";}
+    void compile(CompileWriter &, Phase) const;
+  };
+
+  //
+  //
+  //
+
+  class UserType : public TypeDeclaration, public SimpleType {
+  public:
+    UserType() : SimpleType(USER_C), parent(), type(), module(), defined() {}
+    const Type * parent;
+    const Type * type;
+    const Module * module;
+    bool defined;
+    unsigned size() const {return type ? type->size() : NPOS;}
+    unsigned align() const {return type ? type->align() : NPOS;}
+    void add_prop(SymbolName n, const Syntax * s) {abort();}
+    const Syntax * get_prop(SymbolName n) const {return module->get_prop(n);}
+    const char * what() const {return "user_type";}
+    using SimpleType::finalize;
+    void compile(CompileWriter &, Phase) const;
+  };
+  
   //
   //
   //

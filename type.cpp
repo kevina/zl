@@ -63,6 +63,7 @@ namespace ast {
   PrintInst const * const c_print_inst = new CPrintInst();
   PrintInst const * const zl_print_inst = new ZLPrintInst();
   PrintInst const * const zls_print_inst = new ZLSPrintInst();
+  PrintInst const * const zle_print_inst = new ZLEPrintInst();
   
   void TypeParm::to_string(const PrintInst & pi, StringBuf & buf) const {
     switch (what) {

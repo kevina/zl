@@ -99,6 +99,9 @@ int main(int argc, const char *argv[])
       ast::CompileWriter out;
       out.open("a.out.zls", "w");
       ast::compile(*env.top_level_symbols, out);
+      ast::CompileWriter out2(ast::CompileWriter::ZLE);
+      out2.open("a.out.zle", "w");
+      ast::compile(*env.top_level_symbols, out2);
       //AST::ExecEnviron env;
       //ast->eval(env);
     }

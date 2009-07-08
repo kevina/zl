@@ -600,7 +600,7 @@ namespace ast {
       f << indent;
       f << "(var";
       f << ' ' << uniq_name();
-      f << ' ' << zls_print_inst->to_string(*type);
+      f << " " << type;
       write_storage_class(f);
       if (init && phase != Forward) {
         if (init->ct_value_) {
@@ -833,9 +833,16 @@ namespace ast {
 
   void UnOp::compile(CompileWriter & f) {
     String w = what();
-    if (w == "addrof_ref") w = "addrof"; // HACK
-    if (w == "deref_ref") w = "deref"; // HACK
-    f << "(" << w << " " << exp << ")";
+    if (f.target_lang == CompileWriter::ZLS) {
+      if (w == "addrof_ref") w = "addrof"; // HACK
+      if (w == "deref_ref") w = "deref"; // HACK
+      f << "(" << w << " " << exp << ")";
+    } else if (f.target_lang == CompileWriter::ZLE) {
+      if (w == "addrof_ref" || w == "deref_ref") 
+        f << exp;
+      else
+      f << "(" << w << " " << exp << ")";
+    }
   }
 
   const Type * resolve_unop(Environ & env, TypeCategory * cat, Exp * & exp) {
@@ -1472,6 +1479,26 @@ namespace ast {
   //
   //
 
+  void Module::compile(CompileWriter & f, Phase phase) const {
+    assert(f.target_lang = CompileWriter::ZLE);
+    if (phase == Forward) {
+      f << "(module " << uniq_name() << ")\n";
+    } else {
+      f << "(module " << uniq_name() << "\n";
+      for (SymbolNode * cur = syms; cur; cur = cur->next) {
+        if (cur->key.marks) {
+          // skip
+        } else if (dynamic_cast<const TopLevelSymbol *>(cur->value)) {
+          f << "  " << "(alias " << cur->key << " " << cur->value->uniq_name() << ")\n";
+        } else {
+          f << "  #?" << cur->key << "\n";
+        }
+      }
+      f << ")\n";
+    }
+  }
+
+
   Stmt * parse_module(const Syntax * p, Environ & env0, bool pre_parse = false) {
     assert_num_args(p, 1, 2);
     SymbolName n = *p->arg(0);
@@ -1622,12 +1649,42 @@ namespace ast {
     return res;
   }
 
+  struct InnerNSDecl : public Declaration, public InnerNS {
+    const char * what() const {return "inner_ns";}
+    InnerNSDecl(String n) : InnerNS(n) {} 
+    void finalize(FinalizeEnviron &) {};
+    void compile_prep(CompileEnviron &) {};
+    void compile(CompileWriter & f, Phase phase) const {
+      assert(f.target_lang = CompileWriter::ZLE);
+      if (phase == Forward || phase == Normal) {
+        f << indent << "(" << "make_inner_ns " << uniq_name() << ")\n";
+      }
+    }
+  };
+
   Stmt * parse_make_inner_ns(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     SymbolName n = *p->arg(0);
-    const InnerNS * ns = new InnerNS(n.name);
+    const InnerNS * ns = new InnerNSDecl(n.name);
     env.add(SymbolKey(n, INNER_NS), ns);
     return empty_stmt();
+  }
+
+  //
+  //
+  //
+
+  void UserType::compile(CompileWriter & f, Phase phase) const {
+    if (f.target_lang != CompileWriter::ZLE)
+      return;
+    if (phase == Forward) {
+      f << "(declare_user_type " << uniq_name() << ")\n";
+    } else {
+      f << "(make_user_type " << uniq_name() << " " << type;
+      if (parent) 
+        f << " :(subtype " << parent << ")";
+      f << ")\n";
+    }
   }
 
   Stmt * parse_declare_user_type(const Syntax * p, Environ & env) {
@@ -1883,7 +1940,7 @@ namespace ast {
     exp->compile_prep(env);
   }
   void Cast::compile(CompileWriter & f) {
-    f << "(cast " << zls_print_inst->to_string(*type) << " " << exp << ")";
+    f << "(cast " << type << " " << exp << ")";
   }
 
   Exp * parse_cast(const Syntax * p, Environ & env, TypeRelation::CastType ctype) {
@@ -2061,8 +2118,8 @@ namespace ast {
       f << "(var " << uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
     }
     f << "(fun " << uniq_name();
-    f << " " << zls_print_inst->to_string(*parms);
-    f << " " << zls_print_inst->to_string(*ret_type);
+    f << " " << parms;
+    f << " " << ret_type;
     write_storage_class(f);
     if (inline_)
         f << " :inline";
@@ -2178,8 +2235,7 @@ namespace ast {
 
   void TypeAlias::compile(CompileWriter & f, Phase phase) const {
     if (phase == Body) return;
-    f << indent << "(talias " << uniq_name() << " " 
-      << zls_print_inst->to_string(*of) << ")\n";
+    f << indent << "(talias " << uniq_name() << " " << of << ")\n";
   }
 
   Stmt * parse_struct_union(StructUnion::Which which, const Syntax * p, Environ & env0) {
@@ -2246,7 +2302,7 @@ namespace ast {
       for (int i = 0; i != members.size(); ++i) {
         BasicVar * v = members[i].sym;
         f << adj_indent(2) << indent;
-        f << "(" << zls_print_inst->to_string(*v->type) << " " << v->uniq_name() << ")\n";
+        f << "(" << v->type << " " << v->uniq_name() << ")\n";
       }
     }
     f << ")\n";
@@ -2819,6 +2875,15 @@ namespace ast {
     Vector<AST *> init, cleanup;
     const TopLevelVarSymbol * tl = NULL;
 
+    if (cw.target_lang == CompileWriter::ZLE) {
+      cw << "# module decls\n";
+      for (i = syms.begin(); i != e; ++i) {
+        if (const Module * d = dynamic_cast<const Module *>(*i)) {
+          d->compile(cw, Declaration::Forward);
+        }
+      }
+    }
+
     cw << "# type decls\n";
 
     for (i = syms.begin(); i != e; ++i) {
@@ -2881,6 +2946,15 @@ namespace ast {
           }
         } else if (cw.for_macro_sep_c || !d->for_ct()) {
           d->compile(cw, Declaration::Forward);
+        }
+      }
+    }
+
+    if (cw.target_lang == CompileWriter::ZLE) {
+      cw << "# module definations\n";
+      for (i = syms.begin(); i != e; ++i) {
+        if (const Module * d = dynamic_cast<const Module *>(*i)) {
+          d->compile(cw, Declaration::Body);
         }
       }
     }

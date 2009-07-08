@@ -8,6 +8,7 @@ function compile_test() {
   f=test/$base.res
   o=test/$base.out
   cp a.out.zls test/$base.out.zls
+  cp a.out.zle test/$base.out.zle
   if [ -e $f ] 
   then
     zls test/$base.out.zls || return 1

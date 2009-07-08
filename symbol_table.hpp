@@ -220,12 +220,6 @@ namespace ast {
 
   void add_inner_nss(SymbolTable & sym);
 
-  struct Module : public TopLevelSymbol {
-    Module() : syms() {}
-    SymbolNode * syms;
-    //Vector<const Syntax *> exports; // \...
-  };
-
   struct SymbolNode {
     SymbolKey key;
     const Symbol * value;
