@@ -16,7 +16,10 @@ struct StringObj {
   char str[];
 };
 
-extern const StringObj * const EMPTY_STRING_OBJ;
+extern const struct StringObj1 EMPTY_STRING_OBJ1;
+
+static const StringObj * const EMPTY_STRING_OBJ =
+  reinterpret_cast<const StringObj *>(&EMPTY_STRING_OBJ1);
 
 struct SubStr;
 

@@ -32,14 +32,12 @@ void SourceInfo::dump_info(OStream & o, const char * prefix) const {
   dump_info(o, as, prefix);
 }
 
-static inline StringObj * create_empty_string_obj() {
-  StringObj * p = (StringObj *)malloc(sizeof(StringObj) + 1);
-  p->size = 0;
-  p->str[0] = '\0';
-  return p;
-}
+struct StringObj1 {
+  unsigned size;
+  char str[1];
+};
 
-const StringObj * const EMPTY_STRING_OBJ = create_empty_string_obj();
+const StringObj1 EMPTY_STRING_OBJ1 = {0, {'\0'}};
 
 char * pos_to_str(Pos p, char * buf) {
   if (p.line == UINT_MAX)
