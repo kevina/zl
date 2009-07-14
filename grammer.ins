@@ -63,9 +63,6 @@
 #(smacro "{}" (...)
 #    (block ...))
 
-(macro m (x y)
- (call f (list (mid x) (mid y))))
-
 (smacro or (x y)
     (eif (mid x) (n 1) (mid y)))
 
