@@ -1350,7 +1350,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
   CompileWriter cw;
   cw.open(source, "w");
   cw.deps = &deps;
-  compile(*env.top_level_symbols, cw);
+  compile(*env.top_level_symbols.front, cw);
   cw.close();
   
   system(cmd);

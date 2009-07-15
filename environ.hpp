@@ -55,19 +55,13 @@ namespace ast {
 
   struct Environ : public gc {
     TypeRelation * type_relation;
-    Vector<const TopLevelSymbol *> * top_level_symbols;
-    bool temporary() const {return !top_level_symbols;}
-    const TopLevelSymbol * find_tls(const char * to_find) const {
-      if (!top_level_symbols)
+    bool special() const {return !top_level_symbols.front;}
+    const Symbol * find_tls(const char * to_find) const {
+      if (!top_level_symbols.front)
         return NULL;
-      Vector<const TopLevelSymbol *>::const_iterator 
-        i = top_level_symbols->begin(),
-        e = top_level_symbols->end();
-      for (; i != e; ++i) {
-        if ((*i)->uniq_name() == to_find) return *i;
-      }
-      return NULL;
+      return top_level_symbols.find<Symbol>(to_find);
     }
+    OpenSymbolTable top_level_symbols;
     SymbolTable symbols;
     TypeSymbolTable types;
     OpenSymbolTable fun_labels;
@@ -88,10 +82,12 @@ namespace ast {
         top_level_environ(&symbols.front), 
         deps(), for_ct()
       {
-        top_level_symbols = new Vector<const TopLevelSymbol *>();
-        type_relation = new_c_type_relation(); // FIXME HACK
-        create_c_types(types); // FIXME Another HACK
-        add_inner_nss(symbols);
+        if (s == TOPLEVEL) {
+          top_level_symbols.front = &symbols.front;
+          type_relation = new_c_type_relation(); // FIXME HACK
+          create_c_types(types); // FIXME Another HACK
+          add_inner_nss(symbols);
+        }
         frame = new Frame();
       }
     Environ(const Environ & other) 
@@ -116,6 +112,14 @@ namespace ast {
 
     void add(const SymbolKey & k, const Symbol * sym) {
       sym->add_to_env(k, *this);
+    }
+
+    void add_internal(const SymbolKey & k, const Symbol * sym) {
+      symbols.add(k, sym, SymbolNode::INTERNAL);
+    }
+
+    void add_alias(const SymbolKey & k, const Symbol * sym) {
+      symbols.add(k, sym, SymbolNode::ALIAS);
     }
 
     Environ new_frame() {
@@ -143,6 +147,13 @@ namespace ast {
     env->add(k, t);
   }
 
+  inline void TypeSymbolTable::add_internal(const SymbolKey & k, const TypeSymbol * t) {
+    env->add_internal(k, t);
+  }
+
+  inline void TypeSymbolTable::add_alias(const SymbolKey & k, const TypeSymbol * t) {
+    env->add_alias(k, t);
+  }
 }
 
 #endif

@@ -9,9 +9,9 @@ macro stmts (x, y) {{
 }}
 
 macro decl0 (t, v) {
-  t z = 0;
-  z = 20;
-  t v = z;
+  t zzz = 0;
+  zzz = 20;
+  t v = zzz;
 }
 
 macro loop (body) {
@@ -29,7 +29,7 @@ make_macro (square_, *);
 
 int main() {
   int x = 0;
-  int z;
+  int zzz;
   decl0(int, y);
   y += 1;
   y = times2(y) + 4;
@@ -39,7 +39,7 @@ int main() {
     stmts(x,y);
   else 
     times2(y);
-  z = double_(5);
-  z = square_(2+3);
+  zzz = double_(5);
+  zzz = square_(2+3);
   double_(square_(y));
 }

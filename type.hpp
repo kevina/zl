@@ -111,7 +111,10 @@ namespace ast {
     }
     Type * ct_const(const Type * t);
     inline void add(const SymbolKey & k, const TypeSymbol * t);
+    inline void add_internal(const SymbolKey & k, const TypeSymbol * t);
+    inline void add_alias(const SymbolKey & k, const TypeSymbol * t);
     void add_name(const SymbolKey & n, TypeSymbol * t);
+    void add_name_internal(const SymbolKey & n, TypeSymbol * t);
   };
 
   static inline bool operator==(TypeParm lhs, TypeParm rhs) {
@@ -171,7 +174,7 @@ namespace ast {
     }
   };
 
-  class ZLPrintInst : public  CPrintInst { 
+  class ZLPrintInst : public CPrintInst { 
   public:
     ZLPrintInst() : CPrintInst(ZL_MODE) {}
   };
@@ -207,7 +210,7 @@ namespace ast {
 
   class TypeInst;
   
-  class TypeSymbol : public TopLevelSymbol {
+  class TypeSymbol : virtual public TopLevelSymbol {
   public:
     const PrintInst * print_inst;
     TypeSymbol() 
@@ -310,11 +313,18 @@ namespace ast {
     TypeParm::What parmt(unsigned i) const {return TypeParm::NONE;}
   };
 
+  //static inline void
+  //add_simple_type(TypeSymbolTable sym, SimpleType * t)
+  //{
+  //  t->finalize();
+  //  sym.add(t->name, t);
+  //}
+
   static inline void
-  add_simple_type(TypeSymbolTable sym, SimpleType * t)
+  add_internal_type(TypeSymbolTable sym, SimpleType * t)
   {
     t->finalize();
-    sym.add(t->name, t);
+    sym.add_internal(t->name, t);
   }
 
   static inline SimpleType *  

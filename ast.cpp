@@ -1,6 +1,10 @@
 #include <assert.h>
 #include <stdio.h>
 
+#include <cxxabi.h>
+
+#include <algorithm>
+
 #include "ast.hpp"
 #include "parse.hpp"
 #include "parse_op.hpp"
@@ -147,40 +151,42 @@ namespace ast {
 
   void Symbol::add_to_env(const SymbolKey & k, Environ & env) const {
     env.symbols.add(k, this);
+    if (env.special()) return;
     make_unique(env.symbols.front);
   }
 
-  void TopLevelSymbol::add_to_local_env(const SymbolKey & k, Environ & env) const {
-    env.symbols.add(k, this);
-  }
-  
-  void TopLevelSymbol::add_to_top_level_env(Environ & env) const {
-    if (env.temporary()) return;
-    // If the symbol already exists in the table, remove it and insert
-    // it in the end.  This will happen if a function was declared
-    // before it was defined.  Since order matters it's where the
-    // function is defined that is important.  Fixme, it not
-    // really necessary to do this every time...
-    Vector<const TopLevelSymbol *>::iterator 
-      i = env.top_level_symbols->begin(),
-      e = env.top_level_symbols->end();
-    while (i != e) {
-      if (*i == this) break;
-      ++i;
-    }
-    if (i != e) {
-      env.top_level_symbols->erase(i);
-      env.top_level_symbols->push_back(this);
-    } else {
-      env.top_level_symbols->push_back(this);
-      if (num == NPOS) 
-        assign_uniq_num<TopLevelSymbol>(*env.top_level_symbols);
-    }
-  }
-  
   void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
-    add_to_local_env(k, env);
-    add_to_top_level_env(env);
+    //assert(!env.symbols.exists_this_scope(k));
+    if (env.symbols.exists_this_scope(k)) {
+      fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
+    }
+    SymbolNode * local = env.symbols.add(k, this);
+    if (env.special()) return;
+    local->set_flags(SymbolNode::ALIAS);
+    if (num == NPOS)
+      assign_uniq_num<TopLevelSymbol>(this, *env.top_level_symbols.front);
+    //printf(">>%d %s %u %u %s\n", env.special(), ~k.to_string(), num, NPOS, typeid(*this).name());
+    SymbolKey uniq_key = uniq_name();
+    uniq_key.ns = tl_namespace();
+    SymbolNode * tl = find_symbol_node(uniq_key, *env.top_level_symbols.front);
+    //printf("1> %s %s %s\n", ~k.to_string(), ~uniq_key.to_string(),  typeid(*this).name());
+    if (tl) {
+      if (tl == local) {
+        //printf("TLS DUP %s\n", ~uniq_name());
+        goto finish;
+      } else if (static_cast<const Symbol *>(this) == tl->value) {
+        fprintf(stderr, "tls mismatch %s\n", ~uniq_key);
+      } else {
+        fprintf(stderr, "TLS MISMATCH %s\n", ~uniq_key);
+      }
+      abort();
+      //return;
+    }
+    tl = env.top_level_symbols.add(uniq_key, this);
+  finish:
+    tl->unset_flags(SymbolNode::ALIAS);
+    order_num = last_order_num++;
+    //printf("2> %s %s %s %d\n", ~name, ~uniq_name(), typeid(*this).name(), order_num);
   }
 
   //
@@ -238,7 +244,7 @@ namespace ast {
     }
     void add_to_env(const SymbolKey & k, Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
-      assign_uniq_num<NormalLabel>(self, stop);
+      assign_uniq_num<NormalLabel>(this, self->next, stop);
     }
   };
 
@@ -254,7 +260,7 @@ namespace ast {
       o.printf("%s$%u", ~name, num);
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
-      assign_uniq_num<LocalLabel>(self, stop);
+      assign_uniq_num<LocalLabel>(this, self->next, stop);
     }
   };
 
@@ -380,7 +386,7 @@ namespace ast {
     syn = p;
     assert_num_args(1,2);
     orig = *p->arg(0);
-    printf("StringC: %s\n", ~p->to_string());
+    //printf("StringC: %s\n", ~p->to_string());
     type = env.types.inst(".ptr", env.types.ct_const(env.types.inst("char")));
     type = env.types.ct_const(type);
     ct_value_ = &ct_nval;
@@ -548,7 +554,7 @@ namespace ast {
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
       if (num == NPOS)
-        assign_uniq_num<OtherVar>(self, stop);
+        assign_uniq_num<OtherVar>(this, self->next, stop);
     }
   };
 
@@ -627,7 +633,7 @@ namespace ast {
       o.printf("%s$%u", ~name, num);
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
-      assign_uniq_num<AutoVar>(self, stop);
+      assign_uniq_num<AutoVar>(this, self->next, stop);
     }
   };
 
@@ -1488,8 +1494,10 @@ namespace ast {
       for (SymbolNode * cur = syms; cur; cur = cur->next) {
         if (cur->key.marks) {
           // skip
-        } else if (dynamic_cast<const TopLevelSymbol *>(cur->value)) {
-          f << "  " << "(alias " << cur->key << " " << cur->value->uniq_name() << ")\n";
+        } else if (const TopLevelSymbol * tl = dynamic_cast<const TopLevelSymbol *>(cur->value)) {
+          SymbolKey uniq_key = tl->uniq_name();
+          uniq_key.ns = tl->tl_namespace();
+          f << "  " << "(alias " << cur->key << " " << uniq_key << ")\n";
         } else {
           f << "  #?" << cur->key << "\n";
         }
@@ -1509,6 +1517,7 @@ namespace ast {
       m = new Module();
       m->name = n.name;
       m->where = env0.where;
+      m->num = env0.where ? NPOS : 0;
       env0.add(SymbolKey(n, OUTER_NS), m);
     }
     if (p->num_args() > 1) {
@@ -1613,10 +1622,9 @@ namespace ast {
            i != e; ++i)
         k.marks = mark(k.marks, *i);
       SymbolNode * r = l.push_back(k, cur->value);
-      if (same_scope) 
-        r->imported = cur->imported;
-      else
-        r->imported = true;
+      r->flags = cur->flags;
+      if (!same_scope) 
+        r->set_flags(SymbolNode::IMPORTED);
     }
     env.symbols.splice(l.first, l.last);
   }
@@ -1694,7 +1702,7 @@ namespace ast {
       //printf("DECLARE: ADDING SYM %s\n", ~name.to_string());
       UserType * s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
-      add_simple_type(env.types, SymbolKey(name), s);
+      add_simple_type(env.types, SymbolKey(name), s, env.where);
     } else {
       //printf("DECLARE: SYM ALREADY EXISTS: %s\n", ~name);
       if (name == "_VTable") {
@@ -1716,8 +1724,7 @@ namespace ast {
     } else {
       s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
-      s->finalize();
-      /*sym = */env.types.add_name(SymbolKey(name), s);
+      add_simple_type(env.types, SymbolKey(name), s, env.where);
     }
     if (p->num_args() > 1) {
       s->type = parse_type(p->arg(1), env);
@@ -1726,6 +1733,7 @@ namespace ast {
       //parse_stmt_decl(new Syntax(new Syntax("talias"), p->arg(0), new Syntax(s->type)), env);
     }
     s->module = env.symbols.lookup<Module>(p->arg(0), OUTER_NS);
+    assert(s->num == s->module->num);
     s->defined = true;
     s->finalize();
     return empty_stmt();
@@ -1739,14 +1747,13 @@ namespace ast {
       //printf("ADDING SYM %s\n", ~name);
       UserType * s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
-      s->finalize();
-      env.types.add_name(SymbolKey(name), s);
+      add_simple_type(env.types, SymbolKey(name), s, env.where);
     } else {
       //printf("SYM ALREADY EXISTS: %s\n", ~name);
-      if (name == "_VTable") {
-        const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
-        //abort();
-      }
+      //if (name == "_VTable") {
+      //  const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
+      //  //abort();
+      //}
     }
     return parse_module(p, env);
   }
@@ -1761,6 +1768,7 @@ namespace ast {
     s->type = parse_type(p->arg(0), env);
     s->defined = true;
     s->finalize();
+    assert(s->num == s->module->num);
     return empty_stmt();
   }
 
@@ -2002,7 +2010,7 @@ namespace ast {
       bool mangle = name.marks || env.where || f->storage_class == SC_STATIC;
       f->num = mangle ? NPOS : 0;
       f->where = env.where;
-      f->add_to_local_env(name, env);
+      f->add_to_env(name, env);
       f->parse_forward_i(p, env, collect);
     }
     return f;
@@ -2051,7 +2059,6 @@ namespace ast {
     if (p->num_args() > 3) {
       collect.push_back(this);
     } else {
-      add_to_top_level_env(env0);
       symbols = env.symbols;
     }
 
@@ -2082,7 +2089,10 @@ namespace ast {
     body = dynamic_cast<Block *>(parse_stmt(syn->arg(3), env));
     assert(body); // FiXME
 
-    add_to_top_level_env(env0);
+    // fix up order_num so the function body will come after any top
+    // level symbols which where created in the local env
+    order_num = last_order_num++;
+    
     symbols = env.symbols;
 
     FinalizeEnviron fenv;
@@ -2379,7 +2389,7 @@ namespace ast {
         val++;
         decl->members.push_back(mem);
         sym->ct_value = &decl->members.back().ct_value;
-        sym->add_to_env(n, env);
+        env.add_internal(n, sym);
       }
     }
     decl->Int::finalize();
@@ -2868,44 +2878,107 @@ namespace ast {
       }
     }
   }
+  
+  template <typename T>
+  static bool tl_symbol_lt(T x, T y) {
+    return x->order_num < y->order_num;
+  }
 
-  void compile(const Vector<const TopLevelSymbol *> & syms, CompileWriter & cw) {
+  static void sep(CompileWriter & cw, const char * what) {
+    cw << "\n"
+       << "#\n"
+       << "# " << what << "\n"
+       << "#\n\n";
+  }
 
-    Vector<const TopLevelSymbol *>::const_iterator i, e = syms.end();
+  void compile(SymbolNode * syms, CompileWriter & cw) {
+
+    typedef const TopLevelVarDecl * VarP;
+    typedef const TypeDeclaration * TypeP;
+    typedef const Module * ModuleP;
+    typedef SymbolNode * OtherP;
+    typedef Vector<VarP> Vars;
+    typedef Vector<TypeP> Types;
+    typedef Vector<ModuleP> Modules;
+    typedef Vector<OtherP> Others;
+    typedef Vars::const_iterator VarsItr;
+    typedef Types::const_iterator TypesItr;
+    typedef Modules::const_iterator ModulesItr;
+    typedef Others::const_iterator OthersItr;
+
+    Vars vars;
+    Types types;
+    Modules modules;
+    Others others;
+
+    for (SymbolNode * cur = syms; cur; cur = cur->next) {
+      const Symbol * sym = cur->value;
+
+      if (cur->internal())
+        continue;
+      if (cur->alias()) {
+        if (cw.target_lang != CompileWriter::ZLE)
+          others.push_back(cur);
+        continue;
+      }
+      VarP var = dynamic_cast<VarP>(sym);
+      if (var) {
+        if (cw.for_compile_time()) {
+          if (cw.deps->have(var)) {
+            vars.push_back(var);
+          }
+        } else if (cw.for_macro_sep_c || !var->for_ct()) {
+          vars.push_back(var);
+        }
+        continue;
+      }
+      TypeP type = dynamic_cast<TypeP>(sym);
+      if (type) {
+        types.push_back(type);
+        continue;
+      }
+      if (cw.target_lang != CompileWriter::ZLE)
+        continue;
+      ModuleP module = dynamic_cast<ModuleP>(sym);
+      if (module) {
+        modules.push_back(module);
+      }
+      others.push_back(cur);
+    }
+
+    std::sort(vars.begin(), vars.end(), tl_symbol_lt<VarP>);
+    std::sort(types.begin(), types.end(), tl_symbol_lt<TypeP>);
+    std::sort(modules.begin(), modules.end(), tl_symbol_lt<ModuleP>);
+    std::reverse(others.begin(), others.end());
+  
     Vector<AST *> init, cleanup;
     const TopLevelVarSymbol * tl = NULL;
 
     if (cw.target_lang == CompileWriter::ZLE) {
-      cw << "# module decls\n";
-      for (i = syms.begin(); i != e; ++i) {
-        if (const Module * d = dynamic_cast<const Module *>(*i)) {
-          d->compile(cw, Declaration::Forward);
-        }
+      sep(cw, "module decls");
+      for (ModulesItr i = modules.begin(), e = modules.end(); i != e; ++i) {
+        (*i)->compile(cw, Declaration::Forward);
       }
     }
 
-    cw << "# type decls\n";
+    sep(cw, "type decls");
 
-    for (i = syms.begin(); i != e; ++i) {
-      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>(*i))
-        d->compile(cw, Declaration::Forward);
+    for (TypesItr i = types.begin(), e = types.end(); i != e; ++i) {
+      (*i)->compile(cw, Declaration::Forward);
     }
 
-    cw << "# type definitions\n";
+    sep(cw, "type definitions");
 
-    for (i = syms.begin(); i != e; ++i) {
-      if (const TypeDeclaration * d = dynamic_cast<const TypeDeclaration *>(*i))
-        d->compile(cw, Declaration::Body);
+    for (TypesItr i = types.begin(), e = types.end(); i != e; ++i) {
+      (*i)->compile(cw, Declaration::Body);
     }
 
     if (cw.for_macro_sep_c) {
+      
+      sep(cw, "macro sep. c. stuff");
 
-      cw << "# macro sep. c. stuff\n";
-
-      for (i = syms.begin(); i != e; ++i) {
-        if (const VarDeclaration * d = dynamic_cast<const VarDeclaration *>(*i)) {
-          const_cast<VarDeclaration *>(d)->compile_prep(cw); // evil I know...
-        }
+      for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
+        const_cast<TopLevelVarDecl *>(*i)->compile_prep(cw); // evil I know...
       }
       
       unsigned macro_funs_size = cw.for_macro_sep_c->macro_funs.size();
@@ -2936,46 +3009,31 @@ namespace ast {
       }
     }
 
-    cw << "# function decls\n";
+    sep(cw, "function decls");
 
-    for (i = syms.begin(); i != e; ++i) {
+    for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
       if (const Fun * d = dynamic_cast<const Fun *>(*i)) {
-        if (cw.for_compile_time()) {
-          if (cw.deps->have(d)) {
-            d->compile(cw, Declaration::Forward);
-          }
-        } else if (cw.for_macro_sep_c || !d->for_ct()) {
-          d->compile(cw, Declaration::Forward);
-        }
+        d->compile(cw, Declaration::Forward);
       }
     }
 
     if (cw.target_lang == CompileWriter::ZLE) {
-      cw << "# module definations\n";
-      for (i = syms.begin(); i != e; ++i) {
-        if (const Module * d = dynamic_cast<const Module *>(*i)) {
-          d->compile(cw, Declaration::Body);
-        }
+      sep(cw, "module definations");
+      for (ModulesItr i = modules.begin(), e = modules.end(); i != e; ++i) {
+        (*i)->compile(cw, Declaration::Body);
       }
     }
 
-    cw << "# definitions\n";
+    sep(cw, "definitions");
 
-    for (i = syms.begin(); i != e; ++i) {
-      if (const TopLevelVarDecl * d = dynamic_cast<const TopLevelVarDecl *>(*i)) {
-        if (cw.for_compile_time()) {
-          if (cw.deps->have(d) && !d->ct_ptr) {
-            d->compile(cw, Declaration::Body);
-          }
-        } else if (cw.for_macro_sep_c || !d->for_ct()) {
-          d->compile(cw, Declaration::Body);
-        }
-      }
+    for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
+      //printf("COMPILE %s %d\n", ~(*i)->uniq_name(), (*i)->order_num);
+      (*i)->compile(cw, Declaration::Body);
     }
 
-    cw << "# special\n";
+    sep(cw, "special");
 
-    for (i = syms.begin(); i != e; ++i) {
+    for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
       if (const TopLevelVar * s = dynamic_cast<const TopLevelVar *>(*i)) {
         if (s->constructor) init.push_back(s->constructor);
         //if (s->cleanup) cleanup.push_back(s->cleanup);
@@ -2998,7 +3056,16 @@ namespace ast {
       cw << "))\n";
     }
 
-    cw << "# done\n";
+    if (cw.target_lang == CompileWriter::ZLE) {
+      sep(cw, "others");
+      for (OthersItr i = others.begin(), e = others.end(); i != e; ++i) {
+        cw << "#? " << (*i)->key << " " 
+           << abi::__cxa_demangle(typeid(*(*i)->value).name(), NULL, NULL, NULL) 
+           << "\n";
+      }
+    }
+
+    sep(cw, "done");
   }
 
   

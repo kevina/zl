@@ -174,6 +174,7 @@ namespace ast {
       uniq_name_ = buf.freeze();
       return uniq_name_;
     }
+    virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
     virtual void add_to_env(const SymbolKey & k, Environ &) const;
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
@@ -186,12 +187,14 @@ namespace ast {
   // This if for any symbol which is not lexical and _might_
   // need to made externally visible, they are not necessary
   // global
-  struct Declaration;
+
   struct TopLevelSymbol : virtual public Symbol {
-    TopLevelSymbol(const Declaration * d = NULL) : num(), props() {}
+    static unsigned last_order_num;
+    TopLevelSymbol() : num(), props(), order_num() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
     TopLevelSymbol * where;   // NULL if global
     PropNode * props;
+    mutable unsigned order_num;
     using Symbol::uniq_name;
     void uniq_name(OStream & o) const {
       if (num == 0)
@@ -201,8 +204,6 @@ namespace ast {
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
     void add_to_env(const SymbolKey & k, Environ &) const;
-    void add_to_local_env(const SymbolKey & k, Environ &) const;
-    void add_to_top_level_env(Environ &) const;
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s);
     virtual const Syntax * get_prop(SymbolName n) const;
@@ -215,7 +216,7 @@ namespace ast {
   };
   
   struct InnerNS : public Symbol {
-    InnerNS(String n) {name = n;}
+    InnerNS(String n) : Symbol() {name = n;}
   };
 
   void add_inner_nss(SymbolTable & sym);
@@ -224,11 +225,19 @@ namespace ast {
     SymbolKey key;
     const Symbol * value;
     SymbolNode * next;
-    bool imported;
+    enum {IMPORTED = 1, ALIAS = 2, INTERNAL = 4};
+    unsigned flags;
+    bool imported() const {return flags & IMPORTED;}
+    bool alias() const {return flags & ALIAS;}
+    bool internal() const {return flags & INTERNAL;}
+    void set_flags(unsigned f) {flags |= f;}
+    void unset_flags(unsigned f) {flags &= ~f;}
     SymbolNode(const SymbolKey & k, const Symbol * v, SymbolNode * n = NULL) 
-      : key(k), value(v), next(n), imported(false) {}
+      : key(k), value(v), next(n), flags() {}
+    SymbolNode(const SymbolKey & k, const Symbol * v, unsigned f, SymbolNode * n = NULL) 
+      : key(k), value(v), next(n), flags(f) {}
     SymbolNode(const SymbolNode & n, SymbolNode * nx) 
-      : key(n.key), value(n.value), next(nx), imported(n.imported) {}
+      : key(n.key), value(n.value), next(nx), flags(n.flags) {}
   };
 
   struct PropNode {
@@ -281,7 +290,7 @@ namespace ast {
     AlwaysTrueExtraCmp cmp;
     return find_symbol_p1(k, start, stop, strategy, gather, cmp);
   }
-  
+
   template <typename Gather, typename ExtraCmp>
   const SymbolNode * find_symbol_p1(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
                                     Strategy strategy, Gather & gather, ExtraCmp & cmp)
@@ -293,7 +302,7 @@ namespace ast {
       //if (k.ns->name == "internal") 
       //printf ("--- %s\n", ~cur->key.to_string());
       //printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
-      if (k == cur->key && cmp(cur->key, cur->value) && (strategy != ThisScope || !cur->imported)) break;
+      if (k == cur->key && cmp(cur->key, cur->value) && (strategy != ThisScope || !cur->imported())) break;
     }
     //printf("^^^ %d\n", cur == stop);
     if (cur == stop) {
@@ -341,6 +350,14 @@ namespace ast {
     //printf("p3: %p %p\n", start, stop);
     const SymbolNode * s = find_symbol_p1(k, start, stop, strategy, gather, cmp);
     return find_symbol_p2<T>(s, k, start, stop, strategy);
+  }
+
+  static inline
+  SymbolNode * find_symbol_node(SymbolKey k, SymbolNode * start, SymbolNode * stop = NULL, 
+                                Strategy strategy = NormalStrategy) 
+  {
+    const SymbolNode * s = find_symbol_p1(k, start, stop, strategy);
+    return const_cast<SymbolNode *>(s);
   }
 
   template <typename T, typename Gather, typename ExtraCmp>
@@ -426,15 +443,15 @@ namespace ast {
   class OpenSymbolTable : public gc
   {
   public:
-    bool is_root() {return back == 0;}
+    //bool is_root() {return back == 0;}
   public: // but don't use
     SymbolNode * * front;
-    SymbolNode * back;
+    //SymbolNode * back;
   public:
     OpenSymbolTable() // This is a placeholder, it can't be used in this state
-      : front(), back() {}
-    OpenSymbolTable(SymbolNode * * f, SymbolNode * b)
-      : front(f), back(b) {}
+      : front() {}
+    OpenSymbolTable(SymbolNode * * f)
+      : front(f) {}
     template <typename T> 
     const T * find(const SymbolKey & k) const {
       return find_symbol<T>(k, *front);
@@ -443,9 +460,10 @@ namespace ast {
       return find_symbol<Symbol>(k, *front);
     }
     template <typename T>
-    void add(const SymbolKey & k, const T * sym) {
+    SymbolNode * add(const SymbolKey & k, const T * sym, unsigned flags = 0) {
       //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
-      *front = new SymbolNode(k, sym, *front);
+      *front = new SymbolNode(k, sym, flags, *front);
+      return *front;
     }
   };
 
@@ -467,7 +485,7 @@ namespace ast {
     SymbolTable new_scope(OpenSymbolTable & o) {
       SymbolNode * placeholder = new SymbolNode(SymbolKey(), NULL, front);
       o.front = &placeholder->next;
-      o.back = front;
+      //o.back = front;
       return SymbolTable(placeholder, front);
     }
     template <typename T> 
@@ -490,9 +508,13 @@ namespace ast {
     }
     inline bool exists(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     inline bool exists_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
-    void add(const SymbolKey & k, const Symbol * sym) {
+    SymbolNode * add(const SymbolKey & k, const Symbol * sym, unsigned flags = 0) {
       //if (exists_this_scope(k)) return; // FIXME: throw error
-      front = new SymbolNode(k, sym, front);
+      front = new SymbolNode(k, sym, flags, front);
+      return front;
+    }
+    SymbolNode * add_internal(const SymbolKey & k, const Symbol * sym) {
+      return add(k, sym, SymbolNode::INTERNAL);
     }
     void splice(SymbolNode * first, SymbolNode * last) {
       last->next = front;
@@ -523,36 +545,25 @@ namespace ast {
   }
 
   template <typename T>
-  void assign_uniq_num(SymbolNode * cur, SymbolNode * stop = NULL) {
+  void assign_uniq_num(const T * sym, SymbolNode * cur, SymbolNode * stop = NULL) {
     const T * t = NULL;
     // we need to compare the actual symbol name, since it may be
     // aliases as a different name
-    String name = cur->value->name;
-    for (SymbolNode * p = cur->next; p != stop; p = p->next) {
-      if (p->value && p->value->name == name && (t = dynamic_cast<const T *>(p->value))) 
+    String name = sym->name;
+    for (; cur != stop; cur = cur->next) {
+      if (cur->value && cur->value->name == name && 
+          (t = dynamic_cast<const T *>(cur->value)) && t != sym && t->num != 0) 
         break;
     }
+    if (t == sym) t = NULL;
     unsigned num = 1;
     assert(!t || t->num != NPOS);
     if (t) num = t->num + 1;
-    const T * c = dynamic_cast<const T *>(cur->value);
-    assign_uniq_num(num, dynamic_cast<const T *>(cur->value));
+    assign_uniq_num(num, sym);
   }
 
-  template <typename T>
-  void assign_uniq_num(Vector<const TopLevelSymbol *> & syms) {
-    const T * t = NULL;
-    const T * cur = dynamic_cast<const T *>(syms.back());
-    String name = cur->name;
-    for (int i = syms.size() - 2; i >= 0; --i) {
-      if (syms[i]->name == name && (t = dynamic_cast<const T *>(syms[i]))) 
-        break;
-    }
-    unsigned num = 1;
-    assert(!t || t->num != NPOS);
-    if (t) num = t->num + 1;
-    assign_uniq_num(num, cur);
-  }
+  template <>
+  void assign_uniq_num<TopLevelSymbol>(const TopLevelSymbol * sym, SymbolNode * cur, SymbolNode * stop);
 
 }
 

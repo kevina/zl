@@ -59,6 +59,11 @@ namespace ast {
     env->add(k, t);
   }
 
+  void TypeSymbolTable::add_name_internal(const SymbolKey & k, TypeSymbol * t) {
+    t->name = k.name;
+    env->add_internal(k, t);
+  }
+
   PrintInst const * const generic_print_inst = new GenericPrintInst();
   PrintInst const * const c_print_inst = new CPrintInst();
   PrintInst const * const zl_print_inst = new ZLPrintInst();
@@ -586,14 +591,14 @@ namespace ast {
   void add_c_int(TypeSymbolTable types, String n);
 
   void create_c_types(TypeSymbolTable types) {
-    add_simple_type(types, new_signed_int(".int8", 1));
-    add_simple_type(types, new_unsigned_int(".uint8", 1));
-    add_simple_type(types, new_signed_int(".int16", 2));
-    add_simple_type(types, new_unsigned_int(".uint16", 2));
-    add_simple_type(types, new_signed_int(".int32", 4));
-    add_simple_type(types, new_unsigned_int(".uint32", 4));
-    add_simple_type(types, new_signed_int(".int64", 8));
-    add_simple_type(types, new_unsigned_int(".uint64", 8));
+    add_internal_type(types, new_signed_int(".int8", 1));
+    add_internal_type(types, new_unsigned_int(".uint8", 1));
+    add_internal_type(types, new_signed_int(".int16", 2));
+    add_internal_type(types, new_unsigned_int(".uint16", 2));
+    add_internal_type(types, new_signed_int(".int32", 4));
+    add_internal_type(types, new_unsigned_int(".uint32", 4));
+    add_internal_type(types, new_signed_int(".int64", 8));
+    add_internal_type(types, new_unsigned_int(".uint64", 8));
 
     add_c_int(types, "signed-char");
     add_c_int(types, "short");
@@ -612,40 +617,40 @@ namespace ast {
     add_c_int(types, "unsigned-long");
     add_c_int(types, "unsigned-long-long");
 
-    types.add("unsigned", types.find("unsigned-int"));
+    types.add_alias("unsigned", types.find("unsigned-int"));
 
     add_c_int(types, "char");
 
     VOID_T = new Void();
-    add_simple_type(types, static_cast<Void *>(VOID_T));
+    add_internal_type(types, static_cast<Void *>(VOID_T));
 
-    add_simple_type(types, new Float("float", Float::SINGLE));
-    add_simple_type(types, new Float("double", Float::DOUBLE));
-    add_simple_type(types, new Float("long-double", Float::LONG));
+    add_internal_type(types, new Float("float", Float::SINGLE));
+    add_internal_type(types, new Float("double", Float::DOUBLE));
+    add_internal_type(types, new Float("long-double", Float::LONG));
 
-    //add_simple_type(types, "<bool>", new AliasT(types.inst("int")));
+    //add_internal_type(types, "<bool>", new AliasT(types.inst("int")));
 
     
 
-    types.add("<void>", types.find("void"));
+    types.add_alias("<void>", types.find("void"));
 
-    types.add(".size", types.find("unsigned-long"));
-    types.add(".ptrdiff", types.find("long"));
+    types.add_alias(".size", types.find("unsigned-long"));
+    types.add_alias(".ptrdiff", types.find("long"));
 
-    types.add_name(".ptr", new PointerSymbol);
-    types.add_name(".ref", new ReferenceSymbol);
+    types.add_name_internal(".ptr", new PointerSymbol);
+    types.add_name_internal(".ref", new ReferenceSymbol);
     //types.add_name("<const>", new ConstSymbol);
-    types.add_name(".array", new ArraySymbol);
-    types.add_name(".fun", new FunctionSymbol);
-    types.add_name(".", new TupleSymbol);
-    types.add_name(".qualified", new QualifiedTypeSymbol);
-    types.add_name(".zero", new ZeroTypeSymbol);
-    types.add_name(".typeof", new TypeOfSymbol);
-    add_simple_type(types, new Void("__builtin_va_list"));
-    //add_simple_type(types, "Match", new Void());
-    //add_simple_type(types, "Syntax", new Void());
-    //add_simple_type(types, "Mark", new Void());
-    //add_simple_type(types, "Context", new Void());
+    types.add_name_internal(".array", new ArraySymbol);
+    types.add_name_internal(".fun", new FunctionSymbol);
+    types.add_name_internal(".", new TupleSymbol);
+    types.add_name_internal(".qualified", new QualifiedTypeSymbol);
+    types.add_name_internal(".zero", new ZeroTypeSymbol);
+    types.add_name_internal(".typeof", new TypeOfSymbol);
+    add_internal_type(types, new Void("__builtin_va_list"));
+    //add_internal_type(types, "Match", new Void());
+    //add_internal_type(types, "Syntax", new Void());
+    //add_internal_type(types, "Mark", new Void());
+    //add_internal_type(types, "Context", new Void());
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {
@@ -684,7 +689,7 @@ namespace ast {
   }
   
   void add_c_int(TypeSymbolTable types, String n) {
-    add_simple_type(types, new Int(n, static_cast<const Int *>(types.inst(c_type_to_exact(n)))));
+    add_internal_type(types, new Int(n, static_cast<const Int *>(types.inst(c_type_to_exact(n)))));
   }
 
 }

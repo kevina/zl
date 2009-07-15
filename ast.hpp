@@ -41,7 +41,6 @@ namespace ast {
     SymbolNode * fun_symbols;
   };
 
-
   class CompileWriter : public FStream, public CompileEnviron {
   public:
     enum TargetLang {ZLS, ZLE};
@@ -434,7 +433,7 @@ namespace ast {
     mutable void * ct_ptr; // No relation to ct_value.  Pointer to
                            // compiled symbol, used for proc. macros.
     const TopLevelVarDecl * top_level() const {return this;}
-    TopLevelVarDecl() : TopLevelSymbol(this), deps_closed(false), for_ct_(false), ct_ptr() {}
+    TopLevelVarDecl() : deps_closed(false), for_ct_(false), ct_ptr() {}
   };
 
   typedef Vector<Declaration *> Collect;
@@ -465,7 +464,7 @@ namespace ast {
   //
   //
 
-  struct TypeDeclaration : public Declaration {
+  struct TypeDeclaration : public Declaration, virtual public TopLevelSymbol {
     TypeDeclaration() {}
   };
 
@@ -501,6 +500,7 @@ namespace ast {
     unsigned align_;
     unsigned size() const {return size_;}
     unsigned align() const {return align_;}
+    const InnerNS * tl_namespace() const {return TAG_NS;}
   };
 
   struct Struct : public StructUnion {
@@ -536,6 +536,7 @@ namespace ast {
     void finalize_hook();
     unsigned size() const {return defined ? exact_type->size() : NPOS;}
     unsigned align() const {return defined ? exact_type->align() : NPOS;}
+    const InnerNS * tl_namespace() const {return TAG_NS;}
   };
 
   //
@@ -548,6 +549,7 @@ namespace ast {
     //Vector<const Syntax *> exports; // \...
     const char * what() const {return "module";}
     void compile(CompileWriter &, Phase) const;
+    const InnerNS * tl_namespace() const {return OUTER_NS;}
   };
 
   //
@@ -596,7 +598,7 @@ namespace ast {
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
 
-  void compile(const Vector<const TopLevelSymbol *> &, CompileWriter & cw);
+  void compile(SymbolNode *, CompileWriter & cw);
 
   Exp * cast_up(Exp * exp, const Type * type, Environ & env);
 
