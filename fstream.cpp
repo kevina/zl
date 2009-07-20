@@ -68,12 +68,6 @@
     return *this;
   }
 
-  FStream & FStream::operator<< (ParmStr str)
-  {
-    fputs(str, file_);
-    return *this;
-  }
-
   bool FStream::append_line(StringBuf & str, char d)
   {
     int c;
@@ -107,6 +101,12 @@
     fwrite(str,1,n,file_);
   }
 
+  void FStream::write(FStream & f) {
+    int chr;
+    while ((chr = getc(f.file_)) != EOF)
+      putc(chr, file_);
+  }
+
   FStream & FStream::operator>> (unsigned int & num)
   {
     int r = fscanf(file_, " %u", &num);
@@ -116,30 +116,11 @@
   }
 
 
-  FStream & FStream::operator<< (unsigned int num)
-  {
-    fprintf(file_, "%u", num);
-    return *this;
-  }
-
   FStream & FStream::operator>> (int & num)
   {
     int r = fscanf(file_, " %i", &num);
     if (r != 1)
       close();
-    return *this;
-  }
-
-
-  FStream & FStream::operator<< (int num)
-  {
-    fprintf(file_, "%i", num);
-    return *this;
-  }
-
-  FStream & FStream::operator<< (double num)
-  {
-    fprintf(file_, "%g", num);
     return *this;
   }
 

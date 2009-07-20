@@ -43,7 +43,7 @@
 
     FILE * c_stream();
     int file_no();
-    
+
     int vprintf(const char * format, va_list ap)
     {
       return vfprintf(file_, format, ap);
@@ -64,6 +64,7 @@
     void write(ParmStr);
     void write(char c);
     void write(const void *, unsigned int i);
+    void write(FStream &);
 
     long int tell() {return ftell(file_);}
     bool seek(long int offset, int whence = SEEK_SET) {
@@ -89,10 +90,6 @@
     FStream & operator>> (StringBuf &);
     FStream & operator>> (unsigned int &);
     FStream & operator>> (int &);
-    FStream & operator<< (ParmStr);
-    FStream & operator<< (unsigned int);
-    FStream & operator<< (int);
-    FStream & operator<< (double);
 
   };
 //}

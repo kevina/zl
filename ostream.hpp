@@ -60,6 +60,21 @@
       return *this;
     }
 
+    OStream & operator<< (unsigned int num) {
+      this->printf("%u", num);
+      return *this;
+    }
+
+    OStream & operator<< (int num) {
+      this->printf("%i", num);
+      return *this;
+    }
+
+    OStream & operator<< (double num)  {
+      this->printf("%g", num);
+      return *this;
+    }
+
     virtual ~OStream() {}
   };
   
