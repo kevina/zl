@@ -231,7 +231,7 @@ void parse_class_var(Syntax * p, Match * m, Mark * mark,
 
   // FIXME: handle flags
   if (is_static) {
-    module_b->append(replace(raw_syntax(var (w/inner (mid n) internal) (mid rest)), m, mark));
+    module_b->append(replace(raw_syntax(var (` (mid n) internal) (mid rest)), m, mark));
     module_b->append(replace(syntax {macro n () {n`internal;}}, m, mark));
   } else {
     struct_b->append(p);
@@ -285,7 +285,7 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
   if (!is_static)
     macro_parms->append(replace(syntax (:this this = this), m, mark));
 
-  module_b->append(replace(raw_syntax (fun (w/inner (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
+  module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
                            match_local(m, new_parms, 0), mark));
   module_b->append(replace(syntax {macro nv ($1) {n`internal($2);}},
                            match_local(m, macro_parms, call_parms, 0), mark));
@@ -301,7 +301,7 @@ void parse_class_fun(Syntax * p, Match * m, Mark * mark,
       vtable_b->append(replace(raw_syntax (var (mid n) (mid pfun)), m, mark));
     }
     vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid n))) 
-                                         (cast (mid pfun) (id (w/inner (mid n) internal)))), m, mark));
+                                         (cast (mid pfun) (id (` (mid n) internal)))), m, mark));
   }
 }
 

@@ -765,7 +765,7 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
     res = reparse("STMTS", p->arg(0), rparms);
     if (res->num_args() == 1)
       res = res->arg(0);
-  } else if (p->simple() || p->is_a("w/inner") || p->is_a("w/outer") || p->is_a("fluid")) {
+  } else if (p->simple() || p->is_a("`") || p->is_a("::") || p->is_a("fluid")) {
     // FIXME: This is a hack, in same cases this may not be the correct thing to do.
     // It is needed because sometimes we want "syntax ID" to be just a raw ID (ie a simple
     // syntax) but othertimes it needs to be reparsed so that it can become a mid
@@ -1260,11 +1260,11 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     assert_num_args(p, 1);
     const FluidBinding * b = env.symbols.lookup<FluidBinding>(p->arg(0), ns);
     return SymbolKey(b->rebind, ns);
-  } else if (p->is_a("w/inner")) {
+  } else if (p->is_a("`")) {
     assert_num_args(p, 2);
     const InnerNS * ns = env.symbols.lookup<InnerNS>(p->arg(1), INNER_NS);
     return expand_binding(p->arg(0), ns, env);
-  } else if (p->is_a("w/outer")) {
+  } else if (p->is_a("::")) {
     throw error(p, "Can not use outer namespaces in binding form");
   } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
     return s->name;

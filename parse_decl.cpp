@@ -262,7 +262,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
   for (Parts::iterator i = res.begin(), e = res.end(); i != e; ++i) {
     const Syntax * p = *i;
     const Syntax * n = p->arg(0);
-    if (n->is_a("w/outer")) {
+    if (n->is_a("::")) {
       const Syntax * c = n->arg(0);
       const Syntax * n2 = n->arg(1);
       Syntax * p2 = new Syntax(*p);
@@ -358,7 +358,7 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
     if (body || by_itself) {
       const Syntax * n = name;
       if (n->simple())
-        n = new Syntax(new Syntax("w/inner"), n, new Syntax("tag"));
+        n = new Syntax(new Syntax("`"), n, new Syntax("tag"));
       Syntax * struct_union = new Syntax(p->part(0));
       struct_union->add_part(n);
       struct_union->set_flags(p);

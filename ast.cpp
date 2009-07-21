@@ -38,7 +38,7 @@ namespace ast {
     assert(!key.marks);
     if (key.ns && key.ns != default_ns) {
       assert(o.target_lang == CompileWriter::ZLE);
-      o << "(w/inner ";
+      o << "(` ";
       key.SymbolName::to_string(o);
       o << ' ' << key.ns->name() << ")";
     } else {

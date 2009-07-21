@@ -718,11 +718,11 @@ namespace ast {
       assert_num_args(p, 1);
       const FluidBinding * b = lookup_symbol<FluidBinding>(p->arg(0), ns, start, stop, strategy, gather);
       return lookup_symbol<T>(SymbolKey(b->rebind, ns), p->arg(0)->str(), start, stop, strategy);
-    } else if (p->is_a("w/inner")) {
+    } else if (p->is_a("`")) {
       assert_num_args(p, 2);
       const InnerNS * ns = lookup_symbol<InnerNS>(p->arg(1), INNER_NS, start);
       return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy);
-    } else if (p->is_a("w/outer")) {
+    } else if (p->is_a("::")) {
       //printf("w/outer %s %s\n", ~p->to_string(), ~p->sample_w_loc());
       const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, start, stop, strategy);
       //printf("W/OUTER %s %p %p\n", ~p->to_string(), m, m->syms);

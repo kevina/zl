@@ -334,7 +334,7 @@ namespace parse_parse {
         Res r = parse(str);
         str = r.end;
         res->add_part(r.parse);
-      } else if (*str == ':') {
+      } else if (str[0] == ':' && str[1] != ':') {
         ++str;
         Res r = parse_grp_or_id(str);
         str = r.end;
