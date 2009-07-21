@@ -28,7 +28,7 @@ struct ReplTable;
 
 struct Replacements : public Vector<ReplTable *> {
   bool anywhere(String s) const;
-  void to_string(OStream & o, PrintFlags f) const;
+  void to_string(OStream & o, PrintFlags f, SyntaxGather * = NULL) const;
   String to_string() const {
     StringBuf buf;
     to_string(buf, PrintFlags());

@@ -17,6 +17,7 @@ struct Error;
 struct SourceStr;
 Error * error(const SourceStr & str, const char * fmt, ...)
   __attribute__ ((format (printf, 2, 3)));
+struct SyntaxGather;
 
 namespace ast {
 
@@ -31,7 +32,7 @@ namespace ast {
     const Marks * prev;
     Marks(const Mark * m, const Marks * p) 
       : mark(m), prev(p) {}
-    void to_string(OStream & o) const;
+    void to_string(OStream & o, SyntaxGather * g) const;
   };
 
   struct Mark : public gc_cleanup {
@@ -48,6 +49,7 @@ namespace ast {
       cache.reserve(1);
       cache.push_back(CacheNode(NULL, new Marks(this, NULL)));
     }
+    void to_string(OStream & o, SyntaxGather * g) const;
   };
   
   static inline const Marks * mark(const Marks * ms, const Mark * m) {
@@ -92,10 +94,10 @@ namespace ast {
     SymbolName(String n, const Marks * m = NULL) : name(n), marks(m) {}
 
     // Convert to a string with marks append as '<mark>
-    void to_string(OStream & o) const;
-    String to_string() const {
+    void to_string(OStream & o, SyntaxGather * = NULL) const;
+    String to_string(SyntaxGather * g = NULL) const {
       StringBuf buf;
-      to_string(buf);
+      to_string(buf, g);
       return buf.freeze();
     }
 
@@ -163,6 +165,7 @@ namespace ast {
 
   struct Symbol {
     typedef ::TypeInfo<Symbol> TypeInfo;
+    const SymbolKey * key;
     String name;
     mutable String uniq_name_;
     Symbol() {}

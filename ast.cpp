@@ -11,6 +11,8 @@
 #include "parse_decl.hpp"
 #include "expand.hpp"
 
+#include "syntax_gather.hpp"
+
 #include "ct_value-impl.hpp"
 #include "hash-t.hpp"
 
@@ -23,6 +25,13 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls 
 #define SYN new Syntax
 
 namespace ast {
+
+  CompileWriter::CompileWriter(TargetLang tl) 
+    : target_lang(tl), in_fun(), indent_level(0), deps(), syntax_gather() 
+  {
+    if (tl == ZLE)
+      syntax_gather = new SyntaxGather;
+  }
 
   struct EmptyStmt : public StmtLeaf {
     EmptyStmt() {}
@@ -1494,18 +1503,20 @@ namespace ast {
       for (SymbolNode * cur = syms; cur; cur = cur->next) {
         if (cur->key.marks) {
           // skip
-        } else if (const TopLevelSymbol * tl = dynamic_cast<const TopLevelSymbol *>(cur->value)) {
-          SymbolKey uniq_key = tl->uniq_name();
-          uniq_key.ns = tl->tl_namespace();
-          f << "  " << "(alias " << cur->key << " " << uniq_key << ")\n";
         } else {
-          f << "  #?" << cur->key << "\n";
+          f << adj_indent(2) << cur;
         }
+        //} else if (const TopLevelSymbol * tl = dynamic_cast<const TopLevelSymbol *>(cur->value)) {
+        //  SymbolKey uniq_key = tl->uniq_name();
+        //  uniq_key.ns = tl->tl_namespace();
+        //  f << "  " << "(alias " << cur->key << " " << uniq_key << ")\n";
+        //} else {
+        //  f << "  #?" << cur->key << "\n";
+        //}
       }
       f << ")\n";
     }
   }
-
 
   Stmt * parse_module(const Syntax * p, Environ & env0, bool pre_parse = false) {
     assert_num_args(p, 1, 2);
@@ -1682,6 +1693,10 @@ namespace ast {
   //
   //
 
+  //
+  //
+  //
+
   void UserType::compile(CompileWriter & f, Phase phase) const {
     if (f.target_lang != CompileWriter::ZLE)
       return;
@@ -1772,10 +1787,14 @@ namespace ast {
     return empty_stmt();
   }
 
-  struct UserCast : public Symbol {
+  struct UserCast : public Symbol, public Declaration {
+    const char * what() const {return "user-cast";}
     const Type * from;
     const Type * to;
     const Symbol * cast_macro;
+    void compile(CompileWriter & cw, Phase) const {
+      cw << indent << "(user_cast " << uniq_name() << " " << from << " " << to << " " << cast_macro->uniq_name() << ")\n";
+    }
   };
 
   struct UserCastCompare {
@@ -1803,6 +1822,7 @@ namespace ast {
     UserType * child_t  = const_cast<UserType *>
       (dynamic_cast<const UserType *>(env.types.inst(SymbolKey(m->name))));
     UserCast * user_cast = new UserCast;
+    user_cast->name = "up_cast";
     user_cast->from = child_t;
     user_cast->to = parent_t;
     user_cast->cast_macro = env.symbols.lookup<Symbol>(up_cast);
@@ -3058,11 +3078,23 @@ namespace ast {
 
     if (cw.target_lang == CompileWriter::ZLE) {
       sep(cw, "others");
+      StringBuf buf;
+      OStream * stream = cw.stream;
+      cw.stream = &buf;
       for (OthersItr i = others.begin(), e = others.end(); i != e; ++i) {
-        cw << "#? " << (*i)->key << " " 
-           << abi::__cxa_demangle(typeid(*(*i)->value).name(), NULL, NULL, NULL) 
-           << "\n";
+        cw << *i;
       }
+      cw.stream = stream;
+      cw << "(syntax_data\n";
+      cw.printf("  (marks %u)\n", cw.syntax_gather->mark_map.num);
+      cw.printf("  (repl_tables %u\n", cw.syntax_gather->repl_table_map.to_print.size());
+      for (Vector<String>::const_iterator 
+             i = cw.syntax_gather->repl_table_map.to_print.begin(), 
+             e = cw.syntax_gather->repl_table_map.to_print.end();
+           i != e; ++i) 
+        cw.printf("    %s\n", ~*i);
+      cw << ")\n";
+      cw << buf.freeze();
     }
 
     sep(cw, "done");

@@ -9,6 +9,7 @@
 #include "ast.hpp"
 #include "parse_op.hpp"
 #include "parse_decl.hpp"
+#include "syntax_gather.hpp"
 
 #include "hash-t.hpp"
 
@@ -244,9 +245,33 @@ struct ReplTable : public gc_cleanup {
   SourceStr expand_source_info_str(const Syntax * s) {
     return expand_source_info_str(s->str());
   }
-  void to_string(OStream & o, PrintFlags f) const {
-    o.printf("{");
+  void to_string(OStream & o, PrintFlags f, SyntaxGather * g) const;
+  ReplTable(const ast::Mark * m, ExpandSourceInfo * e)
+    : mark(m), expand_si(e), ci(NULL, e), outer_si(NULL) {}
+};
+
+void ReplTable::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
+  if (g) {
+    std::pair<unsigned, bool> r = g->repl_table_map.insert(this);
+    o.printf("{%u}", r.first);
+    if (!r.second) {
+      PrintFlags f(4);
+      StringBuf buf;
+      buf.printf("(%u", g->mark_map.insert(mark));
+      f.indent += 2;
+      for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
+        buf << " (";
+        i->first.to_string(buf, g);
+        buf << ' ';
+        i->second->to_string(buf, f, g);
+        buf << ')';
+      }
+      buf << ")";
+      g->repl_table_map.set_str(r.first, buf.freeze());
+    }
+  } else {
     //o.printf("...");
+    o.printf("{");
     for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
       //o.printf("%s", ~i->first.to_string());
       o.printf("%s=>", ~i->first.to_string());
@@ -255,9 +280,8 @@ struct ReplTable : public gc_cleanup {
     }
     o.printf("}");
   }
-  ReplTable(const ast::Mark * m, ExpandSourceInfo * e)
-    : mark(m), expand_si(e), ci(NULL, e), outer_si(NULL) {}
-};
+}
+
 
 //
 //
@@ -269,9 +293,9 @@ bool Replacements::anywhere(String s) const {
   return false;
 }
 
-void Replacements::to_string(OStream & o, PrintFlags f) const {
+void Replacements::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
   for (const_iterator i = begin(), e = end(); i != e; ++i)
-    (*i)->to_string(o, f);
+    (*i)->to_string(o, f, g);
 }
 
 //
@@ -464,10 +488,12 @@ struct SimpleMacro : public Macro {
     return res;
   }
   void compile(CompileWriter & f, Phase phase) const {
-    f << "(" << (syntax_macro ? "macro" : "smacro");
-    parms->to_string(f);
+    f << indent << "(" << (syntax_macro ? "smacro" : "macro") << " " 
+      << real_name << " ";
+    parms->to_string(f, PrintFlags(f.indent_level), f.syntax_gather);
     f << "\n";
-    repl->to_string(f);
+    f << indent << "  ";
+    repl->to_string(f, PrintFlags(f.indent_level + 2), f.syntax_gather);
     f << ")\n";
   }
 };
@@ -503,8 +529,8 @@ struct ProcMacro : public Macro {
     return res;
   }
   void compile(CompileWriter & f, Phase phase) const {
-    f << indent << "(" << (syntax_macro ? "make_syntax_macro" : "make_macro")
-      << uniq_name() << " " << fun->uniq_name() << ")";
+    f << indent << "(" << (syntax_macro ? "make_syntax_macro" : "make_macro") 
+      << " " << uniq_name() << " " << fun->uniq_name() << ")\n";
   }
 };
 
@@ -539,7 +565,7 @@ namespace macro_abi {
   }
 
 }
-  
+
 struct SimpleSyntaxEnum : public SyntaxEnum {
   Parts::const_iterator i;
   Parts::const_iterator end;
@@ -1413,14 +1439,26 @@ void load_macro_lib(ParmString lib, Environ & env) {
 }
 
 
+struct FluidBindingDecl : public Declaration, public FluidBinding {
+  const char * what() const {return "fluid_binding";}
+  FluidBindingDecl(String n, SymbolName r) : FluidBinding(n, r) {}
+  void finalize(FinalizeEnviron &) {};
+  void compile_prep(CompileEnviron &) {};
+  void compile(CompileWriter & f, Phase phase) const {
+    assert(f.target_lang = CompileWriter::ZLE);
+    if (phase == Forward || phase == Normal) {
+      f << indent << "(" << "fluid_binding " << uniq_name() << ")\n";
+    }
+  }
+};
+
 Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
   assert_num_args(p, 1);
   SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
-  FluidBinding * b = new FluidBinding(n.name, mark(n, new Mark(NULL)));
+  FluidBindingDecl * b = new FluidBindingDecl(n.name, mark(n, new Mark(NULL)));
   env.add(n, b);
   return empty_stmt();
 }
-
 
 //
 // 

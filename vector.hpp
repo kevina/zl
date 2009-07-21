@@ -42,7 +42,7 @@
     void append(const T * begin, const T * end) {
       insert(this->end(), begin, end);
     }
-    int alloc(int s) {
+    int alloc(int s = 1) {
       int pos = this->size();
       this->resize(pos + s);
       return pos;

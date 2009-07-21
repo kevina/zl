@@ -1,4 +1,5 @@
 #include "symbol_table.hpp"
+#include "syntax_gather.hpp"
 
 namespace ast {
 
@@ -37,7 +38,7 @@ namespace ast {
 
   unsigned Mark::last_id = 0;
 
-  void Marks::to_string(OStream & o) const {
+  void Marks::to_string(OStream & o, SyntaxGather * g) const {
     Vector<const Mark *> mks;
     for (const Marks * cur = this; cur; cur = cur->prev) {
       mks.push_back(cur->mark);
@@ -45,14 +46,18 @@ namespace ast {
     while (!mks.empty()) {
       const Mark * m = mks.back();
       mks.pop_back();
-      o.printf("'%d", m->id);
+      if (g) {
+        o.printf("'%u", g->mark_map.insert(m));
+      } else {
+        o.printf("'%u", m->id);
+      }
     }
   }
 
-  void SymbolName::to_string(OStream & o) const {
+  void SymbolName::to_string(OStream & o, SyntaxGather * g) const {
     o << name;
     if (marks)
-      marks->to_string(o);
+      marks->to_string(o, g);
   }
 
   void SymbolKey::to_string(OStream & o) const {

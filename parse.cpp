@@ -8,6 +8,7 @@
 #include "expand.hpp"     // FIXME: elim dep
 #include "asc_ctype.hpp"
 #include "iostream.hpp"
+#include "syntax_gather.hpp"
 
 using namespace parse_common;
 
@@ -169,13 +170,12 @@ void Syntax::set_src_from_parts() const {
 }
 
 
-void Parts::to_string(OStream & o, PrintFlags f0, char sep) const {
+void Parts::to_string(OStream & o, PrintFlags f, char sep, SyntaxGather * g) const {
   const_iterator i = begin(), e = end(); 
-  PrintFlags f = f0;
   if (sep == '\n')
     f.indent += 2;
   if (i == e) return;
-  (*i)->to_string(o, f);
+  (*i)->to_string(o, f, g);
   ++i;
   while (i != e) {
     if (sep == '\n') {
@@ -185,18 +185,18 @@ void Parts::to_string(OStream & o, PrintFlags f0, char sep) const {
     } else {
       o.put(sep);
     }
-    (*i)->to_string(o, f);
+    (*i)->to_string(o, f, g);
     //o << "\n";
     ++i;
   }
 }
 
-void Flags::to_string(OStream & o, PrintFlags f) const {
+void Flags::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
   const_iterator i = begin(), e = end();
   if (i == e) return;
   while (i != e) {
     o.printf(" :");
-    (*i)->to_string(o, f);
+    (*i)->to_string(o, f, g);
     ++i;
   }
 }
@@ -237,26 +237,31 @@ void Syntax::print() const {
   to_string(COUT);
 }
 
-void Syntax::to_string(OStream & o, PrintFlags f) const {
+void Syntax::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
   if (!d.have_d()) { 
     if (have_entity())
-      o.printf("(%s)", ~escape(what_.to_string()));
+      o.printf("(%s)", ~escape(what_.to_string(g)));
     else if (!what_.defined()) 
       o.printf("()");
     else if (what_.empty()) 
       o.printf("\"\"");
     else
-      o.printf("%s", ~escape(what_.to_string()));
+      o.printf("%s", ~escape(what_.to_string(g)));
   } else {
     o.printf("(");
     char sep = ' ';
     if (what_ == "{...}" || what_ == "@")
       sep = '\n';
-    d->parts.to_string(o, f, sep);
-    d->flags.to_string(o, f);
+    d->parts.to_string(o, f, sep, g);
+    if (sep == '\n') {
+      o.put('\n');
+      for (unsigned i = 0; i < f.indent; ++i)
+        o.put(' ');
+    }
+    d->flags.to_string(o, f, g);
     o.printf(")");
     if (repl)
-      repl->to_string(o, f);
+      repl->to_string(o, f, g);
   }
 }
 
@@ -265,6 +270,7 @@ String Syntax::to_string() const {
   to_string(buf);
   return buf.freeze();
 }
+
 
 static const char * s_id(SourceStr str, String & res) {
   bool have_quotes = false;

@@ -41,18 +41,65 @@ namespace ast {
     SymbolNode * fun_symbols;
   };
 
-  class CompileWriter : public FStream, public CompileEnviron {
+  class CompileWriter : public CompileEnviron {
   public:
+    OStream * stream;
     enum TargetLang {ZLS, ZLE};
     TargetLang target_lang;
     const Fun * in_fun;
     unsigned indent_level;
     Deps * deps;
+    SyntaxGather * syntax_gather;
     bool for_compile_time() {return deps;}
-    CompileWriter(TargetLang tl = ZLS) : target_lang(tl), in_fun(), indent_level(0), deps() {}
+    CompileWriter(TargetLang tl = ZLS);
     void indent() {
       for (int i = 0; i != indent_level; ++i)
-        *this << ' ';
+        stream->put(' ');
+    }
+    int vprintf(const char *format, va_list ap) {
+      return stream->vprintf(format, ap);
+    }
+
+#ifdef __GNUC__
+    __attribute__ ((format (printf,2,3)))
+#endif
+      int printf(const char * format, ...)
+    {
+      va_list ap;
+      va_start(ap, format);
+      int res = vprintf(format, ap);
+      va_end(ap);
+      return res;
+    }
+    operator OStream & () {return *stream;}
+    void open(ParmStr str, const char * mode) {
+      FStream * f = new FStream();
+      f->open(str, mode);
+      stream = f;
+    }
+    void close() {
+      delete stream;
+    }
+
+    CompileWriter & operator<< (String str) {
+      *stream << str;
+      return *this;
+    }
+    CompileWriter & operator<< (const char * str) {
+      *stream << str;
+      return *this;
+    }
+    CompileWriter & operator<< (char c) {
+      *stream << c;
+      return *this;
+    }
+    CompileWriter & operator<< (int n) {
+      *stream << n;
+      return *this;
+    }
+    CompileWriter & operator<< (unsigned n) {
+      *stream << n;
+      return *this;
     }
   };
 
@@ -269,14 +316,8 @@ namespace ast {
   }
 
   static inline 
-  CompileWriter & operator<< (CompileWriter & o, const char * str) {
-    static_cast<FStream &>(o) << str;
-    return o;
-  }
-
-  static inline 
-  CompileWriter & operator<< (CompileWriter & o, String str) {
-    static_cast<FStream &>(o) << str;
+  CompileWriter & operator<< (CompileWriter & o, const SymbolName & name) {
+    name.to_string(o);
     return o;
   }
 
@@ -285,7 +326,9 @@ namespace ast {
     assert(!key.marks);
     if (key.ns && key.ns != DEFAULT_NS) {
       assert(o.target_lang == CompileWriter::ZLE);
-      o << "(w/inner " << key.name << " " << key.ns->name << ")";
+      o << "(w/inner ";
+      key.SymbolName::to_string(o);
+      o << ' ' << key.ns->name << ")";
     } else {
       o << key.name;
     }
@@ -340,6 +383,27 @@ namespace ast {
   static inline 
   CompileWriter & operator<< (CompileWriter & o, indent_) {
     o.indent();
+    return o;
+  }
+
+  static inline 
+  CompileWriter & operator<< (CompileWriter & o, const SymbolNode * n) {
+    if (n->alias()) {
+      const TopLevelSymbol * tl = dynamic_cast<const TopLevelSymbol *>(n->value);
+      SymbolKey uniq_key = tl->uniq_name();
+      uniq_key.ns = tl->tl_namespace();
+      o << indent << "(alias " << n->key << " " << uniq_key << ")\n";
+    } else {
+      AST * decl = const_cast<AST *>(dynamic_cast<const AST *>(n->value));
+      if (decl) {
+        o << decl;
+        //o << "\n";
+      } else {
+        o << indent << "#? " << n->key << " " 
+          << abi::__cxa_demangle(typeid(*n->value).name(), NULL, NULL, NULL) 
+          << "\n";
+      }
+    }
     return o;
   }
 

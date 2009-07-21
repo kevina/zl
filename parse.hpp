@@ -21,6 +21,7 @@ namespace ast {
 
 struct Syntax;
 struct Annon;
+struct SyntaxGather;
 
 bool pos_str(const SourceFile * source, const char * pos,
              const char * pre, OStream & o, const char * post,
@@ -101,7 +102,7 @@ struct Syntax;
 
 struct PrintFlags {
   unsigned indent;
-  PrintFlags() : indent(0) {}
+  PrintFlags(unsigned i = 0) : indent(i) {}
 };
 
 template <typename T>
@@ -129,7 +130,8 @@ struct Parts : public Vector<const Syntax *> {
   void append(const Parts & other) {
     append(other.begin(), other.end());
   }
-  void to_string(OStream & o, PrintFlags f = PrintFlags(), char sep = ' ') const;
+  void to_string(OStream & o, PrintFlags f = PrintFlags(), 
+                 char sep = ' ', SyntaxGather * = NULL) const;
   Parts() {}
   template <typename T> Parts(ChangeSrc<T> &, const Parts & o);
 };
@@ -154,7 +156,7 @@ struct Flags : public gc {
          i != e; ++i)
       insert(*i);
   }
-  void to_string(OStream & o, PrintFlags f = PrintFlags()) const;
+  void to_string(OStream & o, PrintFlags f = PrintFlags(), SyntaxGather * = 0) const;
   Flags() {}
   template <typename T> Flags(ChangeSrc<T> &, const Flags & o);
 };
@@ -514,7 +516,7 @@ struct Syntax : public gc {
   void set_src_from_parts() const; // const is a lie
 
   void print() const;
-  void to_string(OStream & o, PrintFlags f = PrintFlags()) const;
+  void to_string(OStream & o, PrintFlags f = PrintFlags(), SyntaxGather * = 0) const;
   String to_string() const;
   bool is_a(const char * n) const {return what_.name == n;}
   bool is_a(String n) const {return what_.name == n;}
