@@ -113,8 +113,6 @@ namespace ast {
     inline void add(const SymbolKey & k, TypeSymbol * t);
     inline void add_internal(const SymbolKey & k, TypeSymbol * t);
     inline void add_alias(const SymbolKey & k, TypeSymbol * t);
-    void add_name(const SymbolKey & n, TypeSymbol * t);
-    void add_name_internal(const SymbolKey & n, TypeSymbol * t);
   };
 
   static inline bool operator==(TypeParm lhs, TypeParm rhs) {
@@ -300,7 +298,6 @@ namespace ast {
 
   class SimpleType : public TypeInst, public TypeSymbol {
   public:
-    SimpleType(String n, TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {name = n; type_symbol = this;}
     SimpleType(TypeCategory * c = UNKNOWN_C)  : TypeInst(c) {type_symbol = this;}
     SimpleType(const Type * p) : TypeInst(p) {type_symbol = this;}
     unsigned num_parms() const {return 0;}
@@ -321,10 +318,10 @@ namespace ast {
   //}
 
   static inline void
-  add_internal_type(TypeSymbolTable sym, SimpleType * t)
+  add_internal_type(TypeSymbolTable sym, const char * name, SimpleType * t)
   {
     t->finalize();
-    sym.add_internal(t->name, t);
+    sym.add_internal(name, t);
   }
 
   static inline SimpleType *  
@@ -336,7 +333,7 @@ namespace ast {
       t->where = where;
       t->num = NPOS;
     }
-    sym.add_name(name, t);
+    sym.add(name, t);
     return t;
   }
 
@@ -494,7 +491,7 @@ namespace ast {
 
   class Void : public SimpleType {
   public:
-    Void(String n = "void") : SimpleType(n) {}
+    Void() {}
     unsigned size() const {return 0;}
     unsigned align() const {return 1;}
   };
@@ -516,10 +513,10 @@ namespace ast {
   public:
     enum Overflow {UNDEFINED, MODULE, SATURATED, EXCEPTION};
     enum Signed {UNSIGNED = 0, SIGNED = 1};
-    Int(String n, int64_t mn, uint64_t mx, Overflow o, unsigned sz)
-      : SimpleType(n, INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o), rank() {}
-    Int(String n, const Int * t) 
-      : SimpleType(n, INT_C), size_(t->size_), min(t->min), max(t->max), signed_(t->signed_), overflow(t->overflow), rank() {exact_type = t;}
+    Int(int64_t mn, uint64_t mx, Overflow o, unsigned sz)
+      : SimpleType(INT_C), size_(sz), min(mn), max(mx), signed_(mn < 0 ? SIGNED : UNSIGNED), overflow(o), rank() {}
+    Int(const Int * t) 
+      : SimpleType(INT_C), size_(t->size_), min(t->min), max(t->max), signed_(t->signed_), overflow(t->overflow), rank() {exact_type = t;}
     const Int * exact_type_;
     unsigned size_;
     int64_t  min;
@@ -535,21 +532,21 @@ namespace ast {
     unsigned align() const {return size_;}
   };
   
-  static Int signed_int(String n, unsigned sz) {
+  static Int signed_int(unsigned sz) {
     uint64_t sz0 = sz;
-    return Int(n, -(1<<(sz0*8-1)), (1<<(sz0*8-1))-1, Int::UNDEFINED, sz);
+    return Int(-(1<<(sz0*8-1)), (1<<(sz0*8-1))-1, Int::UNDEFINED, sz);
   }
-  static Int unsigned_int(String n, unsigned sz) {
+  static Int unsigned_int(unsigned sz) {
     uint64_t sz0 = sz;
-    return Int(n, 0, (1<<(sz0*8))-1, Int::MODULE, sz);
+    return Int(0, (1<<(sz0*8))-1, Int::MODULE, sz);
   }
 
-  static inline Int * new_signed_int(String n, unsigned sz) {
-    return new Int(signed_int(n, sz));
+  static inline Int * new_signed_int(unsigned sz) {
+    return new Int(signed_int(sz));
   }
   
-  static inline Int * new_unsigned_int(String n, unsigned sz) {
-    return new Int(unsigned_int(n, sz));
+  static inline Int * new_unsigned_int(unsigned sz) {
+    return new Int(unsigned_int(sz));
   }
  
   class Float : public SimpleType {
@@ -558,7 +555,7 @@ namespace ast {
     unsigned size_;
     unsigned size() const {return size_;}
     unsigned align() const {return size_;}
-    Float(String n, Precision p) : SimpleType(n, FLOAT_C),  size_(p == SINGLE ? 4 : DOUBLE ? 8 : 16) {}
+    Float(Precision p) : SimpleType(FLOAT_C),  size_(p == SINGLE ? 4 : DOUBLE ? 8 : 16) {}
   };
 
   //

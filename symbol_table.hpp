@@ -131,6 +131,7 @@ namespace ast {
   extern InnerNS * const OUTER_NS;
   extern InnerNS * const INNER_NS;
   extern InnerNS * const CAST_NS;
+  extern InnerNS * const SPECIAL_NS;
 
   struct SymbolKey : public SymbolName {
     const InnerNS * ns;
@@ -166,9 +167,9 @@ namespace ast {
   struct Symbol {
     typedef ::TypeInfo<Symbol> TypeInfo;
     const SymbolKey * key;
-    String name;
+    String name() const {return key->name;}
     mutable String uniq_name_;
-    Symbol() {}
+    Symbol() : key() {}
     String uniq_name() const {
       if (uniq_name_.defined())
         return uniq_name_;
@@ -183,7 +184,7 @@ namespace ast {
     virtual ~Symbol() {}
   protected:
     virtual void uniq_name(OStream & o) const {
-      o << name;
+      o << name();
     }
   };
 
@@ -201,9 +202,9 @@ namespace ast {
     using Symbol::uniq_name;
     void uniq_name(OStream & o) const {
       if (num == 0)
-        o << name;
+        o << name();
       else
-        o.printf("%s$$%u", ~name, num);
+        o.printf("%s$$%u", ~name(), num);
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
     void add_to_env(const SymbolKey & k, Environ &);
@@ -214,25 +215,26 @@ namespace ast {
   };
 
   struct FluidBinding : public TopLevelSymbol {
-    FluidBinding(String n, SymbolName r) : rebind(r) {name = n;}
+    FluidBinding(SymbolName r) : rebind(r) {}
     SymbolName rebind;
   };
   
   struct InnerNS : public Symbol {
-    InnerNS(String n) : Symbol() {name = n;}
   };
 
-  void add_inner_nss(SymbolTable & sym);
+  void add_inner_nss(Environ &);
 
   struct SymbolNode {
     SymbolKey key;
     Symbol * value;
     SymbolNode * next;
-    enum {IMPORTED = 1, ALIAS = 2, INTERNAL = 4};
+    enum {ALIAS = 1, IMPORTED = 2, DIFF_SCOPE = 4, INTERNAL = 8};
     unsigned flags;
-    bool imported() const {return flags & IMPORTED;}
     bool alias() const {return flags & ALIAS;}
+    bool imported() const {return flags & IMPORTED;}
+    bool diff_scope() const {return flags & DIFF_SCOPE;}
     bool internal() const {return flags & INTERNAL;}
+    bool should_skip() const {return flags & (IMPORTED | DIFF_SCOPE | INTERNAL);}
     void set_flags(unsigned f) {flags |= f;}
     void unset_flags(unsigned f) {flags &= ~f;}
     SymbolNode(const SymbolKey & k, Symbol * v, SymbolNode * n = NULL) 
@@ -305,7 +307,7 @@ namespace ast {
       //if (k.ns->name == "internal") 
       //printf ("--- %s\n", ~cur->key.to_string());
       //printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
-      if (k == cur->key && cmp(cur->key, cur->value) && (strategy != ThisScope || !cur->imported())) break;
+      if (k == cur->key && cmp(cur->key, cur->value) && (strategy != ThisScope || !cur->diff_scope())) break;
     }
     //printf("^^^ %d\n", cur == stop);
     if (cur == stop) {
@@ -530,8 +532,8 @@ namespace ast {
   unsigned existing_uniq_num(T * sym) {
     unsigned num;
     int pos;
-    int res = sscanf(~sym->name, "%*[^$]%*[$]%u%n", &num, &pos);
-    if (pos == sym->name.size()) return num;
+    int res = sscanf(~sym->name(), "%*[^$]%*[$]%u%n", &num, &pos);
+    if (pos == sym->name().size()) return num;
     else return NPOS;
   }
 
@@ -540,7 +542,7 @@ namespace ast {
     unsigned existing_num = existing_uniq_num(sym);
     if (existing_num != NPOS) {
       assert(existing_num >= num);
-      sym->uniq_name_ = sym->name;
+      sym->uniq_name_ = sym->name();
       sym->num = existing_num;
     } else {
       sym->num = num;
@@ -552,9 +554,9 @@ namespace ast {
     const T * t = NULL;
     // we need to compare the actual symbol name, since it may be
     // aliases as a different name
-    String name = sym->name;
+    String name = sym->name();
     for (; cur != stop; cur = cur->next) {
-      if (cur->value && cur->value->name == name && 
+      if (cur->value && cur->value->name() == name && 
           (t = dynamic_cast<const T *>(cur->value)) && t != sym && t->num != 0) 
         break;
     }

@@ -395,7 +395,7 @@ const Syntax * flatten(const Syntax * p) {
 const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs);
 
 struct Macro : public Declaration, public Symbol {
-  SymbolName real_name;
+  SymbolKey real_name;
   bool syntax_macro;
   static const Syntax * macro_call;
   static const Syntax * macro_def;
@@ -458,7 +458,6 @@ struct SimpleMacro : public Macro {
     def = syn = p;
     assert_num_args(3);
     real_name = expand_binding(p->arg(0), e);
-    name = real_name.name;
     parms = flatten(p->arg(1));
     free = p->flag("free");
     if (free)
@@ -489,7 +488,7 @@ struct SimpleMacro : public Macro {
   }
   void compile(CompileWriter & f, Phase phase) const {
     f << indent << "(" << (syntax_macro ? "smacro" : "macro") << " " 
-      << real_name << " ";
+      << key << " ";
     parms->to_string(f, PrintFlags(f.indent_level), f.syntax_gather);
     f << "\n";
     f << indent << "  ";
@@ -509,7 +508,6 @@ struct ProcMacro : public Macro {
     syn = p;
     assert_num_args(1, 2);
     real_name = expand_binding(p->arg(0), e);
-    name = real_name.name;
     fun = e.symbols.lookup<Fun>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
     fun->is_macro = true;
     def = fun->syn;
@@ -530,7 +528,7 @@ struct ProcMacro : public Macro {
   }
   void compile(CompileWriter & f, Phase phase) const {
     f << indent << "(" << (syntax_macro ? "make_syntax_macro" : "make_macro") 
-      << " " << uniq_name() << " " << fun->uniq_name() << ")\n";
+      << " " << key << " " << fun->uniq_name() << ")\n";
   }
 };
 
@@ -1441,7 +1439,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
 
 struct FluidBindingDecl : public Declaration, public FluidBinding {
   const char * what() const {return "fluid_binding";}
-  FluidBindingDecl(String n, SymbolName r) : FluidBinding(n, r) {}
+  FluidBindingDecl(SymbolName r) : FluidBinding(r) {}
   void finalize(FinalizeEnviron &) {};
   void compile_prep(CompileEnviron &) {};
   void compile(CompileWriter & f, Phase phase) const {
@@ -1455,7 +1453,7 @@ struct FluidBindingDecl : public Declaration, public FluidBinding {
 Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
   assert_num_args(p, 1);
   SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
-  FluidBindingDecl * b = new FluidBindingDecl(n.name, mark(n, new Mark(NULL)));
+  FluidBindingDecl * b = new FluidBindingDecl(mark(n, new Mark(NULL)));
   env.add(n, b);
   return empty_stmt();
 }

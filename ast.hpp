@@ -321,17 +321,34 @@ namespace ast {
     return o;
   }
 
+
+  void compile(CompileWriter & o, const SymbolKey & key, 
+               const InnerNS * default_ns = DEFAULT_NS);
+
   static inline 
-  CompileWriter & operator<< (CompileWriter & o, const SymbolKey & key) {
-    assert(!key.marks);
-    if (key.ns && key.ns != DEFAULT_NS) {
-      assert(o.target_lang == CompileWriter::ZLE);
-      o << "(w/inner ";
-      key.SymbolName::to_string(o);
-      o << ' ' << key.ns->name << ")";
-    } else {
-      o << key.name;
-    }
+  CompileWriter & operator<< (CompileWriter & o, const SymbolKey & k) {
+    compile(o, k);
+    return o;
+  }
+
+  static inline 
+  CompileWriter & operator<< (CompileWriter & o,  const SymbolKey * k) {
+    compile(o, *k);
+    return o;
+  }
+
+  struct KeyDefNS {
+    const SymbolKey & key;
+    const InnerNS * default_ns;
+    KeyDefNS(const SymbolKey & k, const InnerNS * n = DEFAULT_NS)
+      : key(k), default_ns(n) {}
+    KeyDefNS(const SymbolKey * k, const InnerNS * n = DEFAULT_NS)
+      : key(*k), default_ns(n) {}
+  };
+
+  static inline 
+  CompileWriter & operator<< (CompileWriter & o, KeyDefNS k) {
+    compile(o, k.key, k.default_ns);
     return o;
   }
 
@@ -386,24 +403,11 @@ namespace ast {
     return o;
   }
 
+  void compile(CompileWriter & o, const SymbolNode * n);
+
   static inline 
   CompileWriter & operator<< (CompileWriter & o, const SymbolNode * n) {
-    if (n->alias()) {
-      const TopLevelSymbol * tl = dynamic_cast<const TopLevelSymbol *>(n->value);
-      SymbolKey uniq_key = tl->uniq_name();
-      uniq_key.ns = tl->tl_namespace();
-      o << indent << "(alias " << n->key << " " << uniq_key << ")\n";
-    } else {
-      AST * decl = dynamic_cast<AST *>(n->value);
-      if (decl) {
-        o << decl;
-        //o << "\n";
-      } else {
-        o << indent << "#? " << n->key << " " 
-          << abi::__cxa_demangle(typeid(*n->value).name(), NULL, NULL, NULL) 
-          << "\n";
-      }
-    }
+    compile (o, n);
     return o;
   }
 
@@ -450,7 +454,7 @@ namespace ast {
     virtual const TopLevelVarDecl * top_level() const {return NULL;}
   protected:
     BasicVar() : name_p(), ct_value() {}
-    BasicVar(String n, const Type * t) : name_p(), type(t), ct_value() {name = n;}
+    BasicVar(const Type * t) : name_p(), type(t), ct_value() {}
     //protected:
     //friend VarSymbol * new_var_symbol(SymbolName n, Scope s);
   };
@@ -552,8 +556,8 @@ namespace ast {
   struct StructUnion : public TypeDeclaration, public SimpleType {
     enum Which {STRUCT, UNION} which;
     Vector<Member> members;
-    StructUnion(Which w, String n) 
-      : SimpleType(n), which(w), have_body(false), env(OTHER), 
+    StructUnion(Which w) 
+      : which(w), have_body(false), env(OTHER), 
         defined(false), size_(NPOS), align_(NPOS) {}
     bool have_body; // fixme: redundent, fixup "defined" and elinimate
     Environ env;
@@ -568,22 +572,22 @@ namespace ast {
   };
 
   struct Struct : public StructUnion {
-    Struct(String n) : StructUnion(STRUCT, n) {}
+    Struct() : StructUnion(STRUCT) {}
     const char * what() const {return "struct";}
     const char * tag() const {return "struct";}
     void finalize_hook();
   };
 
   struct Union : public StructUnion {
-    Union(String n) : StructUnion(UNION, n) {}
+    Union() : StructUnion(UNION) {}
     const char * what() const {return "union";}
     const char * tag() const {return "union";}
     void finalize_hook();
   };
 
   struct Enum : public TypeDeclaration, public Int {
-    Enum(String n) 
-      : Int(n, INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), defined(false) {}
+    Enum() 
+      : Int(INT_MIN, INT_MAX, Int::UNDEFINED, sizeof(int)), defined(false) {}
     const char * what() const {return "enum";}
     bool defined;
     const Syntax * body;

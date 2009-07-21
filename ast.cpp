@@ -33,6 +33,38 @@ namespace ast {
       syntax_gather = new SyntaxGather;
   }
 
+  void compile(CompileWriter & o, const SymbolKey & key, const InnerNS * default_ns)
+  {
+    assert(!key.marks);
+    if (key.ns && key.ns != default_ns) {
+      assert(o.target_lang == CompileWriter::ZLE);
+      o << "(w/inner ";
+      key.SymbolName::to_string(o);
+      o << ' ' << key.ns->name() << ")";
+    } else {
+      o << key.name;
+    }
+  }
+
+  void compile(CompileWriter & o, const SymbolNode * n) {
+    AST * decl = NULL;
+    if (n->alias()) {
+      const TopLevelSymbol * tl = dynamic_cast<const TopLevelSymbol *>(n->value);
+      if (!tl) goto unknown;
+      SymbolKey uniq_key = tl->uniq_name();
+      uniq_key.ns = tl->tl_namespace();
+      o << indent << "(alias " << n->key << " " << uniq_key << ")\n";
+    } else if ((decl = dynamic_cast<AST *>(n->value))) {
+      o << decl;
+      //o << "\n";
+    } else {
+    unknown:
+      o << indent << "#? " << n->key << " " 
+        << abi::__cxa_demangle(typeid(*n->value).name(), NULL, NULL, NULL) 
+        << "\n";
+    }
+  }
+
   struct EmptyStmt : public StmtLeaf {
     EmptyStmt() {}
     const char * what() const {return "empty";}
@@ -159,7 +191,9 @@ namespace ast {
   //
 
   void Symbol::add_to_env(const SymbolKey & k, Environ & env) {
-    env.symbols.add(k, this);
+    SymbolNode * n = env.symbols.add(k, this);
+    assert(!key);
+    key = &n->key;
     if (env.special()) return;
     make_unique(env.symbols.front);
   }
@@ -170,6 +204,8 @@ namespace ast {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
     }
     SymbolNode * local = env.symbols.add(k, this);
+    assert(!key);
+    key = &local->key;
     if (env.special()) return;
     local->set_flags(SymbolNode::ALIAS);
     if (num == NPOS)
@@ -247,9 +283,9 @@ namespace ast {
 
   struct NormalLabel : public Label {
     mutable unsigned num;
-    NormalLabel(String n) : num() {name = n;}
+    NormalLabel() : num() {}
     void uniq_name(OStream & o) const {
-      o.printf("%s$$%u", ~name, num);
+      o.printf("%s$$%u", ~name(), num);
     }
     void add_to_env(const SymbolKey & k, Environ &);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
@@ -258,16 +294,17 @@ namespace ast {
   };
 
   void NormalLabel::add_to_env(const SymbolKey & k, Environ & env) {
-    env.fun_labels.add(k, this);
+    SymbolNode * n = env.fun_labels.add(k, this);
+    key = &n->key;
     make_unique(*env.fun_labels.front);
   }
 
   struct LocalLabel : public Label {
     mutable unsigned num;
-    LocalLabel(String n) : num() {name = n;}
+    LocalLabel() : num() {}
     using Label::uniq_name;
     void uniq_name(OStream & o) const {
-      o.printf("%s$%u", ~name, num);
+      o.printf("%s$%u", ~name(), num);
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
       assign_uniq_num<LocalLabel>(this, self->next, stop);
@@ -279,7 +316,7 @@ namespace ast {
     SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
     Label * label = env.symbols.find<Label>(n);
     if (!label) {
-      label = new NormalLabel(n.name);
+      label = new NormalLabel;
       env.add(SymbolKey(n, LABEL_NS), label);
     }
     label->syn = p;
@@ -294,7 +331,7 @@ namespace ast {
       syn = p;
       assert_num_args(1);
       SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
-      label = new LocalLabel(n.name);
+      label = new LocalLabel;
       env.add(n, label);
       return this;
     }
@@ -554,13 +591,13 @@ namespace ast {
 
   struct OtherVar : public BasicVar {
     OtherVar() : num() {}
-    OtherVar(String n, const Type * t, bool mangle) : BasicVar(n, t), num(mangle ? NPOS : 0) {}
+    OtherVar(const Type * t, bool mangle) : BasicVar(t), num(mangle ? NPOS : 0) {}
     mutable unsigned num; // 0 to avoid renaming, NPOS needs uniq num
     void uniq_name(OStream & o) const {
       if (num == 0)
-        o << name;
+        o << name();
       else
-        o.printf("%s$%u", ~name, num);
+        o.printf("%s$%u", ~name(), num);
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
       if (num == NPOS)
@@ -570,7 +607,7 @@ namespace ast {
 
   static OtherVar * new_other_var(SymbolName n, const Type * t) {
     bool mangle = n.marks;
-    return new OtherVar(n.name, t, mangle);
+    return new OtherVar(t, mangle);
   }
 
   struct Var : virtual public VarDecl {
@@ -640,7 +677,7 @@ namespace ast {
         f << constructor;
     }
     void uniq_name(OStream & o) const {
-      o.printf("%s$%u", ~name, num);
+      o.printf("%s$%u", ~name(), num);
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
       assign_uniq_num<AutoVar>(this, self->next, stop);
@@ -689,7 +726,6 @@ namespace ast {
       res = empty_stmt();
     }
     var->syn = p;
-    var->name = name.name;
     var->name_p = name_p;
     var->type = parse_type(p->arg(1), env);
     var->storage_class = storage_class;
@@ -1501,12 +1537,17 @@ namespace ast {
       f << "(module " << uniq_name() << ")\n";
     } else {
       f << "(module " << uniq_name() << "\n";
+      Vector<SymbolNode *> syms2;
       for (SymbolNode * cur = syms; cur; cur = cur->next) {
-        if (cur->key.marks) {
-          // skip
-        } else {
-          f << adj_indent(2) << cur;
-        }
+        if (!(cur->key.marks || cur->should_skip()))
+          syms2.push_back(cur);
+      }
+      for (Vector<SymbolNode *>::const_reverse_iterator 
+             i = syms2.rbegin(), e = syms2.rend();
+           i != e; ++i)
+      {
+        f << adj_indent(2) << *i;
+      }
         //} else if (const TopLevelSymbol * tl = dynamic_cast<const TopLevelSymbol *>(cur->value)) {
         //  SymbolKey uniq_key = tl->uniq_name();
         //  uniq_key.ns = tl->tl_namespace();
@@ -1514,7 +1555,6 @@ namespace ast {
         //} else {
         //  f << "  #?" << cur->key << "\n";
         //}
-      }
       f << ")\n";
     }
   }
@@ -1527,7 +1567,6 @@ namespace ast {
       m = env0.symbols.lookup<Module>(p->arg(0), OUTER_NS);
     } else {
       m = new Module();
-      m->name = n.name;
       m->where = env0.where;
       m->num = env0.where ? NPOS : 0;
       env0.add(SymbolKey(n, OUTER_NS), m);
@@ -1624,6 +1663,17 @@ namespace ast {
     return empty_stmt();
   }
 
+  struct Import : public Symbol, public Declaration {
+    const Module * from;
+    Import(const Module * f) : from(f) {}
+    const char * what() const {return "import";}
+    void compile(CompileWriter & f, Phase phase) const {
+      assert(f.target_lang = CompileWriter::ZLE);
+      f << indent << "(" << "import " << from->uniq_name() << ")\n";
+    }
+    const InnerNS * tl_namespace() const {return SPECIAL_NS;}
+  };
+
   void import_module(const Module * m, Environ & env, const GatherMarks & gather, bool same_scope = false) {
     SymbolList l;
     for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
@@ -1635,10 +1685,13 @@ namespace ast {
         k.marks = mark(k.marks, *i);
       SymbolNode * r = l.push_back(k, cur->value);
       r->flags = cur->flags;
-      if (!same_scope) 
-        r->set_flags(SymbolNode::IMPORTED);
+      if (same_scope) 
+        r->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED);
+      else
+        r->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED | SymbolNode::DIFF_SCOPE);
     }
     env.symbols.splice(l.first, l.last);
+    env.add(SymbolKey("", SPECIAL_NS), new Import(m));
   }
 
   Stmt * parse_import(const Syntax * p, Environ & env) {
@@ -1671,7 +1724,7 @@ namespace ast {
 
   struct InnerNSDecl : public Declaration, public InnerNS {
     const char * what() const {return "inner_ns";}
-    InnerNSDecl(String n) : InnerNS(n) {} 
+    InnerNSDecl() {}
     void finalize(FinalizeEnviron &) {};
     void compile_prep(CompileEnviron &) {};
     void compile(CompileWriter & f, Phase phase) const {
@@ -1685,7 +1738,7 @@ namespace ast {
   Stmt * parse_make_inner_ns(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     SymbolName n = *p->arg(0);
-    InnerNS * ns = new InnerNSDecl(n.name);
+    InnerNS * ns = new InnerNSDecl;
     env.add(SymbolKey(n, INNER_NS), ns);
     return empty_stmt();
   }
@@ -1778,7 +1831,7 @@ namespace ast {
     assert_num_args(p, 1);
     Module * m = dynamic_cast<Module *>(env.where);
     //printf("FINALIZE USER TYPE %s\n", ~m->name.to_string());
-    Type * t0 = env.types.inst(SymbolKey(m->name));
+    Type * t0 = env.types.inst(SymbolKey(m->name()));
     UserType * s = dynamic_cast<UserType *>(t0);
     s->module = m;
     s->type = parse_type(p->arg(0), env);
@@ -1794,7 +1847,8 @@ namespace ast {
     const Type * to;
     const Symbol * cast_macro;
     void compile(CompileWriter & cw, Phase) const {
-      cw << indent << "(user_cast " << uniq_name() << " " << from << " " << to << " " << cast_macro->uniq_name() << ")\n";
+      cw << indent << "(user_cast " << KeyDefNS(key, CAST_NS) << " " 
+         << from << " " << to << " " << cast_macro->key << ")\n";
     }
   };
 
@@ -1819,16 +1873,15 @@ namespace ast {
     // FIXME: Add check that we are in a user_type
     Module * m = dynamic_cast<Module *>(env.where);
     UserType * parent_t = dynamic_cast<UserType *>(env.types.inst(parent));
-    UserType * child_t  = dynamic_cast<UserType *>(env.types.inst(SymbolKey(m->name)));
+    UserType * child_t  = dynamic_cast<UserType *>(env.types.inst(SymbolKey(m->name())));
     UserCast * user_cast = new UserCast;
-    user_cast->name = "up_cast";
     user_cast->from = child_t;
     user_cast->to = parent_t;
     user_cast->cast_macro = env.symbols.lookup<Symbol>(up_cast);
     assert(!child_t->parent);
     child_t->parent = parent_t;
-    child_t->category = new TypeCategory(child_t->name, parent_t->category);
-    env.symbols.add(SymbolKey("up_cast", CAST_NS), user_cast);
+    child_t->category = new TypeCategory(child_t->name(), parent_t->category);
+    env.add(SymbolKey("up_cast", CAST_NS), user_cast);
     m->syms = new SymbolNode(SymbolKey("up_cast", CAST_NS), user_cast, m->syms);
     return empty_stmt();
   }
@@ -2024,7 +2077,6 @@ namespace ast {
     } else {
     foo:
       f = new Fun;
-      f->name = name.name;
       f->storage_class = get_storage_class(p);
       bool mangle = name.marks || env.where || f->storage_class == SC_STATIC;
       f->num = mangle ? NPOS : 0;
@@ -2276,8 +2328,8 @@ namespace ast {
       decl = dynamic_cast<StructUnion *>(t0);
     } else {
       SymbolKey n = expand_binding(name, TAG_NS, env0);
-      if (which == Struct::STRUCT) decl = new Struct(n);
-      else                         decl = new Union(n);
+      if (which == Struct::STRUCT) decl = new Struct;
+      else                         decl = new Union;
       // fixme: add_simple_type calls finalize() which it probably
       // should't do since we do explicitly latter
       add_simple_type(env0.types, n, decl, env0.where);
@@ -2370,7 +2422,7 @@ namespace ast {
     if (env.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
       decl = dynamic_cast<Enum *>(env.types.inst(SymbolKey(name, TAG_NS)));
     } else {
-      decl = new Enum(name.name);
+      decl = new Enum;
       decl->exact_type = env.types.inst("int")->exact_type;
       // fixme: add_simple_type calls finalize() which it probably
       // should't do since we do explicitly latter
@@ -2932,7 +2984,7 @@ namespace ast {
     for (SymbolNode * cur = syms; cur; cur = cur->next) {
       const Symbol * sym = cur->value;
 
-      if (cur->internal())
+      if (cur->should_skip())
         continue;
       if (cur->alias()) {
         if (cw.target_lang != CompileWriter::ZLE)

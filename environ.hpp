@@ -86,7 +86,7 @@ namespace ast {
           top_level_symbols.front = &symbols.front;
           type_relation = new_c_type_relation(); // FIXME HACK
           create_c_types(types); // FIXME Another HACK
-          add_inner_nss(symbols);
+          add_inner_nss(*this);
         }
         frame = new Frame();
       }
@@ -115,7 +115,8 @@ namespace ast {
     }
 
     void add_internal(const SymbolKey & k, Symbol * sym) {
-      symbols.add(k, sym, SymbolNode::INTERNAL);
+      SymbolNode * n = symbols.add(k, sym, SymbolNode::INTERNAL);
+      sym->key = &n->key;
     }
 
     void add_alias(const SymbolKey & k, Symbol * sym) {
