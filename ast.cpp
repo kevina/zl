@@ -158,13 +158,13 @@ namespace ast {
   //
   //
 
-  void Symbol::add_to_env(const SymbolKey & k, Environ & env) const {
+  void Symbol::add_to_env(const SymbolKey & k, Environ & env) {
     env.symbols.add(k, this);
     if (env.special()) return;
     make_unique(env.symbols.front);
   }
 
-  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) const {
+  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) {
     //assert(!env.symbols.exists_this_scope(k));
     if (env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
@@ -251,13 +251,13 @@ namespace ast {
     void uniq_name(OStream & o) const {
       o.printf("%s$$%u", ~name, num);
     }
-    void add_to_env(const SymbolKey & k, Environ &) const;
+    void add_to_env(const SymbolKey & k, Environ &);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
       assign_uniq_num<NormalLabel>(this, self->next, stop);
     }
   };
 
-  void NormalLabel::add_to_env(const SymbolKey & k, Environ & env) const {
+  void NormalLabel::add_to_env(const SymbolKey & k, Environ & env) {
     env.fun_labels.add(k, this);
     make_unique(*env.fun_labels.front);
   }
@@ -265,6 +265,7 @@ namespace ast {
   struct LocalLabel : public Label {
     mutable unsigned num;
     LocalLabel(String n) : num() {name = n;}
+    using Label::uniq_name;
     void uniq_name(OStream & o) const {
       o.printf("%s$%u", ~name, num);
     }
@@ -276,7 +277,7 @@ namespace ast {
   Stmt * parse_label(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     SymbolKey n = expand_binding(p->arg(0), LABEL_NS, env);
-    Label * label = const_cast<Label *>(env.symbols.find<Label>(n));
+    Label * label = env.symbols.find<Label>(n);
     if (!label) {
       label = new NormalLabel(n.name);
       env.add(SymbolKey(n, LABEL_NS), label);
@@ -288,7 +289,7 @@ namespace ast {
   struct LocalLabelDecl : public Stmt {
     LocalLabelDecl() {}
     const char * what() const {return "local_label";}
-    const LocalLabel * label;
+    LocalLabel * label;
     LocalLabelDecl * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       assert_num_args(1);
@@ -300,7 +301,7 @@ namespace ast {
     void finalize(FinalizeEnviron & env) {}
     void compile_prep(CompileEnviron & env) {}
     void compile(CompileWriter & o) {
-      o << indent << "(local_label " << label << ")\n";
+      o << indent << "(local_label " << label->uniq_name() << ")\n";
     }
   };
 
@@ -918,7 +919,7 @@ namespace ast {
       }
       exp = exp->to_effective(env);
       // FIXME: add check for register qualifier
-      const TypeSymbol * t = env.types.find(".ptr");
+      TypeSymbol * t = env.types.find(".ptr");
       Vector<TypeParm> p;
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
@@ -943,7 +944,7 @@ namespace ast {
         throw error(exp->syn, "Can not be used as lvalue");
       }
       // FIXME: add check for register qualifier
-      const TypeSymbol * t = env.types.find(".ref");
+      TypeSymbol * t = env.types.find(".ref");
       Vector<TypeParm> p;
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
@@ -1523,7 +1524,7 @@ namespace ast {
     SymbolName n = *p->arg(0);
     Module * m = NULL;
     if (env0.symbols.exists_this_scope(SymbolKey(n, OUTER_NS))) {
-      m = const_cast<Module *>(env0.symbols.lookup<Module>(p->arg(0), OUTER_NS));
+      m = env0.symbols.lookup<Module>(p->arg(0), OUTER_NS);
     } else {
       m = new Module();
       m->name = n.name;
@@ -1684,7 +1685,7 @@ namespace ast {
   Stmt * parse_make_inner_ns(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     SymbolName n = *p->arg(0);
-    const InnerNS * ns = new InnerNSDecl(n.name);
+    InnerNS * ns = new InnerNSDecl(n.name);
     env.add(SymbolKey(n, INNER_NS), ns);
     return empty_stmt();
   }
@@ -1733,8 +1734,8 @@ namespace ast {
     SymbolName name = *p->arg(0);
     UserType * s;
     if (env.symbols.exists_this_scope(SymbolKey(name))) {
-      const Type * t0 = env.types.inst(SymbolKey(name));
-      s = const_cast<UserType *>(dynamic_cast<const UserType *>(t0));
+      Type * t0 = env.types.inst(SymbolKey(name));
+      s = dynamic_cast<UserType *>(t0);
       //sym = s->type_symbol;
     } else {
       s = new UserType;
@@ -1777,8 +1778,8 @@ namespace ast {
     assert_num_args(p, 1);
     Module * m = dynamic_cast<Module *>(env.where);
     //printf("FINALIZE USER TYPE %s\n", ~m->name.to_string());
-    const Type * t0 = env.types.inst(SymbolKey(m->name));
-    UserType * s = const_cast<UserType *>(dynamic_cast<const UserType *>(t0));
+    Type * t0 = env.types.inst(SymbolKey(m->name));
+    UserType * s = dynamic_cast<UserType *>(t0);
     s->module = m;
     s->type = parse_type(p->arg(0), env);
     s->defined = true;
@@ -1817,10 +1818,8 @@ namespace ast {
 
     // FIXME: Add check that we are in a user_type
     Module * m = dynamic_cast<Module *>(env.where);
-    UserType * parent_t = const_cast<UserType *>
-      (dynamic_cast<const UserType *>(env.types.inst(parent)));
-    UserType * child_t  = const_cast<UserType *>
-      (dynamic_cast<const UserType *>(env.types.inst(SymbolKey(m->name))));
+    UserType * parent_t = dynamic_cast<UserType *>(env.types.inst(parent));
+    UserType * child_t  = dynamic_cast<UserType *>(env.types.inst(SymbolKey(m->name)));
     UserCast * user_cast = new UserCast;
     user_cast->name = "up_cast";
     user_cast->from = child_t;
@@ -2016,7 +2015,7 @@ namespace ast {
     bool previous_declared = env.symbols.exists_this_scope(name);
     Fun * f = NULL;
     if (previous_declared) {
-      f = const_cast<Fun *>(env.symbols.find<Fun>(name));
+      f = env.symbols.find<Fun>(name);
       if (f->body) goto foo; // FIXME: This is a hack, to allow
                              // functions to shadow an imported
                              // function.
@@ -2273,8 +2272,8 @@ namespace ast {
     const Syntax * name = p->arg(0);
     StructUnion * decl;
     if (env0.symbols.exists_this_scope(name, TAG_NS)) {
-      const Type * t0 = env0.types.inst(name, TAG_NS);
-      decl = const_cast<StructUnion *>(dynamic_cast<const StructUnion *>(t0));
+      Type * t0 = env0.types.inst(name, TAG_NS);
+      decl = dynamic_cast<StructUnion *>(t0);
     } else {
       SymbolKey n = expand_binding(name, TAG_NS, env0);
       if (which == Struct::STRUCT) decl = new Struct(n);
@@ -2369,8 +2368,7 @@ namespace ast {
     SymbolName name = *p->arg(0);
     Enum * decl;
     if (env.symbols.exists_this_scope(SymbolKey(name, TAG_NS))) {
-      decl = (const_cast<Enum *>(dynamic_cast<const Enum *>
-                                (env.types.inst(SymbolKey(name, TAG_NS)))));
+      decl = dynamic_cast<Enum *>(env.types.inst(SymbolKey(name, TAG_NS)));
     } else {
       decl = new Enum(name.name);
       decl->exact_type = env.types.inst("int")->exact_type;

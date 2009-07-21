@@ -124,13 +124,13 @@ namespace ast {
   }
 
   struct InnerNS;
-  extern const InnerNS * const DEFAULT_NS;
-  extern const InnerNS * const TAG_NS;
-  extern const InnerNS * const LABEL_NS;
-  extern const InnerNS * const SYNTAX_NS;
-  extern const InnerNS * const OUTER_NS;
-  extern const InnerNS * const INNER_NS;
-  extern const InnerNS * const CAST_NS;
+  extern InnerNS * const DEFAULT_NS;
+  extern InnerNS * const TAG_NS;
+  extern InnerNS * const LABEL_NS;
+  extern InnerNS * const SYNTAX_NS;
+  extern InnerNS * const OUTER_NS;
+  extern InnerNS * const INNER_NS;
+  extern InnerNS * const CAST_NS;
 
   struct SymbolKey : public SymbolName {
     const InnerNS * ns;
@@ -178,7 +178,7 @@ namespace ast {
       return uniq_name_;
     }
     virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
-    virtual void add_to_env(const SymbolKey & k, Environ &) const;
+    virtual void add_to_env(const SymbolKey & k, Environ &);
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
   protected:
@@ -206,7 +206,7 @@ namespace ast {
         o.printf("%s$$%u", ~name, num);
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
-    void add_to_env(const SymbolKey & k, Environ &) const;
+    void add_to_env(const SymbolKey & k, Environ &);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s);
     virtual const Syntax * get_prop(SymbolName n) const;
@@ -226,7 +226,7 @@ namespace ast {
 
   struct SymbolNode {
     SymbolKey key;
-    const Symbol * value;
+    Symbol * value;
     SymbolNode * next;
     enum {IMPORTED = 1, ALIAS = 2, INTERNAL = 4};
     unsigned flags;
@@ -235,9 +235,9 @@ namespace ast {
     bool internal() const {return flags & INTERNAL;}
     void set_flags(unsigned f) {flags |= f;}
     void unset_flags(unsigned f) {flags &= ~f;}
-    SymbolNode(const SymbolKey & k, const Symbol * v, SymbolNode * n = NULL) 
+    SymbolNode(const SymbolKey & k, Symbol * v, SymbolNode * n = NULL) 
       : key(k), value(v), next(n), flags() {}
-    SymbolNode(const SymbolKey & k, const Symbol * v, unsigned f, SymbolNode * n = NULL) 
+    SymbolNode(const SymbolKey & k, Symbol * v, unsigned f, SymbolNode * n = NULL) 
       : key(k), value(v), next(n), flags(f) {}
     SymbolNode(const SymbolNode & n, SymbolNode * nx) 
       : key(n.key), value(n.value), next(nx), flags(n.flags) {}
@@ -364,16 +364,16 @@ namespace ast {
   }
 
   template <typename T, typename Gather, typename ExtraCmp>
-  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
+  T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop,
                         Strategy strategy, Gather & gather, ExtraCmp & cmp) 
   {
     const SymbolNode * s = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s) return NULL;
-    return dynamic_cast<const T *>(s->value);
+    return dynamic_cast<T *>(s->value);
   }
 
   template <typename T, typename Gather, typename ExtraCmp>
-  const T * lookup_symbol(SymbolKey k, const SourceStr & str,
+  T * lookup_symbol(SymbolKey k, const SourceStr & str,
                           const SymbolNode * start, const SymbolNode * stop,
                           Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
@@ -384,7 +384,7 @@ namespace ast {
       throw error(str, "Unknown Identifier \"%s\"", ~k.to_string());
     }
 
-    const T * s2 = dynamic_cast<const T *>(s1->value);
+    T * s2 = dynamic_cast<T *>(s1->value);
     if (!s2) {
       //fprintf(stderr, "Identifier \"%s\" is of the wrong type.", ~k.name); abort();
       //throw error(str, "Identifier \"%s\" is of the wrong type.", ~k.name);
@@ -399,7 +399,7 @@ namespace ast {
 
   template <typename T>
   static inline
-  const T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
+  T * find_symbol(SymbolKey k, const SymbolNode * start, const SymbolNode * stop = NULL,
                         Strategy strategy = NormalStrategy) 
   {
     NoOpGather gather; 
@@ -409,7 +409,7 @@ namespace ast {
 
   template <typename T>
   static inline
-  const T * lookup_symbol(SymbolKey k, const SourceStr & str,
+  T * lookup_symbol(SymbolKey k, const SourceStr & str,
                           const SymbolNode * start, const SymbolNode * stop = NULL,
                           Strategy strategy = NormalStrategy)
   {
@@ -435,7 +435,7 @@ namespace ast {
       }
       return n;
     }
-    SymbolNode * push_back(const SymbolKey & k, const Symbol * sym) {
+    SymbolNode * push_back(const SymbolKey & k, Symbol * sym) {
       return push_back_i(new SymbolNode(k, sym));
     }
     SymbolNode * push_back(const SymbolNode & n) {
@@ -463,7 +463,7 @@ namespace ast {
       return find_symbol<Symbol>(k, *front);
     }
     template <typename T>
-    SymbolNode * add(const SymbolKey & k, const T * sym, unsigned flags = 0) {
+    SymbolNode * add(const SymbolKey & k, T * sym, unsigned flags = 0) {
       //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
       *front = new SymbolNode(k, sym, flags, *front);
       return *front;
@@ -492,17 +492,17 @@ namespace ast {
       return SymbolTable(placeholder, front);
     }
     template <typename T> 
-    const T * find(const SymbolKey & k, Strategy ms = NormalStrategy) const {
+    T * find(const SymbolKey & k, Strategy ms = NormalStrategy) const {
       return find_symbol<T>(k, front, NULL, ms);
     }
     template <typename T> 
-    const T * lookup(const SymbolKey & k, const SourceStr & str, Strategy ms = NormalStrategy) const {
+    T * lookup(const SymbolKey & k, const SourceStr & str, Strategy ms = NormalStrategy) const {
       return lookup_symbol<T>(k, str, front, NULL, ms);
     }
     template <typename T> 
-    inline const T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
+    inline T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     template <typename T> 
-    inline const T * find(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
+    inline T * find(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) const {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }
@@ -511,12 +511,12 @@ namespace ast {
     }
     inline bool exists(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     inline bool exists_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
-    SymbolNode * add(const SymbolKey & k, const Symbol * sym, unsigned flags = 0) {
+    SymbolNode * add(const SymbolKey & k, Symbol * sym, unsigned flags = 0) {
       //if (exists_this_scope(k)) return; // FIXME: throw error
       front = new SymbolNode(k, sym, flags, front);
       return front;
     }
-    SymbolNode * add_internal(const SymbolKey & k, const Symbol * sym) {
+    SymbolNode * add_internal(const SymbolKey & k, Symbol * sym) {
       return add(k, sym, SymbolNode::INTERNAL);
     }
     void splice(SymbolNode * first, SymbolNode * last) {

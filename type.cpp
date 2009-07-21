@@ -43,13 +43,13 @@ namespace ast {
   }
 
   Type * TypeSymbolTable::inst(SymbolKey n, Vector<TypeParm> & p) {
-    const TypeSymbol * s = find(n);
+    TypeSymbol * s = find(n);
     if (!s) return NULL;
     return s->inst(p);
   }
 
   Type * TypeSymbolTable::inst(const Syntax * n, const InnerNS * ns, Vector<TypeParm> & p) {
-    const TypeSymbol * s = env->symbols.find<TypeSymbol>(n, ns);
+    TypeSymbol * s = env->symbols.find<TypeSymbol>(n, ns);
     if (!s) return NULL;
     return s->inst(p);
   }
@@ -258,7 +258,7 @@ namespace ast {
     }
   }
 
-  Type * TypeOfSymbol::inst(Vector<TypeParm> & d) const {
+  Type * TypeOfSymbol::inst(Vector<TypeParm> & d) {
     assert(d.size() == 1);
     assert(d[0].what == TypeParm::EXP);
     TypeOf * t = new TypeOf(d[0].as_exp);
@@ -298,7 +298,7 @@ namespace ast {
       t->finalize();
       return t;
     }
-    const TypeSymbol * t = types.find(name, ns);
+    TypeSymbol * t = types.find(name, ns);
     if (!t) {
       if (tag.empty()) {
         throw error(p, "Unknown type: %s", ~name_str);
@@ -380,7 +380,7 @@ namespace ast {
     }
   }
   
-  Function * FunctionSymbol::inst(TypeSymbolTable types, Fun * f) const {
+  Function * FunctionSymbol::inst(TypeSymbolTable types, Fun * f) {
     Vector<TypeParm> p;
     p.clear();
     p.push_back(TypeParm(TypeParm::TUPLE, f->parms));

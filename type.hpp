@@ -81,8 +81,8 @@ namespace ast {
   struct TypeSymbolTable {
     Environ * env;
     TypeSymbolTable(Environ * s) : env(s) {}
-    inline const TypeSymbol * find(const SymbolKey & k);
-    inline const TypeSymbol * find(const Syntax * p, const InnerNS * ns);
+    inline TypeSymbol * find(const SymbolKey & k);
+    inline TypeSymbol * find(const Syntax * p, const InnerNS * ns);
     Type * inst(SymbolKey n, Vector<TypeParm> &);
     Type * inst(const Syntax * n, const InnerNS * ns, Vector<TypeParm> &);
     Type * inst(SymbolKey n) {
@@ -110,9 +110,9 @@ namespace ast {
       return inst(n, parms);
     }
     Type * ct_const(const Type * t);
-    inline void add(const SymbolKey & k, const TypeSymbol * t);
-    inline void add_internal(const SymbolKey & k, const TypeSymbol * t);
-    inline void add_alias(const SymbolKey & k, const TypeSymbol * t);
+    inline void add(const SymbolKey & k, TypeSymbol * t);
+    inline void add_internal(const SymbolKey & k, TypeSymbol * t);
+    inline void add_alias(const SymbolKey & k, TypeSymbol * t);
     void add_name(const SymbolKey & n, TypeSymbol * t);
     void add_name_internal(const SymbolKey & n, TypeSymbol * t);
   };
@@ -215,7 +215,7 @@ namespace ast {
     const PrintInst * print_inst;
     TypeSymbol() 
       : TopLevelSymbol(), print_inst(zl_print_inst) {}
-    virtual Type * inst(Vector<TypeParm> & d) const = 0;
+    virtual Type * inst(Vector<TypeParm> & d) = 0;
     //virtual Type * inst(const Syntax *) const = 0;
     virtual unsigned required_parms() const = 0;
     virtual TypeParm::What parmt(unsigned i) const = 0; // return TypeParm::NONE if off end
@@ -234,7 +234,7 @@ namespace ast {
   public:
     typedef ::TypeInfo<TypeInst> TypeInfo;
     TypeCategory * category;
-    const TypeSymbol * type_symbol;
+    TypeSymbol * type_symbol;
     virtual unsigned size() const = 0;
     virtual unsigned align() const = 0;
     virtual unsigned storage_size() const {return size();}
@@ -305,9 +305,9 @@ namespace ast {
     SimpleType(const Type * p) : TypeInst(p) {type_symbol = this;}
     unsigned num_parms() const {return 0;}
     TypeParm parm(unsigned i) const {abort();}
-    SimpleType * inst(Vector<TypeParm> & d) const {
+    SimpleType * inst(Vector<TypeParm> & d) {
       assert(d.empty());
-      return const_cast<SimpleType *>(this);
+      return this;
     }
     unsigned required_parms() const {return 0;}
     TypeParm::What parmt(unsigned i) const {return TypeParm::NONE;}
@@ -382,7 +382,7 @@ namespace ast {
   class ParmTypeSymbol : public TypeSymbol {
   public:
     mutable InstCache inst_cache;
-    ParmTypeInst * inst(Vector<TypeParm> & d) const {
+    ParmTypeInst * inst(Vector<TypeParm> & d) {
       ParmTypeInst * r = inst_cache.find(d);
       if (r) return r;
       ParmTypeInst * res = inst_p(d);
@@ -465,7 +465,7 @@ namespace ast {
   public:
     unsigned required_parms() const {return 0;}
     virtual TypeParm::What parmt(unsigned i) const {return TypeParm::TYPE;}
-    virtual Type * inst(Vector<TypeParm> & p) const {
+    virtual Type * inst(Vector<TypeParm> & p) {
       Tuple * r = new Tuple();
       for (int i = 0; i != p.size(); ++i) {
 	if (p[i].what == TypeParm::DOTS) {
@@ -724,7 +724,7 @@ namespace ast {
   class TypeOfSymbol : public TypeSymbol {
   public:
     TypeOfSymbol() {}
-    Type * inst(Vector<TypeParm> & d) const;
+    Type * inst(Vector<TypeParm> & d);
     unsigned required_parms() const {return 1;}
     TypeParm::What parmt(unsigned i) const {return i == 0 ? TypeParm::EXP : TypeParm::NONE;}
   };
@@ -799,7 +799,7 @@ namespace ast {
       return new Function(static_cast<const Tuple *>(p[0].as_type), p[1].as_type);
     }
     using ParmTypeSymbol::inst;
-    Function * inst(TypeSymbolTable types, Fun * f) const;
+    Function * inst(TypeSymbolTable types, Fun * f);
   };
 
 

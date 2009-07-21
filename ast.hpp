@@ -394,7 +394,7 @@ namespace ast {
       uniq_key.ns = tl->tl_namespace();
       o << indent << "(alias " << n->key << " " << uniq_key << ")\n";
     } else {
-      AST * decl = const_cast<AST *>(dynamic_cast<const AST *>(n->value));
+      AST * decl = dynamic_cast<AST *>(n->value);
       if (decl) {
         o << decl;
         //o << "\n";
@@ -673,36 +673,36 @@ namespace ast {
   //
 
   template <typename T, typename Gather, typename ExtraCmp>
-  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
-                          const SymbolNode * start, const SymbolNode * stop,
-                          Strategy strategy, Gather & gather, ExtraCmp & cmp);
+  T * lookup_symbol(const Syntax * p, const InnerNS * ns,
+                    const SymbolNode * start, const SymbolNode * stop,
+                    Strategy strategy, Gather & gather, ExtraCmp & cmp);
   template <typename T, typename Gather>
-  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
-                          const SymbolNode * start, const SymbolNode * stop,
-                          Strategy strategy, Gather & gather) 
+  T * lookup_symbol(const Syntax * p, const InnerNS * ns,
+                    const SymbolNode * start, const SymbolNode * stop,
+                    Strategy strategy, Gather & gather) 
   {
     AlwaysTrueExtraCmp cmp;
     return lookup_symbol<T>(p, ns, start, stop, strategy, gather, cmp);
   }
   template <typename T>
   static inline
-  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
-                          const SymbolNode * start, const SymbolNode * stop = NULL,
-                          Strategy strategy = NormalStrategy) 
+  T * lookup_symbol(const Syntax * p, const InnerNS * ns,
+                    const SymbolNode * start, const SymbolNode * stop = NULL,
+                    Strategy strategy = NormalStrategy) 
   {
     NoOpGather gather;
     return lookup_symbol<T>(p, ns, start, stop, strategy, gather);
   }
   template <typename T, typename Gather, typename ExtraCmp>
-  const T * lookup_symbol(const Syntax * p, const InnerNS * ns,
-                          const SymbolNode * start, const SymbolNode * stop,
-                          Strategy strategy, Gather & gather, ExtraCmp & cmp)
+  T * lookup_symbol(const Syntax * p, const InnerNS * ns,
+                    const SymbolNode * start, const SymbolNode * stop,
+                    Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
     if (p->simple()) {
       return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy, gather, cmp);
     } else if (p->entity<Symbol>()) {
       //printf(">%s\n", typeid(*p->entity()).name());
-      if (const T * s = dynamic_cast<const T *>(p->entity<Symbol>())) {
+      if (T * s = dynamic_cast<T *>(p->entity<Symbol>())) {
         return s;
       } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
         return lookup_symbol<T>(s->name, p->str(), start, stop, strategy, gather, cmp);
@@ -734,15 +734,15 @@ namespace ast {
   }
 
   template <typename T> 
-  inline const T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns) const {
+  inline T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns) const {
     return lookup_symbol<T>(p, ns, front);
   }
 
   template <typename T>
   static inline
-  const T * find_symbol(const Syntax * p, const InnerNS * ns,
-                        const SymbolNode * start, const SymbolNode * stop = NULL,
-                        Strategy strategy = NormalStrategy) 
+  T * find_symbol(const Syntax * p, const InnerNS * ns,
+                  const SymbolNode * start, const SymbolNode * stop = NULL,
+                  Strategy strategy = NormalStrategy) 
   {
     try {
       return lookup_symbol<T>(p, ns, start, stop, strategy);
@@ -753,7 +753,7 @@ namespace ast {
   }
 
   template <typename T> 
-  inline const T * SymbolTable::find(const Syntax * p, const InnerNS * ns) const {
+  inline T * SymbolTable::find(const Syntax * p, const InnerNS * ns) const {
     return find_symbol<T>(p, ns, front);
   }
 

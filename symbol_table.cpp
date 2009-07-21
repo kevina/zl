@@ -13,13 +13,13 @@ namespace ast {
   InnerNS INNER_NS_OBJ("inner");
   InnerNS CAST_NS_OBJ("cast");
 
-  const InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
-  const InnerNS * const TAG_NS = &TAG_NS_OBJ;
-  const InnerNS * const LABEL_NS = &LABEL_NS_OBJ;
-  const InnerNS * const SYNTAX_NS = &SYNTAX_NS_OBJ;
-  const InnerNS * const OUTER_NS = &OUTER_NS_OBJ;
-  const InnerNS * const INNER_NS = &INNER_NS_OBJ;
-  const InnerNS * const CAST_NS = &CAST_NS_OBJ;
+  InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
+  InnerNS * const TAG_NS = &TAG_NS_OBJ;
+  InnerNS * const LABEL_NS = &LABEL_NS_OBJ;
+  InnerNS * const SYNTAX_NS = &SYNTAX_NS_OBJ;
+  InnerNS * const OUTER_NS = &OUTER_NS_OBJ;
+  InnerNS * const INNER_NS = &INNER_NS_OBJ;
+  InnerNS * const CAST_NS = &CAST_NS_OBJ;
 
   void add_inner_nss(SymbolTable & syms) {
     syms.add_internal(SymbolKey("default", INNER_NS), DEFAULT_NS);

@@ -75,8 +75,8 @@ namespace ast {
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
     Type * bool_type() {return types.inst("int");}
-    const FunctionSymbol * function_sym() 
-      {return static_cast<const FunctionSymbol *>(types.find(".fun"));}
+    FunctionSymbol * function_sym() 
+      {return static_cast<FunctionSymbol *>(types.find(".fun"));}
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
@@ -110,15 +110,15 @@ namespace ast {
       ip.add(stmt);
     }
 
-    void add(const SymbolKey & k, const Symbol * sym) {
+    void add(const SymbolKey & k, Symbol * sym) {
       sym->add_to_env(k, *this);
     }
 
-    void add_internal(const SymbolKey & k, const Symbol * sym) {
+    void add_internal(const SymbolKey & k, Symbol * sym) {
       symbols.add(k, sym, SymbolNode::INTERNAL);
     }
 
-    void add_alias(const SymbolKey & k, const Symbol * sym) {
+    void add_alias(const SymbolKey & k, Symbol * sym) {
       symbols.add(k, sym, SymbolNode::ALIAS);
     }
 
@@ -135,23 +135,23 @@ namespace ast {
   private:
   };
   
-  inline const TypeSymbol * TypeSymbolTable::find(const SymbolKey & k) {
+  inline TypeSymbol * TypeSymbolTable::find(const SymbolKey & k) {
     return env->symbols.find<TypeSymbol>(k);
   }
 
-  inline const TypeSymbol * TypeSymbolTable::find(const Syntax * p, const InnerNS * ns) {
+  inline TypeSymbol * TypeSymbolTable::find(const Syntax * p, const InnerNS * ns) {
     return env->symbols.find<TypeSymbol>(p, ns);
   }
 
-  inline void TypeSymbolTable::add(const SymbolKey & k, const TypeSymbol * t) {
+  inline void TypeSymbolTable::add(const SymbolKey & k, TypeSymbol * t) {
     env->add(k, t);
   }
 
-  inline void TypeSymbolTable::add_internal(const SymbolKey & k, const TypeSymbol * t) {
+  inline void TypeSymbolTable::add_internal(const SymbolKey & k, TypeSymbol * t) {
     env->add_internal(k, t);
   }
 
-  inline void TypeSymbolTable::add_alias(const SymbolKey & k, const TypeSymbol * t) {
+  inline void TypeSymbolTable::add_alias(const SymbolKey & k, TypeSymbol * t) {
     env->add_alias(k, t);
   }
 }
