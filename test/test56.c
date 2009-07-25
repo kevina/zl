@@ -10,7 +10,7 @@ Syntax * add_namespace(Syntax * syn, Environ * env) {
   while ((s = i->next())) {
     Match * m0 = match(m, syntax ns, reparse(m->var(syntax ns), "RAW_ID", env));
     m0 = match(m0, raw_syntax(what name @rest), s);
-    l->append(replace(raw_syntax((mid what) (` (mid name) (mid ns)) (mid rest)), m0, mark));
+    l->append(replace(raw_syntax((mid what) (` (mid name) (mid ns)) (mid @rest)), m0, mark));
   }
   return l;
 }

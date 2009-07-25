@@ -10,7 +10,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   size_t fix_size = ct_value(fix_size_s, env);
 
   m = match(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
-  Syntax * r = replace(raw_syntax (class (mid name) ({...} (mid body) (mid dummy_decl)) (mid rest)), m, mark);
+  Syntax * r = replace(raw_syntax (class (mid name) ({...} (mid body) (mid dummy_decl)) (mid @rest)), m, mark);
   
   Environ * lenv = temp_environ(env);
   pre_parse(r, lenv);
@@ -18,12 +18,12 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   size_t size = ct_value(replace(syntax (offsetof(name, dummy)), m, mark), lenv);
   
   if (size == fix_size) {
-    return replace(raw_syntax (class (mid name) ({...} (mid body) (mid rest))), m, mark);
+    return replace(raw_syntax (class (mid name) ({...} (mid body) (mid @rest))), m, mark);
   } else if (size < fix_size) {
     char buf[32];
     snprintf(buf, 32, "{char dummy[%u];}", fix_size - size);
     m = match(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
-    return replace(raw_syntax (class (mid name) ({...} (mid body) (mid buffer)) (mid rest)), m, mark);
+    return replace(raw_syntax (class (mid name) ({...} (mid body) (mid buffer)) (mid @rest)), m, mark);
   } else {
     return error(p, "Size of class larger than fix_size");
   }

@@ -266,6 +266,7 @@ namespace ast {
       return type;
     }
     TypeSymbolTable types = env.types;
+    p = flatten(p); // FIXME: This is an overkill...
     unsigned sz = p->num_args();
     const InnerNS * ns = DEFAULT_NS;
     //printf("TYPE: %s %s\n", ~p->what(), ~p->to_string());

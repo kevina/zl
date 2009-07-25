@@ -1,3 +1,6 @@
+(macro (` smacro syntax) (name @rest)
+  (macro (` (mid name) syntax) (mid @rest)))
+
 (smacro fluid_label (ID)
       (fluid_binding (` (mid ID) label)))
 

@@ -1,3 +1,13 @@
+Syntax * parse_make_syntax_macro(Syntax * p, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, raw_syntax (name @ fun), p);
+
+  if (m->var(syntax fun))
+    return replace(raw_syntax(make_macro (` (mid name) syntax) (mid fun)), m, mark);
+  else
+    return replace(raw_syntax(make_macro (` (mid name) syntax) (mid name)), m, mark);
+}
+
 /* 
  * Example class definition 
  * (slightly out of date)
@@ -231,7 +241,7 @@ void parse_class_var(Syntax * p, Match * m, Mark * mark,
 
   // FIXME: handle flags
   if (is_static) {
-    module_b->append(replace(raw_syntax(var (` (mid n) internal) (mid rest)), m, mark));
+    module_b->append(replace(raw_syntax(var (` (mid n) internal) (mid @rest)), m, mark));
     module_b->append(replace(syntax {macro n () {n`internal;}}, m, mark));
   } else {
     struct_b->append(p);

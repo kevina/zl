@@ -131,12 +131,20 @@ __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, En
 //
 //
 
+__need_snapshot Syntax * parse_make_syntax_macro(Syntax * p, Environ * env);
+make_macro make_syntax_macro`syntax parse_make_syntax_macro;
+
+//
+//
+//
+
 macro class_cast_up (child) {
   &(*child)..parent;
 }
 
 __need_snapshot Syntax * parse_class(Syntax * p, Environ * env);
-make_syntax_macro class parse_class;
+//make_syntax_macro class parse_class;
+make_macro class`syntax parse_class;
 
 
 
