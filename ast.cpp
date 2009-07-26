@@ -3087,13 +3087,6 @@ namespace ast {
       }
     }
 
-    if (cw.target_lang == CompileWriter::ZLE) {
-      sep(cw, "module definations");
-      for (ModulesItr i = modules.begin(), e = modules.end(); i != e; ++i) {
-        (*i)->compile(cw, Declaration::Body);
-      }
-    }
-
     sep(cw, "definitions");
 
     for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
