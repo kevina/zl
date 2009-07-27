@@ -666,7 +666,7 @@ namespace ast {
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
 
-  void compile(SymbolNode *, CompileWriter & cw);
+  void compile(TopLevelNode *, CompileWriter & cw);
 
   Exp * cast_up(Exp * exp, const Type * type, Environ & env);
 

@@ -55,13 +55,13 @@ namespace ast {
 
   struct Environ : public gc {
     TypeRelation * type_relation;
-    bool special() const {return !top_level_symbols.front;}
+    bool special() const {return !top_level_symbols;}
     const Symbol * find_tls(const char * to_find) const {
-      if (!top_level_symbols.front)
+      if (!top_level_symbols)
         return NULL;
-      return top_level_symbols.find<Symbol>(to_find);
+      return top_level_symbols->find<Symbol>(to_find);
     }
-    OpenSymbolTable top_level_symbols;
+    TopLevelSymbolTable * top_level_symbols;
     SymbolTable symbols;
     TypeSymbolTable types;
     OpenSymbolTable fun_labels;
@@ -72,6 +72,7 @@ namespace ast {
     Deps * deps;
     bool * for_ct; // set if this function uses a ct primitive such as syntax
     InsrPoint ip;
+    bool true_top_level;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
     Type * bool_type() {return types.inst("int");}
@@ -80,10 +81,11 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct()
+        deps(), for_ct(), true_top_level(false)
       {
         if (s == TOPLEVEL) {
-          top_level_symbols.front = &symbols.front;
+          true_top_level = true;
+          top_level_symbols = new TopLevelSymbolTable(&symbols.front);
           type_relation = new_c_type_relation(); // FIXME HACK
           create_c_types(types); // FIXME Another HACK
           add_inner_nss(*this);
@@ -98,9 +100,10 @@ namespace ast {
         scope(other.scope), frame(other.frame), 
         where(other.where),
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
-        deps(other.deps), for_ct(other.for_ct), ip(other.ip) {}
+        deps(other.deps), for_ct(other.for_ct), ip(other.ip), true_top_level(other.true_top_level) {}
     Environ new_scope() {
       Environ env = *this;
+      env.true_top_level = false;
       env.ip.clear();
       env.symbols = symbols.new_scope();
       return env;
@@ -120,11 +123,15 @@ namespace ast {
     }
 
     void add_alias(const SymbolKey & k, Symbol * sym) {
-      symbols.add(k, sym, SymbolNode::ALIAS);
+      if (true_top_level)
+        top_level_symbols->add_top_level(k, sym, SymbolNode::ALIAS);
+      else
+        symbols.add(k, sym, SymbolNode::ALIAS);
     }
 
     Environ new_frame() {
       Environ env = *this;
+      env.true_top_level = false;
       env.ip.clear();
       env.scope = LEXICAL;
       env.symbols = symbols.new_scope(env.fun_labels);

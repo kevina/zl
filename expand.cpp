@@ -1330,7 +1330,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
   CompileWriter cw;
   cw.open(source, "w");
   cw.deps = &deps;
-  compile(*env.top_level_symbols.front, cw);
+  compile(env.top_level_symbols->defn_front, cw);
   cw.close();
   
   system(cmd);
@@ -1351,7 +1351,9 @@ void compile_for_ct(Deps & deps, Environ & env) {
       if (env_ss) {
         StringBuf buf;
         buf.printf("%s$env_ss", ~(*i)->uniq_name());
-        void * p = dlsym(lh, ~buf.freeze());
+        String n = buf.freeze();
+        printf("LOOKUP %s\n", ~n);
+        void * p = dlsym(lh, ~n);
         *static_cast<void * *>(p) = env_ss;
       }
     }

@@ -4,8 +4,6 @@
 
 namespace ast {
 
-  unsigned TopLevelSymbol::last_order_num = 0;
-
   InnerNS DEFAULT_NS_OBJ;
   InnerNS TAG_NS_OBJ;
   InnerNS LABEL_NS_OBJ;

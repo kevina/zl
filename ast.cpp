@@ -191,7 +191,8 @@ namespace ast {
   //
 
   void Symbol::add_to_env(const SymbolKey & k, Environ & env) {
-    SymbolNode * n = env.symbols.add(k, this);
+    SymbolNode * n = env.true_top_level 
+      ? env.top_level_symbols->add_top_level(k, this) : env.symbols.add(k, this);
     assert(!key);
     key = &n->key;
     if (env.special()) return;
@@ -203,21 +204,24 @@ namespace ast {
     if (env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
     }
-    SymbolNode * local = env.symbols.add(k, this);
+    SymbolNode * local = env.true_top_level 
+      ? env.top_level_symbols->add_top_level(k, this) : env.symbols.add(k, this);
     assert(!key);
     key = &local->key;
     if (env.special()) return;
     local->set_flags(SymbolNode::ALIAS);
     if (num == NPOS)
-      assign_uniq_num<TopLevelSymbol>(this, *env.top_level_symbols.front);
+      assign_uniq_num<TopLevelSymbol>(this, *env.top_level_symbols->front);
     //printf(">>%d %s %u %u %s\n", env.special(), ~k.to_string(), num, NPOS, typeid(*this).name());
     SymbolKey uniq_key = uniq_name();
     uniq_key.ns = tl_namespace();
-    SymbolNode * tl = find_symbol_node(uniq_key, *env.top_level_symbols.front);
+    TopLevelNodeLoc loc = find_top_level_node(uniq_key, env.top_level_symbols->defn_front);
+    TopLevelNode * tl = loc.cur;
     //printf("1> %s %s %s\n", ~k.to_string(), ~uniq_key.to_string(),  typeid(*this).name());
     if (tl) {
       if (tl == local) {
         //printf("TLS DUP %s\n", ~uniq_name());
+        env.top_level_symbols->move_to_defn_front(loc);
         goto finish;
       } else if (static_cast<const Symbol *>(this) == tl->value) {
         fprintf(stderr, "tls mismatch %s\n", ~uniq_key);
@@ -227,10 +231,9 @@ namespace ast {
       abort();
       //return;
     }
-    tl = env.top_level_symbols.add(uniq_key, this);
+    tl = env.top_level_symbols->add_top_level(uniq_key, this);
   finish:
     tl->unset_flags(SymbolNode::ALIAS);
-    order_num = last_order_num++;
     //printf("2> %s %s %s %d\n", ~name, ~uniq_name(), typeid(*this).name(), order_num);
   }
 
@@ -2162,8 +2165,8 @@ namespace ast {
 
     // fix up order_num so the function body will come after any top
     // level symbols which where created in the local env
-    order_num = last_order_num++;
-    
+    TopLevelNodeLoc loc = find_top_level_node(this, env.top_level_symbols->defn_front);
+    env.top_level_symbols->move_to_defn_front(loc);
     symbols = env.symbols;
 
     FinalizeEnviron fenv;
@@ -2949,11 +2952,6 @@ namespace ast {
     }
   }
   
-  template <typename T>
-  static bool tl_symbol_lt(T x, T y) {
-    return x->order_num < y->order_num;
-  }
-
   static void sep(CompileWriter & cw, const char * what) {
     cw << "\n"
        << "#\n"
@@ -2961,12 +2959,12 @@ namespace ast {
        << "#\n\n";
   }
 
-  void compile(SymbolNode * syms, CompileWriter & cw) {
+  void compile(TopLevelNode * syms, CompileWriter & cw) {
 
     typedef const TopLevelVarDecl * VarP;
     typedef const TypeDeclaration * TypeP;
     typedef const Module * ModuleP;
-    typedef SymbolNode * OtherP;
+    typedef TopLevelSymbolNode * OtherP;
     typedef Vector<VarP> Vars;
     typedef Vector<TypeP> Types;
     typedef Vector<ModuleP> Modules;
@@ -2981,11 +2979,13 @@ namespace ast {
     Modules modules;
     Others others;
 
-    for (SymbolNode * cur = syms; cur; cur = cur->next) {
+    for (TopLevelNode * cur = syms; cur; cur = cur->defn_next) {
       const Symbol * sym = cur->value;
 
       if (cur->should_skip())
         continue;
+
+      //printf("?? %s\n", ~cur->key.to_string());
       if (cur->alias()) {
         if (cw.target_lang != CompileWriter::ZLE)
           others.push_back(cur);
@@ -3016,9 +3016,9 @@ namespace ast {
       others.push_back(cur);
     }
 
-    std::sort(vars.begin(), vars.end(), tl_symbol_lt<VarP>);
-    std::sort(types.begin(), types.end(), tl_symbol_lt<TypeP>);
-    std::sort(modules.begin(), modules.end(), tl_symbol_lt<ModuleP>);
+    std::reverse(vars.begin(), vars.end());
+    std::reverse(types.begin(), types.end());
+    std::reverse(modules.begin(), modules.end());
     std::reverse(others.begin(), others.end());
   
     Vector<AST *> init, cleanup;
