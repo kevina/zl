@@ -61,6 +61,8 @@ namespace ast {
         return NULL;
       return top_level_symbols->find<Symbol>(to_find);
     }
+    inline void add_defn(Stmt * defn);
+    inline void move_defn(Stmt * defn);
     TopLevelSymbolTable * top_level_symbols;
     SymbolTable symbols;
     TypeSymbolTable types;
@@ -123,9 +125,9 @@ namespace ast {
     }
 
     void add_alias(const SymbolKey & k, Symbol * sym) {
-      if (true_top_level)
-        top_level_symbols->add_top_level(k, sym, SymbolNode::ALIAS);
-      else
+      //if (true_top_level)
+      //  top_level_symbols->add_top_level(k, sym, SymbolNode::ALIAS);
+      //else
         symbols.add(k, sym, SymbolNode::ALIAS);
     }
 

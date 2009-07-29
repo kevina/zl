@@ -22,6 +22,7 @@ struct SyntaxGather;
 namespace ast {
 
   struct AST;
+  struct Stmt;
 
   struct Mark;
   struct SymbolNode;
@@ -222,8 +223,6 @@ namespace ast {
 
   void add_inner_nss(Environ &);
 
-  struct TopLevelNode;
-
   struct SymbolNode {
     SymbolKey key;
     Symbol * value;
@@ -235,7 +234,6 @@ namespace ast {
     bool diff_scope() const {return flags & DIFF_SCOPE;}
     bool internal() const {return flags & INTERNAL;}
     bool should_skip() const {return flags & (IMPORTED | DIFF_SCOPE | INTERNAL);}
-    inline TopLevelNode * top_level();
     void set_flags(unsigned f) {flags |= f;}
     void unset_flags(unsigned f) {flags &= ~f;}
     SymbolNode(const SymbolKey & k, Symbol * v, SymbolNode * n = NULL) 
@@ -245,19 +243,6 @@ namespace ast {
     SymbolNode(const SymbolNode & n, SymbolNode * nx) 
       : key(n.key), value(n.value), next(nx), flags(n.flags) {}
   };
-
-  struct TopLevelNode : public SymbolNode {
-    TopLevelNode(const SymbolKey & k, Symbol * v, unsigned f, SymbolNode * n, TopLevelNode * tln) 
-      : SymbolNode(k,v,f|TOP_LEVEL,n), defn_next(tln) {}
-    TopLevelNode * defn_next;
-  };
-  
-  TopLevelNode * SymbolNode::top_level() {
-    if (flags & TOP_LEVEL) return static_cast<TopLevelNode *>(this);
-    else return NULL;
-  }
-
-  typedef TopLevelNode TopLevelSymbolNode;
 
   struct PropNode {
     SymbolName name;
@@ -377,31 +362,6 @@ namespace ast {
   {
     const SymbolNode * s = find_symbol_p1(k, start, stop, strategy);
     return const_cast<SymbolNode *>(s);
-  }
-
-  struct TopLevelNodeLoc {
-    TopLevelNode * prev;
-    TopLevelNode * cur;
-    TopLevelNodeLoc(TopLevelNode * p, TopLevelNode * c) 
-      : prev(p), cur(c) {}
-  };
-  static inline
-  TopLevelNodeLoc find_top_level_node(const Symbol * val, TopLevelNode * start) 
-  {
-    TopLevelNode * prev = NULL;
-    TopLevelNode * cur = start;
-    while (cur && cur->value != val) 
-      prev = cur, cur = cur->defn_next;
-    return TopLevelNodeLoc(prev, cur);
-  }
-  static inline
-  TopLevelNodeLoc find_top_level_node(SymbolKey k, TopLevelNode * start) 
-  {
-    TopLevelNode * prev = NULL;
-    TopLevelNode * cur = start;
-    while (cur && cur->key != k) 
-      prev = cur, cur = cur->defn_next;
-    return TopLevelNodeLoc(prev, cur);
   }
 
   template <typename T, typename Gather, typename ExtraCmp>
@@ -569,22 +529,14 @@ namespace ast {
 
   class TopLevelSymbolTable : public OpenSymbolTable {
   public: // but don't use
-    TopLevelSymbolNode * defn_front;
+    //TopLevelSymbolNode * defn_front;
+    Stmt * first;
+    Stmt * last;
   public:    
     TopLevelSymbolTable(SymbolNode * * f) 
-      : OpenSymbolTable(f), defn_front() {}
-    TopLevelNode * add_top_level(const SymbolKey & k, Symbol * sym, unsigned flags = 0) {
-      TopLevelNode * tmp = new TopLevelNode(k, sym, flags, *front, defn_front);
-      *front = tmp;
-      defn_front = tmp;
-      return tmp;
-    }
-    void move_to_defn_front(TopLevelNodeLoc loc) {
-      if (loc.cur == defn_front) return;
-      if (loc.prev) loc.prev->defn_next = loc.cur->defn_next;
-      loc.cur->defn_next = defn_front;
-      defn_front = loc.cur;
-    }
+      : OpenSymbolTable(f), first(), last() {}
+    inline void add_defn(Stmt *); // defined in ast.hpp
+    inline void move_defn(Stmt *); // defined in ast.hpp
   };
 
   template <typename T>

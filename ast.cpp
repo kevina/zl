@@ -191,8 +191,7 @@ namespace ast {
   //
 
   void Symbol::add_to_env(const SymbolKey & k, Environ & env) {
-    SymbolNode * n = env.true_top_level 
-      ? env.top_level_symbols->add_top_level(k, this) : env.symbols.add(k, this);
+    SymbolNode * n = env.symbols.add(k, this);
     assert(!key);
     key = &n->key;
     if (env.special()) return;
@@ -204,8 +203,7 @@ namespace ast {
     if (env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
     }
-    SymbolNode * local = env.true_top_level 
-      ? env.top_level_symbols->add_top_level(k, this) : env.symbols.add(k, this);
+    SymbolNode * local = env.symbols.add(k, this);
     assert(!key);
     key = &local->key;
     if (env.special()) return;
@@ -215,13 +213,11 @@ namespace ast {
     //printf(">>%d %s %u %u %s\n", env.special(), ~k.to_string(), num, NPOS, typeid(*this).name());
     SymbolKey uniq_key = uniq_name();
     uniq_key.ns = tl_namespace();
-    TopLevelNodeLoc loc = find_top_level_node(uniq_key, env.top_level_symbols->defn_front);
-    TopLevelNode * tl = loc.cur;
+    SymbolNode * tl = find_symbol_node(uniq_key, *env.top_level_symbols->front);
     //printf("1> %s %s %s\n", ~k.to_string(), ~uniq_key.to_string(),  typeid(*this).name());
     if (tl) {
       if (tl == local) {
         //printf("TLS DUP %s\n", ~uniq_name());
-        env.top_level_symbols->move_to_defn_front(loc);
         goto finish;
       } else if (static_cast<const Symbol *>(this) == tl->value) {
         fprintf(stderr, "tls mismatch %s\n", ~uniq_key);
@@ -231,7 +227,7 @@ namespace ast {
       abort();
       //return;
     }
-    tl = env.top_level_symbols->add_top_level(uniq_key, this);
+    tl = env.top_level_symbols->add(uniq_key, this);
   finish:
     tl->unset_flags(SymbolNode::ALIAS);
     //printf("2> %s %s %s %d\n", ~name, ~uniq_name(), typeid(*this).name(), order_num);
@@ -670,7 +666,7 @@ namespace ast {
     }
   };
 
-  struct AutoVar : public Stmt, public Var {
+  struct AutoVar : public Var {
     AutoVar() : num() {}
     mutable unsigned num;
     void compile(CompileWriter & f, Phase phase) const {
@@ -694,6 +690,7 @@ namespace ast {
         constructor = parse_stmt(SYN(SYN("assign"), SYN(ID, SYN(this)), SYN(init)), env);
         init = NULL;
       } 
+      env.move_defn(this);
     }
   };
 
@@ -712,6 +709,7 @@ namespace ast {
     StorageClass storage_class = get_storage_class(p);
     Var * var;
     Stmt * res;
+    bool fresh = true;
     if (env.scope == LEXICAL && (storage_class == SC_NONE ||
                                  storage_class == SC_AUTO ||
                                  storage_class == SC_REGISTER)) 
@@ -720,7 +718,8 @@ namespace ast {
       var = v;
       res = v;
     } else {
-      TopLevelVar * v = new TopLevelVar;
+      fresh = !env.symbols.exists_this_scope(name);
+      TopLevelVar * v = fresh ? new TopLevelVar : env.symbols.find<TopLevelVar>(name);
       bool mangle = env.scope == LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
       v->num = mangle ? NPOS : 0;
       v->where = env.where;
@@ -734,7 +733,8 @@ namespace ast {
     var->storage_class = storage_class;
     if (storage_class != SC_EXTERN && var->type->size() == NPOS)
       throw error(name_p, "Size not known");
-    env.add(name, var);
+    if (fresh)
+      env.add(name, var);
     collect.push_back(var); // fixme, not always the case
     return res;
   }
@@ -1640,6 +1640,7 @@ namespace ast {
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
         (*i)->finish_parse(env);
       }
+      env.add_defn(m);
     }
     return empty_stmt();
   }
@@ -2072,13 +2073,9 @@ namespace ast {
     Fun * f = NULL;
     if (previous_declared) {
       f = env.symbols.find<Fun>(name);
-      if (f->body) goto foo; // FIXME: This is a hack, to allow
-                             // functions to shadow an imported
-                             // function.
       if (p->num_args() > 3)
         f->parse_forward_i(p, env, collect);
     } else {
-    foo:
       f = new Fun;
       f->storage_class = get_storage_class(p);
       bool mangle = name.marks || env.where || f->storage_class == SC_STATIC;
@@ -2165,8 +2162,7 @@ namespace ast {
 
     // fix up order_num so the function body will come after any top
     // level symbols which where created in the local env
-    TopLevelNodeLoc loc = find_top_level_node(this, env.top_level_symbols->defn_front);
-    env.top_level_symbols->move_to_defn_front(loc);
+    env.add_defn(this);
     symbols = env.symbols;
 
     FinalizeEnviron fenv;
@@ -2359,6 +2355,7 @@ namespace ast {
         const Syntax * q = p->arg(1);
         add_ast_nodes(q->parts_begin(), q->parts_end(), decl->members, Parse<FieldPos>(decl->env));
       }
+      env0.add_defn(decl);
     } else {
       decl->have_body = false;
     }
@@ -2464,6 +2461,7 @@ namespace ast {
         sym->ct_value = &decl->members.back().ct_value;
         env.add_internal(n, sym);
       }
+      env.add_defn(decl);
     }
     decl->Int::finalize();
     return empty_stmt();
@@ -2959,12 +2957,15 @@ namespace ast {
        << "#\n\n";
   }
 
-  void compile(TopLevelNode * syms, CompileWriter & cw) {
+  void compile(TopLevelSymbolTable * tls, CompileWriter & cw) {
+
+    SymbolNode * syms = *tls->front;
+    Stmt * defns = tls->first;
 
     typedef const TopLevelVarDecl * VarP;
     typedef const TypeDeclaration * TypeP;
     typedef const Module * ModuleP;
-    typedef TopLevelSymbolNode * OtherP;
+    typedef SymbolNode * OtherP;
     typedef Vector<VarP> Vars;
     typedef Vector<TypeP> Types;
     typedef Vector<ModuleP> Modules;
@@ -2975,15 +2976,18 @@ namespace ast {
     typedef Others::const_iterator OthersItr;
 
     Vars vars;
+    Vars var_defns;
     Types types;
+    Types type_defns;;
     Modules modules;
     Others others;
+    //Others other_defns;
 
-    for (TopLevelNode * cur = syms; cur; cur = cur->defn_next) {
-      const Symbol * sym = cur->value;
-
+    for (SymbolNode * cur = syms; cur; cur = cur->next) {
       if (cur->should_skip())
         continue;
+
+      const Symbol * sym = cur->value;
 
       //printf("?? %s\n", ~cur->key.to_string());
       if (cur->alias()) {
@@ -3020,6 +3024,29 @@ namespace ast {
     std::reverse(types.begin(), types.end());
     std::reverse(modules.begin(), modules.end());
     std::reverse(others.begin(), others.end());
+
+    for (Stmt * cur = defns; cur; cur = cur->next) {
+      VarP var = dynamic_cast<VarP>(cur);
+      if (var) {
+        if (cw.for_compile_time()) {
+          if (cw.deps->have(var)) {
+            var_defns.push_back(var);
+          }
+        } else if (cw.for_macro_sep_c || !var->for_ct()) {
+          var_defns.push_back(var);
+        }
+        continue;
+      }
+      TypeP type = dynamic_cast<TypeP>(cur);
+      if (type) {
+        type_defns.push_back(type);
+        continue;
+      }
+      if (cw.target_lang != CompileWriter::ZLE)
+        continue;
+      //other_defns.push_back(cur);
+    }
+
   
     Vector<AST *> init, cleanup;
     const TopLevelVarSymbol * tl = NULL;
@@ -3039,7 +3066,7 @@ namespace ast {
 
     sep(cw, "type definitions");
 
-    for (TypesItr i = types.begin(), e = types.end(); i != e; ++i) {
+    for (TypesItr i = type_defns.begin(), e = type_defns.end(); i != e; ++i) {
       (*i)->compile(cw, Declaration::Body);
     }
 
@@ -3082,21 +3109,22 @@ namespace ast {
     sep(cw, "function decls");
 
     for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
-      if (const Fun * d = dynamic_cast<const Fun *>(*i)) {
-        d->compile(cw, Declaration::Forward);
-      }
+      (*i)->compile(cw, Declaration::Forward);
+      //if (const Fun * d = dynamic_cast<const Fun *>(*i)) {
+      //  d->compile(cw, Declaration::Forward);
+      //}
     }
 
     sep(cw, "definitions");
 
-    for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
+    for (VarsItr i = var_defns.begin(), e = var_defns.end(); i != e; ++i) {
       //printf("COMPILE %s %d\n", ~(*i)->uniq_name(), (*i)->order_num);
       (*i)->compile(cw, Declaration::Body);
     }
 
     sep(cw, "special");
 
-    for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
+    for (VarsItr i = var_defns.begin(), e = var_defns.end(); i != e; ++i) {
       if (const TopLevelVar * s = dynamic_cast<const TopLevelVar *>(*i)) {
         if (s->constructor) init.push_back(s->constructor);
         //if (s->cleanup) cleanup.push_back(s->cleanup);

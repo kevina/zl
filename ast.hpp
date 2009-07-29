@@ -461,7 +461,7 @@ namespace ast {
 
   typedef BasicVar VarSymbol;
 
-  struct Declaration : virtual public AST {
+  struct Declaration : public Stmt {
     virtual void finish_parse(Environ & env) {};
     enum Phase {Normal, Forward, Body};
     virtual void compile(CompileWriter &, Phase) const = 0;
@@ -666,7 +666,7 @@ namespace ast {
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
 
-  void compile(TopLevelNode *, CompileWriter & cw);
+  void compile(TopLevelSymbolTable *, CompileWriter & cw);
 
   Exp * cast_up(Exp * exp, const Type * type, Environ & env);
 
@@ -767,6 +767,36 @@ namespace ast {
 
   inline bool SymbolTable::exists_this_scope(const Syntax * p, const InnerNS * ns) const {
     return find_symbol<Symbol>(p, ns, front, back, ThisScope);
+  }
+
+  inline void TopLevelSymbolTable::add_defn(Stmt * stmt) {
+    if (last) {
+      last->next = stmt;
+      last = stmt;
+    } else {
+      first = last = stmt;
+    }
+  }
+
+  inline void TopLevelSymbolTable::move_defn(Stmt * stmt) {
+    Stmt * prev = NULL;
+    Stmt * cur = first;
+    while (cur && cur != stmt)
+      prev = cur, cur = cur->next;
+    if (cur) {
+      // cur == stmt
+      prev->next = cur->next;
+      cur->next = NULL;
+    }
+    add_defn(stmt);
+  }
+  
+  inline void Environ::add_defn(Stmt * defn) {
+    if (top_level_symbols) top_level_symbols->add_defn(defn);
+  }
+  
+  inline void Environ::move_defn(Stmt * defn) {
+    if (top_level_symbols) top_level_symbols->move_defn(defn);
   }
 
   Exp * to_ref(Exp *, Environ &);

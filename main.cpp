@@ -56,7 +56,7 @@ int main(int argc, const char *argv[])
       ast::CompileWriter out;
       out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
       out.open("prelude.zls", "w");
-      ast::compile(env.top_level_symbols->defn_front, out);
+      ast::compile(env.top_level_symbols, out);
       out.close();
       system("zls -O -S -fexceptions -o prelude.zls.s prelude.zls");
       system("zls -g -O -fexceptions -shared -fpic -o prelude.so prelude.zls");
@@ -98,10 +98,10 @@ int main(int argc, const char *argv[])
       }
       ast::CompileWriter out;
       out.open("a.out.zls", "w");
-      ast::compile(env.top_level_symbols->defn_front, out);
+      ast::compile(env.top_level_symbols, out);
       ast::CompileWriter out2(ast::CompileWriter::ZLE);
       out2.open("a.out.zle", "w");
-      ast::compile(env.top_level_symbols->defn_front, out2);
+      ast::compile(env.top_level_symbols, out2);
       //AST::ExecEnviron env;
       //ast->eval(env);
     }
