@@ -190,7 +190,7 @@ namespace ast {
   //
   //
 
-  void Symbol::add_to_env(const SymbolKey & k, Environ & env) {
+  void Symbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     SymbolNode * n = env.symbols.add(k, this);
     assert(!key);
     key = &n->key;
@@ -198,9 +198,9 @@ namespace ast {
     make_unique(env.symbols.front);
   }
 
-  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env) {
+  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     //assert(!env.symbols.exists_this_scope(k));
-    if (env.symbols.exists_this_scope(k)) {
+    if (!shadow_ok && env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
     }
     SymbolNode * local = env.symbols.add(k, this);
@@ -232,6 +232,19 @@ namespace ast {
     tl->unset_flags(SymbolNode::ALIAS);
     //printf("2> %s %s %s %d\n", ~name, ~uniq_name(), typeid(*this).name(), order_num);
   }
+  
+  //
+  //
+  //
+
+  struct TempInsrPointWrapper {
+    TempInsrPointWrapper(Environ & e, TempInsrPoint::Where w = TempInsrPoint::ExtendedExp) 
+      : ip(w), env(e.new_extended_exp(&ip)) {}
+    TempInsrPoint ip;
+    Environ env;
+    Exp * finish(Exp * exp);     // created EBlock;
+    void finish(Environ & env); // add temp to env
+  };
 
   //
   //
@@ -286,13 +299,13 @@ namespace ast {
     void uniq_name(OStream & o) const {
       o.printf("%s$$%u", ~name(), num);
     }
-    void add_to_env(const SymbolKey & k, Environ &);
+    void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
       assign_uniq_num<NormalLabel>(this, self->next, stop);
     }
   };
 
-  void NormalLabel::add_to_env(const SymbolKey & k, Environ & env) {
+  void NormalLabel::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     SymbolNode * n = env.fun_labels.add(k, this);
     key = &n->key;
     make_unique(*env.fun_labels.front);
@@ -457,13 +470,11 @@ namespace ast {
 
   struct Id : public ExpLeaf {
     Id() {}
+    Id(const VarSymbol * s) : sym(s) {}
     const char * what() const {return "id";}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     const VarSymbol * sym;
-    Id * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(1);
-      sym = env.symbols.lookup<VarSymbol>(p->arg(0));
+    Id * construct(Environ & env) {
       const TopLevelVarDecl * tl = sym->top_level();
       if (tl && env.deps)
         env.deps->insert(tl);
@@ -472,6 +483,12 @@ namespace ast {
       type = sym->type;
       lvalue = tl ? 2 : 1;
       return this;
+    }
+    Id * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      assert_num_args(1);
+      sym = env.symbols.lookup<VarSymbol>(p->arg(0));
+      return construct(env);
     }
     void compile(CompileWriter & f) {
       f << sym;
@@ -489,7 +506,9 @@ namespace ast {
     If * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       assert_num_args(2,3);
+      TempInsrPointWrapper wrap(env);
       exp = parse_exp(p->arg(0), env);
+      exp = wrap.finish(exp);
       if_true = parse_stmt(p->arg(1), env);
       if (p->num_args() == 3) {
         if_false = parse_stmt(p->arg(2), env);
@@ -618,7 +637,9 @@ namespace ast {
     void finish_parse(Environ & env) {
       if (syn->num_args() > 2) {
         //env.add(name, sym, SecondPass);
-        init = parse_exp(syn->arg(2), env);
+        TempInsrPointWrapper wrap(env);
+        init = parse_exp(syn->arg(2), wrap.env);
+        init = wrap.finish(init);
         //if (sym->type->is_ref && !init->lvalue) {
         //  temp_exp = init;
         //  SymbolKey name = expand_binding(name_p, env);
@@ -626,7 +647,9 @@ namespace ast {
         //  temp_sym = new_var_symbol(...);
         //  init = addrof(temp_sym);
         //}
-        init = init->resolve_to(type, env);
+        TempInsrPointWrapper wrap2(env, top_level() ? TempInsrPoint::TopLevelVar : TempInsrPoint::Var);
+        init = init->resolve_to(type, wrap2.env);
+        wrap2.finish(env);
         if (storage_class == SC_STATIC && type->read_only && init->ct_value_) {
           ct_value = init->ct_value_;
         }
@@ -683,15 +706,31 @@ namespace ast {
     }
   };
 
+  static unsigned last_temp_num = 0;
+
+  struct AutoTemp : public AutoVar {
+    AutoTemp(const Type * t) {type = t;}
+    void make_unique(SymbolNode *, SymbolNode *) const {
+      num = last_temp_num++;
+    }
+  };
+
   struct TopLevelVar : public Var, public TopLevelVarDecl {
-    void finish_parse(Environ & env) {
-      Var::finish_parse(env);
+    void fix_up_init(Environ & env) {
       if (init && !init->ct_value_) {
         constructor = parse_stmt(SYN(SYN("assign"), SYN(ID, SYN(this)), SYN(init)), env);
         init = NULL;
       } 
+    }
+    void finish_parse(Environ & env) {
+      Var::finish_parse(env);
+      fix_up_init(env);
       env.move_defn(this);
     }
+  };
+
+  struct TopLevelTemp : public TopLevelVar {
+    TopLevelTemp(const Type * t) {type = t; num = NPOS;}
   };
 
   static StorageClass get_storage_class(const Syntax * p) {
@@ -771,13 +810,6 @@ namespace ast {
     EStmt(Exp * e) : exp(e) {}
     //AST * part(unsigned i) {return exp;}
     Exp * exp;
-    EStmt * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(1);
-      exp = parse_exp(p->arg(0), env);
-      //type = exp->type;
-      return this;
-    }
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
     }
@@ -795,7 +827,7 @@ namespace ast {
     BlockBase() {}
     static const bool as_exp = T::ast_type == Exp::ast_type;
     //AST * part(unsigned i) {return stmts[i];}
-    SymbolTable symbols; // not valid until done parsing block
+    //SymbolTable symbols; // not valid until done parsing block
     Stmt * stmts;
     inline void set_type_if_exp(Stmt * t);
     T * parse_self(const Syntax * p, Environ & env0) {
@@ -809,7 +841,7 @@ namespace ast {
       } else {
         last = stmts = empty_stmt();
       }
-      symbols = env.symbols;
+      //symbols = env.symbols;
       set_type_if_exp(last);
       return this;
     }
@@ -825,7 +857,7 @@ namespace ast {
     }
     void compile(CompileWriter & f) {
       if (as_exp)
-        f << "(eblock";
+        f << "(eblock\n";
       else
         f << indent << "(block\n";
       for (Stmt * cur = stmts; cur; cur = cur->next) {
@@ -871,9 +903,7 @@ namespace ast {
     syn = p;
     assert_num_args(1);
     exp = parse_exp(p->arg(0), env);
-    resolve(env);
-    make_ct_value();
-    return this;
+    return construct(env);
   }
 
   void UnOp::make_ct_value() {}
@@ -982,11 +1012,21 @@ namespace ast {
       if (!exp->lvalue) {
         throw error(exp->syn, "Can not be used as lvalue");
       }
-      // FIXME: add check for register qualifier
       TypeSymbol * t = env.types.find(".ref");
       Vector<TypeParm> p;
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
+    }
+    void make_ct_value() {
+      if (!exp->ct_value_) {
+        if (exp->lvalue > 1) 
+          ct_value_ = &ct_nval;
+      } else if (exp->ct_value_->nval()) {
+        ct_value_ = &ct_nval;
+      } else {
+        CT_LValue val = exp->ct_value_direct<CT_LValue>();
+        ct_value_ = new CT_Value<CT_Ptr>(val.addr);
+      }
     }
   };
 
@@ -1017,6 +1057,15 @@ namespace ast {
       type = t->subtype;
       lvalue = true;
     }
+    void make_ct_value() {
+      if (!exp->ct_value_) return;
+      if (exp->ct_value_->nval()) {
+        ct_value_ = &ct_nval;
+      } else {
+        CT_Ptr val = exp->ct_value_direct<CT_Ptr>();
+        ct_value_ = new CT_Value<CT_LValue>(CT_LValue(val));
+      }
+    }
   };
 
   Exp * parse_addrof(const Syntax * p, Environ & env) {
@@ -1041,8 +1090,7 @@ namespace ast {
     AddrOfRef * res = new AddrOfRef();
     res->syn = exp->syn;
     res->exp = exp;
-    res->resolve(env);
-    return res;
+    return res->construct(env);
   }
 
   Exp * from_ref(Exp * exp, Environ & env) {
@@ -1051,8 +1099,7 @@ namespace ast {
     DeRefRef * res = new DeRefRef();
     res->syn = exp->syn;
     res->exp = exp;
-    res->resolve(env);
-    return res;
+    return res->construct(env);
   }
 
   //
@@ -1064,9 +1111,7 @@ namespace ast {
     assert_num_args(2);
     lhs = parse_exp(p->arg(0), env);
     rhs = parse_exp(p->arg(1), env);
-    resolve(env);
-    make_ct_value();
-    return this;
+    return construct(env);
   }
   void BinOp::make_ct_value() {}
   void BinOp::finalize(FinalizeEnviron & env) {
@@ -1190,12 +1235,14 @@ namespace ast {
 
   struct Assign : public BinOp {
     Assign() : BinOp("assign", "=") {}
+    Assign(Exp * l, Exp * r) : BinOp("assign", "=") {lhs = l; rhs = r;}
     void resolve(Environ & env) {
       //printf("RESOLVE ASSIGN:: %p %s\n", lhs, ~syn->to_string());
       //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->syn->to_string());
       //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->syn->sample_w_loc(60));
       env.type_relation->resolve_assign(lhs, rhs, env);
       type = lhs->type;
+      lvalue = 1;
     }
   };
 
@@ -1469,7 +1516,63 @@ namespace ast {
   //
   //
 
-  
+  inline void TempInsrPoint::add(Stmt * ref) {
+    if (decls_back) {
+      decls_back->next = ref;
+      decls_back = ref;
+    } else {
+      decls_front = decls_back = ref;
+    }
+  }
+
+  Exp * TempInsrPointWrapper::finish(Exp * exp) {
+    if (env.temp_ip != &ip) return exp;
+    if (!ip.decls_front) return exp;
+    // now wrap the expression in an ExpBlock
+    EBlock * b = new EBlock();
+    b->stmts = ip.decls_front;
+    for (Stmt * cur = ip.decls_front; cur; cur = cur->next)
+      env.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
+    ip.decls_back->next = new EStmt(exp);
+    b->type = exp->type;
+    return b;
+  }
+
+  void TempInsrPointWrapper::finish(Environ & oenv) {
+    if (env.temp_ip != &ip) return;
+    if (!ip.decls_front) return;
+    Stmt * cur = ip.decls_front;
+    assert(!cur->next); // there should only be one
+    oenv.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
+    if (ip.where == TempInsrPoint::TopLevelVar) {
+      oenv.add_defn(cur);
+    } else {
+      oenv.add_stmt(cur);
+    }
+    ip.decls_front = ip.decls_back = NULL;
+  }
+
+  Exp * make_temp(Exp * exp, Environ & env) {
+    Var * temp = NULL;
+    TopLevelTemp * tl_temp = NULL;
+    if (env.temp_ip->where == TempInsrPoint::TopLevelVar)
+      temp = tl_temp = new TopLevelTemp(exp->type);
+    else
+      temp = new AutoTemp(exp->type);
+    env.temp_ip->add(temp);
+    if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
+      return (new Assign((new Id(temp))->construct(env), exp))->construct(env);
+    } else {
+      temp->init = exp;
+      if (tl_temp)
+        tl_temp->fix_up_init(env);
+      return (new Id(temp))->construct(env);
+    }
+  }
+
+  //
+  //
+  //
 
   void parse_stmts_raw(SourceStr str, Environ & env) {
     Parse<TopLevel> prs(env);
@@ -2081,7 +2184,7 @@ namespace ast {
       bool mangle = name.marks || env.where || f->storage_class == SC_STATIC;
       f->num = mangle ? NPOS : 0;
       f->where = env.where;
-      f->add_to_env(name, env);
+      env.add(name, f);
       f->parse_forward_i(p, env, collect);
     }
     return f;
@@ -2607,6 +2710,7 @@ namespace ast {
   Stmt * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect);
   Stmt * try_just_stmt(const Syntax * p, Environ & env);
   Exp * try_just_exp(const Syntax * p, Environ & env);
+  EStmt * try_exp_stmt(const Syntax * p, Environ & env);
 
   template <typename T>
   T * try_ast(const Syntax * p, Environ & env) {
@@ -2708,8 +2812,8 @@ namespace ast {
     if (res) return res;
     res = try_just_stmt(p, env);
     if (res) return res;
-    Exp * exp = try_just_exp(p, env);
-    if (exp) return new EStmt(exp);
+    res = try_exp_stmt(p, env);
+    if (res) return res;
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
     throw error (p, "Expected statement in: %s.", ~p->to_string());
   }
@@ -2727,8 +2831,8 @@ namespace ast {
     if (res) return res;
     res = try_just_stmt(p, env);
     if (res) return res;
-    Exp * exp = try_just_exp(p, env);
-    if (exp) return new EStmt(exp);
+    res = try_exp_stmt(p, env);
+    if (res) return res;
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
     p->print(); printf("\n");
     throw error (p, "Expected statement or declaration.");
@@ -2867,6 +2971,17 @@ namespace ast {
       return new CompoundAssign(what, op.freeze(), binop, env);
     }
     return 0;
+  }
+
+  EStmt * try_exp_stmt(const Syntax * p, Environ & env) {
+    TempInsrPointWrapper wrap(env);
+    Exp * exp = try_just_exp(p, wrap.env);
+    if (exp) {
+      exp = wrap.finish(exp);
+      return new EStmt(exp);
+    } else {
+      return NULL;
+    }
   }
 
   //
@@ -3106,7 +3221,7 @@ namespace ast {
       }
     }
 
-    sep(cw, "function decls");
+    sep(cw, "decls");
 
     for (VarsItr i = vars.begin(), e = vars.end(); i != e; ++i) {
       (*i)->compile(cw, Declaration::Forward);

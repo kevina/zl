@@ -53,6 +53,23 @@ namespace ast {
     inline void add(Stmt *); // defined in ast.hpp
   };
 
+  struct TempInsrPoint {
+    enum Where {ExtendedExp, Var, TopLevelVar};
+    TempInsrPoint(Where w = ExtendedExp) : decls_front(), decls_back(), where(w) {}
+    void reset(Where w = ExtendedExp) {decls_front = decls_back = 0; where = w;}
+    Stmt * decls_front;
+    Stmt * decls_back;
+    //Stmt * cleanup;
+    Where where;
+    inline void add(Stmt *); // defined in ast.hpp
+  };
+
+  /*
+    TopLevel decl insr point
+    Temp decl/cleanup insr point
+    Block stmts/cleanup
+   */
+
   struct Environ : public gc {
     TypeRelation * type_relation;
     bool special() const {return !top_level_symbols;}
@@ -74,6 +91,7 @@ namespace ast {
     Deps * deps;
     bool * for_ct; // set if this function uses a ct primitive such as syntax
     InsrPoint ip;
+    TempInsrPoint * temp_ip;
     bool true_top_level;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
@@ -83,7 +101,7 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct(), true_top_level(false)
+        deps(), for_ct(), temp_ip(), true_top_level(false)
       {
         if (s == TOPLEVEL) {
           true_top_level = true;
@@ -102,7 +120,7 @@ namespace ast {
         scope(other.scope), frame(other.frame), 
         where(other.where),
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
-        deps(other.deps), for_ct(other.for_ct), ip(other.ip), true_top_level(other.true_top_level) {}
+        deps(other.deps), for_ct(other.for_ct), ip(other.ip), temp_ip(other.temp_ip), true_top_level(other.true_top_level) {}
     Environ new_scope() {
       Environ env = *this;
       env.true_top_level = false;
@@ -110,13 +128,20 @@ namespace ast {
       env.symbols = symbols.new_scope();
       return env;
     }
+    Environ new_extended_exp(TempInsrPoint * ip) {
+      Environ env = *this;
+      env.true_top_level = false;
+      if (!env.temp_ip)
+        env.temp_ip = ip;
+      return env;
+    }
 
     void add_stmt(Stmt * stmt) {
       ip.add(stmt);
     }
 
-    void add(const SymbolKey & k, Symbol * sym) {
-      sym->add_to_env(k, *this);
+    void add(const SymbolKey & k, Symbol * sym, bool shadow_ok = false) {
+      sym->add_to_env(k, *this, shadow_ok);
     }
 
     void add_internal(const SymbolKey & k, Symbol * sym) {

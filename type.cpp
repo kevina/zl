@@ -426,12 +426,14 @@ namespace ast {
       have = exp->type->unqualified;
     }
     if (n_r) {
-      if (!exp->lvalue) 
-        throw error(orig_exp->syn, 
-                    "Can not take a reference of temporary (yet) in conversion from \"%s\" to \"%s\"",
-                    ~orig_exp->type->to_string(), ~type->to_string());
       if (have != n_r->subtype->unqualified) 
         goto fail;
+      if (!exp->lvalue) {
+        return to_ref(make_temp(exp, env), env);
+        //throw error(orig_exp->syn, 
+        //            "Can not take a reference of temporary (yet) in conversion from \"%s\" to \"%s\"",
+        //            ~orig_exp->type->to_string(), ~type->to_string());
+      }
       if (exp->type->read_only && !n_r->subtype->read_only)
         throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                     ~orig_exp->type->to_string(), ~type->to_string());
@@ -530,8 +532,8 @@ namespace ast {
     if (!lhs->lvalue)
       throw error(lhs->syn, "Can not be used as lvalue");
     //throw error(syn->arg(1), "Can not be used as lvalue");
-    if (lhs->type->read_only) 
-      throw error (lhs->syn, "Assignment to read-only location");
+    //if (lhs->type->read_only) 
+    //  throw error (lhs->syn, "Assignment to read-only location");
     const Reference * lhs_r = dynamic_cast<const Reference *>(lhs->type->unqualified);
     if (lhs_r) {
       lhs = from_ref(lhs, env);

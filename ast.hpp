@@ -279,6 +279,11 @@ namespace ast {
     BinOp * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
     virtual void make_ct_value();
+    BinOp * construct(Environ & env) {
+      resolve(env);
+      make_ct_value();
+      return this;
+    }
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
     void compile(CompileWriter & f);
@@ -294,6 +299,11 @@ namespace ast {
     UnOp * parse_self(const Syntax * p, Environ & env);
     virtual void resolve(Environ & env) = 0;
     virtual void make_ct_value();
+    UnOp * construct(Environ & env) {
+      resolve(env);
+      make_ct_value();
+      return this;
+    }
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
     void compile(CompileWriter & f);
@@ -801,6 +811,7 @@ namespace ast {
 
   Exp * to_ref(Exp *, Environ &);
   Exp * from_ref(Exp *, Environ &);
+  Exp * make_temp(Exp *, Environ &);
 
 }
 

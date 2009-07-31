@@ -180,7 +180,7 @@ namespace ast {
       return uniq_name_;
     }
     virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
-    virtual void add_to_env(const SymbolKey & k, Environ &);
+    virtual void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
   protected:
@@ -206,7 +206,7 @@ namespace ast {
         o.printf("%s$$%u", ~name(), num);
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
-    void add_to_env(const SymbolKey & k, Environ &);
+    void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s);
     virtual const Syntax * get_prop(SymbolName n) const;
@@ -552,7 +552,7 @@ namespace ast {
   void assign_uniq_num(unsigned num, T * sym) {
     unsigned existing_num = existing_uniq_num(sym);
     if (existing_num != NPOS) {
-      assert(existing_num >= num);
+      //assert(existing_num >= num); // not always the case with temporaries
       sym->uniq_name_ = sym->name();
       sym->num = existing_num;
     } else {
