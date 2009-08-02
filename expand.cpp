@@ -1136,6 +1136,12 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
           return new Syntax(n->arg(0));
         }
       }
+      if (TypeSymbol * t = env.symbols.find<TypeSymbol>(n->arg(0))) {
+        Syntax * res = new Syntax("anon");
+        res->add_part(new Syntax(t));
+        res->add_part(a);
+        return res;
+      }
     }
     Syntax * res = new Syntax(p->str(), p->part(0));
     res->add_part(p->arg(0));

@@ -45,30 +45,21 @@ namespace ast {
   };
 
   struct InsrPoint {
-    InsrPoint() : ptr() {}
-    Stmt * * ptr;
-    void clear() {
-      ptr = NULL;
-    }
+    InsrPoint(Stmt * * p = NULL) : ptr(p) {}
+    Stmt * * ptr; // insertion point
     inline void add(Stmt *); // defined in ast.hpp
+    operator bool () const {return ptr;}
+    bool operator! () const {return !ptr;}
+    void operator=(Stmt * * p) {ptr = p;}
   };
 
-  struct TempInsrPoint {
+  struct TempInsrPoint : public InsrPoint {
     enum Where {ExtendedExp, Var, TopLevelVar};
-    TempInsrPoint(Where w = ExtendedExp) : decls_front(), decls_back(), where(w) {}
-    void reset(Where w = ExtendedExp) {decls_front = decls_back = 0; where = w;}
-    Stmt * decls_front;
-    Stmt * decls_back;
-    //Stmt * cleanup;
+    TempInsrPoint(Where w = ExtendedExp) : InsrPoint(&stmts), where(w), stmts() {}
     Where where;
-    inline void add(Stmt *); // defined in ast.hpp
+    Stmt * stmts;
+    void reset() {stmts = NULL; ptr = &stmts;}
   };
-
-  /*
-    TopLevel decl insr point
-    Temp decl/cleanup insr point
-    Block stmts/cleanup
-   */
 
   struct Environ : public gc {
     TypeRelation * type_relation;
@@ -124,7 +115,7 @@ namespace ast {
     Environ new_scope() {
       Environ env = *this;
       env.true_top_level = false;
-      env.ip.clear();
+      env.ip = NULL;
       env.symbols = symbols.new_scope();
       return env;
     }
@@ -159,7 +150,7 @@ namespace ast {
     Environ new_frame() {
       Environ env = *this;
       env.true_top_level = false;
-      env.ip.clear();
+      env.ip = NULL;
       env.scope = LEXICAL;
       env.symbols = symbols.new_scope(env.fun_labels);
       env.frame = new Frame();

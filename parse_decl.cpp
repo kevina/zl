@@ -227,6 +227,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
   {
     bool r = w.parse_first_part(i, end, env, true);
     if (!r) return NULL;
+    if (i != end && (*i)->is_a("()")) return NULL;
   }
 
   w.make_inner_type(p);

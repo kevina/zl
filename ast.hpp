@@ -137,6 +137,7 @@ namespace ast {
   };
 
   struct Stmt;
+  struct EStmt;
 
   struct Exp : public AST {
     typedef ::TypeInfo<Exp> TypeInfo;
@@ -149,12 +150,12 @@ namespace ast {
       d.data = this;
     }
     static const int ast_type = 1;
-    Exp(const Syntax * p = 0) : AST(p), type(), lvalue(false), ct_value_(0), temps() {}
+    Exp(const Syntax * p = 0) : AST(p), type(), lvalue(false), ct_value_(0) /*, temps()*/ {}
     const Type * type;
     int lvalue; // 0 false, 1 true, 2 true and addr ct_value
     const CT_Value_Base * ct_value_;
-    Stmt * temps; // temporaries bound to res
-
+    //Stmt * temps; // temporaries bound to res
+    
     virtual Exp * resolve_to(const Type * type, Environ & env, 
                              TypeRelation::CastType rule = TypeRelation::Implicit) {
       return env.type_relation->resolve_to(this, type, env, rule);
@@ -173,7 +174,8 @@ namespace ast {
     template <typename T> T ct_value_direct() const {
       return dynamic_cast<const CT_Value<T> *>(ct_value_)->val;
     }
-  };
+    inline EStmt * as_stmt(); 
+ };
 
   struct ExpLeaf : public Exp {
     ExpLeaf(const Syntax * p = 0) : Exp(p) {}

@@ -70,3 +70,8 @@ test74.c
 test75.c
 test77.c
 test78.c
+test79.c
+test80.c
+test81.c
+test82.c
+

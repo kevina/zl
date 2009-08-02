@@ -90,6 +90,31 @@ namespace ast {
       return p->arg(0);
     }
   }
+  
+  //
+  //
+  //
+
+  struct EStmt : public Stmt {
+    EStmt() {}
+    const char * what() const {return "estmt";}
+    EStmt(Exp * e) : exp(e) {}
+    //AST * part(unsigned i) {return exp;}
+    Exp * exp;
+    void finalize(FinalizeEnviron & env) {
+      exp->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << indent << exp << "\n";
+    }
+  };
+
+  inline EStmt * Exp::as_stmt() {
+    return new EStmt(this);
+  }
 
   //
   //
@@ -237,14 +262,30 @@ namespace ast {
   //
   //
 
+  struct Var;
+
   struct TempInsrPointWrapper {
     TempInsrPointWrapper(Environ & e, TempInsrPoint::Where w = TempInsrPoint::ExtendedExp) 
       : ip(w), env(e.new_extended_exp(&ip)) {}
     TempInsrPoint ip;
     Environ env;
     Exp * finish(Exp * exp);     // created EBlock;
-    void finish(Environ & env); // add temp to env
+    Var * finish(Environ & env); // add temp to env
   };
+
+  void finish(Var * v, TempInsrPointWrapper & wrap,
+              TempInsrPointWrapper & wrap2, Environ & oenv);
+
+
+  //
+  //
+  //
+
+  static Exp * mk_assign(Exp *, Exp *, Environ & env);
+  static Exp * mk_init(const VarSymbol *, Exp *, Environ & env);
+  static Exp * mk_id(const VarSymbol *, Environ & env);
+  static Exp * mk_literal(int val, Environ & env);
+
 
   //
   //
@@ -428,6 +469,12 @@ namespace ast {
   void Literal::compile(CompileWriter & f) {
     ct_value_->compile(f, NULL);
   }
+  Exp * mk_literal(int val, Environ & env) {
+    Literal * l = new Literal;
+    l->type = env.types.inst("int");
+    l->ct_value_ = new CT_Value<int>(val);
+    return l;
+  }
 
   FloatC * FloatC::parse_self(const Syntax * p, Environ & env) {
     syn = p;
@@ -494,6 +541,11 @@ namespace ast {
       f << sym;
     }
   };
+
+  static Exp * mk_id(const VarSymbol * s, Environ & env) {
+    Id * id = new Id(s);
+    return id->construct(env);
+  }
 
   struct If : public Stmt {
     If() {}
@@ -628,18 +680,45 @@ namespace ast {
     return new OtherVar(t, mangle);
   }
 
+  // this marks the point where cleanup is needed
+  struct CleanupFlag : public StmtLeaf {
+    CleanupFlag(struct Var * v) : var(v) {}
+    struct Var * var;
+    virtual const char * what() const {return "need-cleanup";}
+    void compile(CompileWriter & cw);
+  };
+
+  struct Cleanup : public Stmt {
+    Cleanup() : cleanup_flag(), code() {}
+    virtual const char * what() const {return "cleanup";}
+    CleanupFlag * cleanup_flag; // NULL if not used
+    Stmt * code;
+    void compile_prep(CompileEnviron & env) {code->compile_prep(env);}
+    void finalize(FinalizeEnviron & env) {code->finalize(env);}
+    void compile(CompileWriter & cw);
+    Cleanup * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      assert_num_args(1);
+      code = parse_stmt(p->arg(0), env);
+      return this;
+    }
+  };
+
   struct Var : virtual public VarDecl {
-    Var() : init(), constructor() {}
+    Var() : init(), constructor(), cleanup() {}
     const char * what() const {return "var";}
     //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
     Exp * init;
     Stmt * constructor;
+    Cleanup * cleanup;
     void finish_parse(Environ & env) {
       if (syn->num_args() > 2) {
         //env.add(name, sym, SecondPass);
         TempInsrPointWrapper wrap(env);
         init = parse_exp(syn->arg(2), wrap.env);
-        init = wrap.finish(init);
+        TempInsrPointWrapper wrap2(env, top_level() ? TempInsrPoint::TopLevelVar : TempInsrPoint::Var);
+        init = init->resolve_to(type, wrap2.env);
+        finish(this, wrap, wrap2, env);
         //if (sym->type->is_ref && !init->lvalue) {
         //  temp_exp = init;
         //  SymbolKey name = expand_binding(name_p, env);
@@ -647,22 +726,35 @@ namespace ast {
         //  temp_sym = new_var_symbol(...);
         //  init = addrof(temp_sym);
         //}
-        TempInsrPointWrapper wrap2(env, top_level() ? TempInsrPoint::TopLevelVar : TempInsrPoint::Var);
-        init = init->resolve_to(type, wrap2.env);
-        wrap2.finish(env);
         if (storage_class == SC_STATIC && type->read_only && init->ct_value_) {
           ct_value = init->ct_value_;
         }
       }
       if (const UserType * ut = dynamic_cast<const UserType *>(type)) {
-        if (find_symbol<Symbol>("_constructor", ut->module->syms)) {
-          constructor = parse_stmt(SYN(SYN("member"), 
-                                       SYN(ID, SYN(name_p, this)),
-                                       SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
-                                   env);
-        }
+        if (!init) constructor = make_constructor(ut, env);
+        add_cleanup(ut, env);
       }
     }
+    Stmt * make_constructor(const UserType * ut, Environ & env) {
+      if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
+        return parse_stmt(SYN(SYN("member"), 
+                              SYN(ID, SYN(/*name_p, */this)),
+                              SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
+                          env);
+      } else {
+        return NULL;
+      }
+    }
+    void add_cleanup(const UserType * ut, Environ & env) {
+      if (ut && find_symbol<Symbol>("_destructor", ut->module->syms)) {
+        cleanup = new Cleanup;
+        cleanup->code = parse_stmt(SYN(SYN("member"), 
+                                       SYN(ID, SYN(/*name_p, */this)),
+                                       SYN(SYN("call"), SYN(ID, SYN("_destructor")), SYN(SYN(".")))),
+                                   env);
+      }
+    }
+    
     void finalize(FinalizeEnviron & env) {
       if (init)
         init->finalize(env);
@@ -672,6 +764,11 @@ namespace ast {
         init->compile_prep(env);
     }
     void compile(CompileWriter & f, Phase phase) const {
+      if (cleanup && cleanup->cleanup_flag) {
+       f << indent << "(var "<< uniq_name() << "$nc (bool)";
+       if (phase != Forward) f << " 0";
+       f << ")\n";
+      }
       f << indent;
       f << "(var";
       f << ' ' << uniq_name();
@@ -689,6 +786,23 @@ namespace ast {
     }
   };
 
+  void CleanupFlag::compile(CompileWriter & cw) {
+    cw << indent << "(assign " << var->uniq_name() << "$nc 1)\n";
+  }
+
+  void Cleanup::compile(CompileWriter & cw) {
+    cw << indent << "(cleanup ";
+    if (cleanup_flag) {
+      cw << "(if " << cleanup_flag->var->uniq_name() << "$nc\n";
+      cw << adj_indent(2) << code;
+      cw << indent << "))\n";
+    } else {
+      cw << "\n";
+      cw << adj_indent(2) << code;
+      cw << indent << ")\n";
+    }
+  }
+
   struct AutoVar : public Var {
     AutoVar() : num() {}
     mutable unsigned num;
@@ -697,6 +811,8 @@ namespace ast {
       Var::compile(f, phase);
       if (constructor)
         f << constructor;
+      if (cleanup)
+        f << cleanup;
     }
     void uniq_name(OStream & o) const {
       o.printf("%s$%u", ~name(), num);
@@ -804,23 +920,6 @@ namespace ast {
   //
   //
 
-  struct EStmt : public Stmt {
-    EStmt() {}
-    const char * what() const {return "estmt";}
-    EStmt(Exp * e) : exp(e) {}
-    //AST * part(unsigned i) {return exp;}
-    Exp * exp;
-    void finalize(FinalizeEnviron & env) {
-      exp->finalize(env);
-    }
-    void compile_prep(CompileEnviron & env) {
-      exp->compile_prep(env);
-    }
-    void compile(CompileWriter & f) {
-      f << indent << exp << "\n";
-    }
-  };
-
   template <typename T> 
   struct BlockBase : public T {
     using T::syn;
@@ -834,13 +933,11 @@ namespace ast {
       syn = p;
       Environ env = env0.new_scope();
       stmts = NULL;
-      env.ip.ptr = &stmts;
-      Stmt * last;
-      if (p->num_args() > 0) {
-        last = add_stmts(p->args_begin(), p->args_end(), env);
-      } else {
-        last = stmts = empty_stmt();
-      }
+      env.ip = &stmts;
+      Stmt * last = add_stmts(p->args_begin(), p->args_end(), env);
+      if (stmts == NULL) // must test against stmts as last will may
+                         // be an empty_stmt
+        stmts = last = empty_stmt();
       //symbols = env.symbols;
       set_type_if_exp(last);
       return this;
@@ -1246,6 +1343,26 @@ namespace ast {
     }
   };
 
+  static Exp * mk_assign(Exp * l, Exp * r, Environ & env) {
+    Assign * exp = new Assign(l, r);
+    return exp->construct(env);
+  }
+
+  struct InitAssign : public BinOp {
+    InitAssign() : BinOp("assign", "=") {}
+    InitAssign(Exp * l, Exp * r) : BinOp("assign", "=") {lhs = l; rhs = r;}
+    void resolve(Environ & env) {
+      type = lhs->type;
+      rhs->resolve_to(lhs->type, env);
+      lvalue = 1;
+    }
+  };
+
+  static Exp * mk_init(const VarSymbol * v, Exp * r, Environ & env) {
+    InitAssign * exp = new InitAssign(mk_id(v, env), r);
+    return exp->construct(env);
+  }
+
   struct CompoundAssign : public BinOp {
     CompoundAssign(String name, String op0, BinOp *bop, Environ & env) 
       : BinOp(name, op0), assign(new Assign), binop(bop) 
@@ -1516,32 +1633,24 @@ namespace ast {
   //
   //
 
-  inline void TempInsrPoint::add(Stmt * ref) {
-    if (decls_back) {
-      decls_back->next = ref;
-      decls_back = ref;
-    } else {
-      decls_front = decls_back = ref;
-    }
-  }
-
   Exp * TempInsrPointWrapper::finish(Exp * exp) {
-    if (env.temp_ip != &ip) return exp;
-    if (!ip.decls_front) return exp;
+    if (!ip.stmts) return exp;
     // now wrap the expression in an ExpBlock
     EBlock * b = new EBlock();
-    b->stmts = ip.decls_front;
-    for (Stmt * cur = ip.decls_front; cur; cur = cur->next)
+    b->stmts = ip.stmts;
+    Stmt * cur;
+    for (cur = ip.stmts; cur; cur = cur->next)
       env.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
-    ip.decls_back->next = new EStmt(exp);
+    ip.add(new EStmt(exp)); // and thus add to b->stmts list
     b->type = exp->type;
+    ip.reset();
     return b;
   }
 
-  void TempInsrPointWrapper::finish(Environ & oenv) {
-    if (env.temp_ip != &ip) return;
-    if (!ip.decls_front) return;
-    Stmt * cur = ip.decls_front;
+  Var * TempInsrPointWrapper::finish(Environ & oenv) {
+    if (env.temp_ip != &ip) return NULL;
+    if (!ip.stmts) return NULL;
+    Stmt * cur = ip.stmts;
     assert(!cur->next); // there should only be one
     oenv.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
     if (ip.where == TempInsrPoint::TopLevelVar) {
@@ -1549,25 +1658,88 @@ namespace ast {
     } else {
       oenv.add_stmt(cur);
     }
-    ip.decls_front = ip.decls_back = NULL;
+    ip.reset();
+    return dynamic_cast<Var *>(cur);
+  }
+
+
+  static Exp * wrap_w_cleanup_flag(Var * temp, Exp * res, Environ & env) {
+    EBlock * b = new EBlock();
+    Stmt * cur = b->stmts = res->as_stmt();
+    cur = cur->next = temp->cleanup->cleanup_flag;
+    cur = cur->next = mk_id(temp,env)->as_stmt();
+    b->type = temp->type;
+    return b;
+  }
+
+  void finish(Var * v, TempInsrPointWrapper & wrap,
+              TempInsrPointWrapper & wrap2, Environ & oenv) 
+  {
+    Var * t = wrap2.finish(oenv);
+    if (t) v = t;
+    if (wrap.ip.stmts) {
+      Exp * exp = mk_init(v, v->init, oenv);
+      if (v->cleanup && v->cleanup->cleanup_flag)
+        exp = wrap_w_cleanup_flag(v, exp, oenv);
+      exp = wrap.finish(exp);
+      v->init = NULL;
+      v->constructor = new EStmt(exp);
+    } else if (TopLevelVar * tl = dynamic_cast<TopLevelVar *>(v)) {
+      tl->fix_up_init(oenv);
+    }
+  }
+
+  static Var * start_temp(const Type * type, Environ & env) {
+    Var * temp = NULL;
+    if (env.temp_ip->where == TempInsrPoint::TopLevelVar)
+      temp = new TopLevelTemp(type);
+    else
+      temp = new AutoTemp(type);
+    env.temp_ip->add(temp);
+    temp->add_cleanup(dynamic_cast<const UserType *>(type->unqualified), env);
+    if (temp->cleanup)
+      temp->cleanup->cleanup_flag = new CleanupFlag(temp);
+    return temp;
   }
 
   Exp * make_temp(Exp * exp, Environ & env) {
-    Var * temp = NULL;
-    TopLevelTemp * tl_temp = NULL;
-    if (env.temp_ip->where == TempInsrPoint::TopLevelVar)
-      temp = tl_temp = new TopLevelTemp(exp->type);
-    else
-      temp = new AutoTemp(exp->type);
-    env.temp_ip->add(temp);
+    Var * temp = start_temp(exp->type, env);
     if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
-      return (new Assign((new Id(temp))->construct(env), exp))->construct(env);
+      Exp * res = mk_init(temp, exp, env);
+      if (temp->cleanup) {
+        res = wrap_w_cleanup_flag(temp, res, env);
+      }
+      return res;
     } else {
       temp->init = exp;
-      if (tl_temp)
-        tl_temp->fix_up_init(env);
-      return (new Id(temp))->construct(env);
+      return mk_id(temp, env);
     }
+  }
+
+  Exp * make_temp(const Type * type, Environ & env) {
+    Var * temp = start_temp(type, env);
+    Stmt * constructor = temp->make_constructor(dynamic_cast<const UserType *>(type), env);
+    if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
+      EBlock * b = new EBlock();
+      InsrPoint ip = &b->stmts;
+      if (constructor)
+        ip.add(constructor);
+      else if (type->is(SCALAR_C))
+        ip.add(mk_init(temp, mk_literal(0, env), env)->as_stmt());
+      if (temp->cleanup)
+        ip.add(temp->cleanup->cleanup_flag);
+      ip.add(mk_id(temp,env)->as_stmt());
+      b->type = temp->type;
+      return b;
+    } else {
+      temp->constructor = constructor;
+      return mk_id(temp, env);
+    }
+  }
+
+  Exp * parse_anon(const Syntax * p, Environ & env) {
+    Type * t = env.types.inst(p->arg(0));
+    return make_temp(t, env);
   }
 
   //
@@ -2401,7 +2573,7 @@ namespace ast {
       f << "))";
     }
   };
-  
+
   //
   //
   //
@@ -2915,6 +3087,7 @@ namespace ast {
     if (what == "block")   return (new Block)->parse_self(p, env);
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
     if (what == "return")  return (new Return)->parse_self(p, env);
+    if (what == "cleanup") return (new Cleanup)->parse_self(p, env);
     return 0;
   }
 
@@ -2953,6 +3126,7 @@ namespace ast {
     if (what == "member")  return parse_member_access(p, env);
     if (what == "imember") return parse_imember_access(p, env);
     if (what == "call")    return (new Call)->parse_self(p, env);
+    if (what == "anon")    return parse_anon(p, env);
     if (what == "eblock")  return (new EBlock)->parse_self(p, env);
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
     if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
@@ -3242,7 +3416,7 @@ namespace ast {
     for (VarsItr i = var_defns.begin(), e = var_defns.end(); i != e; ++i) {
       if (const TopLevelVar * s = dynamic_cast<const TopLevelVar *>(*i)) {
         if (s->constructor) init.push_back(s->constructor);
-        //if (s->cleanup) cleanup.push_back(s->cleanup);
+        if (s->cleanup) cleanup.push_back(s->cleanup);
       }
     }
 
@@ -3256,7 +3430,7 @@ namespace ast {
     
     if (!cleanup.empty()) {
       cw << "(fun cleanup$s (.) (void) :static :__destructor__ (block\n";
-      for (Vector<AST *>::const_reverse_iterator i = cleanup.rbegin(), e = cleanup.rend(); i != e; ++i) {
+      for (Vector<AST *>::const_iterator i = cleanup.begin(), e = cleanup.end(); i != e; ++i) {
         cw << adj_indent(2) << *i;
       }
       cw << "))\n";
