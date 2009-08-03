@@ -428,7 +428,9 @@ namespace ast {
     if (n_r) {
       if (have != n_r->subtype->unqualified) 
         goto fail;
-      if (!exp->lvalue) {
+      if (!exp->lvalue
+          || (env.temp_ip && env.temp_ip->where >= TempInsrPoint::Var && exp->lvalue < LV_NORMAL))
+      {
         return to_ref(make_temp(exp, env), env);
         //throw error(orig_exp->syn, 
         //            "Can not take a reference of temporary (yet) in conversion from \"%s\" to \"%s\"",

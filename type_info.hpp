@@ -8,6 +8,7 @@ namespace ast {
   struct SymbolKeyEntity;
   struct AST;
   struct Exp;
+  struct Stmt;
   struct TypeInst;
 }
 
@@ -27,6 +28,9 @@ template <> struct TypeInfo<ast::SymbolKeyEntity> {
 template <> struct TypeInfo<ast::Exp> {
   typedef ast::Exp type; 
   static const unsigned id = 0x401;};
+template <> struct TypeInfo<ast::Stmt> {
+  typedef ast::Stmt type; 
+  static const unsigned id = 0x402;};
 template <> struct TypeInfo<ast::TypeInst> {
   typedef ast::TypeInst type; 
   static const unsigned id = 0x5FF;};

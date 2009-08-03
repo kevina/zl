@@ -139,6 +139,8 @@ namespace ast {
   struct Stmt;
   struct EStmt;
 
+  enum LValue { LV_FALSE, LV_EEXP, LV_NORMAL, LV_TOPLEVEL };
+
   struct Exp : public AST {
     typedef ::TypeInfo<Exp> TypeInfo;
     //struct TypeInfo {
@@ -150,9 +152,9 @@ namespace ast {
       d.data = this;
     }
     static const int ast_type = 1;
-    Exp(const Syntax * p = 0) : AST(p), type(), lvalue(false), ct_value_(0) /*, temps()*/ {}
+    Exp(const Syntax * p = 0) : AST(p), type(), lvalue(), ct_value_(0) /*, temps()*/ {}
     const Type * type;
-    int lvalue; // 0 false, 1 true, 2 true and addr ct_value
+    LValue lvalue;
     const CT_Value_Base * ct_value_;
     //Stmt * temps; // temporaries bound to res
     
@@ -184,6 +186,7 @@ namespace ast {
   };
 
   struct Stmt : virtual public AST {
+    typedef ::TypeInfo<Stmt> TypeInfo;
   public:
     //struct TypeInfo {
     //  typedef Stmt type; 
@@ -463,10 +466,11 @@ namespace ast {
     const Syntax * name_p;
     const Type * type;
     const struct CT_Value_Base * ct_value;
+    LValue lvalue;
     virtual const TopLevelVarDecl * top_level() const {return NULL;}
   protected:
-    BasicVar() : name_p(), ct_value() {}
-    BasicVar(const Type * t) : name_p(), type(t), ct_value() {}
+    BasicVar() : name_p(), ct_value(), lvalue(LV_NORMAL) {}
+    BasicVar(const Type * t, LValue lv = LV_NORMAL) : name_p(), type(t), ct_value(), lvalue(lv) {}
     //protected:
     //friend VarSymbol * new_var_symbol(SymbolName n, Scope s);
   };

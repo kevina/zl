@@ -113,6 +113,7 @@ namespace ast {
   };
 
   inline EStmt * Exp::as_stmt() {
+    if (!this) return NULL; // FIXME: You should know why
     return new EStmt(this);
   }
 
@@ -282,7 +283,7 @@ namespace ast {
   //
 
   static Exp * mk_assign(Exp *, Exp *, Environ & env);
-  static Exp * mk_init(const VarSymbol *, Exp *, Environ & env);
+  static Exp * mk_init(const Var *, Exp *, bool need_res, Environ & env);
   static Exp * mk_id(const VarSymbol *, Environ & env);
   static Exp * mk_literal(int val, Environ & env);
 
@@ -528,7 +529,7 @@ namespace ast {
       if (sym->ct_value)
         ct_value_ = sym->ct_value;
       type = sym->type;
-      lvalue = tl ? 2 : 1;
+      lvalue = sym->lvalue;
       return this;
     }
     Id * parse_self(const Syntax * p, Environ & env) {
@@ -681,7 +682,7 @@ namespace ast {
   }
 
   // this marks the point where cleanup is needed
-  struct CleanupFlag : public StmtLeaf {
+  struct CleanupFlag : public ExpLeaf {
     CleanupFlag(struct Var * v) : var(v) {}
     struct Var * var;
     virtual const char * what() const {return "need-cleanup";}
@@ -731,27 +732,49 @@ namespace ast {
         }
       }
       if (const UserType * ut = dynamic_cast<const UserType *>(type)) {
-        if (!init) constructor = make_constructor(ut, env);
+        if (!init) constructor = make_constructor(ut, env)->as_stmt();
         add_cleanup(ut, env);
       }
     }
-    Stmt * make_constructor(const UserType * ut, Environ & env) {
+    Exp * make_constructor(const UserType * ut, Environ & env) {
       if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
-        return parse_stmt(SYN(SYN("member"), 
-                              SYN(ID, SYN(/*name_p, */this)),
+        return parse_exp(SYN(SYN("member"), 
+                              SYN(mk_id(this, env)),
                               SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
                           env);
       } else {
         return NULL;
       }
     }
+    Exp * try_copy_constructor(Exp * rhs, Environ & env) const {
+      const UserType * ut = dynamic_cast<const UserType *>(type->unqualified);
+      if (ut && find_symbol<Symbol>("_copy_constructor", ut->module->syms)) {
+        return parse_exp(SYN(SYN("member"), 
+                              SYN(mk_id(this, env)),
+                              SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
+                                  SYN(SYN("."), SYN(rhs)))),
+                          env);
+      } else {
+        return NULL;
+      }
+    }
+
     void add_cleanup(const UserType * ut, Environ & env) {
       if (ut && find_symbol<Symbol>("_destructor", ut->module->syms)) {
         cleanup = new Cleanup;
         cleanup->code = parse_stmt(SYN(SYN("member"), 
-                                       SYN(ID, SYN(/*name_p, */this)),
+                                       SYN(mk_id(this, env)),
                                        SYN(SYN("call"), SYN(ID, SYN("_destructor")), SYN(SYN(".")))),
                                    env);
+      }
+    }
+
+    virtual void fix_up_init(Environ & env) {
+      if (!init) return;
+      Exp * copy_c = try_copy_constructor(init, env);
+      if (copy_c) {
+        constructor = copy_c->as_stmt();
+        init = NULL;
       }
     }
     
@@ -765,9 +788,9 @@ namespace ast {
     }
     void compile(CompileWriter & f, Phase phase) const {
       if (cleanup && cleanup->cleanup_flag) {
-       f << indent << "(var "<< uniq_name() << "$nc (bool)";
-       if (phase != Forward) f << " 0";
-       f << ")\n";
+        f << indent << "(var "<< uniq_name() << "$nc (bool)";
+        if (phase != Forward) f << " 0";
+        f << ")\n";
       }
       f << indent;
       f << "(var";
@@ -787,7 +810,7 @@ namespace ast {
   };
 
   void CleanupFlag::compile(CompileWriter & cw) {
-    cw << indent << "(assign " << var->uniq_name() << "$nc 1)\n";
+    cw << "(assign " << var->uniq_name() << "$nc 1)";
   }
 
   void Cleanup::compile(CompileWriter & cw) {
@@ -825,22 +848,23 @@ namespace ast {
   static unsigned last_temp_num = 0;
 
   struct AutoTemp : public AutoVar {
-    AutoTemp(const Type * t) {type = t;}
+    AutoTemp(const Type * t, LValue lv) {type = t; lvalue = lv;}
     void make_unique(SymbolNode *, SymbolNode *) const {
       num = last_temp_num++;
     }
   };
 
   struct TopLevelVar : public Var, public TopLevelVarDecl {
+    TopLevelVar() {lvalue = LV_TOPLEVEL;}
     void fix_up_init(Environ & env) {
+      Var::fix_up_init(env);
       if (init && !init->ct_value_) {
-        constructor = parse_stmt(SYN(SYN("assign"), SYN(ID, SYN(this)), SYN(init)), env);
+        constructor = mk_init(this, init, false, env)->as_stmt();
         init = NULL;
       } 
     }
     void finish_parse(Environ & env) {
       Var::finish_parse(env);
-      fix_up_init(env);
       env.move_defn(this);
     }
   };
@@ -973,8 +997,9 @@ namespace ast {
   template <>
   inline void BlockBase<Exp>::set_type_if_exp(Stmt * stmt) {
     EStmt * estmt = dynamic_cast<EStmt *>(stmt);
-    assert(estmt); // FIXME Error Message
+    if (!estmt) return;
     type = estmt->exp->type;
+    lvalue = estmt->exp->lvalue;
   }
 
   struct Block : public BlockBase<Stmt> {
@@ -985,6 +1010,50 @@ namespace ast {
   struct EBlock : public BlockBase<Exp> {
     EBlock() {}
     const char * what() const {return "eblock";}
+    void set_type(const Type * t, LValue lv) {
+      type = t;
+      lvalue = lv;
+    }
+    void set_type(const Exp * e) {
+      set_type(e->type, e->lvalue);
+    }
+    void set_type(const VarSymbol * s) {
+      set_type(s->type, s->lvalue);
+    }
+  };
+
+  struct Seq : public Exp {
+    Vector<Exp *> exps;
+    const char * what() const {return "seq";}
+    void construct(Environ & env) {
+      type = exps.back()->type;
+      lvalue = exps.back()->lvalue;
+    }
+    Seq * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      for (Parts::const_iterator i = p->args_begin(), e = p->args_end();
+           i != e; ++i)
+        exps.push_back(parse_exp(*i, env));
+      construct(env);
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
+           i != e; ++i)
+        (*i)->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
+           i != e; ++i)
+        (*i)->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << "(seq";
+      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
+           i != e; ++i)
+        f << ' ' << *i;
+      f << ")";
+    }
   };
 
   void check_type(Exp * exp, TypeCategory * cat) {
@@ -1092,7 +1161,7 @@ namespace ast {
     }
     void make_ct_value() {
       if (!exp->ct_value_) {
-        if (exp->lvalue > 1) 
+        if (exp->lvalue == LV_TOPLEVEL) 
           ct_value_ = &ct_nval;
       } else if (exp->ct_value_->nval()) {
         ct_value_ = &ct_nval;
@@ -1116,7 +1185,7 @@ namespace ast {
     }
     void make_ct_value() {
       if (!exp->ct_value_) {
-        if (exp->lvalue > 1) 
+        if (exp->lvalue == LV_TOPLEVEL) 
           ct_value_ = &ct_nval;
       } else if (exp->ct_value_->nval()) {
         ct_value_ = &ct_nval;
@@ -1134,7 +1203,7 @@ namespace ast {
       exp = exp->to_effective(env);
       const PointerLike * t = dynamic_cast<const PointerLike *>(exp->type->unqualified);
       type = t->subtype;
-      lvalue = true;
+      lvalue = LV_NORMAL;
     }
     void make_ct_value() {
       if (!exp->ct_value_) return;
@@ -1152,7 +1221,7 @@ namespace ast {
     void resolve(Environ & env) {
       const Reference * t = dynamic_cast<const Reference *>(exp->type->unqualified);
       type = t->subtype;
-      lvalue = true;
+      lvalue = LV_NORMAL;
     }
     void make_ct_value() {
       if (!exp->ct_value_) return;
@@ -1243,7 +1312,7 @@ namespace ast {
         throw error(p->arg(1), "\"%s\" is not a member of \"%s\"", 
                     ~id.to_string(), ~t->to_string());
       type = sym->type;
-      lvalue = true;
+      lvalue = exp->lvalue;
       if (exp->ct_value_) {
         if (exp->ct_value_->nval()) {
           ct_value_ = &ct_nval;
@@ -1339,13 +1408,38 @@ namespace ast {
       //printf("RESOLVE ASSIGN lhs:: %s\n", ~lhs->syn->sample_w_loc(60));
       env.type_relation->resolve_assign(lhs, rhs, env);
       type = lhs->type;
-      lvalue = 1;
+      lvalue = lhs->lvalue;
     }
   };
 
-  static Exp * mk_assign(Exp * l, Exp * r, Environ & env) {
-    Assign * exp = new Assign(l, r);
+  static Exp * try_user_assign(Exp * lhs, Exp * rhs, Environ & env) {
+    const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
+    if (ut && find_symbol<Symbol>("_assign", ut->module->syms)) {
+      return parse_exp(SYN(SYN("member"), 
+                           SYN(lhs),
+                           SYN(SYN("call"), SYN(ID, SYN("_assign")), 
+                               SYN(SYN("."), SYN(rhs)))),
+                       env);
+    } else {
+      return NULL;
+    }
+  }
+
+  static Exp * mk_assign(Exp * lhs, Exp * rhs, Environ & env) {
+    env.type_relation->resolve_assign(lhs, rhs, env);
+    Exp * assign = try_user_assign(lhs, rhs, env);
+    if (assign) return assign;
+    Assign * exp = new Assign(lhs, rhs);
     return exp->construct(env);
+  }
+
+  static Exp * parse_assign(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    Exp * lhs = parse_exp(p->arg(0), env);
+    Exp * rhs = parse_exp(p->arg(1), env);
+    Exp * assign = mk_assign(lhs, rhs, env);
+    assign->syn = p;
+    return assign;
   }
 
   struct InitAssign : public BinOp {
@@ -1354,13 +1448,27 @@ namespace ast {
     void resolve(Environ & env) {
       type = lhs->type;
       rhs->resolve_to(lhs->type, env);
-      lvalue = 1;
+      lvalue = lhs->lvalue;
     }
   };
 
-  static Exp * mk_init(const VarSymbol * v, Exp * r, Environ & env) {
-    InitAssign * exp = new InitAssign(mk_id(v, env), r);
-    return exp->construct(env);
+  static Exp * mk_init(const Var * v, Exp * r, bool need_res, Environ & env) {
+    r = r->resolve_to(v->type, env);
+    Exp * copy_c = v->try_copy_constructor(r, env);
+    if (copy_c) {
+      if (need_res) {
+        Seq * seq = new Seq();
+        seq->exps.push_back(copy_c);
+        seq->exps.push_back(mk_id(v, env));
+        seq->construct(env);
+        return seq;
+      } else {
+        return copy_c;
+      }
+    } else {
+      InitAssign * exp = new InitAssign(mk_id(v, env), r);
+      return exp->construct(env);
+    }
   }
 
   struct CompoundAssign : public BinOp {
@@ -1635,14 +1743,14 @@ namespace ast {
 
   Exp * TempInsrPointWrapper::finish(Exp * exp) {
     if (!ip.stmts) return exp;
-    // now wrap the expression in an ExpBlock
+    // now wrap the expression in an EBlock
     EBlock * b = new EBlock();
     b->stmts = ip.stmts;
     Stmt * cur;
     for (cur = ip.stmts; cur; cur = cur->next)
       env.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
     ip.add(new EStmt(exp)); // and thus add to b->stmts list
-    b->type = exp->type;
+    b->set_type(exp);
     ip.reset();
     return b;
   }
@@ -1663,13 +1771,14 @@ namespace ast {
   }
 
 
-  static Exp * wrap_w_cleanup_flag(Var * temp, Exp * res, Environ & env) {
-    EBlock * b = new EBlock();
-    Stmt * cur = b->stmts = res->as_stmt();
-    cur = cur->next = temp->cleanup->cleanup_flag;
-    cur = cur->next = mk_id(temp,env)->as_stmt();
-    b->type = temp->type;
-    return b;
+  static Exp * wrap_w_cleanup_flag(Var * temp, Exp * res, bool need_res, Environ & env) {
+    Seq * seq = new Seq();
+    seq->exps.push_back(res);
+    seq->exps.push_back(temp->cleanup->cleanup_flag);
+    if (need_res)
+      seq->exps.push_back(mk_id(temp,env));
+    seq->construct(env);
+    return seq;
   }
 
   void finish(Var * v, TempInsrPointWrapper & wrap,
@@ -1678,14 +1787,14 @@ namespace ast {
     Var * t = wrap2.finish(oenv);
     if (t) v = t;
     if (wrap.ip.stmts) {
-      Exp * exp = mk_init(v, v->init, oenv);
+      Exp * exp = mk_init(v, v->init, false, oenv);
       if (v->cleanup && v->cleanup->cleanup_flag)
-        exp = wrap_w_cleanup_flag(v, exp, oenv);
+        exp = wrap_w_cleanup_flag(v, exp, false, oenv);
       exp = wrap.finish(exp);
       v->init = NULL;
-      v->constructor = new EStmt(exp);
-    } else if (TopLevelVar * tl = dynamic_cast<TopLevelVar *>(v)) {
-      tl->fix_up_init(oenv);
+      v->constructor = exp->as_stmt();
+    } else {
+      v->fix_up_init(oenv);
     }
   }
 
@@ -1693,8 +1802,10 @@ namespace ast {
     Var * temp = NULL;
     if (env.temp_ip->where == TempInsrPoint::TopLevelVar)
       temp = new TopLevelTemp(type);
+    else if (env.temp_ip->where == TempInsrPoint::Var)
+      temp = new AutoTemp(type, LV_NORMAL);
     else
-      temp = new AutoTemp(type);
+      temp = new AutoTemp(type, LV_EEXP);
     env.temp_ip->add(temp);
     temp->add_cleanup(dynamic_cast<const UserType *>(type->unqualified), env);
     if (temp->cleanup)
@@ -1705,9 +1816,9 @@ namespace ast {
   Exp * make_temp(Exp * exp, Environ & env) {
     Var * temp = start_temp(exp->type, env);
     if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
-      Exp * res = mk_init(temp, exp, env);
+      Exp * res = mk_init(temp, exp, true, env);
       if (temp->cleanup) {
-        res = wrap_w_cleanup_flag(temp, res, env);
+        res = wrap_w_cleanup_flag(temp, res, true, env);
       }
       return res;
     } else {
@@ -1718,21 +1829,20 @@ namespace ast {
 
   Exp * make_temp(const Type * type, Environ & env) {
     Var * temp = start_temp(type, env);
-    Stmt * constructor = temp->make_constructor(dynamic_cast<const UserType *>(type), env);
+    Exp * constructor = temp->make_constructor(dynamic_cast<const UserType *>(type), env);
     if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
-      EBlock * b = new EBlock();
-      InsrPoint ip = &b->stmts;
+      Seq * seq = new Seq();
       if (constructor)
-        ip.add(constructor);
+        seq->exps.push_back(constructor);
       else if (type->is(SCALAR_C))
-        ip.add(mk_init(temp, mk_literal(0, env), env)->as_stmt());
+        seq->exps.push_back(mk_init(temp, mk_literal(0, env), false, env));
       if (temp->cleanup)
-        ip.add(temp->cleanup->cleanup_flag);
-      ip.add(mk_id(temp,env)->as_stmt());
-      b->type = temp->type;
-      return b;
+        seq->exps.push_back(temp->cleanup->cleanup_flag);
+      seq->exps.push_back(mk_id(temp,env));
+      seq->construct(env);
+      return seq;
     } else {
-      temp->constructor = constructor;
+      temp->constructor = constructor->as_stmt();
       return mk_id(temp, env);
     }
   }
@@ -2530,7 +2640,7 @@ namespace ast {
       if (!ftype)
         throw error (lhs->syn, "Expected function type");
       type = ftype->ret;
-      lvalue = type->addressable;
+      lvalue = type->addressable ? LV_NORMAL : LV_FALSE;
       if (!ftype->parms->vararg && parms.size() != ftype->parms->parms.size()) 
         throw error(syn->arg(1), 
                     "Wrong number of parameters, expected %u but got %u when calling %s",
@@ -2884,13 +2994,29 @@ namespace ast {
   Exp * try_just_exp(const Syntax * p, Environ & env);
   EStmt * try_exp_stmt(const Syntax * p, Environ & env);
 
+  //template <typename T>
+  //T * try_ast(const Syntax * p, Environ & env) {
+  //  if (p->have_entity()) {
+  //    if (T * ast = p->entity<T>()) {
+  //      return ast;
+  //    } else if (Error * err = p->entity<Error>()) {
+  //      throw err;
+  //    } else {
+  //     abort(); // FIXME Error message
+  //    }
+  //  }
+  //  return 0;
+  //}
+
   template <typename T>
-  T * try_ast(const Syntax * p, Environ & env) {
+  T * try_ast(const Syntax * p, Environ & env);
+
+  template <>
+  Exp * try_ast<Exp>(const Syntax * p, Environ & env) {
     if (p->have_entity()) {
-      /*if (T * ast = p->entity<T>()) {
+      if (Exp * ast = p->entity<Exp>()) {
         return ast;
-        } else */
-      if (Error * err = p->entity<Error>()) {
+      } else if (Error * err = p->entity<Error>()) {
         throw err;
       } else {
         abort(); // FIXME Error message
@@ -2900,10 +3026,12 @@ namespace ast {
   }
 
   template <>
-  Exp * try_ast<Exp>(const Syntax * p, Environ & env) {
+  Stmt * try_ast<Stmt>(const Syntax * p, Environ & env) {
     if (p->have_entity()) {
-      if (Exp * ast = p->entity<Exp>()) {
+      if (Stmt * ast = p->entity<Stmt>()) {
         return ast;
+      } else if (Exp * ast = p->entity<Exp>()) {
+        return ast->as_stmt();
       } else if (Error * err = p->entity<Error>()) {
         throw err;
       } else {
@@ -3099,7 +3227,7 @@ namespace ast {
     if (what == "c")       return (new CharC)->parse_self(p, env);
     if (what == "s")       return (new StringC)->parse_self(p, env);
     if (what == "eif")     return (new EIf)->parse_self(p, env);
-    if (what == "assign")  return (new Assign)->parse_self(p, env);
+    if (what == "assign")  return parse_assign(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
     if (what == "lshift")  return (new LeftShift)->parse_self(p, env);
@@ -3127,6 +3255,7 @@ namespace ast {
     if (what == "imember") return parse_imember_access(p, env);
     if (what == "call")    return (new Call)->parse_self(p, env);
     if (what == "anon")    return parse_anon(p, env);
+    if (what == "seq")     return (new Seq)->parse_self(p, env);
     if (what == "eblock")  return (new EBlock)->parse_self(p, env);
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
     if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
