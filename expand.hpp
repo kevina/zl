@@ -135,4 +135,22 @@ struct SyntaxEnum {
 };
 SyntaxEnum * partly_expand_list(const Syntax * p, Position pos, Environ & env);
 
+static inline const bool is_raw_id(const Syntax * p) 
+{
+  return (p->simple() || p->is_a("fluid") || p->is_a("`") || p->is_a("::"));
+}
+
+static inline const Syntax * try_id(const Syntax * p)
+{
+  return is_raw_id(p) ? p : p->is_a("id") ? p->arg(0) : NULL;
+}
+
+const Syntax * handle_operator_fun_id(Parts::const_iterator & i, 
+                                      Parts::const_iterator e,
+                                      Environ & env);
+
+const Syntax * handle_w_tilda(Parts::const_iterator & i, 
+                              Parts::const_iterator e,
+                              Environ & env);
+
 #endif

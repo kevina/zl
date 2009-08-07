@@ -518,6 +518,15 @@ struct Syntax : public gc {
   void print() const;
   void to_string(OStream & o, PrintFlags f = PrintFlags(), SyntaxGather * = 0) const;
   String to_string() const;
+  bool eq(const char * n) const {return simple() && what_.name == n;}
+  bool eq(const char * n1, const char * n2) const 
+    {return simple() && (what_.name == n1 || what_.name == n2);}
+  bool eq(const char * n1, const char * n2, const char * n3) const 
+    {return simple() && (what_.name == n1 || what_.name == n2 || what_.name == n3);}
+  bool ne(const char * n) const {return !eq(n);}
+  bool ne(const char * n1, const char * n2) const {return !eq(n1,n2);}
+  bool ne(const char * n1, const char * n2, const char * n3) const 
+    {return !eq(n1,n2,n3);}
   bool is_a(const char * n) const {return what_.name == n;}
   bool is_a(String n) const {return what_.name == n;}
   bool is_a(SymbolName n) const {return what_ == n;}

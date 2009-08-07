@@ -132,7 +132,7 @@ struct DeclWorking {
 
   Flags qualifiers;
   bool try_qualifier(const Syntax * p, Flags & qualifiers) {
-    if (*p == "const" || *p == "restrict" || *p == "volatile") 
+    if (p->eq("const", "restrict", "volatile"))
       qualifiers.insert(p);
     else return false;
     return true;
@@ -197,6 +197,7 @@ class ParseDeclImpl : public ParseDecl {
 public:
   ParseDeclImpl() {}
   const Syntax * parse_decl(const Syntax * p, Environ &);
+  const Syntax * parse_type(Parts::const_iterator & i, Parts::const_iterator e, Environ &);
   const Syntax * parse_type(const Syntax * p, Environ &);
   
   void init() {}
@@ -224,13 +225,30 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
   DeclWorking w(res);
 
-  {
-    bool r = w.parse_first_part(i, end, env, true);
-    if (!r) return NULL;
-    if (i != end && (*i)->is_a("()")) return NULL;
-  }
+  bool r = w.parse_first_part(i, end, env, true);
 
-  w.make_inner_type(p);
+  //if (i != end) 
+    //printf("<><%d><%s> %s\n", r, ~(*i)->to_string(), ~p->to_string());
+
+  if (i != end && ((r && (*i)->is_a("()")) || (!r && (*i)->eq("~")))) 
+  {
+    //printf(">>1\n");
+    if (env.scope == ast::LEXICAL) return NULL;
+    //printf(">>2\n");
+
+    i = p->args_begin();
+    w.inner_type = new Syntax(new Syntax("void"));
+    
+  } else if (!r) {
+
+    //printf("NO!\n");
+    return NULL;
+
+  } else {
+
+    w.make_inner_type(p);
+
+  }
 
   while (i != end) {
 
@@ -238,7 +256,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
 
     const Syntax * decl;
-    if (i != end && (*i)->is_a("sym", "=")) {
+    if (i != end && (*i)->eq("=")) {
       ++i;
       const Syntax * init = w.parse_init_exp(i, end);
       decl = w.make_declaration(id, t, init);
@@ -254,8 +272,8 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
     if (i == end) break;
 
-    if (!(*i)->is_a("sym", ","))
-      throw error(*i, "Expected \",\".");
+    if (!(*i)->eq(","))
+      throw error(*i, "Expected \",\".<1>");
     ++i;
     
   }
@@ -278,18 +296,30 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     return new Syntax(new Syntax("@"), res);
 }
 
-const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
+const Syntax * ParseDeclImpl::parse_type(Parts::const_iterator & i, 
+                                         Parts::const_iterator end, 
+                                         Environ & env) 
+{
+  if (i == end) return NULL;
+  const Syntax * p = *i;
   Parts dummy;
-  Parts::const_iterator i = p->args_begin();
-  Parts::const_iterator end = p->args_end();
   DeclWorking w(dummy);
   const Syntax * id = NULL;
   bool r = w.parse_first_part(i, end, env);
   if (!r) return NULL;
   w.make_inner_type(p);
   const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
-  if (i != end || id) return NULL;
+  if (id) return NULL;
   assert(dummy.empty()); // FIXME: Error Message
+  return t;
+}
+
+
+const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
+  Parts::const_iterator i = p->args_begin();
+  Parts::const_iterator end = p->args_end();
+  const Syntax * t = parse_type(i, end, env);
+  if (i != end) return NULL;
   return t;
 }
 
@@ -300,14 +330,14 @@ bool DeclWorking::parse_first_part(Parts::const_iterator & i,
 {
   Parts::const_iterator begin = i;
   bool by_itself = top_level && i + 1 == end;
-  if (i != end && (*i)->is_a("sym", "...")) {
+  if (i != end && (*i)->eq("...")) {
     dots = true;
     inner_type = new Syntax("...", (*i)->str());
     ++i;
   } else while (i != end) {
     const Syntax * cur = *i;
-    if (cur->is_a("id")) {
-      const Syntax * p = cur->arg(0);
+    if (const Syntax * p = try_id(cur)) {
+      const Syntax * p = cur;
       bool any = 
         try_attributes(p) ||
         try_storage_class(p) ||
@@ -402,7 +432,7 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
           //const Syntax * decl = w.make_declaration(id, t);
           // FIXME: Duplicate code from parse_decl, also...
           const Syntax * decl;
-          if (i != end && (*i)->is_a("sym", "=")) {
+          if (i != end && (*i)->eq("=")) {
             ++i;
             const Syntax * init = w.parse_init_exp(i, end);
             decl = w.make_declaration(id, t, init);
@@ -418,8 +448,8 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
           
           if (i == end) break;
           
-          if (!(*i)->is_a("sym", ","))
-            throw error(*i, "Expected \",\".");
+          if (!(*i)->eq(","))
+            throw error(*i, "Expected \",\"<2>.");
           ++i;
         }
     } else {
@@ -572,16 +602,24 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   if (i == end) return t;
 
   const Syntax * outer = NULL;
-  
-  if ((*i)->is_a("id")) {
-    id = (*i)->arg(0);
+
+  const Syntax * p;
+  if ((*i)->eq(",", "=")) {
+    goto def;
+  } else if ((p = handle_w_tilda(i, end, env))) {
+    id = p;
+  } else if ((p = handle_operator_fun_id(i, end, env))) {
+    id = p;
+  } else if ((p = try_id(*i))) {
+    id = p;
     ++i;
   } else if ((*i)->is_a("()")) {
     outer = reparse("TOKENS", (*i)->arg(0));
     ++i;
-  } else if (id_required) {
-    throw error(*i, "Expected identifier or \"(\".");
-  }
+  } else
+  def: 
+    if (id_required)
+      throw error(*i, "Expected identifier or \"(\".");
 
   if (i == end) {
     // do nothing
@@ -631,7 +669,7 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
       //ps->add_part(t);
     } 
     if (i == end) break;
-    if (!(*i)->is_a("sym", ",")) throw error(*i, "Expected \",\".");
+    if (!(*i)->eq(",")) throw error(*i, "Expected \",\" got \"%s\".", ~(*i)->to_string());
     ++i;
   }
   return new Syntax(new Syntax(".fun"), ps, ret);
@@ -641,7 +679,7 @@ const Syntax * DeclWorking::parse_init_exp(Parts::const_iterator & i,
                                             Parts::const_iterator end)
 {
   Parts::const_iterator begin = i;
-  while (i != end && !(*i)->is_a("sym", ","))
+  while (i != end && !(*i)->eq(","))
     ++i;
   Syntax * p = new Syntax(new Syntax("exp"));
   p->d->parts.append(begin, i);
@@ -652,11 +690,10 @@ const Syntax * DeclWorking::try_pointers(Parts::const_iterator & i,
                                          Parts::const_iterator end,
                                          const Syntax * t) 
 {
-  while (i != end && (*i)->is_a("sym", "*")) {
+  while (i != end && (*i)->eq("*")) {
     ++i;
     Syntax * new_t = new Syntax(new Syntax(".ptr"), t);
-    while (i != end && 
-           (*i)->is_a("id") && try_qualifier((*i)->arg(0), new_t->d->flags))
+    while (i != end && try_qualifier((*i), new_t->d->flags))
       ++i;
     t = new_t;
   }
@@ -667,7 +704,7 @@ const Syntax * DeclWorking::try_reference(Parts::const_iterator & i,
                                           Parts::const_iterator end,
                                           const Syntax * t) 
 {
-  if (i != end && (*i)->is_a("sym", "&")) {
+  if (i != end && (*i)->eq("&")) {
     ++i;
     return new Syntax(new Syntax(".ref"), t);
   } else {

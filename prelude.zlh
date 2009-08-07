@@ -2,7 +2,7 @@
 // libc stuff
 //
 
-typedef typedef struct _IO_FILE FILE;
+typedef struct _IO_FILE FILE;
 typedef unsigned size_t;
 int printf (const char *, ...);
 int snprintf(const char * str, size_t size, const char * format, ...);

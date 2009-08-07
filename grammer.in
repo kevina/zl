@@ -20,7 +20,7 @@ STMT : "statement" =
     / <continue> "continue" ";"
     / <return>   "return" {EXP} ";"
     / <local_label> "__label__" {ID} ";"
-    / <goto>     "goto" (<id> {ID}) ";"
+    / <goto>     "goto" {ID} ";"
     / {BLOCK}
     / {MACRO} / {MAKE_MACRO}
     / {MODULE} / {IMPORT}
@@ -73,12 +73,12 @@ MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <repa
 TOKEN_ : "token_" =  <<mid>> {MID} !("`" / "::") /  
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {BRACK} / {CONST}
-         / <id> {ID} / <sym> {SYM};
+         / {ID} / {SYM};
 
 TOKEN : "token" =  <<mid PARM>> {MID} !("`" / "::") / 
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {BRACK} / {CONST}
-         / <id> {ID} / <sym> {SYM} 
+         / {ID} / {SYM} 
          / {PARAN} / {BRACE};
 
 #TOKEN : "token" = TOKEN_ / PARAN;

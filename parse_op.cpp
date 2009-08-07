@@ -12,43 +12,42 @@
 using std::pair;
 
 enum Assoc {None, Left, Right, List};
+enum Which {Category, Symbol};
 
 struct OpKey : public gc {
-  String category;
-  String symbol;
+  String what;
+  Which which;
   OpKey() {}
   // FIXME: operators should proabaly be hygienic
-  OpKey(const SymbolName & c)
-    : category(c.name) {}
-  OpKey(const SymbolName & c, const SymbolName & s)
-    : category(c.name), symbol(s.name) {}
+  OpKey(const SymbolName & wt, Which wc)
+    : what(wt.name), which(wc) {}
 };
 
 static inline bool operator== (const OpKey & x, const OpKey & y) {
-  return x.category == y.category && x.symbol == y.symbol;
+  return x.what == y.what && x.which == y.which;
 }
 
-static inline bool operator< (const OpKey & x, const OpKey & y) {
-  if (x.category < y.category) return true;
-  if (x.category > y.category) return false;
-  return x.symbol < y.symbol;
-}
+//static inline bool operator< (const OpKey & x, const OpKey & y) {
+//  if (x.category < y.category) return true;
+//  if (x.category > y.category) return false;
+//  return x.symbol < y.symbol;
+//}
 
 template <> struct hash<OpKey> {
     inline unsigned long operator() (const OpKey & v) const {
-      return HashString<String>()(v.category)
-        + HashString<String>()(v.symbol);
+      return HashString<String>()(v.what);
     }
 };
 
 struct MatchOp : public OpKey {
-  bool capture_op_itself() const {return symbol.empty();}
+  bool capture_op_itself() const {return which == Category;}
   void parse_match_op(const Syntax * p) {
     if (p->is_a("category")) {
-      category = *p->arg(0);
+      what = *p->arg(0);
+      which = Category;
     } else {
-      category = p->what();
-      symbol = *p->arg(0);
+      what = *p;
+      which = Symbol;
     }
   }
 };
@@ -58,7 +57,7 @@ struct OpCommon : public MatchOp {
   typedef int Types;
   String name;
   const Syntax * parse;
-  bool capture_op_itself() const {return symbol.empty();}
+  bool capture_op_itself() const {return which == Category;}
   virtual void parse_self(const Syntax * p) {
     if (p->is_a("bin"))
       type = Bin;
@@ -102,14 +101,14 @@ struct SpecialOp : public OpCommon {
     Vector<MatchOp>::const_iterator j = rest.begin(), e = rest.end();
     for (; j != e && i != end; ++j, ++i) {
       const Syntax * p = *i;
-      if (p->is_a(j->category)) {
-        if (j->symbol.empty()) {
-          working.push_back(p);
-        } else if (*p->arg(0) == ~j->symbol) {
-          return NULL;
-        }
+      if (p->simple()) {
+        if (j->which == Symbol && p->eq(j->what)) {}
+        else return NULL;
       } else {
-        return NULL;
+        if (j->which == Category && p->is_a(j->what))
+          working.push_back(p);
+        else
+          return NULL;
       }
     }
     if (j != e) return NULL;
@@ -168,10 +167,10 @@ struct Ops : public gc_cleanup {
 
   Op::Types lookup_types(const Syntax * p) const {
     Op::Types res = 0;
-    if (p->num_args() > 0)
-      res = i_lookup_types(res, OpKey(p->what(), p->arg(0)->what()), p);
-    if (res == 0)
-      res = i_lookup_types(res, OpKey(p->what()), p);
+    if (p->simple())
+      res = i_lookup_types(res, OpKey(p->what(), Symbol), p);
+    else 
+      res = i_lookup_types(res, OpKey(p->what(), Category), p);
     if (res == 0) 
       res = Op::Other;
     return res;
@@ -191,11 +190,11 @@ struct Ops : public gc_cleanup {
   }
 
   const Op * lookup(const Syntax * p, int type) const {
-    const Op * op = 0;
-    if (p->num_args() > 0)
-      op = i_lookup(OpKey(p->what(), p->arg(0)->what()), type, p);
-    if (op == 0)
-      op = i_lookup(OpKey(p->what()), type, p);
+    const Op * op;
+    if (p->simple())
+      op = i_lookup(OpKey(p->what(), Symbol), type, p);
+    else
+      op = i_lookup(OpKey(p->what(), Category), type, p);
     if (op == 0)
       op = &generic;
     return op;
@@ -216,10 +215,10 @@ struct Ops : public gc_cleanup {
   
   const Syntax * try_special(const Syntax * p, Parts::const_iterator & i, Parts::const_iterator e) {
     const Syntax * res = NULL;
-    if (p->num_args() > 0)
-      res = i_try_special(OpKey(p->what(), p->arg(0)->what()), i, e);
-    if (res == 0)
-      res = i_try_special(OpKey(p->what()), i, e);
+    if (p->simple())
+      res = i_try_special(OpKey(p->what(), Symbol), i, e);
+    else
+      res = i_try_special(OpKey(p->what(), Category), i, e);
     return res;
   }
 };
@@ -271,7 +270,7 @@ public:
             throw error(pop, "Expected an operand or a prefix operator.");
         } else {
           cur &= (Op::Bin | Op::Postfix);
-          if (cur == 0)
+          if (cur == 0) 
             throw error(pop, "Expected a binary or postfix operator.");
         }
         //if (cur == (Op::Prefix | Op::Other)) {
@@ -295,7 +294,7 @@ public:
             reduce();
           if (!opr_s.empty() && opr_s.back().op->level == op->level && op->assoc == None)
             throw error(pop, "\"%s\" is non-associative.", 
-                        op->symbol.c_str());
+                        op->what.c_str());
           opr_s.push_back(OpInfo(op, pop)); 
         }
         prev = cur;
@@ -324,7 +323,7 @@ public:
     if (op->assoc == List) {
       if (val_s.size() < 2)
         throw error(opi.parse, "\"%s\" operator needs 2 operands.",
-                    op->symbol.c_str());
+                    op->what.c_str());
       int num = 1;
       while (!opr_s.empty() && opr_s.back().op->level == op->level) {
         ++num; 
@@ -340,7 +339,7 @@ public:
     } else if (op->type == Op::Bin) {
       if (val_s.size() < 2)
         throw error(opi.parse, "\"%s\" operator needs 2 operands.",
-                    op->symbol.c_str());
+                    op->what.c_str());
       const Syntax * p2 = val_s.back(); val_s.pop_back();
       const Syntax * p1 = val_s.back(); val_s.pop_back();
       parse->str_ = opi.parse->str();
@@ -355,7 +354,7 @@ public:
     } else {
       if (val_s.size() < 1)
         throw error(opi.parse, "\"%s\" operator needs an operand.",
-                    op->symbol.c_str());
+                    op->what.c_str());
       const Syntax * p1 = val_s.back(); val_s.pop_back();
       if (op->type == Op::Prefix) {
         parse->str_ = opi.parse->str();

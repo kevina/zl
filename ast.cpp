@@ -83,12 +83,9 @@ namespace ast {
   //
 
   static const Syntax * expand_id(const Syntax * p) {
-    if (p->simple()) {
-      return p;
-    } else {
-      if (!p->is_a("id")) throw error(p, "Expected identifier");
-      return p->arg(0);
-    }
+    const Syntax * res = try_id(p);
+    if (!res) throw error(p, "Expected identifier");
+    return res;
   }
   
   //
@@ -2291,17 +2288,15 @@ namespace ast {
       const Syntax * call;
       if (arg1->is_a("call")) {
         assert_num_args(arg1, 2);
-        const Syntax * n = arg1->arg(0);
-        assert(n && n->is_a("id")); // FIXME Error Message
+        const Syntax * n = expand_id(arg1->arg(0));
         Syntax * a = new Syntax(*arg1->arg(1));
         a->add_flag(new Syntax(THIS, ptr_exp));
-        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        call = new Syntax(arg1->part(0), new Syntax(ID, new Syntax(n->arg(0), sym)), a);
+        const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
+        call = new Syntax(arg1->part(0), new Syntax(ID, new Syntax(n, sym)), a);
       } else {
-        const Syntax * n = arg1;
-        assert(n && n->is_a("id")); // FIXME Error Message
-        const Symbol * sym = lookup_symbol<Symbol>(n->arg(0), DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        Syntax * c = new Syntax(ID, new Syntax(n->arg(0), sym));
+        const Syntax * n = expand_id(arg1);
+        const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
+        Syntax * c = new Syntax(ID, new Syntax(n, sym));
         c->add_flag(new Syntax(THIS, ptr_exp));
         call = c;
       }
@@ -2321,8 +2316,7 @@ namespace ast {
     Exp * exp = parse_exp(p->arg(0), env);
     exp = exp->to_effective(env);
     //printf("::"); p->arg(1)->print(); printf("\n");
-    if (!p->arg(1)->is_a("id")) throw error(p->arg(1), "Expected Identifier");
-    SymbolName id = *p->arg(1)->arg(0);
+    SymbolName id = *expand_id(p->arg(1));
     const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified);
     if (!t) throw error(p->arg(0), "Expected user type but got ??");
     if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
@@ -2450,7 +2444,7 @@ namespace ast {
   Fun * parse_fun_forward(const Syntax * p, Environ & env, Collect & collect) {
     assert_num_args(p,3,4);
 
-    //printf("%s\n", ~p->to_string());
+    //printf("FUN:: %s\n", ~p->to_string());
 
     SymbolKey name = expand_binding(p->arg(0), env);
     
@@ -2920,8 +2914,8 @@ namespace ast {
     } else if (what == "raw_syntax") {
       using namespace parse_parse;
       Res r = parse(p->part(1)->str());
-        syn = r.parse;
-        //fprintf(stdout, "RSYN %s<<\n", ~syn->to_string());
+      syn = r.parse;
+      //fprintf(stdout, "RSYN %s<<\n", ~syn->to_string());
     } else {
       abort();
     }
