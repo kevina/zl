@@ -1,0 +1,12 @@
+// Error points to line 8 when it should probably point to line 11
+
+typedef struct X X;
+typedef struct Y Y;
+
+void foo(Y *);
+
+macro bar() {(X *)NULL;}
+
+int main() {
+  foo(bar());
+}

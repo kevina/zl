@@ -233,6 +233,7 @@ class ParseExpImpl : public ParseExp {
   };
   Vector<const Syntax *> val_s;
   Vector<OpInfo>         opr_s;
+  String list_is;
 public:
 
   void init() {
@@ -245,10 +246,11 @@ public:
     ops.parse_self(r.parse);
   }
   
-  const Syntax * parse(const Syntax * p) {
+  const Syntax * parse(const Syntax * p, const char * l_i) {
     //printf("ParseExpImpl::parse: %s %s\n", ~p->sample_w_loc(), ~p->to_string());
     opr_s.clear();
     val_s.clear();
+    list_is = l_i;
     Op::Types prev = 0;
     try {
       for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i) {
@@ -285,6 +287,7 @@ public:
         //  }
         //}
         const Op * op = ops.lookup(pop, cur);
+        
         if (op->type == Op::Other) {
           val_s.push_back(pop);
         } else {
@@ -314,11 +317,15 @@ public:
       throw err;
     }
   }
-
+  
   void reduce() {
     const OpInfo & opi = opr_s.back();
     const Op * op = opi.op;
-    Syntax * parse = new Syntax(op->parse);
+    Syntax * parse;
+    if (op->name == "<list>")
+      parse = new Syntax(new Syntax(list_is));
+    else
+      parse = new Syntax(op->parse);
     parse->str_ = opi.parse->str(); // FIXME: Is this right
     if (op->assoc == List) {
       if (val_s.size() < 2)

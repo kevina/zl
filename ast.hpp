@@ -116,6 +116,7 @@ namespace ast {
     virtual const char * what() const = 0;
     virtual AST * part(unsigned i) {return 0;}
     const Syntax * syn;
+    SourceStr source_str() const {return syn ? syn->str() : SourceStr();}
     AST(const Syntax * p = 0) : syn(p) {}
     void assert_num_args(int p) {
       if (syn->num_args() != p) 

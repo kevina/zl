@@ -185,7 +185,7 @@ public:
 
 bool ExpandSourceInfo::dump_info_self(OStream & o) const {
   if (call) {
-    //o.printf("(%p) ", this);
+    //o.printf("(%s) ", ~call->to_string());
     o << "in expansion of ";
     call->sample_w_loc(o);
   } else {
@@ -284,15 +284,15 @@ void ReplTable::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
       g->repl_table_map.set_str(r.first, buf.freeze());
     }
   } else {
-    //o.printf("...");
-    o.printf("{");
-    for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
-      //o.printf("%s", ~i->first.to_string());
-      o.printf("%s=>", ~i->first.to_string());
-      i->second->to_string(o, f);
-      o.printf(",");
-    }
-    o.printf("}");
+    o.printf("{...}");
+    //o.printf("{");
+    //for (Table::const_iterator i = table.begin(), e = table.end(); i != e; ++i) {
+    //  //o.printf("%s", ~i->first.to_string());
+    //  o.printf("%s=>", ~i->first.to_string());
+    //  i->second->to_string(o, f);
+    //  o.printf(",");
+    //}
+    //o.printf("}");
   }
 }
 
@@ -341,45 +341,21 @@ void compile_for_ct(Deps & deps, Environ & env);
 
 // the slightly diffrent C++ version
 typedef ReplTable::Table Match;
-namespace macro_abi {
+extern "C" namespace macro_abi {
   typedef const Marks Context;
   typedef Syntax SyntaxList;
   typedef const ::Syntax Syntax;
   typedef Syntax UnmarkedSyntax;
   //struct SyntaxEnum;
-  extern "C" Mark * new_mark_f(SymbolNode *);
-  extern "C" Syntax * syntax_flag(Syntax *, UnmarkedSyntax *);
-  extern "C" SyntaxList * new_syntax_list();
-  extern "C" int syntax_list_empty(const SyntaxList *);
-  extern "C" void syntax_list_append(SyntaxList *, Syntax *);
-  extern "C" Syntax * syntax_enum_next(SyntaxEnum *);
-  extern "C" Match * match(Match * m, const UnmarkedSyntax * pattern, Syntax * with);
-  extern "C" Match * match_args(Match * m, const UnmarkedSyntax * pattern, Syntax * with);
-  extern "C" Match * match_local(Match *, ...);
-  extern "C" Syntax * match_var(Match *, UnmarkedSyntax *);
-  extern "C" SyntaxEnum * match_varl(Match *, UnmarkedSyntax *);
-  extern "C" Syntax * replace(const UnmarkedSyntax * p, Match * match, Mark * mark);
-  extern "C" Context * get_context(Syntax * p);
-  extern "C" Syntax * replace_context(Syntax * p, Context * context);
-  extern "C" Syntax * partly_expand(Syntax *, Position pos, Environ *);
-  extern "C" Syntax * reparse(Syntax *, const char *, Environ *);
-  extern "C" SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
-  extern "C" Syntax * pre_parse(Syntax *, Environ *);
-  extern "C" const UnmarkedSyntax * string_to_syntax(const char *);
-  extern "C" const char * syntax_to_string(const UnmarkedSyntax *);
-  extern "C" void dump_syntax(const UnmarkedSyntax * s);
-  typedef const UserType UserTypeInfo;
-  typedef const Module ModuleInfo;
-  extern "C" const UserTypeInfo * user_type_info(Syntax *, Environ *);
-  extern "C" const ModuleInfo * user_type_module(const UserTypeInfo *);
-  extern "C" const ModuleInfo * module_info(Syntax *, Environ *);
-  extern "C" SyntaxEnum * module_symbols(const ModuleInfo *);
-  extern "C" bool module_have_symbol(const ModuleInfo *, Syntax *);
-  extern "C" Environ * temp_environ(Environ *);
-  extern "C" size_t ct_value(Syntax *, Environ *);
-  extern "C" Syntax * error(Syntax *, const char *, ...); 
-  extern "C" Syntax * get_symbol_prop(Syntax * sym, Syntax * prop, Environ * env);
-  extern "C" int symbol_exists(Syntax * sym, Syntax * where, Mark * mark, Environ * env);
+  Match * match(Match * m, const UnmarkedSyntax * pattern, Syntax * with);
+  Match * match_args(Match * m, const UnmarkedSyntax * pattern, Syntax * with);
+  Syntax * replace(const UnmarkedSyntax * p, Match * match, Mark * mark);
+  Context * get_context(Syntax * p);
+  Syntax * replace_context(Syntax * p, Context * context);
+  Syntax * partly_expand(Syntax *, Position pos, Environ *);
+  Syntax * reparse(Syntax *, const char *, Environ *);
+  SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
+  Syntax * pre_parse(Syntax *, Environ *);
 }
 
 String gen_sym() {
@@ -550,14 +526,52 @@ struct ProcMacro : public Macro {
 //
 //
 
-namespace macro_abi {
+struct SimpleSyntaxEnum : public SyntaxEnum {
+  Parts::const_iterator i;
+  Parts::const_iterator end;
+  SimpleSyntaxEnum(Parts::const_iterator i0, Parts::const_iterator e0)
+    : i(i0), end(e0) {}
+  const Syntax * next() {
+    if (i == end) return NULL;
+    const Syntax * res = *i;
+    ++i;
+    return res;
+  }
+};
+
+extern "C" namespace macro_abi {
 
   Mark * new_mark_f(SymbolNode * e) {
     return new Mark(e);
   }
+
+  int syntax_simple(Syntax * s) {
+    return s->simple();
+  }
+  
+  const Syntax * syntax_part(const Syntax * s, unsigned i) {
+    return s->part(i);
+  }
+
+  unsigned syntax_num_args(Syntax * s) {
+    return s->num_args();
+  }
   
   const Syntax * syntax_flag(const Syntax * s, UnmarkedSyntax * n) {
     return s->flag(*n);
+  }
+
+  int syntax_eq(Syntax * lhs, UnmarkedSyntax * rhs) {
+    if (lhs->simple() && rhs->simple()) return lhs->what_ == rhs->what_;
+    if (lhs->simple() || rhs->simple()) return false;
+    assert(rhs->num_parts() == 2);
+    if (lhs->num_parts() != 2) return false;
+    return lhs->part(0)->what() == rhs->part(0)->what()
+      && lhs->part(1)->what() == rhs->part(1)->what();
+  }
+
+  SyntaxEnum * syntax_args(Syntax * p) {
+    return new SimpleSyntaxEnum(p->args_begin(), p->args_end());
   }
   
   SyntaxList * new_syntax_list() {
@@ -572,25 +586,19 @@ namespace macro_abi {
     l->add_part(p);
   }
 
+  void syntax_list_append_all(SyntaxList * l, SyntaxEnum * els) {
+    while (const Syntax * el = els->next()) {
+      l->add_part(el);
+    }
+  }
+
+
   const Syntax * syntax_enum_next(SyntaxEnum * e) {
     return e->next();
   }
 
 }
 
-struct SimpleSyntaxEnum : public SyntaxEnum {
-  Parts::const_iterator i;
-  Parts::const_iterator end;
-  SimpleSyntaxEnum(Parts::const_iterator i0, Parts::const_iterator e0)
-    : i(i0), end(e0) {}
-  const Syntax * next() {
-    if (i == end) return NULL;
-    const Syntax * res = *i;
-    ++i;
-    return res;
-  }
-};
- 
 //
 //
 //
@@ -722,7 +730,7 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   return m;
 }
 
-namespace macro_abi {
+extern "C" namespace macro_abi {
 
   Match * match(Match * m, const Syntax * pattern, const Syntax * with) {
     return match(m, pattern, with, 0);
@@ -1016,7 +1024,7 @@ const Syntax * replace_context(const Syntax * p, const Marks * context) {
   }
 }
 
-namespace macro_abi {
+extern "C" namespace macro_abi {
 
   Context * get_context(Syntax * p) {
     return p->what().marks;
@@ -1031,13 +1039,13 @@ namespace macro_abi {
 //
 //
 
-namespace macro_abi {
+extern "C" namespace macro_abi {
   
-  extern "C" const UnmarkedSyntax * string_to_syntax(const char * str) {
+  const UnmarkedSyntax * string_to_syntax(const char * str) {
     return parse_str("SYNTAX_STR", SourceStr(str));
   }
   
-  extern "C" const char * syntax_to_string(const UnmarkedSyntax * s) {
+  const char * syntax_to_string(const UnmarkedSyntax * s) {
     if (s->simple()) {
       return s->what().name;
     } else {
@@ -1045,7 +1053,7 @@ namespace macro_abi {
     }
   }
   
-  extern "C" void dump_syntax(const UnmarkedSyntax * s) {
+  void dump_syntax(const UnmarkedSyntax * s) {
     s->print();
     printf("\n");
   }
@@ -1117,7 +1125,7 @@ static const Syntax * handle_new(Parts::const_iterator & i,
   assert(i != e); // FIXME: error message
   const Syntax * type = parse_decl_->parse_type(i, e, env);
   assert(type); // FIXME: error message
-  return new Syntax(p->str(), p, type);
+  return new Syntax(p, type);
 }
 
 const Syntax * handle_operator_fun_id(Parts::const_iterator & i, 
@@ -1131,13 +1139,13 @@ const Syntax * handle_operator_fun_id(Parts::const_iterator & i,
   assert(i != e); // FIXME: error message
   const Syntax * type = parse_decl_->parse_type(i, e, env);
   if (type) {
-    return new Syntax(p->str(), p, type);
+    return new Syntax(p, type);
   } else {
-    return new Syntax(p->str(), p, *i++);
+    return new Syntax(p, *i++);
   }
 }
 
-const Syntax * e_parse_exp(const Syntax * p0, Environ & env) {
+const Syntax * e_parse_exp(const Syntax * p0, Environ & env, const char * list_is) {
   //printf("e_parse_exp: %s\n", ~p0->to_string());
   Syntax * tmp = new Syntax(p0->str(), p0->part(0));
   Parts::const_iterator i = p0->args_begin(), e = p0->args_end();
@@ -1149,7 +1157,7 @@ const Syntax * e_parse_exp(const Syntax * p0, Environ & env) {
     if (!p) p = *i++;
     tmp->add_part(p);
   }
-  const Syntax * res = parse_exp_->parse(tmp);
+  const Syntax * res = parse_exp_->parse(tmp, list_is);
   // FIXME: if really an expression than "list" needs to become the
   //        comma operator
   return res;
@@ -1232,13 +1240,13 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     const Syntax * res = parse_decl_->parse_decl(p, env);
     //printf("STMT PARSE %p on %s\n", res, ~p->sample_w_loc()); 
     if (!res)
-      res = e_parse_exp(p, env);
+      res = e_parse_exp(p, env, "seq");
     //printf("expand stmt res0 %s\n", res ? ~res->to_string() : "<?>");
     return partly_expand(res, pos, env, flags);
   } else if (what == "exp" || what == "init") {
     //printf("PARSE EXP %s\n", ~p->to_string());
     assert_pos(p, pos, ExpPos);
-    p = e_parse_exp(p, env);
+    p = e_parse_exp(p, env, what == "exp" ? "seq" : ".");
     return partly_expand(p, pos, env, flags);
   }
   // we should have a primitive
@@ -1283,7 +1291,7 @@ SyntaxEnum * partly_expand_list(const Syntax * p, Position pos, Environ & env) {
   return new PartlyExpandSyntaxEnum(new SimpleSyntaxEnum(p->args_begin(), p->args_end()), pos, &env);
 }
 
-namespace macro_abi {
+extern "C" namespace macro_abi {
   
   SyntaxEnum * partly_expand_list(SyntaxEnum * l, Position pos, Environ * env) {
     return new PartlyExpandSyntaxEnum(l, pos, env);
@@ -1324,19 +1332,11 @@ const Syntax * handle_w_tilda(Parts::const_iterator & i,
                               Environ & env) 
 {
   const Syntax * p = *i;
-  if (!p->eq("~")) return NULL;
+  if (!p->is_a("~")) return NULL;
   ++i;
+  if (!p->simple()) return p; // already handled
   assert(i != e); // FIXME: error message
-  SourceStr sstr = p->str();
-  p = *i++;
-  assert(p->simple());
-  sstr.adj(p->str());
-  SymbolName n = p->what();
-  StringBuf buf;
-  buf += "~";
-  buf += n.name;
-  n.name = buf.freeze();
-  return new Syntax(n, sstr);
+  return new Syntax(p, *i++);
 }
 
 Stmt * parse_map(const Syntax * p, Environ & env) {
@@ -1525,7 +1525,10 @@ Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
 // 
 //
 
-namespace macro_abi {
+extern "C" namespace macro_abi {
+
+  typedef const UserType UserTypeInfo;
+  typedef const Module ModuleInfo;
   
   const UserTypeInfo * user_type_info(const Syntax * s, Environ * env) {
     return dynamic_cast<const UserType *>(env->types.inst(s));
@@ -1603,7 +1606,7 @@ Flags::Flags(ChangeSrc<T> & f, const Flags & o) {
 //
 //
 
-namespace macro_abi {
+extern "C" namespace macro_abi {
 
   Environ * temp_environ(Environ * env) {
     env = new Environ(env->new_scope());
@@ -1627,24 +1630,6 @@ namespace macro_abi {
 
   const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
     return env->symbols.lookup<TopLevelSymbol>(sym)->get_prop(*prop);
-  }
-
-  int symbol_exists(Syntax * sym, Syntax * where, Mark * mark, Environ * env) {
-    if (mark)
-      sym = macro_abi::replace(sym, NULL, mark);
-    if (where) {
-      try {
-        Syntax * syn = new Syntax(new Syntax("member"), where, new Syntax(new Syntax("id"), sym));
-        //fprint("> %s\n", ~syn->to_string());
-        parse_exp(syn, *env);
-        return true;
-      } catch (Error * err) {
-        //printf("?? %s\n", err->message().c_str());
-        return false;
-      }
-    } else {
-      return env->symbols.exists(sym);
-    }
   }
 
 }

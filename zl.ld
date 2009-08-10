@@ -1,9 +1,15 @@
 { global:
   new_mark_f;
+  syntax_simple;
+  syntax_num_args;
+  syntax_part;
   syntax_flag;
+  syntax_eq;
+  syntax_args;
   new_syntax_list;
   syntax_list_empty;
   syntax_list_append;
+  syntax_list_append_all;
   syntax_enum_next;
   match;
   match_args;

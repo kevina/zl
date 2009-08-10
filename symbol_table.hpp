@@ -11,6 +11,7 @@
 #include "vector.hpp"
 #include "string_buf.hpp"
 #include "type_info.hpp"
+#include "source_str.hpp"
 
 struct Syntax;
 struct Error;
@@ -156,6 +157,7 @@ namespace ast {
     typedef ::TypeInfo<SymbolKeyEntity> TypeInfo;
     SymbolKeyEntity(const SymbolKey n) : name(n) {}
     SymbolKey name;
+    SourceStr source_str() const {return SourceStr();}
   };
 
   struct SymbolNode;
@@ -183,6 +185,7 @@ namespace ast {
     virtual void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
+    virtual SourceStr source_str() const {return SourceStr();}
   protected:
     virtual void uniq_name(OStream & o) const {
       o << name();

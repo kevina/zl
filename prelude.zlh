@@ -7,6 +7,8 @@ typedef unsigned size_t;
 int printf (const char *, ...);
 int snprintf(const char * str, size_t size, const char * format, ...);
 macro NULL() {0;}
+macro true() {1;}
+macro false() {0;}
 typedef int bool;
 int strcmp(const char *s1, const char *s2);
 macro offsetof(TYPE, MEMBER) {(size_t) &((TYPE *)0)->MEMBER;}
@@ -28,37 +30,58 @@ user_type UnmarkedSyntax {
 }
 
 user_type Syntax;
+user_type SyntaxEnum;
+__ct_callback bool syntax_simple(Syntax *);
+__ct_callback Syntax * syntax_part(Syntax *, unsigned);
+__ct_callback unsigned syntax_num_args(Syntax *);
 __ct_callback Syntax * syntax_flag(Syntax *, UnmarkedSyntax *);
+__ct_callback bool syntax_eq(Syntax *, UnmarkedSyntax *);
+__ct_callback SyntaxEnum * syntax_args(Syntax *);
 struct Syntax;
 user_type Syntax {
   finalize_user_type struct Syntax;
   macro to_unmarked (x) {(UnmarkedSyntax *)x;}
   make_subtype UnmarkedSyntax to_unmarked;
-  export flag;
+  //import UnmarkedSyntax;
+  //export simple, flag, part;
+  macro simple(:this this) {syntax_simple(this);}
+  macro num_parts(:this this) {syntax_num_args(this) + 1;}
+  macro num_args(:this this) {syntax_num_args(this);}
+  macro part(num, :this this) {syntax_part(this, num);}
+  macro arg(num, :this this) {syntax_part(this, num + 1);}
+  macro args(:this this) {syntax_args(this);}
   macro flag(str, :this this) {syntax_flag(this, str);}
+  macro eq(str, :this this) {syntax_eq(this, str);}
+  macro ne(str, :this this) {!syntax_eq(this, str);}
 }
 
 user_type SyntaxList;
 __ct_callback SyntaxList * new_syntax_list();
 __ct_callback int syntax_list_empty(const SyntaxList *);
 __ct_callback void syntax_list_append(SyntaxList *, Syntax *);
+__ct_callback void syntax_list_append_all(SyntaxList *, SyntaxEnum *);
 struct SyntaxList;
 user_type SyntaxList {
   finalize_user_type struct SyntaxList;
   macro to_syntax (x) {(Syntax *)x;}
+  import Syntax;
   make_subtype Syntax to_syntax;
-  export empty, append;
+  //export empty, append;
   macro empty(:this this) {syntax_list_empty(this);}
   macro append(syn, :this this) {syntax_list_append(this, syn);}
+  macro append_all(els, :this this) {syntax_list_append_all(this, els);}
+  macro elements(:this this) {syntax_args(this);}
 }
 
 user_type SyntaxEnum;
 __ct_callback Syntax * syntax_enum_next(SyntaxEnum *);
+__ct_callback SyntaxEnum * syntax_enum_clone(const SyntaxEnum *);
 struct SyntaxEnum;
 user_type SyntaxEnum {
   finalize_user_type struct SyntaxEnum;
   export next;
   macro next(:this this) {syntax_enum_next(this);}
+  macro clone(:this this) {syntax_enum_clone(this);}
 }
 
 user_type Match;
@@ -139,13 +162,10 @@ make_macro make_syntax_macro`syntax parse_make_syntax_macro;
 //
 
 macro class_cast_up (child) {
-  &(*child)..parent;
+  &(*child).._parent;
 }
 
 __need_snapshot Syntax * parse_class(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;
 make_macro class`syntax parse_class;
-
-
-
 

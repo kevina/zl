@@ -280,6 +280,7 @@ namespace ast {
   //
 
   static Exp * mk_assign(Exp *, Exp *, Environ & env);
+  static Exp * mk_init(Exp *, Exp *, bool need_res, Environ & env);
   static Exp * mk_init(const Var *, Exp *, bool need_res, Environ & env);
   static Exp * mk_id(const VarSymbol *, Environ & env);
   static Exp * mk_literal(int val, Environ & env);
@@ -702,6 +703,14 @@ namespace ast {
     }
   };
 
+  Exp * mk_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
+    return parse_exp(SYN(SYN("member"), 
+                         SYN(lhs),
+                         SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
+                             SYN(SYN("."), SYN(rhs)))),
+                     env);
+  }
+
   struct Var : virtual public VarDecl {
     Var() : init(), constructor(), cleanup() {}
     const char * what() const {return "var";}
@@ -743,14 +752,10 @@ namespace ast {
         return NULL;
       }
     }
-    Exp * try_copy_constructor(Exp * rhs, Environ & env) const {
+    Exp * try_copy_constructor(Exp * rhs, Environ & env) {
       const UserType * ut = dynamic_cast<const UserType *>(type->unqualified);
       if (ut && find_symbol<Symbol>("_copy_constructor", ut->module->syms)) {
-        return parse_exp(SYN(SYN("member"), 
-                              SYN(mk_id(this, env)),
-                              SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
-                                  SYN(SYN("."), SYN(rhs)))),
-                          env);
+        return mk_copy_constructor(mk_id(this, env), rhs, env);
       } else {
         return NULL;
       }
@@ -1449,23 +1454,46 @@ namespace ast {
     }
   };
 
-  static Exp * mk_init(const Var * v, Exp * r, bool need_res, Environ & env) {
-    r = r->resolve_to(v->type, env);
-    Exp * copy_c = v->try_copy_constructor(r, env);
+  Exp * try_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
+    const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
+    if (ut && find_symbol<Symbol>("_copy_constructor", ut->module->syms)) {
+      return mk_copy_constructor(lhs, rhs, env);
+    } else {
+      return NULL;
+    }
+  }
+
+  static Exp * mk_init(Exp * l, Exp * r, bool need_res, Environ & env) {
+    r = r->resolve_to(l->type, env);
+    Exp * copy_c = try_copy_constructor(l, r, env);
     if (copy_c) {
       if (need_res) {
         Seq * seq = new Seq();
         seq->exps.push_back(copy_c);
-        seq->exps.push_back(mk_id(v, env));
+        seq->exps.push_back(l);
         seq->construct(env);
         return seq;
       } else {
         return copy_c;
       }
     } else {
-      InitAssign * exp = new InitAssign(mk_id(v, env), r);
+      InitAssign * exp = new InitAssign(l, r);
       return exp->construct(env);
     }
+  }
+
+
+  static Exp * mk_init(const Var * v, Exp * r, bool need_res, Environ & env) {
+    return mk_init(mk_id(v, env), r, need_res, env);
+  }
+
+  static Exp * parse_init_assign(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    Exp * lhs = parse_exp(p->arg(0), env);
+    Exp * rhs = parse_exp(p->arg(1), env);
+    Exp * assign = mk_init(lhs, rhs, true, env);
+    assign->syn = p;
+    return assign;
   }
 
   struct CompoundAssign : public BinOp {
@@ -2292,11 +2320,11 @@ namespace ast {
         Syntax * a = new Syntax(*arg1->arg(1));
         a->add_flag(new Syntax(THIS, ptr_exp));
         const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        call = new Syntax(arg1->part(0), new Syntax(ID, new Syntax(n, sym)), a);
+        call = new Syntax(p->str(), arg1->part(0), new Syntax(ID, new Syntax(n, sym)), a);
       } else {
         const Syntax * n = expand_id(arg1);
         const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        Syntax * c = new Syntax(ID, new Syntax(n, sym));
+        Syntax * c = new Syntax(p->str(), ID, new Syntax(n, sym));
         c->add_flag(new Syntax(THIS, ptr_exp));
         call = c;
       }
@@ -3148,7 +3176,7 @@ namespace ast {
     res = try_just_exp(p, env);
     if (res) return res;
     //abort();
-    throw error (p, "Unsupported primative at expression position: %s", ~p->what());
+    throw error (p, "Unsupported primative at expression position: %s", ~p->what().name);
     //throw error (p, "Expected expression.");
   }
 
@@ -3221,7 +3249,8 @@ namespace ast {
     if (what == "c")       return (new CharC)->parse_self(p, env);
     if (what == "s")       return (new StringC)->parse_self(p, env);
     if (what == "eif")     return (new EIf)->parse_self(p, env);
-    if (what == "assign")  return parse_assign(p, env);
+    if (what == "assign")      return parse_assign(p, env);
+    if (what == "init-assign") return parse_init_assign(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
     if (what == "lshift")  return (new LeftShift)->parse_self(p, env);
@@ -3587,7 +3616,46 @@ namespace ast {
   //
   //
   //
-  
-
 }
 
+extern "C" namespace macro_abi {
+
+  using namespace ast;
+
+  typedef const ::Syntax Syntax;
+  typedef Syntax UnmarkedSyntax;
+  Syntax * replace(const UnmarkedSyntax * p, void * match, Mark * mark);
+
+  int symbol_exists(Syntax * sym, Syntax * where, Mark * mark, Environ * env) {
+    printf("symbol_exists %s in %s\n", ~sym->to_string(), ~where->to_string());
+    if (mark)
+      sym = macro_abi::replace(sym, NULL, mark);
+    if (where) {
+      const Type * type = NULL;
+      try {
+        type = parse_type(where, *env);
+      } catch (...) {}
+      if (!type) {
+        try {
+          Exp * exp = parse_exp(where, *env);
+          type = exp->type;
+        } catch (...) {
+          return false;
+        }
+      }
+      SymbolNode * syms = NULL;
+      if (const StructUnion * t = dynamic_cast<const StructUnion *>(type->unqualified))
+        syms = t->env.symbols.front;
+      else if (const UserType * t = dynamic_cast<const UserType *>(type->unqualified))
+        syms = t->module->syms;
+      else
+        return false;
+      if (find_symbol<Symbol>(sym, DEFAULT_NS, syms, NULL, StripMarks))
+        return true;
+      else
+        return false;
+    } else {
+      return env->symbols.exists(sym);
+    }
+  }
+}

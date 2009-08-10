@@ -227,18 +227,16 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
   bool r = w.parse_first_part(i, end, env, true);
 
-  //if (i != end) 
-    //printf("<><%d><%s> %s\n", r, ~(*i)->to_string(), ~p->to_string());
+  //if (i != end)
+  //  printf("<>%d %s\n", i - p->args_begin(), ~(*i)->to_string());
 
-  if (i != end && ((r && (*i)->is_a("()")) || (!r && (*i)->eq("~")))) 
+  if (i != end && ((r && (*i)->is_a("()")) || (*i)->eq("~"))) 
   {
-    //printf(">>1\n");
     if (env.scope == ast::LEXICAL) return NULL;
-    //printf(">>2\n");
 
-    i = p->args_begin();
+    if ((*i)->ne("~")) --i;
     w.inner_type = new Syntax(new Syntax("void"));
-    
+
   } else if (!r) {
 
     //printf("NO!\n");
