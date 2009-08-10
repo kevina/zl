@@ -882,6 +882,11 @@ namespace ast {
     if (p->flag("register")) return SC_REGISTER;
     return SC_NONE;
   }
+
+  static void make_static_if_marked(StorageClass & storage_class, const SymbolKey & name) {
+    if ((storage_class == SC_NONE || storage_class == SC_EXTERN) && name.marks)
+      storage_class = SC_STATIC;
+  }
   
   static Stmt * parse_var_forward(const Syntax * p, Environ & env, Collect & collect) {
     assert_num_args(p, 2,3);
@@ -899,6 +904,7 @@ namespace ast {
       var = v;
       res = v;
     } else {
+      make_static_if_marked(storage_class, name);
       fresh = !env.symbols.exists_this_scope(name);
       TopLevelVar * v = fresh ? new TopLevelVar : env.symbols.find<TopLevelVar>(name);
       bool mangle = env.scope == LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
@@ -2485,6 +2491,7 @@ namespace ast {
     } else {
       f = new Fun;
       f->storage_class = get_storage_class(p);
+      make_static_if_marked(f->storage_class, name);
       bool mangle = name.marks || env.where || f->storage_class == SC_STATIC;
       f->num = mangle ? NPOS : 0;
       f->where = env.where;
