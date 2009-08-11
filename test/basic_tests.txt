@@ -82,3 +82,6 @@ test87.c
 test88.c
 test89.c
 test90.c
+test91.c
+test92.c
+test93.c

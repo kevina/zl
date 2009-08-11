@@ -7,6 +7,8 @@ void foo(Y *);
 
 macro bar() {(X *)NULL;}
 
+macro bar2() {bar();}
+
 int main() {
-  foo(bar());
+  foo(bar2());
 }

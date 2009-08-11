@@ -1125,6 +1125,7 @@ static const Syntax * handle_new(Parts::const_iterator & i,
   assert(i != e); // FIXME: error message
   const Syntax * type = parse_decl_->parse_type(i, e, env);
   assert(type); // FIXME: error message
+  //printf(">>%s<<\n", ~type->to_string());
   return new Syntax(p, type);
 }
 

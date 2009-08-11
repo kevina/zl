@@ -178,7 +178,7 @@ namespace ast {
       return dynamic_cast<const CT_Value<T> *>(ct_value_)->val;
     }
     inline EStmt * as_stmt(); 
- };
+  };
 
   struct ExpLeaf : public Exp {
     ExpLeaf(const Syntax * p = 0) : Exp(p) {}

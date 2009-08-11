@@ -532,7 +532,7 @@ namespace ast {
 
   void C_TypeRelation::resolve_assign(Exp * & lhs, Exp * & rhs, Environ & env) const {
     if (!lhs->lvalue)
-      throw error(lhs->syn, "Can not be used as lvalue");
+      throw error(lhs->syn, "Can not be used as lvalue in assignment");
     //throw error(syn->arg(1), "Can not be used as lvalue");
     //if (lhs->type->read_only) 
     //  throw error (lhs->syn, "Assignment to read-only location");

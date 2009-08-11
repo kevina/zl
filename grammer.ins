@@ -113,3 +113,16 @@
 #(macro f (x_f) (times (literal 2) (mid x_f)))
 #(macro g (x_g) (plus (literal 2) (call (id f) (list (mid x_g)))))
 
+(talias size_t unsigned)
+(fun malloc (. ((size_t) )) (.ptr (void)))
+(fun free (. ((.ptr (void)) )) (void))
+
+(smacro new (type)
+  (eblock (var tmp (.ptr type) (call malloc (. (sizeof ("(type)" type)))))
+          (construct (deref tmp))
+          tmp))
+
+(smacro delete (exp)
+  (eblock (var tmp (.typeof exp) exp)
+          (destroy (deref tmp))
+          (call free (. tmp))))

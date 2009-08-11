@@ -44,12 +44,12 @@ int main(int argc, const char *argv[])
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
-  parse_maps(env);
   SourceFile * prelude = new_source_file("prelude.zlh");
   SourceFile * code = NULL;
   try {
     if (argc == 2 && strcmp(argv[1], "-p") == 0) {
       SourceFile * prelude_body = new_source_file("prelude.zl");
+      parse_maps(env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
       //system("gcc -g -O -fexceptions -shared -fpic -o prelude.so prelude.c");
@@ -87,6 +87,7 @@ int main(int argc, const char *argv[])
         printf("ZLS MODE\n");
         parse_stmts_raw(SourceStr(code, code->begin(), code->end()), env);
       } else {
+        parse_maps(env);
         parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
         if (debug_mode) {
           SourceFile * prelude_body = new_source_file("prelude.zl");

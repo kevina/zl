@@ -290,20 +290,25 @@ namespace ast {
   //
   //
 
-  struct NoOp : public Stmt {
+  struct NoOp : public Exp {
     NoOp() {}
     const char * what() const {return "noop";}
     NoOp * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       assert_num_args(0);
+      type = VOID_T;
       return this;
     }
     void compile_prep(CompileEnviron &) {}
     void finalize(FinalizeEnviron &) {}
     void compile(CompileWriter & f) {
-      f << indent << "(noop)\n";
+      f << "(noop)";
     }
   };
+
+  static NoOp NO_OP_OBJ;
+  Exp * const NO_OP = &NO_OP_OBJ;
+
 
 //   struct Terminal : public FakeAST {
 //     Terminal(const Syntax * p) : FakeAST(p->what(), p) {}
@@ -703,11 +708,25 @@ namespace ast {
     }
   };
 
+  Exp * mk_constructor(Exp * exp, Environ & env) {
+    return parse_exp(SYN(SYN("member"), 
+                         SYN(exp),
+                         SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
+                     env);
+  }
+
   Exp * mk_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
     return parse_exp(SYN(SYN("member"), 
                          SYN(lhs),
                          SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
                              SYN(SYN("."), SYN(rhs)))),
+                     env);
+  }
+
+  Exp * mk_destructor(Exp * exp, Environ & env) {
+    return parse_exp(SYN(SYN("member"), 
+                         SYN(exp),
+                         SYN(SYN("call"), SYN(ID, SYN("_destructor")), SYN(SYN(".")))),
                      env);
   }
 
@@ -738,16 +757,13 @@ namespace ast {
         }
       }
       if (const UserType * ut = dynamic_cast<const UserType *>(type)) {
-        if (!init) constructor = make_constructor(ut, env)->as_stmt();
+        if (!init) constructor = try_constructor(ut, env)->as_stmt();
         add_cleanup(ut, env);
       }
     }
-    Exp * make_constructor(const UserType * ut, Environ & env) {
+    Exp * try_constructor(const UserType * ut, Environ & env) {
       if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
-        return parse_exp(SYN(SYN("member"), 
-                              SYN(mk_id(this, env)),
-                              SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
-                          env);
+        return mk_constructor(mk_id(this, env), env);
       } else {
         return NULL;
       }
@@ -764,10 +780,7 @@ namespace ast {
     void add_cleanup(const UserType * ut, Environ & env) {
       if (ut && find_symbol<Symbol>("_destructor", ut->module->syms)) {
         cleanup = new Cleanup;
-        cleanup->code = parse_stmt(SYN(SYN("member"), 
-                                       SYN(mk_id(this, env)),
-                                       SYN(SYN("call"), SYN(ID, SYN("_destructor")), SYN(SYN(".")))),
-                                   env);
+        cleanup->code = mk_destructor(mk_id(this, env), env)->as_stmt();
       }
     }
 
@@ -1502,6 +1515,40 @@ namespace ast {
     return assign;
   }
 
+  Exp * try_constructor(Exp * exp, Environ & env) {
+    const UserType * ut = dynamic_cast<const UserType *>(exp->type->unqualified);
+    if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
+      return mk_constructor(exp, env);
+    } else {
+      return NULL;
+    }
+  }
+
+  Exp * try_destructor(Exp * exp, Environ & env) {
+    const UserType * ut = dynamic_cast<const UserType *>(exp->type->unqualified);
+    if (ut && find_symbol<Symbol>("_destructor", ut->module->syms)) {
+      return mk_destructor(exp, env);
+    } else {
+      return NULL;
+    }
+  }
+
+  static Exp * parse_construct(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    Exp * exp = parse_exp(p->arg(0), env);
+    Exp * c = try_constructor(exp, env);
+    if (c) return c;
+    else return NO_OP;
+  }
+
+  static Exp * parse_destroy(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    Exp * exp = parse_exp(p->arg(0), env);
+    Exp * d = try_destructor(exp, env);
+    if (d) return d;
+    else return NO_OP;
+  }
+
   struct CompoundAssign : public BinOp {
     CompoundAssign(String name, String op0, BinOp *bop, Environ & env) 
       : BinOp(name, op0), assign(new Assign), binop(bop) 
@@ -1733,7 +1780,7 @@ namespace ast {
 
   struct InitList : public Exp {
     InitList() {}
-    const char * what() const {return "init";}
+    const char * what() const {return ".";}
     AST * part(unsigned i) {return parts[i];}
     Vector<Exp *> parts;
     InitList * parse_self(const Syntax * p, Environ & env) {
@@ -1860,7 +1907,7 @@ namespace ast {
 
   Exp * make_temp(const Type * type, Environ & env) {
     Var * temp = start_temp(type, env);
-    Exp * constructor = temp->make_constructor(dynamic_cast<const UserType *>(type), env);
+    Exp * constructor = temp->try_constructor(dynamic_cast<const UserType *>(type), env);
     if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
       Seq * seq = new Seq();
       if (constructor)
@@ -3242,7 +3289,6 @@ namespace ast {
     if (what == "if")      return (new If)->parse_self(p, env);
     if (what == ".switch") return (new Switch)->parse_self(p, env);
     if (what == "block")   return (new Block)->parse_self(p, env);
-    if (what == "noop")    return (new NoOp)->parse_self(p, env);
     if (what == "return")  return (new Return)->parse_self(p, env);
     if (what == "cleanup") return (new Cleanup)->parse_self(p, env);
     return 0;
@@ -3258,6 +3304,8 @@ namespace ast {
     if (what == "eif")     return (new EIf)->parse_self(p, env);
     if (what == "assign")      return parse_assign(p, env);
     if (what == "init-assign") return parse_init_assign(p, env);
+    if (what == "construct")   return parse_construct(p, env);
+    if (what == "destroy")     return parse_destroy(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
     if (what == "lshift")  return (new LeftShift)->parse_self(p, env);
@@ -3291,6 +3339,7 @@ namespace ast {
     if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
     if (what == "icast")   return parse_cast(p, env, TypeRelation::Implicit);
     if (what == ".")       return (new InitList)->parse_self(p, env);
+    if (what == "noop")    return (new NoOp)->parse_self(p, env);
     //if (what == "empty")   return (new Empty)->parse_self(p, env);
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
@@ -3634,7 +3683,7 @@ extern "C" namespace macro_abi {
   Syntax * replace(const UnmarkedSyntax * p, void * match, Mark * mark);
 
   int symbol_exists(Syntax * sym, Syntax * where, Mark * mark, Environ * env) {
-    printf("symbol_exists %s in %s\n", ~sym->to_string(), ~where->to_string());
+    //printf("symbol_exists %s in %s\n", ~sym->to_string(), ~where->to_string());
     if (mark)
       sym = macro_abi::replace(sym, NULL, mark);
     if (where) {

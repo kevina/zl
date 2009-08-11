@@ -110,6 +110,8 @@ Error * error(const Syntax * p, const char * fmt, ...) {
   va_start(ap, fmt);
   Error * res = verror(str.source, str.begin, fmt, ap);
   va_end(ap);
+  if (p)
+    res->extra = p->to_string();
   return res;
 }
 

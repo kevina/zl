@@ -206,7 +206,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if (symbol_exists(syntax _destructor, type, mark, lenv)) {
       need_destructor = true;
       destructor_code->append(
-        replace(raw_syntax(member (mid n) (call _destructor (.))), m0, mark));
+        replace(raw_syntax(member (mid n) (call (` _destructor non_virtual) (.))), m0, mark));
     }
   }
 
@@ -242,8 +242,8 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         FieldPos, lenv);
   }
 
-  if (sp.assign)
-    parse_class_fun(sp.assign, m, mark, module_p, parent_vtable, vtable_b, vtable_i, NULL, env, NULL);
+  if (sp.assign) // don't allow virtual assign for now
+    parse_class_fun(sp.assign, m, mark, module_p, NULL, NULL, NULL, NULL, env, NULL);
   if (sp.destructor)
     parse_class_fun(sp.destructor, m, mark, module_p, parent_vtable, vtable_b, vtable_i, NULL, env, NULL);
 
@@ -347,7 +347,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   //
   // Finally create module and user type
   //
-
+  
   Syntax * module_ = replace(syntax {user_type name {$1; $2;}},
                              match_local(m, module_p, module_b, 0),
                              mark);
@@ -422,12 +422,17 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   bool is_static = p->flag(syntax static);
   bool is_virtual = p->flag(syntax virtual);
 
-  
-  if (is_virtual)
-    m = match(m, syntax nv, replace(syntax n`non_virtual, m, mark));
-  else
-    m = match(m, syntax nv, replace(syntax n, m, mark));
+  // create unique name vtable entry, needs to different so that we
+  // don't confuse vtable entries for special functions such as
+  // _destructor with the real function
+  char sbuf[1024];
+  snprintf(sbuf, 1024, "%s$fp", syntax_to_string(m->var(syntax n)));
+  m = match(m, syntax fpn,
+            replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
 
+  if (!is_virtual && parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn)))
+    is_virtual = true;
+  
   SyntaxList * new_parms = new_syntax_list(); 
   if (!is_static)
     new_parms->append(replace(raw_syntax ((.ptr (mid name)) (fluid this)), m, mark));
@@ -454,21 +459,25 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
 
   module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
                            match_local(m, new_parms, 0), mark));
-  module_b->append(replace(syntax {macro nv ($1) {n`internal($2);}},
+  module_b->append(replace(syntax {macro n`non_virtual ($1) {n`internal($2);}},
                            match_local(m, macro_parms, call_parms, 0), mark));
 
   if (is_virtual) {
+    //m = match(m, syntax fpn, m->var(syntax n));
     module_b->append(replace(
-                       syntax {macro n ($1) {(this->_vptr->n)($2);}},
+                       syntax {macro n ($1) {(this->_vptr->fpn)($2);}},
                        match_local(m, macro_parms, call_parms, 0),
                        mark));
     m = match(m, syntax pfun, 
               replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
-    if (!(parent_vtable && parent_vtable->module->have_symbol(m->var(syntax n)))) {
-      vtable_b->append(replace(raw_syntax (var (mid n) (mid pfun)), m, mark));
+    if (!(parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn)))) {
+      vtable_b->append(replace(raw_syntax (var (mid fpn) (mid pfun)), m, mark));
     }
-    vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid n))) 
+    vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid fpn))) 
                                          (cast (mid pfun) (id (` (mid n) internal)))), m, mark));
+  } else {
+    module_b->append(replace(syntax {macro n ($1) {n`internal($2);}},
+                             match_local(m, macro_parms, call_parms, 0), mark));
   }
 
   return NULL;
