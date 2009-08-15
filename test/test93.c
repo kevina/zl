@@ -1,18 +1,24 @@
+#include <stdio.h>
+
 class X {
+ public:
   X() {printf("Hello X\n");}
   virtual ~X() {printf("BY BY X\n");}
 };
 
 class Y : public X {
+ public:
   Y() {printf("Hello Y\n");}
   ~Y() {printf("BY BY Y\n");}
 };
 
 class Zb {
+ public:
   virtual ~Zb() {}
 };
 
 class Z : public Zb {
+ public:
   X x;
   Y y;
 };

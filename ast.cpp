@@ -757,7 +757,7 @@ namespace ast {
         }
       }
       if (const UserType * ut = dynamic_cast<const UserType *>(type)) {
-        if (!init) constructor = try_constructor(ut, env)->as_stmt();
+        if (!init && !constructor) constructor = try_constructor(ut, env)->as_stmt();
         add_cleanup(ut, env);
       }
     }

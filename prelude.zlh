@@ -59,6 +59,7 @@ __ct_callback SyntaxList * new_syntax_list();
 __ct_callback int syntax_list_empty(const SyntaxList *);
 __ct_callback void syntax_list_append(SyntaxList *, Syntax *);
 __ct_callback void syntax_list_append_all(SyntaxList *, SyntaxEnum *);
+__ct_callback void syntax_list_reverse(SyntaxList *);
 struct SyntaxList;
 user_type SyntaxList {
   finalize_user_type struct SyntaxList;
@@ -70,6 +71,7 @@ user_type SyntaxList {
   macro append(syn, :this this) {syntax_list_append(this, syn);}
   macro append_all(els, :this this) {syntax_list_append_all(this, els);}
   macro elements(:this this) {syntax_args(this);}
+  macro reverse(:this this) {syntax_list_reverse(this);}
 }
 
 user_type SyntaxEnum;

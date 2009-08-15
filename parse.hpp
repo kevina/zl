@@ -204,6 +204,9 @@ struct Syntax : public gc {
   Syntax(const Syntax & other) 
     : what_(other.what_), str_(other.str_), d(other.d), repl(other.repl)
   {}
+  Syntax(const SourceStr & s, const Syntax & other) 
+    : what_(other.what_), str_(s), d(other.d), repl(other.repl)
+  {}
   template <typename T> Syntax(ChangeSrc<T> & f, const Syntax & other); // defined in expand.cpp
   Syntax & operator= (const Syntax & other) {
     what_ = other.what_;
@@ -257,33 +260,33 @@ struct Syntax : public gc {
     d->parts.push_back(x);
     d->parts.push_back(y);
   }
-  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : repl(0) {
-    d = new D;
-    what_ = p->string_if_simple();
-    d->parts.push_back(p); 
-    d->parts.push_back(x);
-    d->parts.push_back(y);
-    d->parts.push_back(z);
-  }
-  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a) : repl(0) {
-    d = new D;
-    what_ = p->string_if_simple();
-    d->parts.push_back(p); 
-    d->parts.push_back(x);
-    d->parts.push_back(y);
-    d->parts.push_back(z);
-    d->parts.push_back(a);
-  }
-  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a, const Syntax * b) : repl(0) {
-    d = new D;
-    what_ = p->string_if_simple();
-    d->parts.push_back(p); 
-    d->parts.push_back(x);
-    d->parts.push_back(y);
-    d->parts.push_back(z);
-    d->parts.push_back(a);
-    d->parts.push_back(b);
-  }
+//   Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : repl(0) {
+//     d = new D;
+//     what_ = p->string_if_simple();
+//     d->parts.push_back(p); 
+//     d->parts.push_back(x);
+//     d->parts.push_back(y);
+//     d->parts.push_back(z);
+//   }
+//   Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a) : repl(0) {
+//     d = new D;
+//     what_ = p->string_if_simple();
+//     d->parts.push_back(p); 
+//     d->parts.push_back(x);
+//     d->parts.push_back(y);
+//     d->parts.push_back(z);
+//     d->parts.push_back(a);
+//   }
+//   Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a, const Syntax * b) : repl(0) {
+//     d = new D;
+//     what_ = p->string_if_simple();
+//     d->parts.push_back(p); 
+//     d->parts.push_back(x);
+//     d->parts.push_back(y);
+//     d->parts.push_back(z);
+//     d->parts.push_back(a);
+//     d->parts.push_back(b);
+//   }
   Syntax(const SourceStr & s, const Syntax * p, const Syntax * x) : str_(s), repl(0) {
     d = new D;
     what_ = p->string_if_simple();
@@ -297,14 +300,14 @@ struct Syntax : public gc {
     d->parts.push_back(x);
     d->parts.push_back(y);
   }
-  Syntax(const SourceStr & s, const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : str_(s), repl(0)  {
-    d = new D;
-    what_ = p->string_if_simple();
-    d->parts.push_back(p); 
-    d->parts.push_back(x);
-    d->parts.push_back(y);
-    d->parts.push_back(z);
-  }
+//   Syntax(const SourceStr & s, const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : str_(s), repl(0)  {
+//     d = new D;
+//     what_ = p->string_if_simple();
+//     d->parts.push_back(p); 
+//     d->parts.push_back(x);
+//     d->parts.push_back(y);
+//     d->parts.push_back(z);
+//   }
   template <typename T>
   Syntax(const T * e) 
     : what_("<entity>"), str_(e->source_str()), d(e), repl() {}
@@ -401,6 +404,14 @@ struct Syntax : public gc {
     return &self + 1;
   }
   Parts::const_iterator args_end()   const {
+    if (d.have_d()) return d->parts.end();
+    return &self + 1;
+  }
+  Parts::iterator args_begin() {
+    if (d.have_d()) return d->parts.begin() + 1;
+    return &self + 1;
+  }
+  Parts::iterator args_end() {
     if (d.have_d()) return d->parts.end();
     return &self + 1;
   }

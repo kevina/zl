@@ -309,6 +309,8 @@ public:
       if (val_s.size() > 1)
         throw error(val_s[val_s.size()-2], "Extra operand(s).");
       assert(val_s.size() == 1);
+      // Don't do this for now, cases weird problems
+      //return new Syntax(p->str(), *val_s.front());
       return val_s.front();
     } catch (Error * err) {
       printf("?? %s %s\n", ~p->sample_w_loc(), ~p->to_string());

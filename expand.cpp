@@ -1,4 +1,5 @@
 #include <set>
+#include <algorithm>
 
 #include <stdio.h>
 #include <dlfcn.h>
@@ -59,6 +60,19 @@ public:
       source->dump_info(o, as2, new_prefix.freeze());
     }
     o << buf.freeze();
+  }
+};
+
+class ResultSourceInfo : public SourceInfo {
+public:
+  SourceStr orig;
+  ResultSourceInfo(const SourceInfo * p, const SourceStr & o) : SourceInfo(p), orig(o) {}
+  virtual const SourceInfo * clone_until(const SourceInfo * stop, 
+                                         const SourceInfo * new_parent) const {
+    return new ResultSourceInfo(parent->clone_until(stop, new_parent), orig);
+  }
+  bool dump_info_self(OStream & o) const {
+    return true;
   }
 };
 
@@ -414,6 +428,10 @@ struct Macro : public Declaration, public Symbol {
     try {
       MacroInfo whocares(s,def);
       const Syntax * res = expand(p, env);
+      // Don't do this for now, might cause weird problems
+      //SourceStr n = s->str();
+      //n.source = new ResultSourceInfo(n.source, res->str());
+      //res = new Syntax(n, *res);
       // FIXME: What is this find_insertion_point doing, it fails for test56.c
       //ExpandSourceInfo * ip 
       //  = const_cast<ExpandSourceInfo *>
@@ -592,6 +610,9 @@ extern "C" namespace macro_abi {
     }
   }
 
+  void syntax_list_reverse(SyntaxList * l) {
+    std::reverse(l->args_begin(), l->args_end());
+  }
 
   const Syntax * syntax_enum_next(SyntaxEnum * e) {
     return e->next();

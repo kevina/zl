@@ -148,7 +148,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if (strcmp(what, "label")==0) continue;
 
     Syntax * err = NULL;
-    if (strcmp(what, "var")==0) 
+    if (strcmp(what, "var")==0)
       parse_class_var(member, m, mark, struct_b, module_b);
     else if (strcmp(what, "fun")==0) 
       err = parse_class_fun(member, m, mark, module_b, parent_vtable,
@@ -210,7 +210,16 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     }
   }
 
-  if (need_constructor && !sp.constructor) {
+  destructor_code->reverse();
+
+  if (sp.constructor) {
+    Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), sp.constructor);
+    sp.constructor =
+      partly_expand(
+        replace(syntax{void _constructor() {$1; $body;}}, 
+                match_local(m0, constructor_code, 0), mark), 
+        FieldPos, lenv);
+  } else if (need_constructor) {
     sp.constructor =
       partly_expand(
         replace(syntax{void _constructor() {$1;}}, 
@@ -218,7 +227,15 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         FieldPos, lenv);
   }
 
-  if (need_copy_constructor && !sp.copy_constructor) {
+  if (sp.copy_constructor) {
+    Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), sp.copy_constructor);
+    sp.copy_constructor =
+      partly_expand(
+        replace(syntax{void _copy_constructor(const name & other) {$1; $body;}}, 
+                match_local(m0, constructor_code, 0), mark), 
+                // yes constructor_code, not copy_constructor_code
+        FieldPos, lenv);
+  } else if (need_copy_constructor) {
     sp.copy_constructor =
       partly_expand(
         replace(syntax{void _copy_constructor(const name & other) {$1;}}, 
@@ -234,7 +251,12 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         FieldPos, lenv);
   }
 
-  if (need_destructor && !sp.destructor) {
+  if (sp.destructor) {
+    Match * m0 = match(m, raw_syntax ($w $n $parms $ret $body @rest), sp.destructor);    
+    sp.destructor =
+      replace(raw_syntax($w $n $parms $ret (block $body $1) @rest), 
+              match_local(m0, destructor_code, 0), mark);
+  } else if (need_destructor) {
     sp.destructor =
       partly_expand(
         replace(syntax{void _destructor() {$1;}}, 

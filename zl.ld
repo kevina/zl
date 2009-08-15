@@ -10,6 +10,7 @@
   syntax_list_empty;
   syntax_list_append;
   syntax_list_append_all;
+  syntax_list_reverse;
   syntax_enum_next;
   match;
   match_args;

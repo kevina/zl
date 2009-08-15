@@ -110,8 +110,11 @@ Error * error(const Syntax * p, const char * fmt, ...) {
   va_start(ap, fmt);
   Error * res = verror(str.source, str.begin, fmt, ap);
   va_end(ap);
-  if (p)
-    res->extra = p->to_string();
+  if (p) {
+    StringBuf buf = res->extra;
+    buf.printf(">>%p %s\n", p, ~p->to_string());
+    res->extra = buf.freeze();
+  }
   return res;
 }
 
