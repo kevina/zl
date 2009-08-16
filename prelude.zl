@@ -48,13 +48,43 @@ Syntax * parse_make_syntax_macro(Syntax * p, Environ * env) {
  */
 
 
-
-struct SpecialFuns {
+typedef struct SpecialFuns {
+  bool need_constructor;
+  SyntaxList * constructor_code[2];
   Syntax * constructor;
+
+  bool need_copy_constructor;
+  SyntaxList * copy_constructor_code[2];
   Syntax * copy_constructor;
+
+  bool need_assign;
+  SyntaxList * assign_code;
   Syntax * assign;
+
+  bool need_destructor;
+  SyntaxList * destructor_code;
   Syntax * destructor;
-};
+} SpecialFuns;
+
+void init_special_funs(SpecialFuns & sp) {
+  sp.need_constructor = false;
+  sp.constructor_code[0] = new_syntax_list();
+  sp.constructor_code[1] = new_syntax_list();
+  sp.constructor = NULL;
+
+  sp.need_copy_constructor = false;
+  sp.copy_constructor_code[0] = new_syntax_list();
+  sp.copy_constructor_code[1] = new_syntax_list();
+  sp.copy_constructor = NULL;
+
+  sp.need_assign = false;
+  sp.assign_code = new_syntax_list();
+  sp.assign = NULL;
+
+  sp.need_destructor = false;
+  sp.destructor_code = new_syntax_list();
+  sp.destructor = NULL;
+}
 
 void parse_class_var(Syntax * p, Match * m, Mark * mark,
                      SyntaxList * struct_b, SyntaxList * module_b);
@@ -63,7 +93,40 @@ Syntax * parse_class_fun(Syntax * p, Match * m, Mark * mark,
                          UserTypeInfo * parent_vtable,
                          SyntaxList *  vtable_b, SyntaxList * vtable_i,
                          Context * context, Environ * env,
-                         struct SpecialFuns * sp);
+                         struct SpecialFuns * sp, bool skip_body);
+Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
+                               SyntaxList *  module_b,
+                               Environ * env);
+
+void create_special_funs(SpecialFuns & sp, Syntax * name, Syntax * type,
+                         unsigned which, Match * m, Mark * mark, Environ * lenv)
+{
+  Match * m0 = match(m, syntax n, name);
+  
+  if (symbol_exists(syntax _constructor, type, mark, lenv)) {
+    sp.need_constructor = true;
+    sp.constructor_code[which]->append(
+      replace(raw_syntax(member (mid n) (call _constructor (.))), m0, mark));
+  }
+  
+  if (symbol_exists(syntax _copy_constructor, type, mark, lenv))
+    sp.need_copy_constructor = true;
+  sp.copy_constructor_code[which]->append(
+    replace(raw_syntax(init-assign (mid n) (member other (mid n))), 
+            m0, mark));
+  
+  if (symbol_exists(syntax _assign, type, mark, lenv))
+    sp.need_assign = true;
+  sp.assign_code->append(
+    replace(raw_syntax(assign (mid n) (member other (mid n))), 
+            m0, mark));
+  
+  if (symbol_exists(syntax _destructor, type, mark, lenv)) {
+    sp.need_destructor = true;
+    sp.destructor_code->append(
+      replace(raw_syntax(member (mid n) (call (` _destructor non_virtual) (.))), m0, mark));
+  }
+}
 
 Syntax * parse_class(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
@@ -112,6 +175,9 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   m = match(m, syntax _copy_constructor, replace_context(syntax _copy_constructor, context));
   m = match(m, syntax _assign, replace_context(syntax _assign, context));
   m = match(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
+
+  struct SpecialFuns sp;
+  init_special_funs(sp);
   
   if (parent) {
     parent_m = parent->module;
@@ -120,6 +186,10 @@ Syntax * parse_class(Syntax * p, Environ * env) {
 
     parse_class_var(partly_expand(replace(syntax {parent_n _parent;}, m, mark), FieldPos, lenv),
                     m, mark, struct_p, module_p);
+    create_special_funs(sp, 
+                        m->var(syntax _parent), 
+                        replace(raw_syntax (parent_n), m, mark), 
+                        0, m, mark, lenv);
             
     module_p->append(replace(syntax {make_subtype parent_n class_cast_up;}, m, mark));
     module_p->append(replace(syntax {import parent_n;}, m, mark));
@@ -131,8 +201,6 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     }
   }
 
-  struct SpecialFuns sp = {NULL, NULL, NULL, NULL};
-
   //
   // Parse Body
   //
@@ -141,133 +209,42 @@ Syntax * parse_class(Syntax * p, Environ * env) {
                                         FieldPos, lenv);
   Syntax * member;
   while ((member = itr->next)) {
-    Match * m0 = match(m, raw_syntax (what n @_), member);
+    Match * m0 = match(m, raw_syntax (what n @ type @_), member);
     const char * what = syntax_to_string(m0->var(syntax what));
 
     // ignore access control labels for now
     if (strcmp(what, "label")==0) continue;
 
     Syntax * err = NULL;
-    if (strcmp(what, "var")==0)
+    if (strcmp(what, "var")==0) {
       parse_class_var(member, m, mark, struct_b, module_b);
-    else if (strcmp(what, "fun")==0) 
+      create_special_funs(sp, m0->var(syntax n), m0->var(syntax type), 1, m, mark, lenv);
+    } else if (strcmp(what, "fun")==0) {
       err = parse_class_fun(member, m, mark, module_b, parent_vtable,
-                            vtable_b, vtable_i, context, lenv, &sp);
-    // otherwise we have some sort of type definition which needs to go before 
-    // _Data
-    else
+                            vtable_b, vtable_i, context, lenv, &sp, false);      
+    } else {
+      // otherwise we have some sort of type definition which needs to go before 
+      // _Data
       module_p->append(pre_parse(member, lenv));
+    }
     if (err) return err;
     exports->append(m0->var(syntax n));
   }
 
   //
-  // Build speical functions if needed
+  // Parse special functions as forward declarations in order to build
+  // necessary vptr and related info, for now only handle the _destructor
   //
 
-  bool need_constructor = false;
-  SyntaxList * constructor_code = new_syntax_list();
-  bool need_copy_constructor = false;
-  SyntaxList * copy_constructor_code = new_syntax_list();
-  bool need_assign = false;
-  SyntaxList * assign_code = new_syntax_list();
-  bool need_destructor = false;
-  SyntaxList * destructor_code = new_syntax_list();
-
-  SyntaxEnum * itrs[2];  
-  itrs[0] = struct_p->elements();
-  itrs[1] = struct_b->elements();
-  int i = 0;
-  Syntax * member;
-  while (member = itrs[i]->next(), 
-         member ? member : i == 0 ? (member = itrs[++i]->next()) : NULL) 
-  {
-    Match * m0 = match(m, raw_syntax (what n @_), member);
-    Syntax * type = member->arg(1);
-
-    if (symbol_exists(syntax _constructor, type, mark, lenv)) {
-      need_constructor = true;
-      constructor_code->append(
-        replace(raw_syntax(member (mid n) (call _constructor (.))), m0, mark));
-    }
-    
-    if (symbol_exists(syntax _copy_constructor, type, mark, lenv))
-      need_copy_constructor = true;
-    copy_constructor_code->append(
-      replace(raw_syntax(init-assign (mid n) (member other (mid n))), 
-              m0, mark));
-    
-    if (symbol_exists(syntax _assign, type, mark, lenv))
-      need_assign = true;
-    assign_code->append(
-      replace(raw_syntax(assign (mid n) (member other (mid n))), 
-              m0, mark));
-    
-    if (symbol_exists(syntax _destructor, type, mark, lenv)) {
-      need_destructor = true;
-      destructor_code->append(
-        replace(raw_syntax(member (mid n) (call (` _destructor non_virtual) (.))), m0, mark));
-    }
-  }
-
-  destructor_code->reverse();
-
-  if (sp.constructor) {
-    Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), sp.constructor);
-    sp.constructor =
-      partly_expand(
-        replace(syntax{void _constructor() {$1; $body;}}, 
-                match_local(m0, constructor_code, 0), mark), 
-        FieldPos, lenv);
-  } else if (need_constructor) {
-    sp.constructor =
-      partly_expand(
-        replace(syntax{void _constructor() {$1;}}, 
-                match_local(m, constructor_code, 0), mark), 
-        FieldPos, lenv);
-  }
-
-  if (sp.copy_constructor) {
-    Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), sp.copy_constructor);
-    sp.copy_constructor =
-      partly_expand(
-        replace(syntax{void _copy_constructor(const name & other) {$1; $body;}}, 
-                match_local(m0, constructor_code, 0), mark), 
-                // yes constructor_code, not copy_constructor_code
-        FieldPos, lenv);
-  } else if (need_copy_constructor) {
-    sp.copy_constructor =
-      partly_expand(
-        replace(syntax{void _copy_constructor(const name & other) {$1;}}, 
-                match_local(m, copy_constructor_code, 0), mark), 
-        FieldPos, lenv);
-  }
-
-  if (need_assign && !sp.assign) {
-    sp.assign =
-      partly_expand(
-        replace(syntax{void _assign(const name & other) {$1;}}, 
-                match_local(m, assign_code, 0), mark), 
-        FieldPos, lenv);
-  }
+  Syntax * destructor = NULL;
 
   if (sp.destructor) {
-    Match * m0 = match(m, raw_syntax ($w $n $parms $ret $body @rest), sp.destructor);    
-    sp.destructor =
-      replace(raw_syntax($w $n $parms $ret (block $body $1) @rest), 
-              match_local(m0, destructor_code, 0), mark);
-  } else if (need_destructor) {
-    sp.destructor =
-      partly_expand(
-        replace(syntax{void _destructor() {$1;}}, 
-                match_local(m, destructor_code, 0), mark), 
-        FieldPos, lenv);
+    destructor = sp.destructor;
+  } else if (sp.need_destructor) {
+    destructor = partly_expand(replace(syntax{void _destructor();}, m, mark), FieldPos, lenv);
   }
-
-  if (sp.assign) // don't allow virtual assign for now
-    parse_class_fun(sp.assign, m, mark, module_p, NULL, NULL, NULL, NULL, env, NULL);
-  if (sp.destructor)
-    parse_class_fun(sp.destructor, m, mark, module_p, parent_vtable, vtable_b, vtable_i, NULL, env, NULL);
+  if (destructor)
+    parse_class_fun(destructor, m, mark, module_p, parent_vtable, vtable_b, vtable_i, NULL, lenv, NULL, true);
 
   //
   // Now generate vtable and related bits
@@ -320,14 +297,11 @@ Syntax * parse_class(Syntax * p, Environ * env) {
       parse_class_var(v, m, mark, struct_p, module_b); // Note: beginning of structure but end of module
     }
     exports->append(replace(syntax _vptr, m, mark));
-    if (sp.constructor) {
-      Match * m0 = match(m, raw_syntax (w n parms ret body @rest), sp.constructor);
-      sp.constructor = replace(
-        raw_syntax(w n parms ret (block body (assign _vptr (addrof _vtable))) @rest), m0, mark);
-    } else {
-      sp.constructor = replace(
-        raw_syntax(fun _constructor (.) (void) (block (assign _vptr (addrof _vtable)))), m, mark);
-    }
+    Syntax * assign = replace(raw_syntax(assign _vptr (addrof _vtable)), m, mark);
+    sp.need_constructor = true;
+    sp.constructor_code[0]->append(assign);
+    sp.need_copy_constructor = true;
+    sp.copy_constructor_code[0]->append(assign);
   }
 
   // Now add structure and _vtable to module
@@ -358,14 +332,71 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   //                   mark));
 
   //
-  // Create constructors
+  // Create special functions
   //
 
+  sp.destructor_code->reverse();
+
+  if (sp.constructor) {
+    Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), sp.constructor);
+    sp.constructor =
+      partly_expand(
+        replace(syntax{void _constructor() {$1; $2; $body;}}, 
+                match_local(m0, sp.constructor_code[0], sp.constructor_code[1], 0), mark), 
+        FieldPos, lenv);
+  } else if (sp.need_constructor) {
+    sp.constructor =
+      partly_expand(
+        replace(syntax{void _constructor() {$1; $2;}}, 
+                match_local(m, sp.constructor_code[0], sp.constructor_code[1], 0), mark), 
+        FieldPos, lenv);
+  }
   if (sp.constructor)
-    parse_class_fun(sp.constructor, m, mark, module_p, NULL, NULL, NULL, NULL, env, NULL);
+    parse_class_fun(sp.constructor, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, false);
+
+  if (sp.copy_constructor) {
+    Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), sp.copy_constructor);
+    sp.copy_constructor =
+      partly_expand(
+        replace(syntax{void _copy_constructor(const name & other) {$1; $2; $body;}}, 
+                match_local(m0, sp.constructor_code[0], sp.constructor_code[1], 0), mark), 
+                // yes constructor_code, not copy_constructor_code
+        FieldPos, lenv);
+  } else if (sp.need_copy_constructor) {
+    sp.copy_constructor =
+      partly_expand(
+        replace(syntax{void _copy_constructor(const name & other) {$1; $2; }}, 
+                match_local(m, sp.copy_constructor_code[0], sp.copy_constructor_code[1], 0), mark), 
+        FieldPos, lenv);
+  }
   if (sp.copy_constructor)
-    parse_class_fun(sp.copy_constructor, m, mark, module_p, NULL, NULL, NULL, NULL, env, NULL);
-  
+    parse_class_fun(sp.copy_constructor, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, false);
+
+  if (sp.need_assign && !sp.assign) {
+    sp.assign =
+      partly_expand(
+        replace(syntax{void _assign(const name & other) {$1;}}, 
+                match_local(m, sp.assign_code, 0), mark), 
+        FieldPos, lenv);
+  }
+  if (sp.assign) // don't allow virtual assign for now
+    parse_class_fun(sp.assign, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, false);
+
+  if (sp.destructor) {
+    Match * m0 = match(m, raw_syntax ($w $n $parms $ret $body @rest), sp.destructor);    
+    sp.destructor =
+      replace(raw_syntax($w $n $parms $ret (block $body $1) @rest), 
+              match_local(m0, sp.destructor_code, 0), mark);
+  } else if (sp.need_destructor) {
+    sp.destructor =
+      partly_expand(
+        replace(syntax{void _destructor() {$1;}}, 
+                match_local(m, sp.destructor_code, 0), mark), 
+        FieldPos, lenv);
+  }
+  if (sp.destructor)
+    parse_class_fun_body(sp.destructor, m, mark, module_p, lenv);
+
   //
   // Finally create module and user type
   //
@@ -378,6 +409,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   //printf("---\n");
   return module_;
 }
+
 
 void parse_class_var(Syntax * p, Match * m, Mark * mark,
                      SyntaxList * struct_b, SyntaxList * module_b)
@@ -402,10 +434,10 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                           UserTypeInfo * parent_vtable,
                           SyntaxList *  vtable_b, SyntaxList * vtable_i,
                           Context * context, Environ * env,
-                          struct SpecialFuns * sp)
+                          struct SpecialFuns * sp, bool skip_body)
 {
   //printf("parse_class_fun: %s\n", syntax_to_string(p));
-  m = match_args(m, raw_syntax (n parms ret body @rest), p);
+  m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
   m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
   //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
   //assert(!(is_static && is_virtual)); // FIXME Error message
@@ -417,26 +449,22 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
     Syntax * parms = m->var(syntax parms);
     if (parms->num_args() == 0) {
       //printf("DEFAULT CONSTRUCTOR\n");
-      m = match(m, syntax n, replace_context(syntax _constructor, context));
-      sp->constructor = replace(raw_syntax(fun n (. @parms) ret body @rest), m, mark);
+      sp->constructor = replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark);
       return NULL;
     } else if (parms->num_args() == 1) {
       //printf("COPY CONSTRUCTOR\n");
-      m = match(m, syntax n, replace_context(syntax _copy_constructor, context));
-      sp->copy_constructor = replace(raw_syntax(fun n (. @parms) ret body @rest), m, mark);
+      sp->copy_constructor = replace(raw_syntax(fun _copy_constructor (. @parms) ret body @rest), m, mark);
       return NULL;
     } else {
       return error(p, "Only default and copy constructor supported at this time.");
     }
   } else if (name->eq(raw_syntax (operator =))) {
     //printf("ASSIGN\n");
-    m = match(m, syntax n, replace_context(syntax _assign, context));
-    sp->assign = replace(raw_syntax(fun n (. @parms) ret body @rest), m, mark);
+    sp->assign = replace(raw_syntax(fun _assign (. @parms) ret body @rest), m, mark);
     return NULL;
   } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) {
     //printf("DESTRUCTOR\n");
-    m = match(m, syntax n, replace_context(syntax _destructor, context));
-    sp->destructor = replace(raw_syntax(fun n (. @parms) ret body @rest), m, mark);
+    sp->destructor = replace(raw_syntax(fun _destructor (. @parms) ret body @rest), m, mark);
     return NULL;
   }
 
@@ -479,8 +507,13 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   if (!is_static)
     macro_parms->append(replace(syntax (:this this = this), m, mark));
 
-  module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
-                           match_local(m, new_parms, 0), mark));
+  if (!skip_body && m->var(syntax body))
+    module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
+                             match_local(m, new_parms, 0), mark));
+  else
+    module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret)),
+                             match_local(m, new_parms, 0), mark));
+    
   module_b->append(replace(syntax {macro n`non_virtual ($1) {n`internal($2);}},
                            match_local(m, macro_parms, call_parms, 0), mark));
 
@@ -501,6 +534,33 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
     module_b->append(replace(syntax {macro n ($1) {n`internal($2);}},
                              match_local(m, macro_parms, call_parms, 0), mark));
   }
+
+  return NULL;
+}
+
+Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
+                               SyntaxList *  module_b,
+                               Environ * env)
+{
+  //printf("parse_class_fun: %s\n", syntax_to_string(p));
+  m = match_args(m, raw_syntax (n parms ret body @rest), p);
+  m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
+
+  // FIXME: handle flags
+  bool is_static = p->flag(syntax static);
+  
+  SyntaxList * new_parms = new_syntax_list(); 
+  if (!is_static)
+    new_parms->append(replace(raw_syntax ((.ptr (mid name)) (fluid this)), m, mark));
+
+  SyntaxEnum * parms_enum = m->varl(syntax parms);
+  Syntax * parm;
+  while ((parm = parms_enum->next())) {
+    new_parms->append(parm);
+  }
+
+  module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
+                           match_local(m, new_parms, 0), mark));
 
   return NULL;
 }
