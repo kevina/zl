@@ -128,6 +128,21 @@ void create_special_funs(SpecialFuns & sp, Syntax * name, Syntax * type,
   }
 }
 
+Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
+  Match * m = match(0, raw_syntax (what name @ body @rest), p);
+  Syntax * body = m->var(syntax body);
+  if (!body) return p;
+  Environ * lenv = temp_environ(env);
+  pre_parse(replace(raw_syntax (declare_user_type name), m, mark), lenv);
+  SyntaxList * new_body = new_syntax_list();
+  SyntaxEnum * itr = partly_expand_list(body->args(), FieldPos, lenv);
+  Syntax * member;
+  while ((member = itr->next))
+    new_body->append(pre_parse(member, lenv));
+  return replace(raw_syntax(what name ({...} @$1) @rest), 
+                 match_local(m, new_body, NULL), mark);
+}
+
 Syntax * parse_class(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
 
@@ -144,7 +159,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
 
   UserTypeInfo * parent = parent_s ? user_type_info(parent_s, env) : NULL;
 
-  Context * context = get_context(name);
+  Context * context = empty_context();
 
   Environ * lenv = temp_environ(env);
   pre_parse(replace(raw_syntax (declare_user_type (mid name)), m, mark),
@@ -219,6 +234,12 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if (strcmp(what, "var")==0) {
       parse_class_var(member, m, mark, struct_b, module_b);
       create_special_funs(sp, m0->var(syntax n), m0->var(syntax type), 1, m, mark, lenv);
+    } else if (strcmp(what, "alias")==0) {
+      Match * m0 = match(m, raw_syntax (what n type value @_), member);
+      //module_b->append(replace(raw_syntax (macro n (:(this (reparse this this))) value), m0, mark));
+      module_b->append(replace(syntax {macro n (:this ths = this) {*({typeof(ths) fluid this = ths; &value;});}}, m0, mark));
+      if (member->flag(syntax need_constructor))
+        create_special_funs(sp, m0->var(syntax n), m0->var(syntax type), 1, m, mark, lenv);
     } else if (strcmp(what, "fun")==0) {
       err = parse_class_fun(member, m, mark, module_b, parent_vtable,
                             vtable_b, vtable_i, context, lenv, &sp, false);      

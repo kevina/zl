@@ -337,8 +337,9 @@ namespace ast {
   {
     if (!s) return NULL;
     if (strategy != ThisScope)
-      if (const FluidBinding * b = dynamic_cast<const FluidBinding *>(s->value))
+      if (const FluidBinding * b = dynamic_cast<const FluidBinding *>(s->value)) {
         s = find_symbol_p1(SymbolKey(b->rebind, k.ns), start, stop, strategy);
+      }
     return s;
   }
   template <>
@@ -381,6 +382,7 @@ namespace ast {
                           const SymbolNode * start, const SymbolNode * stop,
                           Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
+    //printf("LOOKUP %s\n", ~k.to_string());
     const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s1) {
       //fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
@@ -397,6 +399,7 @@ namespace ast {
                   abi::__cxa_demangle(typeid(const T).name(), NULL, NULL, NULL), 
                   abi::__cxa_demangle(typeid(*s1->value).name(), NULL, NULL, NULL));
     }
+    //printf("LOOKUP %s OK\n", ~k.to_string());
     return s2;
   }
 

@@ -1634,7 +1634,7 @@ namespace ast {
   };
 
   struct Mod : public SimpleBinOp {
-    Mod() : SimpleBinOp("mid", "%", INT_C) {}
+    Mod() : SimpleBinOp("mod", "%", INT_C) {}
     void make_ct_value() {
       ct_value_ = mod_ct_value(this);
     }
@@ -2298,7 +2298,8 @@ namespace ast {
     assert_num_args(p, 1);
     Module * m = dynamic_cast<Module *>(env.where);
     //printf("FINALIZE USER TYPE %s\n", ~m->name.to_string());
-    Type * t0 = env.types.inst(SymbolKey(m->name()));
+    Type * t0 = env.types.inst(SymbolName(*m->key)); 
+    //                        ^^ need to kill namespace but preserve marks
     UserType * s = dynamic_cast<UserType *>(t0);
     s->module = m;
     s->type = parse_type(p->arg(0), env);
@@ -2854,11 +2855,11 @@ namespace ast {
     size_ = 0;
     align_ = 0;
     for (unsigned i = 0; i != members.size(); ++i) {
-      members[i].offset = size_;
       const Type * t = members[i].sym->type;
       if (t->storage_align() > align_) align_ = t->storage_align();
       unsigned align_offset = size_ % t->storage_align();
       if (align_offset != 0) size_ += t->storage_align() - align_offset;
+      members[i].offset = size_;
       size_ += t->storage_size();
     }
     defined = true;
@@ -3178,6 +3179,7 @@ namespace ast {
     if (what == "finalize_user_type") parse_finalize_user_type(p, env);
     if (what == "make_subtype") parse_make_subtype(p, env);
     if (what == "declare_user_type") parse_declare_user_type(p, env);
+    if (what == "import")  parse_import(p, env);
     return p;
   }
 

@@ -11,6 +11,7 @@
   syntax_list_append;
   syntax_list_append_all;
   syntax_list_reverse;
+  syntax_list_replace;
   syntax_enum_next;
   match;
   match_args;
@@ -18,6 +19,7 @@
   match_var;
   match_varl;
   replace;
+  empty_context;
   get_context;
   replace_context;
   partly_expand;

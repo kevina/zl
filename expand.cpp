@@ -580,7 +580,15 @@ extern "C" namespace macro_abi {
   }
 
   int syntax_eq(Syntax * lhs, UnmarkedSyntax * rhs) {
-    if (lhs->simple() && rhs->simple()) return lhs->what_ == rhs->what_;
+    if (lhs->simple() && rhs->simple()) {
+      if (lhs->what_ == rhs->what_) return true;
+      SymbolName n = lhs->what_;
+      while (n.marks) {
+        n.marks = n.marks->prev;
+        if (n == rhs->what_) return true;
+      }
+      return false;
+    }
     if (lhs->simple() || rhs->simple()) return false;
     assert(rhs->num_parts() == 2);
     if (lhs->num_parts() != 2) return false;
@@ -600,8 +608,10 @@ extern "C" namespace macro_abi {
     return p->num_args() == 0;
   }
   
-  void syntax_list_append(SyntaxList * l, const Syntax * p) {
+  size_t syntax_list_append(SyntaxList * l, const Syntax * p) {
+    size_t pos = l->num_args();
     l->add_part(p);
+    return pos;
   }
 
   void syntax_list_append_all(SyntaxList * l, SyntaxEnum * els) {
@@ -612,6 +622,10 @@ extern "C" namespace macro_abi {
 
   void syntax_list_reverse(SyntaxList * l) {
     std::reverse(l->args_begin(), l->args_end());
+  }
+
+  void syntax_list_replace(SyntaxList * l, size_t pos, const Syntax * p) {
+    l->arg(pos) = p;
   }
 
   const Syntax * syntax_enum_next(SyntaxEnum * e) {
@@ -1047,6 +1061,10 @@ const Syntax * replace_context(const Syntax * p, const Marks * context) {
 
 extern "C" namespace macro_abi {
 
+  Context * empty_context() {
+    return NULL;
+  }
+
   Context * get_context(Syntax * p) {
     return p->what().marks;
   }
@@ -1124,6 +1142,7 @@ static const Syntax * handle_paran(Parts::const_iterator & i,
   //printf("handle_paran: %s\n", ~p->to_string());
   try {
     const Syntax * exp = reparse("PARAN_EXP", p);
+    //printf("handle_paran:: %s\n", ~exp->to_string());
     const Syntax * type = parse_decl_->parse_type(exp, env);
     if (type) return new Syntax(p->str(), new Syntax("(type)"), type);
     // Since the raw string might need to be reparsed we can't use an
@@ -1320,9 +1339,15 @@ extern "C" namespace macro_abi {
   }
   
   const Syntax * pre_parse(const Syntax * p, Environ * env) {
-    //printf("PRE_PARSE\n");
     p = partly_expand(p, TopLevel, env);
-    return pre_parse_decl(p, *env);
+    if (p->is_a("@")) {
+      ::Syntax * res = new ::Syntax(p->str(), p->part(0));
+      for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i)
+        res->add_part(pre_parse(*i, env));
+      return res;
+    } else {
+      return pre_parse_decl(p, *env);
+    }
   }
 
 }

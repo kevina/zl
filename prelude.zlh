@@ -57,9 +57,10 @@ user_type Syntax {
 user_type SyntaxList;
 __ct_callback SyntaxList * new_syntax_list();
 __ct_callback int syntax_list_empty(const SyntaxList *);
-__ct_callback void syntax_list_append(SyntaxList *, Syntax *);
+__ct_callback size_t syntax_list_append(SyntaxList *, Syntax *);
 __ct_callback void syntax_list_append_all(SyntaxList *, SyntaxEnum *);
 __ct_callback void syntax_list_reverse(SyntaxList *);
+__ct_callback void syntax_list_replace(SyntaxList *, size_t pos, Syntax * el);
 struct SyntaxList;
 user_type SyntaxList {
   finalize_user_type struct SyntaxList;
@@ -68,10 +69,11 @@ user_type SyntaxList {
   make_subtype Syntax to_syntax;
   //export empty, append;
   macro empty(:this this) {syntax_list_empty(this);}
-  macro append(syn, :this this) {syntax_list_append(this, syn);}
-  macro append_all(els, :this this) {syntax_list_append_all(this, els);}
+  macro append(:this this, syn) {syntax_list_append(this, syn);}
+  macro append_all(:this this, els) {syntax_list_append_all(this, els);}
   macro elements(:this this) {syntax_args(this);}
   macro reverse(:this this) {syntax_list_reverse(this);}
+  macro replace(:this this, pos, el) {syntax_list_replace(this, pos, el);}
 }
 
 user_type SyntaxEnum;
@@ -102,6 +104,7 @@ user_type Match {
 __ct_callback Syntax * replace(UnmarkedSyntax *, Match *, Mark *);
 
 typedef struct Context Context;
+__ct_callback Context * empty_context();
 __ct_callback Context * get_context(Syntax *);
 __ct_callback Syntax * replace_context(UnmarkedSyntax *, Context *);
 
@@ -165,6 +168,8 @@ make_macro make_syntax_macro`syntax parse_make_syntax_macro;
 macro class_cast_up (child) {
   &(*child).._parent;
 }
+
+Syntax * partly_expand_class(Syntax *, Mark *, Environ *);
 
 __need_snapshot Syntax * parse_class(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;

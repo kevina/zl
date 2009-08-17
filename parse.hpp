@@ -63,7 +63,7 @@ struct Parts : public Vector<const Syntax *> {
   iterator begin() {return &*Base::begin();}
   iterator end()   {return &*Base::end();}
   void push_back(const Syntax * x) {
-    assert(x);
+    //assert(x); // allow NULL x as placeholder
     Base::push_back(x);
   }
   void append(const Syntax * x) {
