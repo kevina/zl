@@ -429,7 +429,7 @@ namespace ast {
       if (have != n_r->subtype->unqualified) 
         goto fail;
       if (!exp->lvalue
-          || (env.temp_ip && env.temp_ip->where >= TempInsrPoint::Var && exp->lvalue < LV_NORMAL))
+          || (env.temp_ip && env.temp_ip->where >= ExpInsrPoint::Var && exp->lvalue < LV_NORMAL))
       {
         return to_ref(make_temp(exp, env), env);
         //throw error(orig_exp->syn, 

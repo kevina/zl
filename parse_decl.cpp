@@ -232,7 +232,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
   if (i != end && ((r && (*i)->is_a("()")) || (*i)->eq("~"))) 
   {
-    if (env.scope == ast::LEXICAL) return NULL;
+    if (env.scope >= ast::LEXICAL) return NULL;
 
     if ((*i)->ne("~")) --i;
     w.inner_type = new Syntax(new Syntax("void"));

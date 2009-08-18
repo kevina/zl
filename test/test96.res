@@ -1,0 +1,4 @@
+COPY X
+KILL X
+KILL X
+KILL X

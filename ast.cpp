@@ -262,17 +262,26 @@ namespace ast {
 
   struct Var;
 
-  struct TempInsrPointWrapper {
-    TempInsrPointWrapper(Environ & e, TempInsrPoint::Where w = TempInsrPoint::ExtendedExp) 
+  struct ExpInsrPointWrapperBase {
+    ExpInsrPointWrapperBase(Environ & e, ExpInsrPoint::Where w = ExpInsrPoint::ExtendedExp) 
       : ip(w), env(e.new_extended_exp(&ip)) {}
-    TempInsrPoint ip;
+    ExpInsrPoint ip;
     Environ env;
-    Exp * finish(Exp * exp);     // created EBlock;
+  };
+
+  struct ExpInsrPointWrapper : public ExpInsrPointWrapperBase {
+    ExpInsrPointWrapper(Environ & e) : ExpInsrPointWrapperBase(e) {}
+    Stmt * finish(Exp * exp); // if necessary wrap exp in a block
+                              // otherwise return estmt
+  };
+
+  struct RefInsrPointWrapper : public ExpInsrPointWrapperBase {
+    RefInsrPointWrapper(Environ & e, ExpInsrPoint::Where w) : ExpInsrPointWrapperBase(e, w) {}
     Var * finish(Environ & env); // add temp to env
   };
 
-  void finish(Var * v, TempInsrPointWrapper & wrap,
-              TempInsrPointWrapper & wrap2, Environ & oenv);
+  void finish(Var * v, ExpInsrPointWrapper & wrap,
+              RefInsrPointWrapper & wrap2, Environ & oenv);
 
 
   //
@@ -551,6 +560,132 @@ namespace ast {
     return id->construct(env);
   }
 
+  //
+  //
+  //
+
+  template <typename T> 
+  struct BlockBase : public T {
+    using T::syn;
+    BlockBase() {}
+    static const bool as_exp = T::ast_type == Exp::ast_type;
+    //AST * part(unsigned i) {return stmts[i];}
+    //SymbolTable symbols; // not valid until done parsing block
+    Stmt * stmts;
+    inline void set_type_if_exp(Stmt * t);
+    T * parse_self(const Syntax * p, Environ & env0) {
+      syn = p;
+      Environ env = env0.new_scope();
+      if (as_exp) env.scope = EXTENDED_EXP;
+      stmts = NULL;
+      env.ip = &stmts;
+      Stmt * last = add_stmts(p->args_begin(), p->args_end(), env);
+      if (stmts == NULL) // must test against stmts as last will may
+                         // be an empty_stmt
+        stmts = last = empty_stmt();
+      //symbols = env.symbols;
+      set_type_if_exp(last);
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      for (Stmt * cur = stmts; cur; cur = cur->next) {
+        cur->finalize(env);
+      }
+    }
+    void compile_prep(CompileEnviron & env) {
+      for (Stmt * cur = stmts; cur; cur = cur->next) { 
+       cur->compile_prep(env);
+      }
+    }
+    void compile(CompileWriter & f) {
+      if (as_exp)
+        f << "(eblock\n";
+      else
+        f << indent << "(block\n";
+      for (Stmt * cur = stmts; cur; cur = cur->next) {
+        f << adj_indent(2) << cur;
+      }
+      if (as_exp)
+        f << indent << ")";
+      else
+        f << indent << ")\n";
+    }
+  };
+
+  template <>
+  inline void BlockBase<Stmt>::set_type_if_exp(Stmt *) {}
+
+  template <>
+  inline void BlockBase<Exp>::set_type_if_exp(Stmt * stmt) {
+    EStmt * estmt = dynamic_cast<EStmt *>(stmt);
+    if (!estmt) return;
+    type = estmt->exp->type;
+    lvalue = estmt->exp->lvalue;
+  }
+
+  struct Block : public BlockBase<Stmt> {
+    Block() {}
+    const char * what() const {return "block";}
+  };
+
+  struct EBlock : public BlockBase<Exp> {
+    EBlock() {}
+    const char * what() const {return "eblock";}
+    void set_type(const Type * t, LValue lv) {
+      type = t;
+      lvalue = lv;
+    }
+    void set_type(const Exp * e) {
+      set_type(e->type, e->lvalue);
+    }
+    void set_type(const VarSymbol * s) {
+      set_type(s->type, s->lvalue);
+    }
+  };
+
+  struct Seq : public Exp {
+    Vector<Exp *> exps;
+    const char * what() const {return "seq";}
+    void construct(Environ & env) {
+      type = exps.back()->type;
+      lvalue = exps.back()->lvalue;
+    }
+    Seq * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      for (Parts::const_iterator i = p->args_begin(), e = p->args_end();
+           i != e; ++i)
+        exps.push_back(parse_exp(*i, env));
+      construct(env);
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
+           i != e; ++i)
+        (*i)->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
+           i != e; ++i)
+        (*i)->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << "(seq";
+      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
+           i != e; ++i)
+        f << ' ' << *i;
+      f << ")";
+    }
+  };
+
+  void check_type(Exp * exp, TypeCategory * cat) {
+    if (!exp->type->is(cat)) 
+      throw error(exp->syn, "Expected %s type", ~cat->name);
+  }
+
+  //
+  //
+  //
+
   struct If : public Stmt {
     If() {}
     const char * what() const {return "if";}
@@ -562,9 +697,9 @@ namespace ast {
     If * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       assert_num_args(2,3);
-      TempInsrPointWrapper wrap(env);
+      //ExpInsrPointWrapper wrap(env);
       exp = parse_exp(p->arg(0), env);
-      exp = wrap.finish(exp);
+      //exp = wrap.finish(exp);
       if_true = parse_stmt(p->arg(1), env);
       if (p->num_args() == 3) {
         if_false = parse_stmt(p->arg(2), env);
@@ -737,12 +872,12 @@ namespace ast {
     Exp * init;
     Stmt * constructor;
     Cleanup * cleanup;
-    void finish_parse(Environ & env) {
+    Stmt * finish_parse(Environ & env) {
       if (syn->num_args() > 2) {
         //env.add(name, sym, SecondPass);
-        TempInsrPointWrapper wrap(env);
+        ExpInsrPointWrapper wrap(env);
         init = parse_exp(syn->arg(2), wrap.env);
-        TempInsrPointWrapper wrap2(env, top_level() ? TempInsrPoint::TopLevelVar : TempInsrPoint::Var);
+        RefInsrPointWrapper wrap2(env, top_level() ? ExpInsrPoint::TopLevelVar : ExpInsrPoint::Var);
         init = init->resolve_to(type, wrap2.env);
         finish(this, wrap, wrap2, env);
         //if (sym->type->is_ref && !init->lvalue) {
@@ -760,6 +895,7 @@ namespace ast {
         if (!init && !constructor) constructor = try_constructor(ut, env)->as_stmt();
         add_cleanup(ut, env);
       }
+      return this;
     }
     Exp * try_constructor(const UserType * ut, Environ & env) {
       if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
@@ -863,11 +999,61 @@ namespace ast {
   static unsigned last_temp_num = 0;
 
   struct AutoTemp : public AutoVar {
+    AutoTemp() {}
     AutoTemp(const Type * t, LValue lv) {type = t; lvalue = lv;}
+    void uniq_name(OStream & o) const {
+      o.printf("%s$t%u", ~name(), num);
+    }
     void make_unique(SymbolNode *, SymbolNode *) const {
       num = last_temp_num++;
     }
   };
+
+  struct NamedTemp : public AutoTemp {
+    void add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok);
+    void fix_up_init(Environ & env) {
+      Var::fix_up_init(env);
+      if (init && !init->ct_value_) {
+        constructor = mk_init(this, init, false, env)->as_stmt();
+        init = NULL;
+      } 
+    }
+    Stmt * finish_parse(Environ & env);
+ };
+
+  void NamedTemp::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
+    Symbol::add_to_env(k, env, shadow_ok);
+    env.temp_ip->add(this);
+  }
+
+  Stmt * NamedTemp::finish_parse(Environ & env) {
+    Var::finish_parse(env);
+    if (cleanup) {
+      cleanup->cleanup_flag = new CleanupFlag(this);
+      if (constructor) {
+        Block * b = dynamic_cast<Block *>(constructor);
+        if (!b) {
+          b = new Block;
+          b->stmts = constructor;
+        } 
+        Stmt * * ip;
+        ip = &b->stmts->next;
+        while (*ip != NULL)
+          ip = &b->stmts->next;
+        *ip = cleanup->cleanup_flag->as_stmt();
+        constructor = b;
+      } else {
+        constructor = cleanup->cleanup_flag->as_stmt();
+      }
+    }
+    if (constructor) {
+      Stmt * ret = constructor;
+      constructor = NULL;
+      return ret;
+    } else {
+      return empty_stmt();
+    }
+  }
 
   struct TopLevelVar : public Var, public TopLevelVarDecl {
     TopLevelVar() {lvalue = LV_TOPLEVEL;}
@@ -878,9 +1064,10 @@ namespace ast {
         init = NULL;
       } 
     }
-    void finish_parse(Environ & env) {
+    Stmt * finish_parse(Environ & env) {
       Var::finish_parse(env);
       env.move_defn(this);
+      return empty_stmt();
     }
   };
 
@@ -909,18 +1096,18 @@ namespace ast {
     Var * var;
     Stmt * res;
     bool fresh = true;
-    if (env.scope == LEXICAL && (storage_class == SC_NONE ||
+    if (env.scope >= LEXICAL && (storage_class == SC_NONE ||
                                  storage_class == SC_AUTO ||
                                  storage_class == SC_REGISTER)) 
     {
-      AutoVar * v = new AutoVar;
+      AutoVar * v = env.scope == LEXICAL ? new AutoVar : new NamedTemp;
       var = v;
       res = v;
     } else {
       make_static_if_marked(storage_class, name);
       fresh = !env.symbols.exists_this_scope(name);
       TopLevelVar * v = fresh ? new TopLevelVar : env.symbols.find<TopLevelVar>(name);
-      bool mangle = env.scope == LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
+      bool mangle = env.scope >= LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
       v->num = mangle ? NPOS : 0;
       v->where = env.where;
       v->deps_closed = true;
@@ -942,9 +1129,8 @@ namespace ast {
   static Stmt * parse_var(const Syntax * p, Environ & env) {
     Collect collect;
     Stmt * res = parse_var_forward(p, env, collect);
-    for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-      (*i)->finish_parse(env);
-    }
+    assert(collect.size() == 1);
+    res = collect[0]->finish_parse(env);
     return res;
   }
 
@@ -960,128 +1146,7 @@ namespace ast {
     env.add(name, var);
     return var;
   }
-  
-  //
-  //
-  //
 
-  template <typename T> 
-  struct BlockBase : public T {
-    using T::syn;
-    BlockBase() {}
-    static const bool as_exp = T::ast_type == Exp::ast_type;
-    //AST * part(unsigned i) {return stmts[i];}
-    //SymbolTable symbols; // not valid until done parsing block
-    Stmt * stmts;
-    inline void set_type_if_exp(Stmt * t);
-    T * parse_self(const Syntax * p, Environ & env0) {
-      syn = p;
-      Environ env = env0.new_scope();
-      stmts = NULL;
-      env.ip = &stmts;
-      Stmt * last = add_stmts(p->args_begin(), p->args_end(), env);
-      if (stmts == NULL) // must test against stmts as last will may
-                         // be an empty_stmt
-        stmts = last = empty_stmt();
-      //symbols = env.symbols;
-      set_type_if_exp(last);
-      return this;
-    }
-    void finalize(FinalizeEnviron & env) {
-      for (Stmt * cur = stmts; cur; cur = cur->next) {
-        cur->finalize(env);
-      }
-    }
-    void compile_prep(CompileEnviron & env) {
-      for (Stmt * cur = stmts; cur; cur = cur->next) { 
-       cur->compile_prep(env);
-      }
-    }
-    void compile(CompileWriter & f) {
-      if (as_exp)
-        f << "(eblock\n";
-      else
-        f << indent << "(block\n";
-      for (Stmt * cur = stmts; cur; cur = cur->next) {
-        f << adj_indent(2) << cur;
-      }
-      if (as_exp)
-        f << indent << ")";
-      else
-        f << indent << ")\n";
-    }
-  };
-
-  template <>
-  inline void BlockBase<Stmt>::set_type_if_exp(Stmt *) {}
-
-  template <>
-  inline void BlockBase<Exp>::set_type_if_exp(Stmt * stmt) {
-    EStmt * estmt = dynamic_cast<EStmt *>(stmt);
-    if (!estmt) return;
-    type = estmt->exp->type;
-    lvalue = estmt->exp->lvalue;
-  }
-
-  struct Block : public BlockBase<Stmt> {
-    Block() {}
-    const char * what() const {return "block";}
-  };
-
-  struct EBlock : public BlockBase<Exp> {
-    EBlock() {}
-    const char * what() const {return "eblock";}
-    void set_type(const Type * t, LValue lv) {
-      type = t;
-      lvalue = lv;
-    }
-    void set_type(const Exp * e) {
-      set_type(e->type, e->lvalue);
-    }
-    void set_type(const VarSymbol * s) {
-      set_type(s->type, s->lvalue);
-    }
-  };
-
-  struct Seq : public Exp {
-    Vector<Exp *> exps;
-    const char * what() const {return "seq";}
-    void construct(Environ & env) {
-      type = exps.back()->type;
-      lvalue = exps.back()->lvalue;
-    }
-    Seq * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      for (Parts::const_iterator i = p->args_begin(), e = p->args_end();
-           i != e; ++i)
-        exps.push_back(parse_exp(*i, env));
-      construct(env);
-      return this;
-    }
-    void finalize(FinalizeEnviron & env) {
-      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
-           i != e; ++i)
-        (*i)->finalize(env);
-    }
-    void compile_prep(CompileEnviron & env) {
-      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
-           i != e; ++i)
-        (*i)->compile_prep(env);
-    }
-    void compile(CompileWriter & f) {
-      f << "(seq";
-      for (Vector<Exp *>::iterator i = exps.begin(), e = exps.end();
-           i != e; ++i)
-        f << ' ' << *i;
-      f << ")";
-    }
-  };
-
-  void check_type(Exp * exp, TypeCategory * cat) {
-    if (!exp->type->is(cat)) 
-      throw error(exp->syn, "Expected %s type", ~cat->name);
-  }
-  
   //
   // UnOp
   //
@@ -1819,27 +1884,23 @@ namespace ast {
   //
   //
 
-  Exp * TempInsrPointWrapper::finish(Exp * exp) {
-    if (!ip.stmts) return exp;
-    // now wrap the expression in an EBlock
-    EBlock * b = new EBlock();
+  Stmt * ExpInsrPointWrapper::finish(Exp * exp) {
+    if (!ip.stmts) return exp->as_stmt();
+    // now wrap the expression in an Block
+    Block * b = new Block();
     b->stmts = ip.stmts;
-    Stmt * cur;
-    for (cur = ip.stmts; cur; cur = cur->next)
-      env.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
     ip.add(new EStmt(exp)); // and thus add to b->stmts list
-    b->set_type(exp);
     ip.reset();
     return b;
   }
 
-  Var * TempInsrPointWrapper::finish(Environ & oenv) {
-    if (env.temp_ip != &ip) return NULL;
+  Var * RefInsrPointWrapper::finish(Environ & oenv) {
     if (!ip.stmts) return NULL;
+    assert(env.temp_ip == &ip);
     Stmt * cur = ip.stmts;
     assert(!cur->next); // there should only be one
-    oenv.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
-    if (ip.where == TempInsrPoint::TopLevelVar) {
+    //env.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
+    if (ip.where == ExpInsrPoint::TopLevelVar) {
       oenv.add_defn(cur);
     } else {
       oenv.add_stmt(cur);
@@ -1847,7 +1908,6 @@ namespace ast {
     ip.reset();
     return dynamic_cast<Var *>(cur);
   }
-
 
   static Exp * wrap_w_cleanup_flag(Var * temp, Exp * res, bool need_res, Environ & env) {
     Seq * seq = new Seq();
@@ -1859,8 +1919,8 @@ namespace ast {
     return seq;
   }
 
-  void finish(Var * v, TempInsrPointWrapper & wrap,
-              TempInsrPointWrapper & wrap2, Environ & oenv) 
+  void finish(Var * v, ExpInsrPointWrapper & wrap,
+              RefInsrPointWrapper & wrap2, Environ & oenv) 
   {
     Var * t = wrap2.finish(oenv);
     if (t) v = t;
@@ -1868,9 +1928,8 @@ namespace ast {
       Exp * exp = mk_init(v, v->init, false, oenv);
       if (v->cleanup && v->cleanup->cleanup_flag)
         exp = wrap_w_cleanup_flag(v, exp, false, oenv);
-      exp = wrap.finish(exp);
       v->init = NULL;
-      v->constructor = exp->as_stmt();
+      v->constructor = wrap.finish(exp);
     } else {
       v->fix_up_init(oenv);
     }
@@ -1878,12 +1937,13 @@ namespace ast {
 
   static Var * start_temp(const Type * type, Environ & env) {
     Var * temp = NULL;
-    if (env.temp_ip->where == TempInsrPoint::TopLevelVar)
+    if (env.temp_ip->where == ExpInsrPoint::TopLevelVar)
       temp = new TopLevelTemp(type);
-    else if (env.temp_ip->where == TempInsrPoint::Var)
+    else if (env.temp_ip->where == ExpInsrPoint::Var)
       temp = new AutoTemp(type, LV_NORMAL);
     else
       temp = new AutoTemp(type, LV_EEXP);
+    env.add(SymbolKey("tmp"), temp, true);
     env.temp_ip->add(temp);
     temp->add_cleanup(dynamic_cast<const UserType *>(type->unqualified), env);
     if (temp->cleanup)
@@ -1893,7 +1953,7 @@ namespace ast {
 
   Exp * make_temp(Exp * exp, Environ & env) {
     Var * temp = start_temp(exp->type, env);
-    if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
+    if (env.temp_ip->where == ExpInsrPoint::ExtendedExp) {
       Exp * res = mk_init(temp, exp, true, env);
       if (temp->cleanup) {
         res = wrap_w_cleanup_flag(temp, res, true, env);
@@ -1908,7 +1968,7 @@ namespace ast {
   Exp * make_temp(const Type * type, Environ & env) {
     Var * temp = start_temp(type, env);
     Exp * constructor = temp->try_constructor(dynamic_cast<const UserType *>(type), env);
-    if (env.temp_ip->where == TempInsrPoint::ExtendedExp) {
+    if (env.temp_ip->where == ExpInsrPoint::ExtendedExp) {
       Seq * seq = new Seq();
       if (constructor)
         seq->exps.push_back(constructor);
@@ -2600,7 +2660,7 @@ namespace ast {
     return this;
   }
 
-  void Fun::finish_parse(Environ & env0) {
+  Stmt * Fun::finish_parse(Environ & env0) {
     assert(syn->num_args() > 3);
 
     Environ env = env0.new_frame();
@@ -2635,6 +2695,7 @@ namespace ast {
     //for (Deps::iterator i = deps_.begin(), e = deps_.end(); i != e; ++i)
     //  printf("  %s\n", ~(*i)->name);
     //printf("---\n");
+    return empty_stmt();
   }
 
   void Fun::finalize(FinalizeEnviron & env0) {
@@ -3069,7 +3130,7 @@ namespace ast {
   Stmt * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect);
   Stmt * try_just_stmt(const Syntax * p, Environ & env);
   Exp * try_just_exp(const Syntax * p, Environ & env);
-  EStmt * try_exp_stmt(const Syntax * p, Environ & env);
+  Stmt * try_exp_stmt(const Syntax * p, Environ & env);
 
   //template <typename T>
   //T * try_ast(const Syntax * p, Environ & env) {
@@ -3357,12 +3418,11 @@ namespace ast {
     return 0;
   }
 
-  EStmt * try_exp_stmt(const Syntax * p, Environ & env) {
-    TempInsrPointWrapper wrap(env);
+  Stmt * try_exp_stmt(const Syntax * p, Environ & env) {
+    ExpInsrPointWrapper wrap(env);
     Exp * exp = try_just_exp(p, wrap.env);
     if (exp) {
-      exp = wrap.finish(exp);
-      return new EStmt(exp);
+      return wrap.finish(exp);
     } else {
       return NULL;
     }

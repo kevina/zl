@@ -18,7 +18,7 @@ namespace ast {
 
   //enum Scope {STATIC, STACK};
 
-  enum Scope {OTHER, TOPLEVEL, LEXICAL};
+  enum Scope {OTHER, TOPLEVEL, LEXICAL, EXTENDED_EXP};
   
   struct Frame : public gc {
     const TypeInst * return_type;
@@ -53,9 +53,9 @@ namespace ast {
     void operator=(Stmt * * p) {ptr = p;}
   };
 
-  struct TempInsrPoint : public InsrPoint {
+  struct ExpInsrPoint : public InsrPoint {
     enum Where {ExtendedExp, Var, TopLevelVar};
-    TempInsrPoint(Where w = ExtendedExp) : InsrPoint(&stmts), where(w), stmts() {}
+    ExpInsrPoint(Where w = ExtendedExp) : InsrPoint(&stmts), where(w), stmts() {}
     Where where;
     Stmt * stmts;
     void reset() {stmts = NULL; ptr = &stmts;}
@@ -82,7 +82,7 @@ namespace ast {
     Deps * deps;
     bool * for_ct; // set if this function uses a ct primitive such as syntax
     InsrPoint ip;
-    TempInsrPoint * temp_ip;
+    ExpInsrPoint * temp_ip;
     bool true_top_level;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
@@ -119,7 +119,7 @@ namespace ast {
       env.symbols = symbols.new_scope();
       return env;
     }
-    Environ new_extended_exp(TempInsrPoint * ip) {
+    Environ new_extended_exp(ExpInsrPoint * ip) {
       Environ env = *this;
       env.true_top_level = false;
       if (!env.temp_ip)

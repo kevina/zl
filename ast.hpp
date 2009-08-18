@@ -479,7 +479,7 @@ namespace ast {
   typedef BasicVar VarSymbol;
 
   struct Declaration : public Stmt {
-    virtual void finish_parse(Environ & env) {};
+    virtual Stmt * finish_parse(Environ & env) {return empty_stmt();}
     enum Phase {Normal, Forward, Body};
     virtual void compile(CompileWriter &, Phase) const = 0;
     void compile(CompileWriter & cw) {compile(cw, Normal);}
@@ -497,7 +497,7 @@ namespace ast {
     void write_storage_class_c(CompileWriter & f) const;
     void write_storage_class(CompileWriter & f) const;
     //void forward_decl(CompileWriter & w) {compile(w, true);}
-    void finish_parse(Environ & env) {abort();}
+    Stmt * finish_parse(Environ & env) {abort();}
   };
 
   typedef VarDeclaration VarDecl;
@@ -537,7 +537,7 @@ namespace ast {
     bool ct_callback;
     bool static_constructor;
     //LabelSymbolTable * labels;
-    void finish_parse(Environ &);
+    Stmt * finish_parse(Environ &);
     void compile_prep(CompileEnviron &);
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
