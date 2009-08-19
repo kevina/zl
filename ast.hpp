@@ -262,13 +262,15 @@ namespace ast {
 
   struct EIf : public Exp {
     EIf() {}
+    EIf(const Syntax * p, Exp * e, Exp * et, Exp * ef)
+      : exp(e), if_true(et), if_false(ef) {syn = p;}
     const char * what() const {return "eif";}
     //AST * part(unsigned i) 
     //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
     Exp * exp;
     Exp * if_true;
     Exp * if_false;
-    EIf * parse_self(const Syntax * p, Environ & env);
+    EIf * construct(Environ & env);
     void finalize(FinalizeEnviron & env);
     void compile_prep(CompileEnviron & env);
     void compile(CompileWriter & f);

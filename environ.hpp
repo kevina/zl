@@ -55,10 +55,8 @@ namespace ast {
 
   struct ExpInsrPoint : public InsrPoint {
     enum Where {ExtendedExp, Var, TopLevelVar};
-    ExpInsrPoint(Where w = ExtendedExp) : InsrPoint(&stmts), where(w), stmts() {}
+    ExpInsrPoint(Stmt * * p, Where w = ExtendedExp) : InsrPoint(p), where(w) {}
     Where where;
-    Stmt * stmts;
-    void reset() {stmts = NULL; ptr = &stmts;}
   };
 
   struct Environ : public gc {
@@ -83,6 +81,7 @@ namespace ast {
     bool * for_ct; // set if this function uses a ct primitive such as syntax
     InsrPoint ip;
     ExpInsrPoint * temp_ip;
+    InsrPoint * exp_ip;
     bool true_top_level;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
@@ -122,8 +121,16 @@ namespace ast {
     Environ new_extended_exp(ExpInsrPoint * ip) {
       Environ env = *this;
       env.true_top_level = false;
-      if (!env.temp_ip)
+      if (!env.temp_ip) {
         env.temp_ip = ip;
+        env.exp_ip = ip;
+      }
+      return env;
+    }
+    Environ new_exp_branch(InsrPoint * ip) { // used for "eif"
+      Environ env = *this;
+      assert(!env.true_top_level);
+      env.exp_ip = ip;
       return env;
     }
 

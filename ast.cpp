@@ -264,9 +264,11 @@ namespace ast {
 
   struct ExpInsrPointWrapperBase {
     ExpInsrPointWrapperBase(Environ & e, ExpInsrPoint::Where w = ExpInsrPoint::ExtendedExp) 
-      : ip(w), env(e.new_extended_exp(&ip)) {}
+      : ip(&stmts, w), stmts(NULL), env(e.new_extended_exp(&ip)) {}
     ExpInsrPoint ip;
+    Stmt * stmts;
     Environ env;
+    void reset() {ip = &stmts; stmts = NULL;}
   };
 
   struct ExpInsrPointWrapper : public ExpInsrPointWrapperBase {
@@ -278,6 +280,16 @@ namespace ast {
   struct RefInsrPointWrapper : public ExpInsrPointWrapperBase {
     RefInsrPointWrapper(Environ & e, ExpInsrPoint::Where w) : ExpInsrPointWrapperBase(e, w) {}
     Var * finish(Environ & env); // add temp to env
+  };
+
+  struct BranchInsrPointWrapper {
+    BranchInsrPointWrapper(Environ & e)     
+      : ip(&stmts), stmts(NULL), env(e.new_exp_branch(&ip)) {}
+    InsrPoint ip;
+    Stmt * stmts;
+    Environ env;
+    Stmt * finish(Var * v, Exp * e, Environ & env);
+    void reset() {ip = &stmts; stmts = NULL;}
   };
 
   void finish(Var * v, ExpInsrPointWrapper & wrap,
@@ -293,7 +305,7 @@ namespace ast {
   static Exp * mk_init(const Var *, Exp *, bool need_res, Environ & env);
   static Exp * mk_id(const VarSymbol *, Environ & env);
   static Exp * mk_literal(int val, Environ & env);
-
+  static Var * start_temp(const Type * type, Environ & env);
 
   //
   //
@@ -561,7 +573,7 @@ namespace ast {
   }
 
   //
-  //
+  // Blocks
   //
 
   template <typename T> 
@@ -572,7 +584,7 @@ namespace ast {
     //AST * part(unsigned i) {return stmts[i];}
     //SymbolTable symbols; // not valid until done parsing block
     Stmt * stmts;
-    inline void set_type_if_exp(Stmt * t);
+    inline void finish_parse(Stmt * t, Environ & env);
     T * parse_self(const Syntax * p, Environ & env0) {
       syn = p;
       Environ env = env0.new_scope();
@@ -584,7 +596,7 @@ namespace ast {
                          // be an empty_stmt
         stmts = last = empty_stmt();
       //symbols = env.symbols;
-      set_type_if_exp(last);
+      finish_parse(last, env);
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -613,10 +625,10 @@ namespace ast {
   };
 
   template <>
-  inline void BlockBase<Stmt>::set_type_if_exp(Stmt *) {}
+  inline void BlockBase<Stmt>::finish_parse(Stmt *, Environ & env) {}
 
   template <>
-  inline void BlockBase<Exp>::set_type_if_exp(Stmt * stmt) {
+  inline void BlockBase<Exp>::finish_parse(Stmt * stmt, Environ & env) {
     EStmt * estmt = dynamic_cast<EStmt *>(stmt);
     if (!estmt) return;
     type = estmt->exp->type;
@@ -683,119 +695,7 @@ namespace ast {
   }
 
   //
-  //
-  //
-
-  struct If : public Stmt {
-    If() {}
-    const char * what() const {return "if";}
-    //AST * part(unsigned i) 
-    //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
-    Exp * exp;
-    AST * if_true;
-    AST * if_false;
-    If * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(2,3);
-      //ExpInsrPointWrapper wrap(env);
-      exp = parse_exp(p->arg(0), env);
-      //exp = wrap.finish(exp);
-      if_true = parse_stmt(p->arg(1), env);
-      if (p->num_args() == 3) {
-        if_false = parse_stmt(p->arg(2), env);
-      } else {
-        if_false = NULL;
-      }
-      exp = exp->resolve_to(env.bool_type(), env);
-      return this;
-    }
-    void finalize(FinalizeEnviron & env) {
-      exp->finalize(env);
-      if_true->finalize(env);
-      if (if_false)
-        if_false->finalize(env);
-    }
-    void compile_prep(CompileEnviron & env) {
-      exp->compile_prep(env);
-      if_true->compile_prep(env);
-      if (if_false)
-        if_false->compile_prep(env);
-    }
-    void compile(CompileWriter & f) {
-      f << indent << "(if " << exp << "\n";
-      f << adj_indent(2) << if_true;
-      //f << indent << "else\n";
-      if (if_false)
-        f << adj_indent(2) << if_false;
-      f << indent << ")\n";
-    }
-  };
-
-  void EIf::finalize(FinalizeEnviron & env) {
-    exp->finalize(env);
-    if_true->finalize(env);
-    if_false->finalize(env);
-  }
-
-  void EIf::compile_prep(CompileEnviron & env) {
-    exp->compile_prep(env);
-    if_true->compile_prep(env);
-    if_false->compile_prep(env);
-  }
-  
-  void EIf::compile(CompileWriter & f) {
-    f << "(eif " << exp << " " << if_true << " " << if_false << ")";
-  }
-
-  EIf * EIf::parse_self(const Syntax * p, Environ & env) {
-    syn = p;
-    assert_num_args(3);
-    exp = parse_exp(p->arg(0), env);
-    exp = exp->resolve_to(env.bool_type(), env);
-    if_true = parse_exp(p->arg(1), env);
-    if_false = parse_exp(p->arg(2), env);
-    if_false = if_false->resolve_to(if_true->type, env);
-    type = if_true->type;
-    ct_value_ = eif_ct_value(this);
-    return this;
-  }
-
-  struct Switch : public Stmt {
-    Switch() {}
-    const char * what() const {return ".switch";}
-    Exp * exp;
-    AST * body;
-    //AST * part(unsigned i) {return i == 0 ? exp : i == 1 ? body : 0;}
-    Switch * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(2);
-      exp = parse_exp(p->arg(0), env);
-      exp = exp->resolve_to(env.bool_type(), env);  
-      body = parse_stmt(p->arg(1), env);
-      return this;
-    }
-    //void resolve(Environ & env) {
-    //  type = env.void_type();
-    //  resolve_to(env, exp, env.bool_type());      
-    //  resolve_to_void(env, body);
-    //}
-    void finalize(FinalizeEnviron & env) {
-      exp->finalize(env);
-      body->finalize(env);
-    }
-    void compile_prep(CompileEnviron & env) {
-      exp->compile_prep(env);
-      body->compile_prep(env);
-    }
-    void compile(CompileWriter & f) {
-      f << indent << "(.switch " << exp << "\n";
-      f << adj_indent(2) << body;
-      f << indent << ")\n";
-    }
-  };
-
-  //
-  //
+  // Var Declararions
   //
 
   struct OtherVar : public BasicVar {
@@ -1146,6 +1046,134 @@ namespace ast {
     env.add(name, var);
     return var;
   }
+
+  //
+  // Conditionals
+  //
+
+  struct If : public Stmt {
+    If() {}
+    If(const Syntax * p, Exp * e, Stmt * et, Stmt * ef)
+      : exp(e), if_true(et), if_false(ef) {syn = p;}
+    const char * what() const {return "if";}
+    //AST * part(unsigned i) 
+    //  {return i == 0 ? exp : i == 1 ? if_true : i == 2 ? if_false : 0;}
+    Exp * exp;
+    Stmt * if_true;
+    Stmt * if_false;
+    If * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      assert_num_args(2,3);
+      //ExpInsrPointWrapper wrap(env);
+      exp = parse_exp(p->arg(0), env);
+      //exp = wrap.finish(exp);
+      if_true = parse_stmt(p->arg(1), env);
+      if (p->num_args() == 3) {
+        if_false = parse_stmt(p->arg(2), env);
+      } else {
+        if_false = NULL;
+      }
+      exp = exp->resolve_to(env.bool_type(), env);
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      exp->finalize(env);
+      if_true->finalize(env);
+      if (if_false)
+        if_false->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+      if_true->compile_prep(env);
+      if (if_false)
+        if_false->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << indent << "(if " << exp << "\n";
+      f << adj_indent(2) << if_true;
+      //f << indent << "else\n";
+      if (if_false)
+        f << adj_indent(2) << if_false;
+      f << indent << ")\n";
+    }
+  };
+
+  void EIf::finalize(FinalizeEnviron & env) {
+    exp->finalize(env);
+    if_true->finalize(env);
+    if_false->finalize(env);
+  }
+
+  void EIf::compile_prep(CompileEnviron & env) {
+    exp->compile_prep(env);
+    if_true->compile_prep(env);
+    if_false->compile_prep(env);
+  }
+  
+  void EIf::compile(CompileWriter & f) {
+    f << "(eif " << exp << " " << if_true << " " << if_false << ")";
+  }
+
+  EIf * EIf::construct(Environ & env) {
+    type = if_true->type;
+    ct_value_ = eif_ct_value(this);
+    return this;
+  }
+
+  Exp * parse_eif(const Syntax * p, Environ & env) {
+    assert_num_args(p, 3);
+    Exp * exp = parse_exp(p->arg(0), env);
+    exp = exp->resolve_to(env.bool_type(), env);
+    BranchInsrPointWrapper wrap1(env);
+    Exp * if_true = parse_exp(p->arg(1), wrap1.env);
+    BranchInsrPointWrapper wrap2(env);
+    Exp * if_false = parse_exp(p->arg(2), wrap2.env);
+    if_false = if_false->resolve_to(if_true->type, wrap2.env);
+    if (wrap1.stmts || wrap2.stmts) {
+      Var * v = start_temp(if_true->type, env);
+      Stmt * s1 = wrap1.finish(v, if_true, env);
+      Stmt * s2 = wrap2.finish(v, if_true, env);
+      Stmt * s = new If(p, exp, s1, s2);
+      env.exp_ip->add(s);
+      return mk_id(v, env);
+    } else {
+      return (new EIf(p, exp, if_true, if_false))->construct(env);
+    }
+  }
+  
+  struct Switch : public Stmt {
+    Switch() {}
+    const char * what() const {return ".switch";}
+    Exp * exp;
+    AST * body;
+    //AST * part(unsigned i) {return i == 0 ? exp : i == 1 ? body : 0;}
+    Switch * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      assert_num_args(2);
+      exp = parse_exp(p->arg(0), env);
+      exp = exp->resolve_to(env.bool_type(), env);  
+      body = parse_stmt(p->arg(1), env);
+      return this;
+    }
+    //void resolve(Environ & env) {
+    //  type = env.void_type();
+    //  resolve_to(env, exp, env.bool_type());      
+    //  resolve_to_void(env, body);
+    //}
+    void finalize(FinalizeEnviron & env) {
+      exp->finalize(env);
+      body->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      exp->compile_prep(env);
+      body->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << indent << "(.switch " << exp << "\n";
+      f << adj_indent(2) << body;
+      f << indent << ")\n";
+    }
+  };
 
   //
   // UnOp
@@ -1885,28 +1913,36 @@ namespace ast {
   //
 
   Stmt * ExpInsrPointWrapper::finish(Exp * exp) {
-    if (!ip.stmts) return exp->as_stmt();
-    // now wrap the expression in an Block
+    if (!stmts) return exp->as_stmt();
+    ip.add(new EStmt(exp)); 
     Block * b = new Block();
-    b->stmts = ip.stmts;
-    ip.add(new EStmt(exp)); // and thus add to b->stmts list
-    ip.reset();
+    b->stmts = stmts;
+    reset();
     return b;
   }
 
   Var * RefInsrPointWrapper::finish(Environ & oenv) {
-    if (!ip.stmts) return NULL;
+    if (!stmts) return NULL;
     assert(env.temp_ip == &ip);
-    Stmt * cur = ip.stmts;
+    Stmt * cur = stmts;
     assert(!cur->next); // there should only be one
-    //env.add(SymbolKey("tmp"), dynamic_cast<Symbol *>(cur), true);
     if (ip.where == ExpInsrPoint::TopLevelVar) {
       oenv.add_defn(cur);
     } else {
       oenv.add_stmt(cur);
     }
-    ip.reset();
+    reset();
     return dynamic_cast<Var *>(cur);
+  }
+
+  Stmt * BranchInsrPointWrapper::finish(Var * v, Exp * e, Environ & env) {
+    ip.add(mk_init(v, e, false, env)->as_stmt());
+    if (v->cleanup)
+      ip.add(v->cleanup->cleanup_flag->as_stmt());
+    Block * b = new Block();
+    b->stmts = stmts;
+    reset();
+    return b;
   }
 
   static Exp * wrap_w_cleanup_flag(Var * temp, Exp * res, bool need_res, Environ & env) {
@@ -1924,7 +1960,7 @@ namespace ast {
   {
     Var * t = wrap2.finish(oenv);
     if (t) v = t;
-    if (wrap.ip.stmts) {
+    if (wrap.stmts) {
       Exp * exp = mk_init(v, v->init, false, oenv);
       if (v->cleanup && v->cleanup->cleanup_flag)
         exp = wrap_w_cleanup_flag(v, exp, false, oenv);
@@ -3364,7 +3400,7 @@ namespace ast {
     if (what == "f")       return (new FloatC)->parse_self(p, env);
     if (what == "c")       return (new CharC)->parse_self(p, env);
     if (what == "s")       return (new StringC)->parse_self(p, env);
-    if (what == "eif")     return (new EIf)->parse_self(p, env);
+    if (what == "eif")     return parse_eif(p, env);
     if (what == "assign")      return parse_assign(p, env);
     if (what == "init-assign") return parse_init_assign(p, env);
     if (what == "construct")   return parse_construct(p, env);
