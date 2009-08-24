@@ -28,6 +28,8 @@ namespace ast {
   struct SyntaxC;
   struct Fun;
 
+  struct ExpContext;
+
   struct CompileEnviron {
     struct ForMacroSepC {
       Vector<Fun *> macro_funs;
@@ -463,6 +465,7 @@ namespace ast {
 
   struct Block;
   struct TopLevelVarDecl;
+  struct Id;
 
   struct BasicVar : virtual public Symbol {
     //SourceStr str;
@@ -470,9 +473,12 @@ namespace ast {
     const Type * type;
     const struct CT_Value_Base * ct_value;
     LValue lvalue;
+    mutable Id * ids; 
+    inline Id * id_for(); 
     virtual const TopLevelVarDecl * top_level() const {return NULL;}
+    virtual bool is_temp() const {return false;}
   protected:
-    BasicVar() : name_p(), ct_value(), lvalue(LV_NORMAL) {}
+    BasicVar() : name_p(), ct_value(), lvalue(LV_NORMAL), ids(NULL) {}
     BasicVar(const Type * t, LValue lv = LV_NORMAL) : name_p(), type(t), ct_value(), lvalue(lv) {}
     //protected:
     //friend VarSymbol * new_var_symbol(SymbolName n, Scope s);

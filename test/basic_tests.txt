@@ -88,3 +88,7 @@ test93.c
 test94.c
 test95.c
 test96.c
+test97.c
+test98.c
+test99.c
+test100.c

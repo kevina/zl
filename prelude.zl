@@ -237,7 +237,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     } else if (strcmp(what, "alias")==0) {
       Match * m0 = match(m, raw_syntax (what n type value @_), member);
       //module_b->append(replace(raw_syntax (macro n (:(this (reparse this this))) value), m0, mark));
-      module_b->append(replace(syntax {macro n (:this ths = this) {*({typeof(ths) fluid this = ths; &value;});}}, m0, mark));
+      module_b->append(replace(syntax {macro n (:this ths = this) {({typeof(ths) fluid this = ths; value;});}}, m0, mark));
       if (member->flag(syntax need_constructor))
         create_special_funs(sp, m0->var(syntax n), m0->var(syntax type), 1, m, mark, lenv);
     } else if (strcmp(what, "fun")==0) {
@@ -376,13 +376,11 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     parse_class_fun(sp.constructor, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, false);
 
   if (sp.copy_constructor) {
-    Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), sp.copy_constructor);
+    Match * m0 = match(m, raw_syntax (w n parms ret body @_), sp.copy_constructor);
     sp.copy_constructor =
-      partly_expand(
-        replace(syntax{void _copy_constructor(const name & other) {$1; $2; $body;}}, 
-                match_local(m0, sp.constructor_code[0], sp.constructor_code[1], 0), mark), 
-                // yes constructor_code, not copy_constructor_code
-        FieldPos, lenv);
+      replace(raw_syntax(w n parms ret (block $1 $2 body)),
+              match_local(m0, sp.constructor_code[0], sp.constructor_code[1], 0), mark);
+              // yes constructor_code, not copy_constructor_code
   } else if (sp.need_copy_constructor) {
     sp.copy_constructor =
       partly_expand(

@@ -548,7 +548,7 @@ namespace ast {
   template <typename T>
   unsigned existing_uniq_num(T * sym) {
     unsigned num;
-    int pos;
+    int pos = -1;
     int res = sscanf(~sym->name(), "%*[^$]%*[$]%u%n", &num, &pos);
     if (pos == sym->name().size()) return num;
     else return NPOS;

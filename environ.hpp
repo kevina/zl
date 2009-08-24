@@ -48,6 +48,7 @@ namespace ast {
     InsrPoint(Stmt * * p = NULL) : ptr(p) {}
     Stmt * * ptr; // insertion point
     inline void add(Stmt *); // defined in ast.hpp
+    inline void add(Exp *); // defined in ast.hpp
     operator bool () const {return ptr;}
     bool operator! () const {return !ptr;}
     void operator=(Stmt * * p) {ptr = p;}
@@ -79,7 +80,7 @@ namespace ast {
     SymbolNode * const * top_level_environ;
     Deps * deps;
     bool * for_ct; // set if this function uses a ct primitive such as syntax
-    InsrPoint ip;
+    InsrPoint * stmt_ip;
     ExpInsrPoint * temp_ip;
     InsrPoint * exp_ip;
     bool true_top_level;
@@ -91,7 +92,7 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct(), temp_ip(), true_top_level(false)
+        deps(), for_ct(), temp_ip(), exp_ip(), true_top_level(false)
       {
         if (s == TOPLEVEL) {
           true_top_level = true;
@@ -110,11 +111,11 @@ namespace ast {
         scope(other.scope), frame(other.frame), 
         where(other.where),
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
-        deps(other.deps), for_ct(other.for_ct), ip(other.ip), temp_ip(other.temp_ip), true_top_level(other.true_top_level) {}
+        deps(other.deps), for_ct(other.for_ct), stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), true_top_level(other.true_top_level) {}
     Environ new_scope() {
       Environ env = *this;
       env.true_top_level = false;
-      env.ip = NULL;
+      env.stmt_ip = NULL;
       env.symbols = symbols.new_scope();
       return env;
     }
@@ -135,7 +136,7 @@ namespace ast {
     }
 
     void add_stmt(Stmt * stmt) {
-      ip.add(stmt);
+      stmt_ip->add(stmt);
     }
 
     void add(const SymbolKey & k, Symbol * sym, bool shadow_ok = false) {
@@ -157,7 +158,7 @@ namespace ast {
     Environ new_frame() {
       Environ env = *this;
       env.true_top_level = false;
-      env.ip = NULL;
+      env.stmt_ip = NULL;
       env.scope = LEXICAL;
       env.symbols = symbols.new_scope(env.fun_labels);
       env.frame = new Frame();
