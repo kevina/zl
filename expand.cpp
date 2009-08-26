@@ -614,6 +614,10 @@ extern "C" namespace macro_abi {
     return pos;
   }
 
+  void syntax_list_append_flag(SyntaxList * l, const Syntax * p) {
+    l->add_flag(p);
+  }
+
   void syntax_list_append_all(SyntaxList * l, SyntaxEnum * els) {
     while (const Syntax * el = els->next()) {
       l->add_part(el);
@@ -976,8 +980,12 @@ static const Syntax * replace(const Syntax * p,
     for (unsigned i = 0; i != p->num_parts(); ++i) {
       //const Syntax * q = (i == 0 && p->part(0)->simple()) ? p->part(0) : replace(p->part(i), r); // HACK
       bool splice = false;
+      //static int x = 0;
+      //++x;
+      //printf("<<%d %s\n", x, ~p->part(i)->to_string());
       const Syntax * q = replace(p->part(i), r, rs, allow_plain_mids, &splice);
       if (splice) {
+        //printf("??%d %s\n", x, ~q->to_string());
         assert(q->is_a("@")); // FIXME: Error message
         res->add_parts(q->args_begin(), q->args_end());
         res->add_flags(q);
@@ -1206,7 +1214,8 @@ const Syntax * e_parse_exp(const Syntax * p0, Environ & env, const char * list_i
 
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags) {
   if (p->have_entity()) return p;
-  SymbolName what = p->what().name;
+  //printf("\n>expand>%s//\n", ~p->part(0)->to_string());
+  SymbolName what = p->what();
   //printf("\n>expand>%s//\n", ~what);
   //p->str().sample_w_loc(COUT);
   //COUT << "\n";
@@ -1398,6 +1407,8 @@ Stmt * parse_macro(const Syntax * p, Environ & env) {
   ProcMacro * m = new ProcMacro;
   m->parse_self(p, env);
   env.add(m->real_name, m);
+  if (p->flag("w_snapshot"))
+    m->fun->env_ss = *env.top_level_environ;
   return empty_stmt();
 }
 

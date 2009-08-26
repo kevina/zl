@@ -536,7 +536,7 @@ namespace ast {
     const char * what() const {return "fun";}
     //AST * part(unsigned i);
     SymbolTable symbols;
-    SymbolNode * env_ss;
+    mutable SymbolNode * env_ss;
     mutable bool is_macro;
     const Tuple * parms;
     const Type * ret_type;

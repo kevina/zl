@@ -9,6 +9,7 @@
   new_syntax_list;
   syntax_list_empty;
   syntax_list_append;
+  syntax_list_append_flag;
   syntax_list_append_all;
   syntax_list_reverse;
   syntax_list_replace;

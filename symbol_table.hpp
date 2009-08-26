@@ -197,12 +197,23 @@ namespace ast {
   // global
 
   struct TopLevelSymbol : virtual public Symbol {
-    TopLevelSymbol() : num(), props() {}
+    TopLevelSymbol() : num(), where(), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
     TopLevelSymbol * where;   // NULL if global
     PropNode * props;
     using Symbol::uniq_name;
+    void uniq_name0(OStream & o) const {
+      if (where) {
+        where->uniq_name0(o);
+        o << "$";
+      }
+      o << name();
+    }
     void uniq_name(OStream & o) const {
+      if (where) {
+        where->uniq_name0(o);
+        o << "$";
+      }
       if (num == 0)
         o << name();
       else
@@ -213,6 +224,18 @@ namespace ast {
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s);
     virtual const Syntax * get_prop(SymbolName n) const;
+    void full_name(OStream & o) const {
+      if (where) {
+        where->full_name(o);
+        o << "::";
+      }
+      key->to_string(o);
+    }
+    String full_name() const {
+      StringBuf buf;
+      full_name(buf);
+      return buf.freeze();
+    }
     //virtual const Syntax * get_props(SymbolName n) const; // not implemented yet
   };
 

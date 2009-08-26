@@ -1,3 +1,4 @@
+
 //
 // libc stuff
 //
@@ -58,6 +59,7 @@ user_type SyntaxList;
 __ct_callback SyntaxList * new_syntax_list();
 __ct_callback int syntax_list_empty(const SyntaxList *);
 __ct_callback size_t syntax_list_append(SyntaxList *, Syntax *);
+__ct_callback void syntax_list_append_flag(SyntaxList *, Syntax *);
 __ct_callback void syntax_list_append_all(SyntaxList *, SyntaxEnum *);
 __ct_callback void syntax_list_reverse(SyntaxList *);
 __ct_callback void syntax_list_replace(SyntaxList *, size_t pos, Syntax * el);
@@ -70,6 +72,7 @@ user_type SyntaxList {
   //export empty, append;
   macro empty(:this this) {syntax_list_empty(this);}
   macro append(:this this, syn) {syntax_list_append(this, syn);}
+  macro append_flag(:this this, syn) {syntax_list_append_flag(this, syn);}
   macro append_all(:this this, els) {syntax_list_append_all(this, els);}
   macro elements(:this this) {syntax_args(this);}
   macro reverse(:this this) {syntax_list_reverse(this);}
@@ -158,8 +161,8 @@ __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, En
 //
 //
 
-__need_snapshot Syntax * parse_make_syntax_macro(Syntax * p, Environ * env);
-make_macro make_syntax_macro`syntax parse_make_syntax_macro;
+Syntax * parse_make_syntax_macro(Syntax * p, Environ * env);
+make_macro make_syntax_macro`syntax parse_make_syntax_macro :w_snapshot;
 
 //
 //
@@ -171,7 +174,8 @@ macro class_cast_up (child) {
 
 Syntax * partly_expand_class(Syntax *, Mark *, Environ *);
 
-__need_snapshot Syntax * parse_class(Syntax * p, Environ * env);
+Syntax * parse_class(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;
-make_macro class`syntax parse_class;
+make_macro class`syntax parse_class :w_snapshot;
+
 

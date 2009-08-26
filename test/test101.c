@@ -1,0 +1,152 @@
+Syntax * parse_myclass(Syntax * p, Environ * env);
+make_syntax_macro class parse_myclass;
+
+Syntax * parse_myclass(Syntax * p, Environ * env) {
+
+  Mark * mark = new_mark();
+  
+  // to avoid duplicate work
+  p = partly_expand_class(p, mark, env);
+
+  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) :(fix_vtable_size fix_vtable_size) @rest), p);
+
+  //printf("MY CLASS PARSE on %s\n", syntax_to_string(m->var(syntax name)));
+  //dump_syntax(p);
+
+  Syntax * body = match_var(m, syntax body);
+  Syntax * fix_size_s = match_var(m, syntax fix_size);
+  Syntax * fix_vtable_s = match_var(m, syntax fix_vtable_size);
+
+  if (!body || (!fix_size_s && !fix_vtable_s))
+    return parse_class(p, env);
+
+  SyntaxList * res = new_syntax_list();
+
+  if (fix_vtable_s) {
+    res->append(replace(raw_syntax(smacro vtable_class (@r) 
+                                   (class @r :(fix_size fix_vtable_size))),
+                        m, mark));
+    m = match(m, syntax rest, replace(raw_syntax(@ @rest :(vtable_class vtable_class)),
+                                      m, mark));
+    if (!fix_size_s) {
+      res->append(replace(raw_syntax(class name ({...} body) @rest), m, mark));
+      return res;
+    }
+  }
+
+  printf("FIX SIZE PARSE on %s\n", syntax_to_string(m->var(syntax name)));
+  
+  size_t fix_size = ct_value(fix_size_s, env);
+
+  m = match(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
+  Syntax * r = replace(raw_syntax (@ (class name ({...} body dummy_decl) @rest) 
+                                     (import name)),
+                                   m, mark);
+  
+  Environ * lenv = temp_environ(env);
+  pre_parse(res, lenv); // to get the vtable_class macro if necessary
+  pre_parse(r, lenv);
+
+  size_t size = ct_value(replace(syntax (offsetof(name, dummy)), m, mark), lenv);
+
+  size_t ptr_size = ct_value(replace(syntax(sizeof(void *)), m, mark), lenv);
+
+  if (fix_size % ptr_size != 0) {
+    fix_size += ptr_size - (fix_size % ptr_size);
+  } else if (fix_size == 0) {
+    fix_size = ptr_size;
+  }
+
+  //printf("?? %d == %d\n", size, fix_size);
+
+  if (size == fix_size) {
+
+    res->append(replace(raw_syntax (class name ({...} body @rest)), m, mark));
+
+  } else if (size < fix_size) {
+
+    char buf[32];
+    snprintf(buf, 32, "{char dummy[%u];}", fix_size - size);
+    m = match(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
+    res->append(replace(raw_syntax (class name ({...} body buffer) @rest), m, mark));
+
+  } else {
+    // now go throgh and get offset of each member until it is under
+    // the size
+
+    SyntaxList * main = new_syntax_list();
+    SyntaxList * overflow = new_syntax_list();
+
+    SyntaxList * ip = main;
+    unsigned overflow_pos = -1;
+
+    SyntaxEnum * itr = m->varl(syntax body);
+    Syntax * member;
+    while ((member = itr->next)) {
+      Match * m0 = match(m, raw_syntax (what n @ type @_), member);
+      const char * what = syntax_to_string(m0->var(syntax what));
+      if (strcmp(what, "var")==0) {
+        size_t offset = ct_value(replace(syntax (offsetof(name, n)), m0, mark), lenv);
+        size_t size_of = ct_value(replace(raw_syntax (sizeof ("(type)" type)), m0, mark), lenv);
+        if (ip != overflow && offset + size_of > fix_size - ptr_size) {
+          overflow_pos = main->append(NULL);
+          ip = overflow;
+        }
+        ip->append(member);
+        if (ip == overflow)
+          main->append(replace(raw_syntax(alias n type (-> (member overflow ptr) n) :need_constructor), m0, mark));
+      } else {
+        main->append(member);
+      }
+    }
+
+    Syntax * of = replace(syntax {
+        class Overflow {
+          class Data {
+            $1;
+          };
+          Data * ptr;
+          Overflow() {ptr = malloc(sizeof(Data));}
+          Overflow(const Overflow & o) {ptr = malloc(sizeof(Data));}
+          ~Overflow() {free(ptr);}
+        };
+        Overflow overflow;
+      }, match_local(m, overflow, NULL), mark);
+    main->replace(overflow_pos, of);
+    
+    res->append(replace(raw_syntax (class name ({...} $1) @rest), 
+                        match_local(m, main, NULL), mark));
+  }
+
+  //printf("===\n");
+  //dump_syntax(res);
+  //printf("^^^\n");
+  return res;
+}
+
+make_syntax_macro class parse_myclass;
+
+class X : fix_size(8) : fix_vtable_size(8) {
+  virtual void foo1() {printf("1\n");}
+  virtual void foo2() {printf("2\n");}
+  virtual void foo3() {printf("3\n");}
+  class Inner : fix_size(8) {
+    int x;
+    int y;
+    int z;
+  };
+  Inner inner;
+};
+
+int main() {
+  X x;
+  x.foo1();
+  x.foo2();
+  x.foo3();
+  x.inner.x = 20;
+  x.inner.y = 30;
+  x.inner.z = 40;
+  printf("%d %d %d\n", x.inner.x, x.inner.y, x.inner.z);
+  printf("%d\n", sizeof(X));
+}
+

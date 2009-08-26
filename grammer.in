@@ -49,8 +49,7 @@ MACRO =
   / <smacro> "smacro" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE} ;
 
 MAKE_MACRO  =
-    <make_macro> "make_macro" {ID} {ID}? ";"
-  / <make_syntax_macro> "make_syntax_macro" {ID} {ID}? ";";
+    <%> ({"make_macro"/"make_syntax_macro"}) {ID} {ID}? {:<> ':'{"w_snapshot"}}? ";";
 
 MODULE = 
     <%> {"module"/"user_type"} {ID} ({<{...}> "{" {STMT}* "}" } / ";");
@@ -106,6 +105,7 @@ STRUCT_UNION = <%> {"struct"/"union"/"class"}
                    {ID/}
                    (:<public> ":" "public" {ID})?
                    (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
+                   (:<fix_vtable_size> ":" "fix_vtable_size" "(" {EXP} ")" )? # used for test101
                    {<{...}> "{" {STMT}* "}" }?;
 
 ENUM = <enum> "enum" {ID/} 

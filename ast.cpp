@@ -1,3 +1,4 @@
+
 #include <assert.h>
 #include <stdio.h>
 
@@ -2889,6 +2890,7 @@ namespace ast {
   void Fun::compile(CompileWriter & f, Phase phase) const {
     if (!body && phase == Body)
       return;
+    //f << indent << "# " << full_name() << "\n";
     if (env_ss && phase != Forward) {
       f << "(var " << uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
     }
@@ -3072,6 +3074,7 @@ namespace ast {
 
   void StructUnion::compile(CompileWriter & f, Phase phase) const {
     if (!have_body && phase == Declaration::Body) return;
+    //f << indent << "# " << full_name() << "\n";
     f << indent << "(." << what() << " " << uniq_name();
     if (have_body && phase != Forward) {
       f << "\n";
@@ -3413,6 +3416,7 @@ namespace ast {
     if (what == "make_subtype") parse_make_subtype(p, env);
     if (what == "declare_user_type") parse_declare_user_type(p, env);
     if (what == "import")  parse_import(p, env);
+    if (what == "macro")   parse_map(p, env);
     return p;
   }
 
@@ -3494,9 +3498,9 @@ namespace ast {
     if (what == "talias")  return parse_type_alias(p, env);
     if (what == "local_label") return (new LocalLabelDecl)->parse_self(p, env);
     if (what == "macro")   return parse_map(p, env);
-    if (what == "smacro")  return parse_map(p, env);
+    //if (what == "smacro")  return parse_map(p, env);
     if (what == "make_macro")         return parse_macro(p, env);
-    if (what == "make_syntax_macro")  return parse_macro(p, env);
+    //if (what == "make_syntax_macro")  return parse_macro(p, env);
     if (what == "fluid_binding") return parse_fluid_binding(p, env);
     if (what == "module")        return parse_module(p, env);
     if (what == "import")        return parse_import(p, env);

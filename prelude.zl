@@ -146,7 +146,7 @@ Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
 Syntax * parse_class(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
 
-  Match * m = match_args(0, raw_syntax (name @ body :(public parent_n)), p);
+  Match * m = match_args(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), p);
 
   Syntax * name = m->var(syntax name);
   Syntax * body = m->var(syntax body);
@@ -237,7 +237,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     } else if (strcmp(what, "alias")==0) {
       Match * m0 = match(m, raw_syntax (what n type value @_), member);
       //module_b->append(replace(raw_syntax (macro n (:(this (reparse this this))) value), m0, mark));
-      module_b->append(replace(syntax {macro n (:this ths = this) {({typeof(ths) fluid this = ths; value;});}}, m0, mark));
+      module_b->append(replace(syntax {macro n (:this ths = this) {({typeof(ths) tmp = ths; typeof(ths) fluid this = tmp; value;});}}, m0, mark));
       if (member->flag(syntax need_constructor))
         create_special_funs(sp, m0->var(syntax n), m0->var(syntax type), 1, m, mark, lenv);
     } else if (strcmp(what, "fun")==0) {
@@ -274,19 +274,18 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   const bool need_vtable = !vtable_i->empty();
 
   if (need_vtable) {
+
+    SyntaxList * flags = new_syntax_list();
+    if (parent_vtable) // inherit parent vtable if one
+      flags->append_flag(replace(raw_syntax(public $1), 
+                             match_local(m, parent_vtable_n, NULL), mark));
+    if (m->var(syntax vtable_flag))
+      flags->append_flag(m->var(syntax vtable_flag));
     
-    // create new vtable class, inherit parent vtable if one
-    if (parent_vtable) {
-      vtable = replace(
-        syntax {class _VTable : public $1 {$2;};},
-        match_local(m, parent_vtable_n, vtable_b, 0),
-        mark);
-    } else {
-      vtable = replace(
-        syntax {class _VTable {$1;};},
-        match_local(m, vtable_b, 0),
-        mark);
-    }
+    // create new vtable class, 
+    vtable = replace (raw_syntax(vtable_class _VTable @$1 ({...} $2)),
+                      match_local(m, flags, vtable_b, 0),
+                      mark);
     
     // create static vtable obj
     // create init function
@@ -328,7 +327,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   // Now add structure and _vtable to module
   
   if (need_vtable) {
-    module_p->append(replace(syntax {class _VTable;}, m, mark));
+    module_p->append(replace(raw_syntax (vtable_class _VTable), m, mark));
     exports->append(replace(syntax _VTable, m, mark));
     exports->append(replace(syntax _VTable`outer, m, mark));
   }
