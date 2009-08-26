@@ -2272,7 +2272,7 @@ namespace ast {
     }
     if (p->num_args() > 1) {
       assert_num_args(p, 2);
-      Environ env = env0.new_scope();
+      Environ env = env0.new_open_scope();
       env.scope = TOPLEVEL;
       env.where = m;
 

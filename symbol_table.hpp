@@ -473,30 +473,24 @@ namespace ast {
     }
   };
 
-  class OpenSymbolTable : public gc
+  class SymbolInsrPoint : public gc
   {
-  public:
-    //bool is_root() {return back == 0;}
   public: // but don't use
     SymbolNode * * front;
-    //SymbolNode * back;
   public:
-    OpenSymbolTable() // This is a placeholder, it can't be used in this state
+    SymbolInsrPoint() // This is a placeholder, it can't be used in this state
       : front() {}
-    OpenSymbolTable(SymbolNode * * f)
+    SymbolInsrPoint(SymbolNode * * f)
       : front(f) {}
-    template <typename T> 
-    const T * find(const SymbolKey & k) const {
-      return find_symbol<T>(k, *front);
-    }
-    bool exists(const SymbolKey & k) const {
-      return find_symbol<Symbol>(k, *front);
-    }
     template <typename T>
-    SymbolNode * add(const SymbolKey & k, T * sym, unsigned flags = 0) {
+    SymbolNode * add(const SymbolKey & k, T * sym, unsigned flags = 0, SymbolNode * back = NULL) {
       //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
       *front = new SymbolNode(k, sym, flags, *front);
       return *front;
+    }
+    void splice(SymbolNode * first, SymbolNode * last) {
+      last->next = *front;
+      *front = first;
     }
   };
 
@@ -505,20 +499,36 @@ namespace ast {
   public:
     bool is_root() {return back == 0;}
   public: // but don't use
+    //friend class Environ;
     SymbolNode * front;
     SymbolNode * back;
+    SymbolInsrPoint ip;
   public:
     SymbolTable() 
-      : front(), back() {}
+      : front(), back(), ip(&front) {}
     SymbolTable(SymbolNode * f, SymbolNode * b)
-      : front(f), back(b) {}
+      : front(f), back(b), ip(&front) {}
+    SymbolTable(SymbolNode * f, SymbolNode * b, SymbolNode * * i)
+      : front(f), back(b), ip(i) {}
+    SymbolTable(const SymbolTable & o)
+      : front(o.front), back(o.back), ip(o.ip.front == &o.front ? &front : o.ip) {}
+    SymbolTable & operator=(const SymbolTable & o) {
+      front = o.front;
+      back = o.back;
+      if (o.ip.front != &o.front)
+        ip = o.ip;
+      return *this;
+    }
     SymbolTable new_scope() {
       return SymbolTable(front, front);
     }
-    SymbolTable new_scope(OpenSymbolTable & o) {
+    SymbolTable new_open_scope() {
+      SymbolNode * placeholder = new SymbolNode(SymbolKey(), NULL, front);
+      return SymbolTable(placeholder, front, &placeholder->next);
+    }
+    SymbolTable new_scope(SymbolInsrPoint & o) {
       SymbolNode * placeholder = new SymbolNode(SymbolKey(), NULL, front);
       o.front = &placeholder->next;
-      //o.back = front;
       return SymbolTable(placeholder, front);
     }
     template <typename T> 
@@ -542,28 +552,32 @@ namespace ast {
     inline bool exists(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     inline bool exists_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     SymbolNode * add(const SymbolKey & k, Symbol * sym, unsigned flags = 0) {
-      //if (exists_this_scope(k)) return; // FIXME: throw error
-      front = new SymbolNode(k, sym, flags, front);
-      return front;
+      return ip.add(k, sym, flags, back);
     }
     SymbolNode * add_internal(const SymbolKey & k, Symbol * sym) {
       return add(k, sym, SymbolNode::INTERNAL);
     }
     void splice(SymbolNode * first, SymbolNode * last) {
-      last->next = front;
-      front = first;
+      return ip.splice(first, last);
     }
     void dump_this_scope();
   };
 
-  class TopLevelSymbolTable : public OpenSymbolTable {
+  class TopLevelSymbolTable : public SymbolInsrPoint {
   public: // but don't use
     //TopLevelSymbolNode * defn_front;
     Stmt * first;
     Stmt * last;
   public:    
     TopLevelSymbolTable(SymbolNode * * f) 
-      : OpenSymbolTable(f), first(), last() {}
+      : SymbolInsrPoint(f), first(), last() {}
+    template <typename T> 
+    const T * find(const SymbolKey & k) const {
+      return find_symbol<T>(k, *front);
+    }
+    bool exists(const SymbolKey & k) const {
+      return find_symbol<Symbol>(k, *front);
+    }
     inline void add_defn(Stmt *); // defined in ast.hpp
     inline void move_defn(Stmt *); // defined in ast.hpp
   };

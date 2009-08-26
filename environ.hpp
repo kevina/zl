@@ -73,7 +73,7 @@ namespace ast {
     TopLevelSymbolTable * top_level_symbols;
     SymbolTable symbols;
     TypeSymbolTable types;
-    OpenSymbolTable fun_labels;
+    SymbolInsrPoint fun_labels;
     Scope scope;
     Frame * frame;
     TopLevelSymbol * where;
@@ -117,6 +117,13 @@ namespace ast {
       env.true_top_level = false;
       env.stmt_ip = NULL;
       env.symbols = symbols.new_scope();
+      return env;
+    }
+    Environ new_open_scope() {
+      Environ env = *this;
+      env.true_top_level = false;
+      env.stmt_ip = NULL;
+      env.symbols = symbols.new_open_scope();
       return env;
     }
     Environ new_extended_exp(ExpInsrPoint * ip) {
