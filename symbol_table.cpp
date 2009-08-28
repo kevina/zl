@@ -74,7 +74,21 @@ namespace ast {
     //  assign_uniq_num<TopLevelSymbol>(self, stop);
   }
 
-  void SymbolTable::dump_this_scope() {
+  void SymbolTable::dump() const {
+    printf("=== BEGIN SYMBOL TABLE ===\n");
+    printf("%p %p <> %p %p\n", front, back, &front, ip.front);
+    for (SymbolNode * c = front; c; c = c->next) {
+      if (c == back)
+        printf("--- end current scope ---\n");
+      printf("  %s %p %s %s\n", ~c->key.to_string(), 
+             c->value,
+             c->value ? ~c->value->name() : "", 
+             c->value ? ~c->value->uniq_name() : "");
+    }
+    printf("^^^ END SYMBOL TABLE ^^^\n");
+  }
+
+  void SymbolTable::dump_this_scope() const {
     for (SymbolNode * c = front; c != back; c = c->next)
       printf("  %s %p %s %s\n", ~c->key.to_string(), 
              c->value,

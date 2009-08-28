@@ -331,7 +331,8 @@ namespace ast {
     for (; cur != stop; cur = cur->next) {
       //if (k.ns->name == "internal") 
       //printf ("--- %s\n", ~cur->key.to_string());
-      //printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
+      //if (cur->value)
+      //  printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
       if (k == cur->key && cmp(cur->key, cur->value) && (strategy != ThisScope || !cur->diff_scope())) break;
     }
     //printf("^^^ %d\n", cur == stop);
@@ -515,8 +516,7 @@ namespace ast {
     SymbolTable & operator=(const SymbolTable & o) {
       front = o.front;
       back = o.back;
-      if (o.ip.front != &o.front)
-        ip = o.ip;
+      ip = o.ip.front == &o.front ? &front : o.ip;
       return *this;
     }
     SymbolTable new_scope() {
@@ -560,7 +560,8 @@ namespace ast {
     void splice(SymbolNode * first, SymbolNode * last) {
       return ip.splice(first, last);
     }
-    void dump_this_scope();
+    void dump() const;
+    void dump_this_scope() const;
   };
 
   class TopLevelSymbolTable : public SymbolInsrPoint {
