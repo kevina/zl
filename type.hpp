@@ -195,7 +195,7 @@ namespace ast {
 
   class TypeRelation : public gc_cleanup {
   public:
-    enum CastType {Implicit, Explicit};
+    enum CastType {Implicit, Explicit, Static, Reinterpret, Const, Dynamic};
     virtual Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
     virtual void resolve_assign(Exp * &, Exp * &, Environ & env) const = 0;

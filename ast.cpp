@@ -1393,9 +1393,10 @@ namespace ast {
   struct DeRef : public UnOp {
     DeRef() : UnOp("deref", "*") {}
     void resolve(Environ & env) {
-      check_type(exp, POINTER_C);
       exp = exp->to_effective(env);
+      check_type(exp, POINTER_C);
       const PointerLike * t = dynamic_cast<const PointerLike *>(exp->type->unqualified);
+      if (!t) throw error(exp->syn, "Internal Error: Expected PointerLink");
       type = t->subtype;
       lvalue = LV_NORMAL;
     }
@@ -2565,25 +2566,35 @@ namespace ast {
     }
   };
 
+  static void add_cast(Module * m, const Syntax * cast, const char * what, 
+                       UserType * from, UserType * to, Environ & env) {
+    UserCast * user_cast = new UserCast;
+    user_cast->from = from;
+    user_cast->to = to;
+    user_cast->cast_macro = env.symbols.lookup<Symbol>(cast);
+    env.add(SymbolKey(what, CAST_NS), user_cast);
+    m->syms = new SymbolNode(SymbolKey(what, CAST_NS), user_cast, m->syms);
+  }
+
   Stmt * parse_make_subtype(const Syntax * p, Environ & env) {
     //printf(">>%s\n", ~p->to_string());
     assert_num_args(p, 2, 3);
     const Syntax * parent = p->arg(0);
     const Syntax * up_cast = p->arg(1);
+    const Syntax * down_cast = p->num_args() > 2 ? p->arg(2) : NULL;
 
     // FIXME: Add check that we are in a user_type
     Module * m = dynamic_cast<Module *>(env.where);
     UserType * parent_t = dynamic_cast<UserType *>(env.types.inst(parent));
     UserType * child_t  = dynamic_cast<UserType *>(env.types.inst(SymbolKey(m->name())));
-    UserCast * user_cast = new UserCast;
-    user_cast->from = child_t;
-    user_cast->to = parent_t;
-    user_cast->cast_macro = env.symbols.lookup<Symbol>(up_cast);
     assert(!child_t->parent);
     child_t->parent = parent_t;
     child_t->category = new TypeCategory(child_t->name(), parent_t->category);
-    env.add(SymbolKey("up_cast", CAST_NS), user_cast);
-    m->syms = new SymbolNode(SymbolKey("up_cast", CAST_NS), user_cast, m->syms);
+
+    add_cast(m, up_cast, "up_cast", parent_t, child_t, env);
+    if (down_cast)
+      add_cast(m, down_cast, "down_cast", child_t, parent_t, env);
+      
     return empty_stmt();
   }
 
@@ -2618,10 +2629,10 @@ namespace ast {
       //printf("member: %s\n", ~call->to_string());
       return parse_exp(call, env);
     } else {
-      abort();
+      throw error(p->arg(0), "Expected struct or user type.");
     }
   }
-
+  
   const Type * change_unqualified(const Type * from, const Type * to) {
     return to;
   }
@@ -2687,16 +2698,34 @@ namespace ast {
     return cast_up(res, type, env);
   }
 
-  Exp * cast_down(Exp * exp, const Type * type, Environ & env) {
-    abort();
-    //if (exp->type == type)
-    //  return exp;
-    //const UserType * ?? = dynamic_cast<const UserType *>(type);
-    //const Type * ???_unqualified = ??->parent;
-    //call cast macro;
-    //compile to ast;
-    //return it;
+  Exp * cast_down(Exp * exp, const UserType * type, Environ & env) {
+    const PointerLike * from_ptr = dynamic_cast<const PointerLike *>(exp->type->unqualified);
+    const QualifiedType * from_qualified = dynamic_cast<const QualifiedType *>(from_ptr->subtype->root);
+    const Type * from_base = from_ptr->subtype->unqualified;
+    if (from_base == type) return exp;
+    const Type * parent = type->parent;
+    assert(parent); 
+    const Type * to_qualified = from_qualified
+      ? env.types.inst(".qualified", TypeParm(from_qualified->qualifiers), TypeParm(type))
+      : type;
+    const Type * to_ptr = env.types.inst(".ptr", to_qualified);
+    NoOpGather gather;
+    const UserCast * cast = lookup_symbol<UserCast>(SymbolKey("down_cast", CAST_NS), exp->source_str(), 
+                                                    type->module->syms);
+    Exp * subexp = exp;
+    if (parent != from_base) {
+      const UserType * t = dynamic_cast<const UserType *>(parent);
+      subexp = cast_down(exp, t, env);
+    }
+    const Syntax * p = new Syntax(new Syntax("call"), 
+                                  new Syntax(new Syntax("id"), new Syntax(cast->cast_macro)),
+                                  new Syntax(new Syntax("."), new Syntax(subexp)));
+    Exp * res = parse_exp(p, env);
+    res = res->resolve_to(to_ptr, env);
+    return res;
   }
+
+  
 
   Exp * subtype_cast(Exp * exp, const UserType * type, Environ & env) {
     const Type * have = exp->type->effective->unqualified;
@@ -2724,8 +2753,12 @@ namespace ast {
   Exp * parse_cast(const Syntax * p, Environ & env, TypeRelation::CastType ctype) {
     assert_num_args(p, 2);
     const Syntax * t = p->arg(0);
-    if (t->is_a("(type)"))
+    if (t->is_a("<>")) {
+      t = reparse("TOKENS", t->arg(0));
+      t = parse_decl_->parse_type(t, env);
+    } else if (t->is_a(".type")) {
       t = t->arg(0);
+    }
     Type * type = parse_type(t, env);
     Exp * exp = parse_exp(p->arg(1), env);
     Exp * res = env.type_relation->resolve_to(exp, type, env, ctype);
@@ -3199,7 +3232,7 @@ namespace ast {
   SizeOf * SizeOf::parse_self(const Syntax * p, Environ & env) {
     syn = p;
     assert_num_args(1);
-    if (p->arg(0)->is_a("(type)")) {
+    if (p->arg(0)->is_a(".type")) {
       sizeof_type = parse_type(p->arg(0)->arg(0), env);
     } else {
       Exp * exp = parse_exp(p->arg(0), env);
@@ -3587,6 +3620,8 @@ namespace ast {
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
     if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
     if (what == "icast")   return parse_cast(p, env, TypeRelation::Implicit);
+    if (what == "implicit_cast")    return parse_cast(p, env, TypeRelation::Reinterpret);
+    if (what == "reinterpret_cast") return parse_cast(p, env, TypeRelation::Reinterpret);
     if (what == ".")       return (new InitList)->parse_self(p, env);
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
     //if (what == "empty")   return (new Empty)->parse_self(p, env);

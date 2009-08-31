@@ -444,8 +444,7 @@ namespace ast {
 
     if (have == need) return exp;
     // FIXME: Is this right?
-
-    if (rule == Explicit) // FIXME: This isn't always legal
+    if (rule == Reinterpret /* || rule == Explicit*/) // FIXME: This isn't always legal
       return new Cast(exp, type);
 
     if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
@@ -474,7 +473,10 @@ namespace ast {
       if (exp->type->is_null) return exp;
       // FIXME: This probably isn't right
       if (dynamic_cast<const Function *>(have)) {
-        return exp;
+        if (rule == Implicit)
+          return exp;
+        else
+          return new Cast(exp, type);
       }
       const Pointer * h_p = dynamic_cast<const Pointer *>(have);
       const Array   * h_a = dynamic_cast<const Array *>(have);
@@ -483,24 +485,30 @@ namespace ast {
       if (dynamic_cast<const Function *>(h_subtype->unqualified) // FIXME: Hack
           && dynamic_cast<const Function *>(n_subtype->unqualified))
         return new Cast(exp, type);
+      const UserType * hu, * nu;
       if (h_subtype->unqualified == n_subtype->unqualified ||
           dynamic_cast<const Void *>(h_subtype->unqualified) ||
           dynamic_cast<const Void *>(n_subtype->unqualified) /* this one is C only */)  
       {
-        if (h_subtype->read_only && !n_subtype->read_only)
+        if (!h_subtype->read_only || n_subtype->read_only) 
+          return exp;
+        if (rule == Explicit)
+          return new Cast(exp, type);
+        else
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
-        else
-          return exp;
-      } else if (dynamic_cast<const UserType *>(h_subtype->unqualified) &&
-                 dynamic_cast<const UserType *>(n_subtype->unqualified) &&
-                 h_subtype->is(n_subtype->category)) 
+      } else if ((hu = dynamic_cast<const UserType *>(h_subtype->unqualified)) &&
+                 (nu = dynamic_cast<const UserType *>(n_subtype->unqualified)))
       { // this is C++ only
         if (h_subtype->read_only && !n_subtype->read_only)
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
-        else 
+        else if (h_subtype->is(n_subtype->category))
           return cast_up(exp, n_subtype, env);
+        else if (n_subtype->is(h_subtype->category) && rule == Explicit || rule == Static)
+          return cast_down(exp, nu, env);
+        else
+          goto fail;
       } else {
         goto fail;
       }
@@ -508,7 +516,9 @@ namespace ast {
     //abort();
 
   fail:
-    //abort();
+    if (rule == Explicit) // FIXME: This isn't always legal
+      return new Cast(exp, type);
+
     throw error(orig_exp->syn, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
                 ~type->to_string(), ~orig_exp->type->to_string());
   }

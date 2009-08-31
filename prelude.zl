@@ -205,9 +205,11 @@ Syntax * parse_class(Syntax * p, Environ * env) {
                         m->var(syntax _parent), 
                         replace(raw_syntax (parent_n), m, mark), 
                         0, m, mark, lenv);
-            
-    module_p->append(replace(syntax {make_subtype parent_n class_cast_up;}, m, mark));
+    
     module_p->append(replace(syntax {import parent_n;}, m, mark));
+    module_p->append(replace(syntax {macro cast_up(p) {&(*p).._parent;}}, m, mark));
+    module_p->append(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>(p);}}, m, mark));
+    module_p->append(replace(syntax {make_subtype parent_n cast_up cast_down;}, m, mark));
 
     SyntaxEnum * itr = parent_m->symbols();
     Syntax * syn;
@@ -308,9 +310,9 @@ Syntax * parse_class(Syntax * p, Environ * env) {
 
     //printf("Adding _vptr\n");
     if (parent_vtable) {
-      // fixme "parent_n *" cast should be an icast
       module_b->append(replace(
-                         syntax {macro _vptr (:this this = this) {*(_VTable * *)&(((parent_n *)this)->_vptr);}},
+                         syntax {macro _vptr (:this this = this) 
+                                   {*(_VTable * *)&((implicit_cast<parent_n *>(this))->_vptr);}},
                          m, mark));
     } else {
       Syntax * v = replace(raw_syntax (var (mid _vptr) (.ptr (mid _VTable))), m, mark);
@@ -422,9 +424,9 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   Syntax * module_ = replace(syntax {user_type name {$1; $2;}},
                              match_local(m, module_p, module_b, 0),
                              mark);
-  //printf("DONE %s\n", syntax_to_string(name));
-  //dump_syntax(module_);
-  //printf("---\n");
+  printf("DONE %s\n", syntax_to_string(name));
+  dump_syntax(module_);
+  printf("---\n");
   return module_;
 }
 
@@ -442,8 +444,7 @@ void parse_class_var(Syntax * p, Match * m, Mark * mark,
     module_b->append(replace(syntax {macro n () {n`internal;}}, m, mark));
   } else {
     struct_b->append(p);
-    // FIXME: "name *" should be an icast
-    module_b->append(replace(syntax {macro n (:this this = this) {(*(name *)this)..n;}}, m, mark));
+    module_b->append(replace(syntax {macro n (:this this = this) {(*implicit_cast<name *>(this))..n;}}, m, mark));
   }
 }
 

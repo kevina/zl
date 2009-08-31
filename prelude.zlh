@@ -11,7 +11,7 @@ macro true() {1;}
 macro false() {0;}
 typedef int bool;
 int strcmp(const char *s1, const char *s2);
-macro offsetof(TYPE, MEMBER) {(size_t) &((TYPE *)0)->MEMBER;}
+macro offsetof(TYPE, MEMBER) {(size_t) &(reinterpret_cast<TYPE *>(0))->MEMBER;}
 
 //
 // Macro ABI
@@ -40,8 +40,9 @@ __ct_callback SyntaxEnum * syntax_args(Syntax *);
 struct Syntax;
 user_type Syntax {
   finalize_user_type struct Syntax;
-  macro to_unmarked (x) {(UnmarkedSyntax *)x;}
-  make_subtype UnmarkedSyntax to_unmarked;
+  macro _up_cast (x) {reinterpret_cast<UnmarkedSyntax *>(x);}
+  macro _down_cast (x) {reinterpret_cast<Syntax *>(x);}
+  make_subtype UnmarkedSyntax _up_cast _down_cast;
   //import UnmarkedSyntax;
   //export simple, flag, part;
   macro simple(:this this) {syntax_simple(this);}
@@ -66,9 +67,10 @@ __ct_callback void syntax_list_replace(SyntaxList *, size_t pos, Syntax * el);
 struct SyntaxList;
 user_type SyntaxList {
   finalize_user_type struct SyntaxList;
-  macro to_syntax (x) {(Syntax *)x;}
   import Syntax;
-  make_subtype Syntax to_syntax;
+  macro _up_cast (x) {reinterpret_cast<Syntax *>(x);}
+  macro _down_cast (x) {reinterpret_cast<SyntaxList *>(x);}
+  make_subtype Syntax _up_cast _down_cast;
   //export empty, append;
   macro empty(:this this) {syntax_list_empty(this);}
   macro append(:this this, syn) {syntax_list_append(this, syn);}
@@ -167,10 +169,6 @@ make_macro make_syntax_macro`syntax parse_make_syntax_macro :w_snapshot;
 //
 //
 //
-
-macro class_cast_up (child) {
-  &(*child).._parent;
-}
 
 Syntax * partly_expand_class(Syntax *, Mark *, Environ *);
 

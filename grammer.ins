@@ -118,7 +118,7 @@
 (fun free (. ((.ptr (void)) )) (void))
 
 (smacro new (type)
-  (eblock (var tmp (.ptr type) (call malloc (. (sizeof ("(type)" type)))))
+  (eblock (var tmp (.ptr type) (call malloc (. (sizeof (.type type)))))
           (construct (deref tmp))
           tmp))
 

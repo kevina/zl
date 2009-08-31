@@ -694,6 +694,7 @@ namespace ast {
   void compile(TopLevelSymbolTable *, CompileWriter & cw);
 
   Exp * cast_up(Exp * exp, const Type * type, Environ & env);
+  Exp * cast_down(Exp * exp, const UserType * type, Environ & env);
 
   const Syntax * parse_syntax_c(const Syntax * p);
 

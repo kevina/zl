@@ -60,7 +60,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
       const char * what = syntax_to_string(m0->var(syntax what));
       if (strcmp(what, "var")==0) {
         size_t offset = ct_value(replace(syntax (offsetof(name, n)), m0, mark), lenv);
-        size_t size_of = ct_value(replace(raw_syntax (sizeof ("(type)" type)), m0, mark), lenv);
+        size_t size_of = ct_value(replace(raw_syntax (sizeof (.type type)), m0, mark), lenv);
         if (ip != overflow && offset + size_of > fix_size - ptr_size) {
           overflow_pos = main->append(NULL);
           ip = overflow;

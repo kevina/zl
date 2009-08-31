@@ -75,7 +75,8 @@ TOKEN_ : "token_" =  <<mid>> {MID} !("`" / "::") /
          / {ID} / {SYM};
 
 TOKEN : "token" =  <<mid PARM>> {MID} !("`" / "::") / 
-         {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
+         {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX} 
+         / {TEMPLATE_CALL}
          / {BRACK} / {CONST}
          / {ID} / {SYM} 
          / {PARAN} / {BRACE};
@@ -145,6 +146,7 @@ EBLOCK = <eblock> "(" "{" {STMT}* "}" ")";
 BRACE = <{}> "{" {RAW_TOKEN*} "}";
 PARAN = <()> "(" {RAW_TOKEN*} ")";
 BRACK = <[]> "[" {RAW_TOKEN*} "]";
+ANGLE = <\<\>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
 
 RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 
@@ -163,6 +165,9 @@ ID_W_NS =
 
 ID =
   <fluid> "fluid" {ID} / {ID_W_NS};
+
+TEMPLATE_CALL =
+  <%> {"implicit_cast"/"reinterpret_cast"} {ANGLE} {PARAN};
 
 MID : "macro identifier" = 
      {[@$\a_][\a_\d]*} SPACING;

@@ -961,7 +961,7 @@ static const Syntax * replace(const Syntax * p,
   } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f")) {
     ChangeSrc<ExpandSourceInfo> ci(r);
     return new Syntax(ci, *p);
-  } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("parm")) {
+  } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("<>") || p->is_a("parm")) {
     // raw tokens
     assert(p->num_args() == 1);
     assert(p->arg(0)->simple());
@@ -1152,7 +1152,7 @@ static const Syntax * handle_paran(Parts::const_iterator & i,
     const Syntax * exp = reparse("PARAN_EXP", p);
     //printf("handle_paran:: %s\n", ~exp->to_string());
     const Syntax * type = parse_decl_->parse_type(exp, env);
-    if (type) return new Syntax(p->str(), new Syntax("(type)"), type);
+    if (type) return new Syntax(p->str(), new Syntax(".type"), type);
     // Since the raw string might need to be reparsed we can't use an
     // exp here.  Unfortunately this will likely mean duplicate work.
     // Avoiding that will take more thought
