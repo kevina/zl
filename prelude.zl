@@ -198,6 +198,9 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     parent_m = parent->module;
     parent_vtable_n = replace(syntax parent_n::_VTable, m, mark);
     parent_vtable = user_type_info(parent_vtable_n, env);
+    
+    // this needs to be one of the first things we do
+    module_p->append(replace(syntax {import parent_n;}, m, mark));
 
     parse_class_var(partly_expand(replace(syntax {parent_n _parent;}, m, mark), FieldPos, lenv),
                     m, mark, struct_p, module_p);
@@ -206,7 +209,6 @@ Syntax * parse_class(Syntax * p, Environ * env) {
                         replace(raw_syntax (parent_n), m, mark), 
                         0, m, mark, lenv);
     
-    module_p->append(replace(syntax {import parent_n;}, m, mark));
     module_p->append(replace(syntax {macro cast_up(p) {&(*p).._parent;}}, m, mark));
     module_p->append(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>(p);}}, m, mark));
     module_p->append(replace(syntax {make_subtype parent_n cast_up cast_down;}, m, mark));
