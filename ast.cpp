@@ -1,4 +1,3 @@
-
 #include <assert.h>
 #include <stdio.h>
 
@@ -879,8 +878,9 @@ namespace ast {
   //}
 
   struct AutoVar : public Var {
-    AutoVar() : num() {}
+    AutoVar() : num(), shadow(false) {}
     mutable unsigned num;
+    bool shadow;
     void compile(CompileWriter & f, Phase phase) const {
       assert(phase == Normal);
       Var::compile(f, phase);
@@ -1006,11 +1006,13 @@ namespace ast {
       storage_class = SC_STATIC;
   }
   
-  static Stmt * parse_var_forward(const Syntax * p, Environ & env, Collect & collect) {
+  static Stmt * parse_var(const Syntax * p, Environ & env, Collect * collect) {
     assert_num_args(p, 2,3);
     const Syntax * name_p = p->arg(0);
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
+    bool shadow = p->flag("__shadow");
+    if (shadow && collect) abort(); // FIXME: Error message
     Var * var;
     Stmt * res;
     bool fresh = true;
@@ -1038,18 +1040,24 @@ namespace ast {
     var->storage_class = storage_class;
     if (storage_class != SC_EXTERN && var->type->size() == NPOS)
       throw error(name_p, "Size not known");
-    if (fresh)
+    if (fresh && !shadow)
       env.add(name, var);
-    collect.push_back(var); // fixme, not always the case
+    if (collect) {
+      collect->push_back(var); 
+    } else {
+      res = var->finish_parse(env);
+      if (shadow)
+        env.add(name, var);
+    }
     return res;
   }
 
+  static Stmt * parse_var_forward(const Syntax * p, Environ & env, Collect & collect) {
+    return parse_var(p, env, &collect);
+  }
+
   static Stmt * parse_var(const Syntax * p, Environ & env) {
-    Collect collect;
-    Stmt * res = parse_var_forward(p, env, collect);
-    assert(collect.size() == 1);
-    res = collect[0]->finish_parse(env);
-    return res;
+    return parse_var(p, env, NULL);
   }
 
   static BasicVar * parse_field_var(const Syntax * p, Environ & env) {

@@ -241,7 +241,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     } else if (strcmp(what, "alias")==0) {
       Match * m0 = match(m, raw_syntax (what n type value @_), member);
       //module_b->append(replace(raw_syntax (macro n (:(this (reparse this this))) value), m0, mark));
-      module_b->append(replace(syntax {macro n (:this ths = this) {({typeof(ths) tmp = ths; typeof(ths) fluid this = tmp; value;});}}, m0, mark));
+      module_b->append(replace(syntax {macro n (:this ths = this) {({__shadow typeof(ths) fluid this = ths; value;});}}, m0, mark));
       if (member->flag(syntax need_constructor))
         create_special_funs(sp, m0->var(syntax n), m0->var(syntax type), 1, m, mark, lenv);
     } else if (strcmp(what, "fun")==0) {
