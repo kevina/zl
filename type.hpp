@@ -274,6 +274,7 @@ namespace ast {
     virtual unsigned num_parms() const = 0;
     virtual TypeParm parm(unsigned i) const = 0;
     virtual const char * tag() const {return NULL;}
+    virtual const Type * tprop(const Syntax * p, Environ & env) const {abort(); /* FIXME: Error Message */}
     virtual ~TypeInst() {}
   protected:
     virtual void finalize_hook() {} 
@@ -392,6 +393,10 @@ namespace ast {
     virtual unsigned required_parms() const = 0;
     virtual TypeParm::What parmt(unsigned i) const = 0; // return TypeParm::NONE if off end
   };
+
+  //
+  //
+  //
 
   //
   //
@@ -575,6 +580,7 @@ namespace ast {
     const Type * subtype;
     unsigned size() const {return POINTER_SIZE;}
     unsigned align() const {return POINTER_SIZE;}
+    const Type * tprop(const Syntax * p, Environ & env) const;
     String ct_type_name() const {return ".ptr";}
   };
 
@@ -718,19 +724,12 @@ namespace ast {
   //
   //
 
-  class TypeOfSymbol : public TypeSymbol {
+  class WrapperTypeInst : public TypeInst {
   public:
-    TypeOfSymbol() {}
-    Type * inst(Vector<TypeParm> & d);
-    unsigned required_parms() const {return 1;}
-    TypeParm::What parmt(unsigned i) const {return i == 0 ? TypeParm::EXP : TypeParm::NONE;}
-  };
-
-  class TypeOf : public TypeInst {
-  public:
-    inline TypeOf(Exp * a);
-    Exp * of_ast;
+    WrapperTypeInst(const Type * st, const Syntax * s)
+      :TypeInst(st->category), of(st), syn(s) {type_symbol = st->type_symbol;}
     const Type * of;
+    const Syntax * syn;
     unsigned size() const {return of->size();}
     unsigned align() const {return of->align();}
     virtual unsigned num_parms() const {return 0;}
@@ -740,6 +739,23 @@ namespace ast {
       return of->root; 
     }
   };
+
+  class TypeOf : public WrapperTypeInst {
+  public:
+    inline TypeOf(Exp * a);
+    Exp * of_ast;
+  };
+
+/*
+  class TypeOfSymbol : public TypeSymbol {
+  public:
+    TypeOfSymbol() {}
+    Type * inst(Vector<TypeParm> & d);
+    unsigned required_parms() const {return 1;}
+    TypeParm::What parmt(unsigned i) const {return i == 0 ? TypeParm::EXP : TypeParm::NONE;}
+  };
+
+*/
 
   //
   //
@@ -776,6 +792,7 @@ namespace ast {
 //     }
     unsigned size() const {return POINTER_SIZE;}
     unsigned align() const {return POINTER_SIZE;}
+    const Type * tprop(const Syntax * p, Environ & env) const;
   };
 
   class FunctionSymbol : public ParmTypeSymbol {

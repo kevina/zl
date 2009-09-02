@@ -106,7 +106,7 @@ namespace ast {
     for (;;) { // loop while something changed
       if (const ZeroT * t = dynamic_cast<const ZeroT *>(type)) {
         type = t->of;
-      } else if (const TypeOf * t = dynamic_cast<const TypeOf *>(type)) {
+      } else if (const WrapperTypeInst * t = dynamic_cast<const WrapperTypeInst *>(type)) {
         type = t->of;
       } else if (const UserType * t = zls_mode ? dynamic_cast<const UserType *>(type) : NULL) {
         type = t->type;
@@ -181,7 +181,7 @@ namespace ast {
         if (t->qualifiers & QualifiedType::RESTRICT) lbuf += " restrict";
         qualifiers = lbuf.freeze();
         type = t->subtype;
-      } else if (const TypeOf * t = dynamic_cast<const TypeOf *>(type)) {
+      } else if (const WrapperTypeInst * t = dynamic_cast<const WrapperTypeInst *>(type)) {
         type = t->of;
       } else if (const UserType * t = dynamic_cast<const UserType *>(type)) {
         type = t->type;
@@ -248,16 +248,16 @@ namespace ast {
     }
   }
 
-  Type * TypeOfSymbol::inst(Vector<TypeParm> & d) {
-    assert(d.size() == 1);
-    assert(d[0].what == TypeParm::EXP);
-    TypeOf * t = new TypeOf(d[0].as_exp);
-    t->finalize();
-    return t;
-  }
+  //Type * TypeOfSymbol::inst(Vector<TypeParm> & d) {
+  //  assert(d.size() == 1);
+  //  assert(d[0].what == TypeParm::EXP);
+  //  TypeOf * t = new TypeOf(d[0].as_exp);
+  //  t->finalize();
+  //  return t;
+  //}
 
   inline TypeOf::TypeOf(Exp * a) 
-    : TypeInst(a->type->effective), of_ast(a), of(a->type->effective) {type_symbol = of->type_symbol;}
+    : WrapperTypeInst(a->type->effective, a->syn), of_ast(a) {}
 
   Type * parse_type(const Syntax * p, Environ & env) {
     if (p->have_entity()) {
@@ -288,6 +288,19 @@ namespace ast {
       Type * t = new TypeOf(ast);
       t->finalize();
       return t;
+    } else if (name_str == ".tprop") {
+      const Syntax * tp = p->arg(0);
+      const Type * t;
+      if (tp->is_a(".type")) {
+        t = parse_type(tp->arg(0), env);
+      } else {
+        Exp * exp = parse_exp(tp, env);
+        t = exp->type->effective;
+      }
+      t = t->tprop(p->arg(1), env);
+      Type * res = new WrapperTypeInst(t, p);
+      res->finalize();
+      return res;
     }
     TypeSymbol * t = types.find(name, ns);
     if (!t) {
@@ -370,6 +383,13 @@ namespace ast {
       return inst_type;
     }
   }
+
+  const Type * PointerLike::tprop(const Syntax * p, Environ & env) const {
+    if (p->is_a("inner"))
+      return subtype;
+    else
+      throw error(p, "Unsupported type property \"%s\" for pointer type", ~p->what());
+  }
   
   Function * FunctionSymbol::inst(TypeSymbolTable types, Fun * f) {
     Vector<TypeParm> p;
@@ -377,6 +397,20 @@ namespace ast {
     p.push_back(TypeParm(TypeParm::TUPLE, f->parms));
     p.push_back(TypeParm(f->ret_type));
     return static_cast<Function *>(inst(p));
+  }
+
+  const Type * Function::tprop(const Syntax * p, Environ & env) const {
+    if (p->is_a("ret")) {
+      return ret;
+    } else if (p->is_a("parm")) {
+      assert_num_args(p, 1);
+      Exp * exp = parse_exp(p->arg(0), env);
+      exp = exp->resolve_to(env.types.inst("int"), env);
+      unsigned i = exp->ct_value<int>();
+      return parms->parm(i).as_type;
+    } else {
+      throw error(p, "Unsupported type property \"%s\" for function type", ~p->what());
+    }
   }
   
 
@@ -650,7 +684,7 @@ namespace ast {
     types.add_internal(".", new TupleSymbol);
     types.add_internal(".qualified", new QualifiedTypeSymbol);
     types.add_internal(".zero", new ZeroTypeSymbol);
-    types.add_internal(".typeof", new TypeOfSymbol);
+    //types.add_internal(".typeof", new TypeOfSymbol);
     add_internal_type(types, "__builtin_va_list", new Void());
     //add_internal_type(types, "Match", new Void());
     //add_internal_type(types, "Syntax", new Void());

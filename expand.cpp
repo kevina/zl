@@ -1284,6 +1284,9 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     res->add_part(p->arg(0));
     res->add_part(a);
     p = res;
+  } else if (what == "raw") {
+    parse_parse::Res r = parse_parse::parse(p->part(1)->str());
+    return partly_expand(r.parse, pos, env, flags);
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
     //printf("TRYING STMT PARSE on %s\n", ~p->sample_w_loc()); 
@@ -1298,7 +1301,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env, what == "exp" ? "seq" : ".");
     return partly_expand(p, pos, env, flags);
-  }
+  } 
   // we should have a primitive
   return p;
 }
