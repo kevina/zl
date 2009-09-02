@@ -305,7 +305,7 @@ namespace ast {
     TypeSymbol * t = types.find(name, ns);
     if (!t) {
       if (tag.empty()) {
-        throw error(p, "Unknown type: %s", ~name_str);
+        throw error(p, "Unknown type: %s", ~name->to_string());
       } else {
         SimpleType * ti;
         SymbolKey n = expand_binding(name, TAG_NS, env);

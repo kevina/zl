@@ -47,6 +47,10 @@ Syntax * parse_make_syntax_macro(Syntax * p, Environ * env) {
   }
  */
 
+typedef struct Collect {
+  bool virtual_override;
+  Syntax * this_parm;
+} Collect;
 
 typedef struct SpecialFuns {
   bool need_constructor;
@@ -64,6 +68,7 @@ typedef struct SpecialFuns {
   bool need_destructor;
   SyntaxList * destructor_code;
   Syntax * destructor;
+  Collect destructor_collect;
 } SpecialFuns;
 
 void init_special_funs(SpecialFuns & sp) {
@@ -84,6 +89,8 @@ void init_special_funs(SpecialFuns & sp) {
   sp.need_destructor = false;
   sp.destructor_code = new_syntax_list();
   sp.destructor = NULL;
+  sp.destructor_collect.virtual_override = false;
+  sp.destructor_collect.this_parm = NULL;
 }
 
 void parse_class_var(Syntax * p, Match * m, Mark * mark,
@@ -93,9 +100,9 @@ Syntax * parse_class_fun(Syntax * p, Match * m, Mark * mark,
                          UserTypeInfo * parent_vtable,
                          SyntaxList *  vtable_b, SyntaxList * vtable_i,
                          Context * context, Environ * env,
-                         struct SpecialFuns * sp, bool skip_body);
+                         SpecialFuns * sp, Collect * c);
 Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
-                               SyntaxList *  module_b,
+                               SyntaxList *  module_b, Collect * collect,
                                Environ * env);
 
 void create_special_funs(SpecialFuns & sp, Syntax * name, Syntax * type,
@@ -246,7 +253,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         create_special_funs(sp, m0->var(syntax n), m0->var(syntax type), 1, m, mark, lenv);
     } else if (strcmp(what, "fun")==0) {
       err = parse_class_fun(member, m, mark, module_b, parent_vtable,
-                            vtable_b, vtable_i, context, lenv, &sp, false);      
+                            vtable_b, vtable_i, context, lenv, &sp, NULL);      
     } else {
       // otherwise we have some sort of type definition which needs to go before 
       // _Data
@@ -269,7 +276,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     destructor = partly_expand(replace(syntax{void _destructor();}, m, mark), FieldPos, lenv);
   }
   if (destructor)
-    parse_class_fun(destructor, m, mark, module_p, parent_vtable, vtable_b, vtable_i, NULL, lenv, NULL, true);
+    parse_class_fun(destructor, m, mark, module_p, parent_vtable, vtable_b, vtable_i, NULL, lenv, NULL, &sp.destructor_collect);
 
   //
   // Now generate vtable and related bits
@@ -376,7 +383,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         FieldPos, lenv);
   }
   if (sp.constructor)
-    parse_class_fun(sp.constructor, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, false);
+    parse_class_fun(sp.constructor, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, NULL);
 
   if (sp.copy_constructor) {
     Match * m0 = match(m, raw_syntax (w n parms ret body @_), sp.copy_constructor);
@@ -392,7 +399,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         FieldPos, lenv);
   }
   if (sp.copy_constructor)
-    parse_class_fun(sp.copy_constructor, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, false);
+    parse_class_fun(sp.copy_constructor, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, NULL);
 
   if (sp.need_assign && !sp.assign) {
     sp.assign =
@@ -402,7 +409,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         FieldPos, lenv);
   }
   if (sp.assign) // don't allow virtual assign for now
-    parse_class_fun(sp.assign, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, false);
+    parse_class_fun(sp.assign, m, mark, module_p, NULL, NULL, NULL, NULL, lenv, NULL, NULL);
 
   if (sp.destructor) {
     Match * m0 = match(m, raw_syntax ($w $n $parms $ret $body @rest), sp.destructor);    
@@ -417,7 +424,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
         FieldPos, lenv);
   }
   if (sp.destructor)
-    parse_class_fun_body(sp.destructor, m, mark, module_p, lenv);
+    parse_class_fun_body(sp.destructor, m, mark, module_p, &sp.destructor_collect, lenv);
 
   //
   // Finally create module and user type
@@ -450,14 +457,17 @@ void parse_class_var(Syntax * p, Match * m, Mark * mark,
   }
 }
 
+Syntax * mk_class_fun_body(Match * m, Mark * mark, SyntaxList *  module_b, 
+                           bool virtual_override, SyntaxList * new_parms);
+
 Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                           SyntaxList *  module_b,
                           UserTypeInfo * parent_vtable,
                           SyntaxList *  vtable_b, SyntaxList * vtable_i,
                           Context * context, Environ * env,
-                          struct SpecialFuns * sp, bool skip_body)
+                          struct SpecialFuns * sp, struct Collect * collect)
 {
-  //printf("parse_class_fun: %s\n", syntax_to_string(p));
+  printf("parse_class_fun: %s\n", syntax_to_string(p));
   m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
   m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
   //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
@@ -500,17 +510,29 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   snprintf(sbuf, 1024, "%s$fp", syntax_to_string(m->var(syntax n)));
   m = match(m, syntax fpn,
             replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
-
-  if (!is_virtual && parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn)))
-    is_virtual = true;
   
+  bool virtual_override = parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn));
+
+  if (!is_virtual && virtual_override)
+    is_virtual = true;
+
   SyntaxList * new_parms = new_syntax_list(); 
-  if (!is_static)
-    new_parms->append(replace(raw_syntax ((.ptr (mid name)) (fluid this)), m, mark));
+  Syntax * this_parm = NULL;
+  if (!is_static) {
+    if (virtual_override) {
+      m = match(m, syntax this_t, 
+                replace(raw_syntax(.tprop (.type (.tprop (-> (reinterpret_cast 
+                                                              (.ptr ((:: parent_n _VTable))) 0) fpn) 
+                                                  inner)) (parm 0)), m, mark));
+      this_parm = replace(raw_syntax(this_t ths), m, mark);
+    } else
+      this_parm = replace(raw_syntax ((.ptr name) (fluid this)), m, mark);
+    new_parms->append(this_parm);
+  }
 
   SyntaxList * macro_parms = new_syntax_list();
   SyntaxList * call_parms  = new_syntax_list();
-
+  
   if (!is_static) 
     call_parms->append(replace(syntax ((name  *)this), m, mark));
   SyntaxEnum * parms_enum = m->varl(syntax parms);
@@ -527,13 +549,15 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   }
   if (!is_static)
     macro_parms->append(replace(syntax (:this this = this), m, mark));
-
-  if (!skip_body && m->var(syntax body))
-    module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
-                             match_local(m, new_parms, 0), mark));
-  else
+  
+  if (!collect && m->var(syntax body)) {
+    mk_class_fun_body(m, mark, module_b, virtual_override, new_parms);
+  } else {
     module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret)),
                              match_local(m, new_parms, 0), mark));
+    collect->virtual_override = virtual_override;
+    collect->this_parm = this_parm;
+  }
     
   module_b->append(replace(syntax {macro n`non_virtual ($1) {n`internal($2);}},
                            match_local(m, macro_parms, call_parms, 0), mark));
@@ -544,13 +568,13 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                        syntax {macro n ($1) {(this->_vptr->fpn)($2);}},
                        match_local(m, macro_parms, call_parms, 0),
                        mark));
-    m = match(m, syntax pfun, 
-              replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
-    if (!(parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn)))) {
+    if (!virtual_override) {
+      m = match(m, syntax pfun, 
+                replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
       vtable_b->append(replace(raw_syntax (var (mid fpn) (mid pfun)), m, mark));
     }
     vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid fpn))) 
-                                         (cast (mid pfun) (id (` (mid n) internal)))), m, mark));
+                                         (id (` (mid n) internal))), m, mark));
   } else {
     module_b->append(replace(syntax {macro n ($1) {n`internal($2);}},
                              match_local(m, macro_parms, call_parms, 0), mark));
@@ -559,9 +583,9 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   return NULL;
 }
 
-Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
-                               SyntaxList *  module_b,
-                               Environ * env)
+Syntax * parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
+                              SyntaxList *  module_b, Collect * collect,
+                              Environ * env)
 {
   //printf("parse_class_fun: %s\n", syntax_to_string(p));
   m = match_args(m, raw_syntax (n parms ret body @rest), p);
@@ -572,7 +596,7 @@ Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
   
   SyntaxList * new_parms = new_syntax_list(); 
   if (!is_static)
-    new_parms->append(replace(raw_syntax ((.ptr (mid name)) (fluid this)), m, mark));
+    new_parms->append(collect->this_parm);
 
   SyntaxEnum * parms_enum = m->varl(syntax parms);
   Syntax * parm;
@@ -580,9 +604,22 @@ Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
     new_parms->append(parm);
   }
 
-  module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
-                           match_local(m, new_parms, 0), mark));
+  mk_class_fun_body(m, mark, module_b, collect->virtual_override, new_parms);
 
   return NULL;
 }
+
+Syntax * mk_class_fun_body(Match * m, Mark * mark, SyntaxList *  module_b, 
+                           bool virtual_override, SyntaxList * new_parms) 
+{
+  if (virtual_override)
+    module_b->append(replace(raw_syntax (fun (` n internal) (. $1) ret 
+                                         (block (var (fluid this) (.ptr name) (cast (.ptr name) ths)) 
+                                          body)),
+                             match_local(m, new_parms, 0), mark));
+  else
+    module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
+                             match_local(m, new_parms, 0), mark));
+}
+
 

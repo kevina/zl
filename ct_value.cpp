@@ -99,7 +99,7 @@ namespace ast {
       else
         abort();
     } else {
-      const char * s = ~*vp;
+      const char * s = ~vp->what().name;
       char * e = (char *)s;
       long long value = strtoll(s, &e, 0);
       if (*e) throw error(vp, "Expected Integer");

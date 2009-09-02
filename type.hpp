@@ -274,7 +274,12 @@ namespace ast {
     virtual unsigned num_parms() const = 0;
     virtual TypeParm parm(unsigned i) const = 0;
     virtual const char * tag() const {return NULL;}
-    virtual const Type * tprop(const Syntax * p, Environ & env) const {abort(); /* FIXME: Error Message */}
+    virtual const Type * tprop(const Syntax * p, Environ & env) const {
+      if (this == root)
+        abort(); /* FIXME: Error Message */
+      else
+        return root->tprop(p, env);
+    }
     virtual ~TypeInst() {}
   protected:
     virtual void finalize_hook() {} 
