@@ -183,7 +183,7 @@ namespace ast {
         type = t->subtype;
       } else if (const WrapperTypeInst * t = dynamic_cast<const WrapperTypeInst *>(type)) {
         type = t->of;
-      } else if (const UserType * t = dynamic_cast<const UserType *>(type)) {
+      } else if (const UserType * t = dynamic_cast<const UserType *>(mode == C_MODE ? type : NULL)) {
         type = t->type;
       } else {
         break;
@@ -477,6 +477,13 @@ namespace ast {
     }
 
     if (have == need) return exp;
+
+    //printf("%i RESOLVE_TO %s (%s) (%s) %d\n", 
+    //       i, orig_exp->syn ? ~orig_exp->syn->to_string() : "?", 
+    //       ~orig_exp->type->to_string(),
+    //       ~type->to_string(),
+    //       rule);
+
     // FIXME: Is this right?
     if (rule == Reinterpret /* || rule == Explicit*/) // FIXME: This isn't always legal
       return new Cast(exp, type);
@@ -524,10 +531,10 @@ namespace ast {
           dynamic_cast<const Void *>(h_subtype->unqualified) ||
           dynamic_cast<const Void *>(n_subtype->unqualified) /* this one is C only */)  
       {
-        if (!h_subtype->read_only || n_subtype->read_only) 
-          return exp;
         if (rule == Explicit)
           return new Cast(exp, type);
+        else if (!h_subtype->read_only || n_subtype->read_only) 
+          return exp;
         else
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());

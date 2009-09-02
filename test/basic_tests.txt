@@ -97,3 +97,4 @@ test102.c
 test103.c
 test104.c
 test105.c
+test106.c

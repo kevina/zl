@@ -192,6 +192,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   m = match(m, syntax _VTable, replace_context(syntax _VTable, context));
   m = match(m, syntax _vtable, replace_context(syntax _vtable, context));
   m = match(m, syntax _vptr, replace_context(syntax _vptr, context));
+  m = match(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
   m = match(m, syntax _constructor, replace_context(syntax _constructor, context));
   m = match(m, syntax _destructor, replace_context(syntax _destructor, context));
   m = match(m, syntax _copy_constructor, replace_context(syntax _copy_constructor, context));
@@ -273,7 +274,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   if (sp.destructor) {
     destructor = sp.destructor;
   } else if (sp.need_destructor) {
-    destructor = partly_expand(replace(syntax{void _destructor();}, m, mark), FieldPos, lenv);
+    destructor = partly_expand(replace(syntax{void * _destructor();}, m, mark), FieldPos, lenv);
   }
   if (destructor)
     parse_class_fun(destructor, m, mark, module_p, parent_vtable, vtable_b, vtable_i, NULL, lenv, NULL, &sp.destructor_collect);
@@ -321,14 +322,18 @@ Syntax * parse_class(Syntax * p, Environ * env) {
     if (parent_vtable) {
       module_b->append(replace(
                          syntax {macro _vptr (:this this = this) 
-                                   {*(_VTable * *)&((implicit_cast<parent_n *>(this))->_vptr);}},
+                                   {(_VTable *)(implicit_cast<parent_n *>(this)->_vptr);}},
                          m, mark));
     } else {
       Syntax * v = replace(raw_syntax (var (mid _vptr) (.ptr (mid _VTable))), m, mark);
       parse_class_var(v, m, mark, struct_p, module_b); // Note: beginning of structure but end of module
+      module_b->append(replace(
+                         syntax {macro _set_vptr (:this this = this, other) 
+                                   {(*implicit_cast<name *>(this)).._vptr = other;}}, 
+                         m, mark));
     }
     exports->append(replace(syntax _vptr, m, mark));
-    Syntax * assign = replace(raw_syntax(assign _vptr (addrof _vtable)), m, mark);
+    Syntax * assign = replace(syntax (_set_vptr(&_vtable)), m, mark);
     sp.need_constructor = true;
     sp.constructor_code[0]->append(assign);
     sp.need_copy_constructor = true;
@@ -414,12 +419,12 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   if (sp.destructor) {
     Match * m0 = match(m, raw_syntax ($w $n $parms $ret $body @rest), sp.destructor);    
     sp.destructor =
-      replace(raw_syntax($w $n $parms $ret (block $body $1) @rest), 
+      replace(raw_syntax($w $n $parms (.ptr (void)) (block $body $1 (return this)) @rest), 
               match_local(m0, sp.destructor_code, 0), mark);
   } else if (sp.need_destructor) {
     sp.destructor =
       partly_expand(
-        replace(syntax{void _destructor() {$1;}}, 
+        replace(syntax{void * _destructor() {$1; return this;}}, 
                 match_local(m, sp.destructor_code, 0), mark), 
         FieldPos, lenv);
   }
@@ -433,9 +438,9 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   Syntax * module_ = replace(syntax {user_type name {$1; $2;}},
                              match_local(m, module_p, module_b, 0),
                              mark);
-  printf("DONE %s\n", syntax_to_string(name));
-  dump_syntax(module_);
-  printf("---\n");
+  //printf("DONE %s\n", syntax_to_string(name));
+  //dump_syntax(module_);
+  //printf("---\n");
   return module_;
 }
 
@@ -453,7 +458,8 @@ void parse_class_var(Syntax * p, Match * m, Mark * mark,
     module_b->append(replace(syntax {macro n () {n`internal;}}, m, mark));
   } else {
     struct_b->append(p);
-    module_b->append(replace(syntax {macro n (:this this = this) {(*implicit_cast<name *>(this))..n;}}, m, mark));
+    // FIXME: (name *)(this) may cast away const
+    module_b->append(replace(syntax {macro n (:this this = this) {(*(name *)(this))..n;}}, m, mark));
   }
 }
 
@@ -467,7 +473,7 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                           Context * context, Environ * env,
                           struct SpecialFuns * sp, struct Collect * collect)
 {
-  printf("parse_class_fun: %s\n", syntax_to_string(p));
+  //printf("parse_class_fun: %s\n", syntax_to_string(p));
   m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
   m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
   //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
@@ -495,7 +501,8 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
     return NULL;
   } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) {
     //printf("DESTRUCTOR\n");
-    sp->destructor = replace(raw_syntax(fun _destructor (. @parms) ret body @rest), m, mark);
+    // change the return type to "void *", the body will get fixed up later
+    sp->destructor = replace(raw_syntax(fun _destructor (. @parms) (.ptr void) body @rest), m, mark);
     return NULL;
   }
 
@@ -529,7 +536,7 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
       this_parm = replace(raw_syntax ((.ptr name) (fluid this)), m, mark);
     new_parms->append(this_parm);
   }
-
+  
   SyntaxList * macro_parms = new_syntax_list();
   SyntaxList * call_parms  = new_syntax_list();
   

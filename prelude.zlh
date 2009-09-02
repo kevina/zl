@@ -12,6 +12,8 @@ macro false() {0;}
 typedef int bool;
 int strcmp(const char *s1, const char *s2);
 macro offsetof(TYPE, MEMBER) {(size_t) &(reinterpret_cast<TYPE *>(0))->MEMBER;}
+void *memcpy(void *dest, const void *src, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
 
 //
 // Macro ABI

@@ -260,14 +260,14 @@ struct Syntax : public gc {
     d->parts.push_back(x);
     d->parts.push_back(y);
   }
-//   Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : repl(0) {
-//     d = new D;
-//     what_ = p->string_if_simple();
-//     d->parts.push_back(p); 
-//     d->parts.push_back(x);
-//     d->parts.push_back(y);
-//     d->parts.push_back(z);
-//   }
+  Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z) : repl(0) {
+    d = new D;
+    what_ = p->string_if_simple();
+    d->parts.push_back(p); 
+    d->parts.push_back(x);
+    d->parts.push_back(y);
+    d->parts.push_back(z);
+  }
 //   Syntax(const Syntax * p, const Syntax * x, const Syntax * y, const Syntax * z, const Syntax * a) : repl(0) {
 //     d = new D;
 //     what_ = p->string_if_simple();

@@ -123,6 +123,6 @@
           tmp))
 
 (smacro delete (exp)
-  (eblock (var tmp (.typeof exp) exp)
-          (destroy (deref tmp))
+  (eblock (var tmp (.ptr void))
+          (assign tmp (destroy (deref exp)))
           (call free (. tmp))))

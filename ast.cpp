@@ -1350,6 +1350,7 @@ namespace ast {
 
   struct AddrOf : public UnOp {
     AddrOf() : UnOp("addrof", "&") {}
+    AddrOf(Exp * e) : UnOp("addrof", "&") {exp = e;}
     void resolve(Environ & env) {
       if (!exp->lvalue) {
         throw error(exp->syn, "Can not be used as lvalue");
@@ -1508,7 +1509,7 @@ namespace ast {
       //printf("::"); p->arg(1)->print(); printf("\n");
       SymbolName id = *expand_id(p->arg(1));
       const StructUnion * t = dynamic_cast<const StructUnion *>(exp->type->unqualified);
-      if (!t) throw error(p->arg(0), "Expected struct or union type");
+      if (!t) throw error(p->arg(0), "Expected struct or union type"); 
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
       sym = t->env.symbols.find<VarSymbol>(id, StripMarks);
       if (!sym)
@@ -1669,12 +1670,19 @@ namespace ast {
     Exp * copy_c = try_copy_constructor(l, r, env);
     if (copy_c) {
       return copy_c;
+    } else if (const Array * a = dynamic_cast<const Array *>(l->type)) {
+      return parse_exp(SYN(SYN("call"), 
+                           SYN("memcpy"), 
+                           SYN(SYN("."), 
+                               SYN(l), 
+                               SYN(r), 
+                               SYN(SYN("sizeof"), SYN(l)))),
+                       env);
     } else {
       InitAssign * exp = new InitAssign(l, r);
       return exp->construct(env);
     }
   }
-
 
   static Exp * mk_init(const Var * v, Exp * r, Environ & env) {
     return mk_init(mk_id(v, env), r, env);
@@ -1720,7 +1728,7 @@ namespace ast {
     Exp * exp = parse_exp(p->arg(0), env);
     Exp * d = try_destructor(exp, env);
     if (d) return d;
-    else return noop();
+    else return (new AddrOf(exp))->construct(env);
   }
 
   struct CompoundAssign : public BinOp {
@@ -2637,7 +2645,8 @@ namespace ast {
       //printf("member: %s\n", ~call->to_string());
       return parse_exp(call, env);
     } else {
-      throw error(p->arg(0), "Expected struct or user type.");
+      throw error(p->arg(0), "Expected struct or user type, got %s.",
+                  abi::__cxa_demangle(typeid(*exp->type->unqualified).name(), NULL, NULL, NULL)); 
     }
   }
   
@@ -3628,7 +3637,7 @@ namespace ast {
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
     if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
     if (what == "icast")   return parse_cast(p, env, TypeRelation::Implicit);
-    if (what == "implicit_cast")    return parse_cast(p, env, TypeRelation::Reinterpret);
+    if (what == "implicit_cast")    return parse_cast(p, env, TypeRelation::Implicit);
     if (what == "reinterpret_cast") return parse_cast(p, env, TypeRelation::Reinterpret);
     if (what == ".")       return (new InitList)->parse_self(p, env);
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
