@@ -651,10 +651,12 @@ namespace ast {
 
   class UserType : public TypeDeclaration, public SimpleType {
   public:
-    UserType() : SimpleType(USER_C), parent(), type(), module(), defined() {}
+    UserType() : SimpleType(USER_C), parent(), type(), module(), lt_sizeof_(NULL), defined() {}
     const Type * parent;
     const Type * type;
     const Module * module;
+    Exp * lt_sizeof_;
+    Exp * lt_sizeof() const {return lt_sizeof_;}
     bool defined;
     unsigned size() const {return type ? type->size() : NPOS;}
     unsigned align() const {return type ? type->align() : NPOS;}

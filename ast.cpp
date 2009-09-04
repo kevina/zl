@@ -2560,6 +2560,12 @@ namespace ast {
     s->type = parse_type(p->arg(0), env);
     s->defined = true;
     s->finalize();
+    Symbol * vs = env.symbols.find_this_scope<Symbol>("_sizeof");
+    Var * v = dynamic_cast<Var *>(vs);
+    if (v) {
+      v->init = parse_exp(SYN(SYN("sizeof"), SYN(SYN(".type"), SYN(static_cast<Type *>(s)))), env);
+      s->lt_sizeof_ = mk_id(v, env);
+    }
     assert(s->num == s->module->num);
     return empty_stmt();
   }
@@ -3260,6 +3266,7 @@ namespace ast {
     SizeOf() {}
     const char * what() const {return "sizeof";}
     const Type * sizeof_type;
+    Exp * lt_sizeof;
     SizeOf * parse_self(const Syntax * p, Environ & env);
     void finalize(FinalizeEnviron &) {}
     void compile(CompileWriter & f) {
@@ -3276,8 +3283,12 @@ namespace ast {
       Exp * exp = parse_exp(p->arg(0), env);
       sizeof_type = parse_type(new Syntax(new Syntax(".typeof"), new Syntax(exp)), env);
     }
+    lt_sizeof = sizeof_type->lt_sizeof();
     type = env.types.ct_const(env.types.inst(".size"));
-    ct_value_ = new CT_Value<target_size_t>(sizeof_type->size());
+    if (lt_sizeof)
+      lt_sizeof = lt_sizeof->resolve_to(type, env);
+    else
+      ct_value_ = new CT_Value<target_size_t>(sizeof_type->size());
     return this;
   }
 

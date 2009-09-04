@@ -280,6 +280,8 @@ namespace ast {
       else
         return root->tprop(p, env);
     }
+    virtual SourceStr source_str() const {return SourceStr();}
+    virtual Exp * lt_sizeof() const {return NULL;}
     virtual ~TypeInst() {}
   protected:
     virtual void finalize_hook() {} 

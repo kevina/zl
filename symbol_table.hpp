@@ -539,6 +539,10 @@ namespace ast {
       return find_symbol<T>(k, front, NULL, ms);
     }
     template <typename T> 
+    T * find_this_scope(const SymbolKey & k, Strategy ms = NormalStrategy) const {
+      return find_symbol<T>(k, front, back, ThisScope);
+    }
+    template <typename T> 
     T * lookup(const SymbolKey & k, const SourceStr & str, Strategy ms = NormalStrategy) const {
       return lookup_symbol<T>(k, str, front, NULL, ms);
     }
