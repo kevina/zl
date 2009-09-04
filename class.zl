@@ -61,7 +61,7 @@ typedef struct SpecialFuns {
   Collect destructor_collect;
 } SpecialFuns;
 
-void init_special_funs(SpecialFuns & sp) {
+static void init_special_funs(SpecialFuns & sp) {
   sp.need_constructor = false;
   sp.constructor_code[0] = new_syntax_list();
   sp.constructor_code[1] = new_syntax_list();
