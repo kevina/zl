@@ -83,20 +83,20 @@ void init_special_funs(SpecialFuns & sp) {
   sp.destructor_collect.this_parm = NULL;
 }
 
-void parse_class_var(Syntax * p, Match * m, Mark * mark,
-                     SyntaxList * struct_b, SyntaxList * module_b);
-Syntax * parse_class_fun(Syntax * p, Match * m, Mark * mark,
-                         SyntaxList *  module_b,
-                         UserTypeInfo * parent_vtable,
-                         SyntaxList *  vtable_b, SyntaxList * vtable_i,
-                         Context * context, Environ * env,
-                         SpecialFuns * sp, Collect * c);
-Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
-                               SyntaxList *  module_b, Collect * collect,
-                               Environ * env);
+static void parse_class_var(Syntax * p, Match * m, Mark * mark,
+                            SyntaxList * struct_b, SyntaxList * module_b);
+static Syntax * parse_class_fun(Syntax * p, Match * m, Mark * mark,
+                                SyntaxList *  module_b,
+                                UserTypeInfo * parent_vtable,
+                                SyntaxList *  vtable_b, SyntaxList * vtable_i,
+                                Context * context, Environ * env,
+                                SpecialFuns * sp, Collect * c);
+static Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
+                                      SyntaxList *  module_b, Collect * collect,
+                                      Environ * env);
 
-void create_special_funs(SpecialFuns & sp, Syntax * name, Syntax * type,
-                         unsigned which, Match * m, Mark * mark, Environ * lenv)
+static void create_special_funs(SpecialFuns & sp, Syntax * name, Syntax * type,
+                                unsigned which, Match * m, Mark * mark, Environ * lenv)
 {
   Match * m0 = match(m, syntax n, name);
   
@@ -420,8 +420,8 @@ Syntax * parse_class(Syntax * p, Environ * env) {
 }
 
 
-void parse_class_var(Syntax * p, Match * m, Mark * mark,
-                     SyntaxList * struct_b, SyntaxList * module_b)
+static void parse_class_var(Syntax * p, Match * m, Mark * mark,
+                            SyntaxList * struct_b, SyntaxList * module_b)
 {
   //printf("parse_class_var: %s\n", syntax_to_string(p));
   m = match_args(m, raw_syntax (n @rest), p);
@@ -438,15 +438,15 @@ void parse_class_var(Syntax * p, Match * m, Mark * mark,
   }
 }
 
-Syntax * mk_class_fun_body(Match * m, Mark * mark, SyntaxList *  module_b, 
-                           bool virtual_override, SyntaxList * new_parms);
+static Syntax * mk_class_fun_body(Match * m, Mark * mark, SyntaxList *  module_b, 
+                                  bool virtual_override, SyntaxList * new_parms);
 
-Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
-                          SyntaxList *  module_b,
-                          UserTypeInfo * parent_vtable,
-                          SyntaxList *  vtable_b, SyntaxList * vtable_i,
-                          Context * context, Environ * env,
-                          struct SpecialFuns * sp, struct Collect * collect)
+static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
+                                 SyntaxList *  module_b,
+                                 UserTypeInfo * parent_vtable,
+                                 SyntaxList *  vtable_b, SyntaxList * vtable_i,
+                                 Context * context, Environ * env,
+                                 struct SpecialFuns * sp, struct Collect * collect)
 {
   //printf("parse_class_fun: %s\n", syntax_to_string(p));
   m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
@@ -565,9 +565,9 @@ Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   return NULL;
 }
 
-Syntax * parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
-                              SyntaxList *  module_b, Collect * collect,
-                              Environ * env)
+static Syntax * parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
+                                     SyntaxList *  module_b, Collect * collect,
+                                     Environ * env)
 {
   //printf("parse_class_fun: %s\n", syntax_to_string(p));
   m = match_args(m, raw_syntax (n parms ret body @rest), p);
@@ -591,8 +591,8 @@ Syntax * parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
   return NULL;
 }
 
-Syntax * mk_class_fun_body(Match * m, Mark * mark, SyntaxList *  module_b, 
-                           bool virtual_override, SyntaxList * new_parms) 
+static Syntax * mk_class_fun_body(Match * m, Mark * mark, SyntaxList *  module_b, 
+                                  bool virtual_override, SyntaxList * new_parms) 
 {
   if (virtual_override)
     module_b->append(replace(raw_syntax (fun (` n internal) (. $1) ret 
