@@ -29,7 +29,7 @@ sub run_prog($) {
 
 sub maybe_run_prog($) {
   my $base = $_[0];
-  return unless -e "$base.res" && -e "a.out";
+  return unless (-e "$base.res") && (-e "a.out");
   run_prog($base);
 }
 
@@ -57,10 +57,10 @@ sub do_test( $ ) {
       compile_test($base);
     } elsif ($ext eq 'sh') {
       sys "sh $f";
-      run_prog ($base);
+      maybe_run_prog ($base);
     } elsif ($ext eq 'pl') {
       sys "perl $f";
-      run_prog ($base);
+      maybe_run_prog ($base);
     } else {
       die "Unknown extension \"$ext\" in \"$f\".\n";
     }
