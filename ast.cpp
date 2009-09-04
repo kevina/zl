@@ -1046,10 +1046,11 @@ namespace ast {
       throw error(name_p, "Size not known");
     if (fresh && !shadow)
       env.add(name, var);
-    if (collect) {
+    if (!env.interface && collect) {
       collect->push_back(var); 
     } else {
-      res = var->finish_parse(env);
+      if (!env.interface)
+        res = var->finish_parse(env);
       if (shadow)
         env.add(name, var);
     }
@@ -2354,10 +2355,9 @@ namespace ast {
       //        c->value ? ~c->value->name : "", 
       //         c->value ? ~c->value->uniq_name() : "");
       
-      if (!env.interface)
-        for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-          (*i)->finish_parse(env);
-        }
+      for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
+        (*i)->finish_parse(env);
+      }
       env.add_defn(m);
     }
     return empty_stmt();
@@ -2697,8 +2697,7 @@ namespace ast {
     SourceFile * code = new_source_file(file_name);
     try {
       env.interface = true;
-      Collect dummy;
-      parse_stmts_first_pass(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env, dummy);
+      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env);
     } catch (...) {
       env.interface = false;
       throw;
@@ -2894,7 +2893,7 @@ namespace ast {
     type = env.function_sym()->inst(env.types, this);
 
     body = 0;
-    if (p->num_args() > 3) {
+    if (!env.interface && p->num_args() > 3) {
       collect.push_back(this);
     } else {
       symbols = env.symbols;
