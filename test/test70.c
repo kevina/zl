@@ -17,4 +17,5 @@ make_macro get_prop;
 
 int main() {
   printf("%d\n", get_prop(M, foo));
+  return 0;
 }

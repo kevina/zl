@@ -7,6 +7,7 @@ class X {
 int main() {
   ({X x0;
     X x = X();});
+  return 0;
 }
 
 

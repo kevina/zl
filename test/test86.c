@@ -33,5 +33,6 @@ int main() {
   X x2;
   x2 = x;
   x2 = X();
+  return 0;
 }
 

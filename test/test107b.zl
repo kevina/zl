@@ -1,0 +1,11 @@
+
+import_file "test107a.zl";
+
+int z = 30;
+
+int main() {
+  X x;
+  x.x = y;
+  x.foo();
+  return 0;
+}

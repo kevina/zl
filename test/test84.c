@@ -26,4 +26,5 @@ user_type X {
 int main() {
   const int & n = X().num;
   printf("%d\n", n);
+  return 0;
 }

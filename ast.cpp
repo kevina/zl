@@ -1027,12 +1027,16 @@ namespace ast {
       make_static_if_marked(storage_class, name);
       fresh = !env.symbols.exists_this_scope(name);
       TopLevelVar * v = fresh ? new TopLevelVar : env.symbols.find<TopLevelVar>(name);
-      bool mangle = env.scope >= LEXICAL || name.marks || env.where || storage_class == SC_STATIC;
-      v->num = mangle ? NPOS : 0;
+      v->num = env.scope >= LEXICAL || name.marks || storage_class == SC_STATIC ? NPOS : 0;
       v->where = env.where;
       v->deps_closed = true;
       var = v;
       res = empty_stmt();
+    }
+    if (env.interface && env.scope == TOPLEVEL) {
+      if (storage_class == SC_STATIC)
+        return empty_stmt();
+      storage_class = SC_EXTERN;
     }
     var->syn = p;
     var->name_p = name_p;
@@ -2350,9 +2354,10 @@ namespace ast {
       //        c->value ? ~c->value->name : "", 
       //         c->value ? ~c->value->uniq_name() : "");
       
-      for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-        (*i)->finish_parse(env);
-      }
+      if (!env.interface)
+        for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
+          (*i)->finish_parse(env);
+        }
       env.add_defn(m);
     }
     return empty_stmt();
@@ -2686,6 +2691,22 @@ namespace ast {
     return empty_stmt();
   }
 
+  Stmt * parse_import_file(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    String file_name = *p->arg(0);
+    SourceFile * code = new_source_file(file_name);
+    try {
+      env.interface = true;
+      Collect dummy;
+      parse_stmts_first_pass(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env, dummy);
+    } catch (...) {
+      env.interface = false;
+      throw;
+    }
+    env.interface = false;
+    return empty_stmt();
+  }
+
   //
   //
   //
@@ -2806,7 +2827,7 @@ namespace ast {
   }
 #endif
 
-  Fun * parse_fun_forward(const Syntax * p, Environ & env, Collect & collect) {
+  Stmt * parse_fun_forward(const Syntax * p, Environ & env, Collect & collect) {
     assert_num_args(p,3,4);
 
     //printf("FUN:: %s\n", ~p->to_string());
@@ -2823,8 +2844,9 @@ namespace ast {
       f = new Fun;
       f->storage_class = get_storage_class(p);
       make_static_if_marked(f->storage_class, name);
-      bool mangle = name.marks || env.where || f->storage_class == SC_STATIC;
-      f->num = mangle ? NPOS : 0;
+      if (env.interface && f->storage_class == SC_STATIC)
+        return empty_stmt();
+      f->num = name.marks || f->storage_class == SC_STATIC ? NPOS : 0;
       f->where = env.where;
       env.add(name, f);
       f->parse_forward_i(p, env, collect);
@@ -2832,11 +2854,11 @@ namespace ast {
     return f;
   }
 
-  Fun * parse_fun(const Syntax * p, Environ & env) {
+  Stmt * parse_fun(const Syntax * p, Environ & env) {
     Collect collect;
-    Fun * f = parse_fun_forward(p, env, collect);
+    Stmt * f = parse_fun_forward(p, env, collect);
     if (!collect.empty())
-      f->finish_parse(env);
+      collect[0]->finish_parse(env);
     return f;
   }
   
@@ -3563,6 +3585,7 @@ namespace ast {
     if (what == "export")  return parse_export(p, env);
     if (what == "add_prop")  return parse_add_prop(p, env);
     if (what == "memberdecl") return parse_memberdecl(p, env);
+    if (what == "import_file") return parse_import_file(p, env);
     return 0;
   }
 

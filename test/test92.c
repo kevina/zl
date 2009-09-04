@@ -10,4 +10,5 @@ int main() {
   X * x = new Y;
   x->foo();
   delete x;
+  return 0;
 }

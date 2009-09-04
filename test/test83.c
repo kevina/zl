@@ -26,4 +26,5 @@ const X & x = X();
 
 int main() {
   const X & x = X();
+  return 0;
 }

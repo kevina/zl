@@ -84,6 +84,7 @@ namespace ast {
     ExpInsrPoint * temp_ip;
     InsrPoint * exp_ip;
     bool true_top_level;
+    bool interface;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
     Type * bool_type() {return types.inst("int");}
@@ -92,7 +93,7 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct(), temp_ip(), exp_ip(), true_top_level(false)
+        deps(), for_ct(), temp_ip(), exp_ip(), true_top_level(false), interface(false)
       {
         if (s == TOPLEVEL) {
           true_top_level = true;
@@ -111,7 +112,7 @@ namespace ast {
         scope(other.scope), frame(other.frame), 
         where(other.where),
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
-        deps(other.deps), for_ct(other.for_ct), stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), true_top_level(other.true_top_level) {}
+        deps(other.deps), for_ct(other.for_ct), stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), true_top_level(other.true_top_level), interface(other.interface) {}
     Environ new_scope() {
       Environ env = *this;
       env.true_top_level = false;

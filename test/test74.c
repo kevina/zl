@@ -20,4 +20,6 @@ int main() {
   make_golden(a, q, r, {q -= a; r += a;});
 
   printf("%f %f\n", q, r);
+
+  return 0;
 }

@@ -20,4 +20,5 @@ int main() {
   printf("%d %d\n", y.y, y.x);
   y.dump_y();
   y.dump_x();
+  return 0;
 }

@@ -39,6 +39,7 @@ int main() {
   printf("---\n");
   Zb * z = new Z;
   delete z;
+  return 0;
 }
 
 

@@ -4,4 +4,5 @@ int main() {
   *x = 20;
   printf("%d\n", *x);
   delete x;
+  return 0;
 }

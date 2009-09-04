@@ -35,5 +35,6 @@ int main() {
   printf("---\n");
   Z z2 = z1;
   printf("---\n");
+  return 0;
 }
 

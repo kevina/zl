@@ -47,4 +47,5 @@ int main() {
   Y y;
   y.x;
   printf("%d\n", sizeof(Y));
+  return 0;
 }

@@ -13,4 +13,5 @@ int main() {
   y.foo();
   X * xp = & y;
   xp->foo();
+  return 0;
 }

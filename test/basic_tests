@@ -1,0 +1,94 @@
+#!/usr/bin/perl
+
+use IO::Handle;
+
+use POSIX qw(SIGINT SIGQUIT);
+
+use warnings;
+use strict;
+
+$ENV{ZL} = "../zl";
+$ENV{ZLS} = "zls";
+
+my $failed = '';
+
+sub sys ($) {
+  system $_[0];
+  my $ret = $? >> 8;
+  my $sig = $? & 127;
+  kill $sig, $$ if $sig == SIGINT || $sig == SIGQUIT;
+  die "$_[0] failed with exit code $ret and signal $sig\n" unless $? == 0;
+}
+
+sub run_prog($) {
+  my $base = $_[0];
+  print "... exec ...\n";
+  sys "./a.out > $base.out";
+  sys "diff -u $base.res $base.out";
+}
+
+sub maybe_run_prog($) {
+  my $base = $_[0];
+  return unless -e "$base.res" && -e "a.out";
+  run_prog($base);
+}
+
+sub compile_test($) {
+  my $base = $_[0];
+  if ( -e "$base.res" ) {
+    sys "zls $base.zls";
+    run_prog($base);
+  } else {
+    sys "zls -fsyntax-only $base.zls";
+  }
+  sys "zls -S $base.zls";
+  sys "../zl -s $base.zls >> $base.log";
+}
+
+sub do_test( $ ) {
+  my $f = $_[0];
+  my ($base, $ext) = $f =~ /^(.+?)\.([a-z]+)$/ or die;
+  eval {
+    unlink "a.out";
+    print "$f ...\n";
+    flush STDIN;
+    if ($ext eq 'c' || $ext eq 'zl' || $ext eq 'cpp') {
+      sys "../zl $f > $base.log";
+      compile_test($base);
+    } elsif ($ext eq 'sh') {
+      sys "sh $f";
+      run_prog ($base);
+    } elsif ($ext eq 'pl') {
+      sys "perl $f";
+      run_prog ($base);
+    } else {
+      die "Unknown extension \"$ext\" in \"$f\".\n";
+    }
+  };
+  if ($@) {
+    print STDERR $@;
+    print "... FAILED ($f)\n";
+    $failed .= " $f";
+  } else {
+    print "... passed ($f)\n";
+  }
+}
+
+my @tests;
+if ( @ARGV > 0) {
+  @tests = @ARGV;
+} else {
+  open F, "basic_tests.txt" or die $!;
+  @tests = <F>;
+}
+
+foreach (@tests) {
+  chomp;
+  do_test($_);
+}
+
+if ($failed) {
+  print "FAILED TESTS: $failed\n";
+} else {
+  print "ALL TEST PASSED\n"
+}

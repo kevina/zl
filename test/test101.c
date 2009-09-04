@@ -148,5 +148,6 @@ int main() {
   x.inner.z = 40;
   printf("%d %d %d\n", x.inner.x, x.inner.y, x.inner.z);
   printf("%d\n", sizeof(X));
+  return 0;
 }
 

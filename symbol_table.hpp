@@ -214,10 +214,13 @@ namespace ast {
         where->uniq_name0(o);
         o << "$";
       }
-      if (num == 0)
+      if (num == 0) {
         o << name();
-      else
+        if (where) 
+          o << "$";
+      } else {
         o.printf("%s$$%u", ~name(), num);
+      }
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
     void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);

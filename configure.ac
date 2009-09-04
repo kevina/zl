@@ -17,7 +17,7 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS([fcntl.h string.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
-AC_HEADER_STDBOOL
+AC_HEADER_STDBOOL      
 AC_C_CONST
 AC_C_INLINE
 
@@ -28,4 +28,8 @@ AC_FUNC_REALLOC
 AC_CHECK_FUNCS([memset strtol])
 
 AC_CONFIG_FILES([Makefile])
+
+AH_TEMPLATE([SOURCE_PREFIX], [])
+AC_DEFINE_UNQUOTED([SOURCE_PREFIX], "`pwd`/") 
+
 AC_OUTPUT

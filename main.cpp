@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "config.h"
+
 #include "parse.hpp"
 #include "ast.hpp"
 #include "parse_op.hpp"
@@ -12,7 +14,7 @@
 //#include "symbol_table.hpp"
 
 void parse_maps(ast::Environ & env) {
-  SourceFile * code = new_source_file("grammer.ins");
+  SourceFile * code = new_source_file(SOURCE_PREFIX "grammer.ins");
   const char * s = code->begin();
   try {
     while (s != code->end()) {
@@ -35,7 +37,7 @@ int main(int argc, const char *argv[])
   assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
   assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
   parse_exp_->init();
-  file = new_source_file("grammer.in");
+  file = new_source_file(SOURCE_PREFIX "grammer.in");
   ast::Environ env;
   try {
     parse.top(file->begin(), file->end());
@@ -44,18 +46,18 @@ int main(int argc, const char *argv[])
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
-  SourceFile * prelude = new_source_file("prelude.zlh");
+  SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
   SourceFile * code = NULL;
   try {
     if (argc == 2 && strcmp(argv[1], "-p") == 0) {
-      SourceFile * prelude_body = new_source_file("prelude.zl");
+      SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
       parse_maps(env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
       //system("gcc -g -O -fexceptions -shared -fpic -o prelude.so prelude.c");
       ast::CompileWriter out;
       out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
-      out.open("prelude.zls", "w");
+      out.open(SOURCE_PREFIX "prelude.zls", "w");
       ast::compile(env.top_level_symbols, out);
       out.close();
       system("zls -O -S -fexceptions -o prelude.zls.s prelude.zls");
@@ -72,11 +74,25 @@ int main(int argc, const char *argv[])
       if (argc > offset && strcmp(argv[offset], "-s") == 0) {
         zls_mode = true;
         offset++;
-      } 
+      }
+      String output_fn;
       if (argc > offset) {
         code = new_source_file(argv[offset]);
+        const char * dot = strrchr(argv[offset], '.');
+        if (!dot) {
+          output_fn = argv[offset];
+        } else {
+          StringBuf buf;
+          if (strcmp(dot, ".zls") == 0)
+            buf.append(argv[offset]);
+          else
+            buf.append(argv[offset], dot);
+          buf.append(".zls");
+          output_fn = buf.freeze();
+        }
       } else {
         code = new_source_file(STDIN_FILENO);
+        output_fn = "a.out.zls";
       }
       //const Syntax * res = parse_str("TEST", SourceStr(code->entity(), code->begin(), code->end()));
       //res->print();
@@ -90,15 +106,15 @@ int main(int argc, const char *argv[])
         parse_maps(env);
         parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
         if (debug_mode) {
-          SourceFile * prelude_body = new_source_file("prelude.zl");
+          SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
           parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
         } else {
-          load_macro_lib("./prelude.so", env);
+          load_macro_lib(SOURCE_PREFIX "prelude.so", env);
         }
         parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
       }
       ast::CompileWriter out;
-      out.open("a.out.zls", "w");
+      out.open(output_fn, "w");
       ast::compile(env.top_level_symbols, out);
       //ast::CompileWriter out2(ast::CompileWriter::ZLE);
       //out2.open("a.out.zle", "w");

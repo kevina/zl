@@ -15,4 +15,5 @@ int main() {
   Y y; 
   y.foo(); 
   y.bar(); 
+  return 0;
 }

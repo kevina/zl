@@ -27,4 +27,5 @@ int main() {
   X x;
   const int & n = x.num;
   printf("%d\n", n);
+  return 0;
 }

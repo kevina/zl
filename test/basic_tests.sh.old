@@ -1,0 +1,51 @@
+function failed() {
+  echo "*** FAILED $1";
+  failed="$failed $1";
+}
+
+function compile_test() {
+  base=$1
+  f=$base.res
+  o=$base.out
+  if [ -e $f ] 
+  then
+    zls $base.zls || return 1
+    ./a.out > $o
+    diff -u $f $o
+  else
+    zls -fsyntax-only $base.zls
+  fi
+  if [ $? -ne 0 ]; then return 1; fi
+  zls -S $base.zls
+  ../zl -s $base.zls >> $base.log
+}
+
+function do_test() {
+    base=`basename $1 .c`
+    echo $1 1>&2
+    ( ../zl $1 > $base.log && compile_test $base ) \
+    || failed $1
+}
+
+if [ "$#" -gt 0 ]; then
+    tests="$@"
+else
+    tests="`cat basic_tests.txt`"
+fi
+
+#LOG_CMD="| tee"
+#LOG_CMD=" > "
+
+#IFS=$'\n'
+for l in $tests 
+do (
+    #unset IFS
+    do_test $l
+); done
+
+if [ -n "$failed" ]; then 
+    echo FAILED TESTS: $failed 1>&2
+else
+    echo ALL TEST PASSED 1>&2
+fi
+

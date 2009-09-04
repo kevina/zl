@@ -1,0 +1,11 @@
+
+class X {
+  int x;
+  void foo() {
+    printf("X = %d\n", x);
+  }
+};
+
+int y = 20;
+
+static int z = 20;

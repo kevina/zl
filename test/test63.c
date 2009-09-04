@@ -17,4 +17,5 @@ int main() {
   Y & y = yo;
   y.foo();
   y.bar();
+  return 0;
 }

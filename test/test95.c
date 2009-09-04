@@ -142,5 +142,6 @@ int main() {
   printf("%d %d %d %d\n", sizeof(Z), z.x, z.y, z.z);
   Z z2;
   printf("%d\n", sizeof(Z2));
+  return 0;
 }
 

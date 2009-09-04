@@ -24,6 +24,7 @@ STMT : "statement" =
     / {BLOCK}
     / {MACRO} / {MAKE_MACRO}
     / {MODULE} / {IMPORT}
+    / {IMPORT_FILE}
     / <fluid_binding> "fluid_binding" {ID} ";"
     / <fluid_label>   "fluid_label"   {ID} ";"
     / <fluid_syntax>  "fluid_syntax"  {ID} ";"
@@ -57,6 +58,9 @@ MODULE =
 
 IMPORT = 
     <import> "import" {ID} ";";
+
+IMPORT_FILE = 
+    <import_file> "import_file" {STRING} ";";
 
 ID_LIST =
   <> ({ID} ",")* {ID}?;

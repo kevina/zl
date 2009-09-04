@@ -28,4 +28,5 @@ int main() {
   x.data = d;
   x.sz = 4;
   foreach(el, x, {printf("%d\n", el);});
+  return 0;
 }

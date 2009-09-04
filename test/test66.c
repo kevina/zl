@@ -29,4 +29,5 @@ make_macro f;
 int main() {
   const char * str = f();
   printf("%s\n", str);
+  return 0;
 }
