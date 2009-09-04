@@ -51,9 +51,11 @@ int main(int argc, const char *argv[])
   try {
     if (argc == 2 && strcmp(argv[1], "-p") == 0) {
       SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
+      SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
       parse_maps(env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
+      parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
       //system("gcc -g -O -fexceptions -shared -fpic -o prelude.so prelude.c");
       ast::CompileWriter out;
       out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
@@ -108,6 +110,8 @@ int main(int argc, const char *argv[])
         if (debug_mode) {
           SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
           parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
+          SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
+          parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
         } else {
           load_macro_lib(SOURCE_PREFIX "prelude.so", env);
         }

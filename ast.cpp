@@ -83,7 +83,6 @@ namespace ast {
     }
   }
 
-
   struct NoOp : public Exp {
     NoOp() {assert(VOID_T); type = VOID_T;}
     const char * what() const {return "noop";}

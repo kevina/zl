@@ -16,5 +16,5 @@ zl_LDFLAGS=-Wl,--export-dynamic,--version-script=zl.ld
 
 noinst_DATA=prelude.so
 
-prelude.so: prelude.zlh prelude.zl zl
+prelude.so: prelude.zlh prelude.zl class.zl zl
 	ulimit -s 1024; ./zl -p > /dev/null
