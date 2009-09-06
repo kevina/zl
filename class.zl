@@ -128,7 +128,7 @@ static void create_special_funs(SpecialFuns & sp, Syntax * name, Syntax * type,
 Syntax * parse_class(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
 
-  Match * m = match_args(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), p);
+  Match * m = match_args(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), p, mark);
 
   Syntax * name = m->var(syntax name);
   Syntax * body = m->var(syntax body);

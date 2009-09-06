@@ -361,8 +361,8 @@ extern "C" namespace macro_abi {
   typedef const ::Syntax Syntax;
   typedef Syntax UnmarkedSyntax;
   //struct SyntaxEnum;
-  Match * match(Match * m, const UnmarkedSyntax * pattern, Syntax * with);
-  Match * match_args(Match * m, const UnmarkedSyntax * pattern, Syntax * with);
+  Match * match_f(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+  Match * match_args_f(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
   Syntax * replace(const UnmarkedSyntax * p, Match * match, Mark * mark);
   Context * get_context(Syntax * p);
   Syntax * replace_context(Syntax * p, Context * context);
@@ -480,10 +480,11 @@ struct SimpleMacro : public Macro {
     //printf("EXPANDING MAP %s\n", ~name);
     using namespace macro_abi;
     using macro_abi::Syntax;
-    Match * m = match_args(NULL, parms, p);
+    Mark * mark = new Mark(env);
+    Match * m = match_args_f(NULL, parms, p, mark);
     if (free)
-      m = match(m, free, replace_context(free, get_context(p)));
-    Syntax * res = replace(repl, m, new Mark(env));
+      m = match_f(m, free, replace_context(free, get_context(p)), mark);
+    Syntax * res = replace(repl, m, mark);
     //printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
     //printf("  %s\n", ~res->sample_w_loc());
     //res->str().source->dump_info(COUT, "    ");
@@ -560,8 +561,6 @@ struct SimpleSyntaxEnum : public SyntaxEnum {
 extern "C" namespace macro_abi {
 
   Mark * new_mark_f(SymbolNode * e) {
-    printf("New mark on %p\n", e);
-    SymbolTable(e, NULL).dump();
     return new Mark(e);
   }
 
@@ -651,10 +650,11 @@ void add_match_var(Match * m, const SymbolName & n, const Syntax * repl) {
 
 bool match_list(Match * m, 
                 const Syntax * p, Parts::const_iterator p_i, Parts::const_iterator p_end, 
-                const Syntax * r, Parts::const_iterator r_i, Parts::const_iterator r_end);
+                const Syntax * r, Parts::const_iterator r_i, Parts::const_iterator r_end,
+                ReplTable * rt);
 
 // if match_prep sets p == 0 then there is nothing more to do
-bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
+bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl, ReplTable * rt) {
   //printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   if (p->num_args() > 0) {
     if (p->is_a("pattern")) {
@@ -662,13 +662,13 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
       p = p->arg(0);
       assert(p->what().name == repl->what().name);
       bool res = match_list(m, p, p->args_begin(), p->args_end(),
-                            repl, repl->args_begin(), repl->args_end());
+                            repl, repl->args_begin(), repl->args_end(), rt);
       p = 0;
       return res;
     } else if (p->is_a("reparse")) {
       if (!repl) {
         if (p->num_args() > 1)
-          repl = p->arg(1);
+          repl = replace(p->arg(1), rt, NULL, false, NULL);
       }
       p = p->arg(0);
     } else {
@@ -680,9 +680,9 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl) {
 }
 
 
-bool match_parm(Match * m, const Syntax * p, const Syntax * repl) {
+bool match_parm(Match * m, const Syntax * p, const Syntax * repl, ReplTable * rt) {
   //printf("match_parm <<: %s :: %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
-  bool cont = match_prep(m, p, repl);
+  bool cont = match_prep(m, p, repl, rt);
   if (!cont) return true;
   if (repl) {
     add_match_var(m, *p, repl);
@@ -694,13 +694,14 @@ bool match_parm(Match * m, const Syntax * p, const Syntax * repl) {
 
 bool match_list(Match * m, 
                 const Syntax * pattern, Parts::const_iterator p_i, Parts::const_iterator p_end, 
-                const Syntax * with,    Parts::const_iterator r_i, Parts::const_iterator r_end)
+                const Syntax * with,    Parts::const_iterator r_i, Parts::const_iterator r_end,
+                ReplTable * rt)
 {
   bool now_optional = false;
   while (p_i != p_end) {
     const Syntax * p = *p_i;
     const Syntax * r = r_i < r_end ? *r_i : NULL;
-    bool ok = match_prep(m, p, r);
+    bool ok = match_prep(m, p, r, rt);
     if (!ok) return false;
     if (p) {
       SymbolName v = *p;
@@ -733,13 +734,16 @@ bool match_list(Match * m,
   const Flags & flags = pattern->d->flags;
   for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
     const Syntax * w = with->flag((*i)->what());
-    match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL);
+    match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL, rt);
   }
   return true;
 }
 
-Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsigned shift) {
+Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsigned shift, Mark * mark) {
   Match * m = new Match();
+  ReplTable * rt 
+    = new ReplTable(mark, 
+                    new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
   if (pattern->is_a("()")) {
     //printf("YES!\n");
     pattern = reparse("MATCH_LIST", pattern->arg(0));
@@ -755,7 +759,7 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   } else {
     with = with->ensure_branch();
     bool ok = match_list(m, pattern, pattern->parts_begin(), pattern->parts_end(),
-                         with, with->parts_begin() + shift, with->parts_end());
+                         with, with->parts_begin() + shift, with->parts_end(), rt);
     if (!ok) return NULL;
   }
   //printf("MATCH RES:: ");
@@ -773,12 +777,12 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
 
 extern "C" namespace macro_abi {
 
-  Match * match(Match * m, const Syntax * pattern, const Syntax * with) {
-    return match(m, pattern, with, 0);
+  Match * match_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+    return match(m, pattern, with, 0, mark);
   }
   
-  Match * match_args(Match * m, const Syntax * pattern, const Syntax * with) {
-    return match(m, pattern, with, 1);
+  Match * match_args_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+    return match(m, pattern, with, 1, mark);
   }
   
   const Syntax * match_var(Match * m, UnmarkedSyntax * n) {
@@ -1541,7 +1545,6 @@ void load_macro_lib(ParmString lib, Environ & env) {
     const char * * i = (const char * *)dlsym(lh, "_macro_funs");
     const char * * e = i + macro_funs_size;
     for (; i != e; ++i) {
-      printf(">>%s\n", *i);
       const Fun * fun = dynamic_cast<const Fun *>(env.find_tls(*i));
       String uniq_name = fun->uniq_name();
       if (fun->is_macro) {

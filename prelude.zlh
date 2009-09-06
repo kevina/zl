@@ -95,8 +95,10 @@ user_type SyntaxEnum {
 }
 
 user_type Match;
-__ct_callback Match * match(Match *, UnmarkedSyntax * pattern, Syntax * with);
-__ct_callback Match * match_args(Match *, UnmarkedSyntax * pattern, Syntax * with);
+__ct_callback Match * match_f(Match * m, UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+macro match(m, pattern, with, mark = NULL) {match_f(m, pattern, with, mark);}
+__ct_callback Match *match_args_f(Match *, UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+macro match_args(m, pattern, with, mark = NULL) {match_args_f(m, pattern, with, mark);}
 __ct_callback Match * match_local(Match *, ...);
 __ct_callback Syntax * match_var(Match *, UnmarkedSyntax *);
 __ct_callback SyntaxEnum * match_varl(Match *, UnmarkedSyntax *);

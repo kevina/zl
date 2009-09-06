@@ -1,5 +1,5 @@
---- ../class.zl	2009-09-06 00:13:40.000000000 -0600
-+++ class-new_abi.zl	2009-09-06 00:28:26.000000000 -0600
+--- ../class.zl	2009-09-06 02:16:13.000000000 -0600
++++ class-new_abi.zl	2009-09-06 02:28:17.000000000 -0600
 @@ -125,7 +125,7 @@
    }
  }
@@ -8,7 +8,7 @@
 +Syntax * parse_class_new_abi(Syntax * p, Environ * env) {
    Mark * mark = new_mark();
  
-   Match * m = match_args(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), p);
+   Match * m = match_args(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), p, mark);
 @@ -147,8 +147,8 @@
    pre_parse(replace(raw_syntax (declare_user_type (mid name)), m, mark),
              lenv);

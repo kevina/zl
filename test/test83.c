@@ -5,21 +5,21 @@ struct X {
 user_type X {
   static int last_num = 0;
   finalize_user_type struct X;
-  macro num(:this this = this) {(*this)..num;}
-  void constructor(X * this) {
+  macro num(:this ths = this) {(*ths)..num;}
+  void constructor(X * fluid this) {
     num = last_num++;
     printf("HELLO %d\n", num);
   }
-  macro _constructor(:this this) {constructor(this);}
-  void destructor(X * this) {
+  macro _constructor(:this ths) {constructor(ths);}
+  void destructor(X * fluid this) {
     printf("BY BY %d\n", num);
   }
-  macro _destructor(:this this = this) {destructor(this);}
-  void copy_constructor(X * this, const X & x) {
+  macro _destructor(:this ths = this) {destructor(ths);}
+  void copy_constructor(X * fluid this, const X & x) {
     num = last_num++;
     printf("COPY %d = %d\n", num, x.num);
   }
-  macro _copy_constructor(lhs, :this this  = this) {copy_constructor(this, lhs);}
+  macro _copy_constructor(lhs, :this ths  = this) {copy_constructor(ths, lhs);}
 }
 
 const X & x = X();
