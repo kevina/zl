@@ -1,0 +1,367 @@
+/* 
+ * Example class definition 
+ * (slightly out of date)
+ *
+
+  class Y : public X {
+    struct D {
+      ...
+    };
+    D d;
+    virtual Y make_y();
+    virtual D foo();
+  }
+
+  user_type Y {
+    make_subtype X; // this must come first otherwise X may be redefined by import
+    import X;
+    struct D {
+    };
+    class _VTable;
+    struct _Data {
+      _VTable * _vptr;
+      ...
+    };
+    finalize user_type _Data;
+    class _VTable { / must come after _Data and finalize user_type;
+      Y (*make_y)();
+      D (*foo());
+    }
+    static _VTable _vtable;
+    ...
+    now come access macros and functions in the order they appear
+    ...
+    init() : static_constructor ...;
+    map _vptr ...;
+    void _constructor() ..;
+  }
+ */
+
+static void parse_class_var(Syntax * p, Match * m, Mark * mark,
+                            SyntaxList * struct_b, SyntaxList * module_b);
+static Syntax * parse_class_fun(Syntax * p, Match * m, Mark * mark,
+                                SyntaxList *  module_b,
+                                UserTypeInfo * parent_vtable,
+                                SyntaxList *  vtable_b, SyntaxList * vtable_i,
+                                Context * context, Environ * env);
+static Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
+                                      SyntaxList *  module_b, Environ * env);
+
+Syntax * parse_class_simple(Syntax * p, Environ * env) {
+  Mark * mark = new_mark();
+  
+  Match * m = match_args(0, raw_syntax (name @ body :(public parent_n)), p);
+
+  Syntax * name = m->var(syntax name);
+  Syntax * body = m->var(syntax body);
+  Syntax * parent_s = m->var(syntax parent_n);
+
+  if (!body) {
+    //printf("DONE (declare only) %s\n", syntax_to_string(name));
+    return replace(syntax {declare_user_type name;}, m, mark);
+  }
+
+  UserTypeInfo * parent = parent_s ? user_type_info(parent_s, env) : NULL;
+
+  Context * context = empty_context();
+
+  Environ * lenv = temp_environ(env);
+  pre_parse(replace(raw_syntax (declare_user_type (mid name)), m, mark),
+            lenv);
+
+  //printf("parse_class %s %s\n", syntax_to_string(name));
+  
+  ModuleInfo * parent_m = NULL;
+  UserTypeInfo * parent_vtable = NULL;
+  Syntax * parent_vtable_n = NULL;
+  Syntax * vtable = NULL;
+  SyntaxList * struct_p = new_syntax_list();
+  SyntaxList * struct_b = new_syntax_list();
+  SyntaxList * module_p = new_syntax_list();
+  SyntaxList * module_b = new_syntax_list();
+  SyntaxList * vtable_b = new_syntax_list();
+  SyntaxList * vtable_i = new_syntax_list();
+  SyntaxList * exports  = new_syntax_list();
+                         
+  m = match(m, syntax _Data, replace_context(syntax _Data, context));
+  m = match(m, syntax _parent, replace_context(syntax _parent, context));
+  m = match(m, syntax _VTable, replace_context(syntax _VTable, context));
+  m = match(m, syntax _vtable, replace_context(syntax _vtable, context));
+  m = match(m, syntax _vptr, replace_context(syntax _vptr, context));
+  m = match(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
+  m = match(m, syntax _constructor, replace_context(syntax _constructor, context));
+  m = match(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
+
+  if (parent) {
+    parent_m = parent->module;
+    parent_vtable_n = replace(syntax parent_n::_VTable, m, mark);
+    parent_vtable = user_type_info(parent_vtable_n, env);
+    
+    // this needs to be one of the first things we do
+    module_p->append(replace(syntax {import parent_n;}, m, mark));
+
+    parse_class_var(partly_expand(replace(syntax {parent_n _parent;}, m, mark), FieldPos, lenv),
+                    m, mark, struct_p, module_p);
+    
+    module_p->append(replace(syntax {macro cast_up(p) {&(*p).._parent;}}, m, mark));
+    module_p->append(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>(p);}}, m, mark));
+    module_p->append(replace(syntax {make_subtype parent_n cast_up cast_down;}, m, mark));
+
+    SyntaxEnum * itr = parent_m->symbols();
+    Syntax * syn;
+    while ((syn = itr->next())) {
+      exports->append(syn);
+    }
+  }
+
+  //
+  // Parse Body
+  //
+
+  SyntaxEnum * itr = partly_expand_list(match(NULL, raw_syntax ({...} @body), body)->varl(syntax body),
+                                        FieldPos, lenv);
+  Syntax * member;
+  while ((member = itr->next)) {
+    Match * m0 = match(m, raw_syntax (what n @ type @_), member);
+    const char * what = syntax_to_string(m0->var(syntax what));
+
+    // ignore access control labels for now
+    if (strcmp(what, "label")==0) continue;
+
+    Syntax * err = NULL;
+    if (strcmp(what, "var")==0) {
+      parse_class_var(member, m, mark, struct_b, module_b);
+    } else if (strcmp(what, "alias")==0) {
+      Match * m0 = match(m, raw_syntax (what n type value @_), member);
+      module_b->append(replace(syntax {macro n (:this ths = this) {({__shadow typeof(ths) fluid this = ths; value;});}}, m0, mark));
+    } else if (strcmp(what, "fun")==0) {
+      err = parse_class_fun(member, m, mark, module_b, parent_vtable,
+                            vtable_b, vtable_i, context, lenv);      
+    } else {
+      // otherwise we have some sort of type definition which needs to go before 
+      // _Data
+      module_p->append(pre_parse(member, lenv));
+    }
+    if (err) return err;
+    exports->append(m0->var(syntax n));
+  }
+
+  //
+  // Now generate vtable and related bits
+  //
+
+  const bool need_vtable = !vtable_i->empty();
+
+  if (need_vtable) {
+
+    SyntaxList * flags = new_syntax_list();
+    if (parent_vtable) // inherit parent vtable if one
+      flags->append_flag(replace(raw_syntax(public $1), 
+                             match_local(m, parent_vtable_n, NULL), mark));
+    if (m->var(syntax vtable_flag))
+      flags->append_flag(m->var(syntax vtable_flag));
+    
+    // create new vtable class, 
+    vtable = replace (raw_syntax(class _VTable @$1 ({...} $2)),
+                      match_local(m, flags, vtable_b, 0),
+                      mark);
+    
+    // create static vtable obj
+    // create init function
+    //   and add init code
+    module_b->append(replace(
+      syntax {void _vtable_init(_VTable * _vt) {$1;} },
+      match_local(m, vtable_i, 0),
+      mark));
+    exports->append(replace(syntax _vtable_init, m, mark));
+
+    if (parent_vtable) {
+      module_b->append(replace(
+                         syntax {__static_constructor void init() {parent_n::_vtable_init(&_vtable); _vtable_init(&_vtable);}},
+                         m, mark));
+    } else {
+      module_b->append(replace(
+                         syntax {__static_constructor void init() {_vtable_init(&_vtable);}},
+                         m, mark));
+    }
+
+    //printf("Adding _vptr\n");
+    if (parent_vtable) {
+      module_b->append(replace(
+                         syntax {macro _vptr (:this this = this) 
+                                   {(_VTable *)(implicit_cast<parent_n *>(this)->_vptr);}},
+                         m, mark));
+    } else {
+      Syntax * v = replace(raw_syntax (var (mid _vptr) (.ptr (mid _VTable))), m, mark);
+      parse_class_var(v, m, mark, struct_p, module_b); // Note: beginning of structure but end of module
+      module_b->append(replace(
+                         syntax {macro _set_vptr (:this this = this, other) 
+                                   {(*implicit_cast<name *>(this)).._vptr = other;}}, 
+                         m, mark));
+    }
+    exports->append(replace(syntax _vptr, m, mark));
+    module_b->append(replace(syntax {macro _constructor(:this ths = this) 
+          {({__shadow typeof(ths) fluid this = ths; _set_vptr(&_vtable);});}}, m, mark));
+  }
+
+  // Now add structure and _vtable to module
+  
+  if (need_vtable) {
+    module_p->append(replace(raw_syntax (class _VTable), m, mark));
+    exports->append(replace(syntax _VTable, m, mark));
+    exports->append(replace(syntax _VTable`outer, m, mark));
+  }
+                         
+  module_p->append(replace(
+                     syntax {struct _Data {$1; $2;};},
+                     match_local(m, struct_p, struct_b, 0),
+                     mark));
+  module_p->append(replace(
+                     syntax {finalize_user_type struct _Data;},
+                     m,
+                     mark));
+
+  if (need_vtable) {
+    module_p->append(vtable);
+    module_p->append(replace(syntax {_VTable _vtable;}, m, mark));
+  }
+
+  //module_b->append(replace(
+  //                   syntax {export $1;},
+  //                   match_local(m, exports, 0),
+  //                   mark));
+
+  //
+  // Finally create module and user type
+  //
+  
+  Syntax * module_ = replace(syntax {user_type name {$1; $2;}},
+                             match_local(m, module_p, module_b, 0),
+                             mark);
+  printf("DONE %s\n", syntax_to_string(name));
+  dump_syntax(module_);
+  printf("---\n");
+  return module_;
+}
+
+
+static void parse_class_var(Syntax * p, Match * m, Mark * mark,
+                            SyntaxList * struct_b, SyntaxList * module_b)
+{
+  //printf("parse_class_var: %s\n", syntax_to_string(p));
+  m = match_args(m, raw_syntax (n @rest), p);
+  bool is_static = p->flag(syntax static);
+
+  // FIXME: handle flags
+  if (is_static) {
+    module_b->append(replace(raw_syntax(var (` (mid n) internal) (mid @rest)), m, mark));
+    module_b->append(replace(syntax {macro n () {n`internal;}}, m, mark));
+  } else {
+    struct_b->append(p);
+    // FIXME: (name *)(this) may cast away const
+    module_b->append(replace(syntax {macro n (:this this = this) {(*(name *)(this))..n;}}, m, mark));
+  }
+}
+
+static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
+                                 SyntaxList *  module_b,
+                                 UserTypeInfo * parent_vtable,
+                                 SyntaxList *  vtable_b, SyntaxList * vtable_i,
+                                 Context * context, Environ * env)
+{
+  //printf("parse_class_fun: %s\n", syntax_to_string(p));
+  m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
+  m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
+  //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
+  //assert(!(is_static && is_virtual)); // FIXME Error message
+
+  Match * m0;
+  Syntax * class_name = m->var(syntax name);
+  Syntax * name = m->var(syntax n);
+
+  // FIXME: handle flags
+  bool is_static = p->flag(syntax static);
+  bool is_virtual = p->flag(syntax virtual);
+
+  // create unique name vtable entry, needs to different so that we
+  // don't confuse vtable entries for special functions such as
+  // _destructor with the real function
+  char sbuf[1024];
+  snprintf(sbuf, 1024, "%s$fp", syntax_to_string(m->var(syntax n)));
+  m = match(m, syntax fpn,
+            replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
+  
+  bool virtual_override = parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn));
+
+  if (!is_virtual && virtual_override)
+    is_virtual = true;
+
+  SyntaxList * new_parms = new_syntax_list(); 
+  Syntax * this_parm = NULL;
+  if (!is_static) {
+    if (virtual_override) {
+      m = match(m, syntax this_t, 
+                replace(raw_syntax(.tprop (.type (.tprop (-> (reinterpret_cast 
+                                                              (.ptr ((:: parent_n _VTable))) 0) fpn) 
+                                                  inner)) (parm 0)), m, mark));
+      this_parm = replace(raw_syntax(this_t ths), m, mark);
+    } else
+      this_parm = replace(raw_syntax ((.ptr name) (fluid this)), m, mark);
+    new_parms->append(this_parm);
+  }
+  
+  SyntaxList * macro_parms = new_syntax_list();
+  SyntaxList * call_parms  = new_syntax_list();
+  
+  if (!is_static) 
+    call_parms->append(replace(syntax ((name  *)this), m, mark));
+  SyntaxEnum * parms_enum = m->varl(syntax parms);
+  unsigned i = 0;
+  Syntax * parm;
+  while ((parm = parms_enum->next())) {
+    new_parms->append(parm);
+    char sbuf[8];
+    snprintf(sbuf, 8, "arg%d", i);
+    Syntax * arg = replace(string_to_syntax(sbuf), 0, mark);
+    macro_parms->append(arg);
+    call_parms->append(arg);
+    ++i;
+  }
+  if (!is_static)
+    macro_parms->append(replace(syntax (:this this = this), m, mark));
+  
+  if (virtual_override)
+    module_b->append(replace(raw_syntax (fun (` n internal) (. $1) ret 
+                                         (block (var (fluid this) (.ptr name) (cast (.ptr name) ths)) 
+                                          body)),
+                             match_local(m, new_parms, 0), mark));
+  else
+    module_b->append(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid body)),
+                             match_local(m, new_parms, 0), mark));
+  
+  module_b->append(replace(syntax {macro n`non_virtual ($1) {n`internal($2);}},
+                           match_local(m, macro_parms, call_parms, 0), mark));
+
+  if (is_virtual) {
+    //m = match(m, syntax fpn, m->var(syntax n));
+    module_b->append(replace(
+                       syntax {macro n ($1) {(this->_vptr->fpn)($2);}},
+                       match_local(m, macro_parms, call_parms, 0),
+                       mark));
+    if (!virtual_override) {
+      m = match(m, syntax pfun, 
+                replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
+      vtable_b->append(replace(raw_syntax (var (mid fpn) (mid pfun)), m, mark));
+    }
+    vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid fpn))) 
+                                         (id (` (mid n) internal))), m, mark));
+  } else {
+    module_b->append(replace(syntax {macro n ($1) {n`internal($2);}},
+                             match_local(m, macro_parms, call_parms, 0), mark));
+  }
+
+  return NULL;
+}
+
+
+

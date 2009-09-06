@@ -202,6 +202,7 @@ namespace ast {
     static const int ast_type = 2;
     Stmt(const Syntax * p = 0) : AST(p), next() {}
     Stmt * next;
+    inline Exp * as_exp(Environ & env); 
   };
 
   struct StmtLeaf : public Stmt {

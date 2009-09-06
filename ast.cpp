@@ -155,6 +155,11 @@ namespace ast {
     return new EStmt(this);
   }
 
+  inline Exp * Stmt::as_exp(Environ & env) {
+    env.exp_ip->add(this);
+    return noop();
+  }
+
   inline void InsrPoint::add(Exp * to_add) {
     if (to_add == noop()) return;
     add(to_add->as_stmt());
@@ -733,19 +738,23 @@ namespace ast {
   //  void compile(CompileWriter & cw);
   //};
 
-  Exp * mk_constructor(Exp * exp, Environ & env) {
-    return parse_exp(SYN(SYN("member"), 
-                         SYN(exp),
-                         SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
-                     env);
+  Stmt * mk_constructor(Exp * exp, Environ & env) {
+    ExpInsrPointWrapper wrap(env);
+    Exp * call = parse_exp(SYN(SYN("member"), 
+                               SYN(exp),
+                               SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
+                           wrap.env);
+    return wrap.finish(call);
   }
 
-  Exp * mk_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
-    return parse_exp(SYN(SYN("member"), 
-                         SYN(lhs),
-                         SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
-                             SYN(SYN("."), SYN(rhs)))),
-                     env);
+  Stmt * mk_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
+    ExpInsrPointWrapper wrap(env);
+    Exp * call =  parse_exp(SYN(SYN("member"), 
+                                SYN(lhs),
+                                SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
+                                    SYN(SYN("."), SYN(rhs)))),
+                            env);
+    return wrap.finish(call);
   }
 
   Exp * mk_destructor(Exp * exp, Environ & env) {
@@ -784,19 +793,19 @@ namespace ast {
       }
       const UserType * ut;
       if (!cleanup && (ut = dynamic_cast<const UserType *>(type))) {
-        if (!init && !constructor) constructor = try_constructor(ut, env)->as_stmt();
+        if (!init && !constructor) constructor = try_constructor(ut, env);
         add_cleanup(ut, env);
       }
       return this;
     }
-    Exp * try_constructor(const UserType * ut, Environ & env) {
+    Stmt * try_constructor(const UserType * ut, Environ & env) {
       if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
         return mk_constructor(mk_id(this, env), env);
       } else {
         return NULL;
       }
     }
-    Exp * try_copy_constructor(Exp * rhs, Environ & env) {
+    Stmt * try_copy_constructor(Exp * rhs, Environ & env) {
       const UserType * ut = dynamic_cast<const UserType *>(type->unqualified);
       if (ut && find_symbol<Symbol>("_copy_constructor", ut->module->syms)) {
         return mk_copy_constructor(mk_id(this, env), rhs, env);
@@ -814,9 +823,9 @@ namespace ast {
 
     virtual void fix_up_init(Environ & env) {
       if (!init) return;
-      Exp * copy_c = try_copy_constructor(init, env);
+      Stmt * copy_c = try_copy_constructor(init, env);
       if (copy_c) {
-        constructor = copy_c->as_stmt();
+        constructor = copy_c;
         init = NULL;
       }
     }
@@ -1662,7 +1671,7 @@ namespace ast {
     }
   };
 
-  Exp * try_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
+  Stmt * try_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
     if (ut && find_symbol<Symbol>("_copy_constructor", ut->module->syms)) {
       return mk_copy_constructor(lhs, rhs, env);
@@ -1673,9 +1682,9 @@ namespace ast {
 
   static Exp * mk_init(Exp * l, Exp * r, Environ & env) {
     r = r->resolve_to(l->type, env);
-    Exp * copy_c = try_copy_constructor(l, r, env);
+    Stmt * copy_c = try_copy_constructor(l, r, env);
     if (copy_c) {
-      return copy_c;
+      return copy_c->as_exp(env);
     } else if (const Array * a = dynamic_cast<const Array *>(l->type)) {
       return parse_exp(SYN(SYN("call"), 
                            SYN("memcpy"), 
@@ -1703,13 +1712,13 @@ namespace ast {
     return assign;
   }
 
-  Exp * try_constructor(Exp * exp, Environ & env) {
+  Stmt * try_constructor(Exp * exp, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(exp->type->unqualified);
     if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
       return mk_constructor(exp, env);
     } else {
       return NULL;
-    }
+   }
   }
 
   Exp * try_destructor(Exp * exp, Environ & env) {
@@ -1724,9 +1733,10 @@ namespace ast {
   static Exp * parse_construct(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     Exp * exp = parse_exp(p->arg(0), env);
-    Exp * c = try_constructor(exp, env);
-    if (c) return c;
-    else return noop();
+    Stmt * c = try_constructor(exp, env);
+    if (c)
+      env.exp_ip->add(c);
+    return noop();
   }
 
   static Exp * parse_destroy(const Syntax * p, Environ & env) {
@@ -2164,7 +2174,7 @@ namespace ast {
     if (temp) use_res_loc = true;
 #endif
     if (!temp) temp = start_temp(type, env);
-    Exp * constructor = temp->try_constructor(dynamic_cast<const UserType *>(type), env);
+    Stmt * constructor = temp->try_constructor(dynamic_cast<const UserType *>(type), env);
     if (env.temp_ip->where == ExpInsrPoint::ExtendedExp) {
       if (constructor)
         env.exp_ip->add(constructor);
@@ -2173,7 +2183,7 @@ namespace ast {
       if (temp->cleanup)
         env.exp_ip->add(temp->cleanup->cleanup_flag);
     } else {
-      temp->constructor = constructor->as_stmt();
+      temp->constructor = constructor;
     }
     if (use_res_loc)
       return noop();
