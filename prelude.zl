@@ -1,11 +1,11 @@
 Syntax * parse_make_syntax_macro(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, raw_syntax (name @ fun), p);
+  Match * m = match_args(0, raw_syntax (name @ fun @rest), p);
 
   if (m->var(syntax fun))
-    return replace(raw_syntax(make_macro (` name syntax) fun), m, mark);
+    return replace(raw_syntax(make_macro (` name syntax) fun @rest), m, mark);
   else
-    return replace(raw_syntax(make_macro (` name syntax) name), m, mark);
+    return replace(raw_syntax(make_macro (` name syntax) name @rest), m, mark);
 }
 
 Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {

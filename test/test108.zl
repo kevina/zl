@@ -1,0 +1,14 @@
+
+user_type X {
+  struct D {
+    int x;
+    int y;
+  };
+  size_t _sizeof;
+  finalize_user_type struct D;
+}
+
+int main() {
+  size_t s = sizeof(X);
+  return 0;
+}

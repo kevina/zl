@@ -560,6 +560,8 @@ struct SimpleSyntaxEnum : public SyntaxEnum {
 extern "C" namespace macro_abi {
 
   Mark * new_mark_f(SymbolNode * e) {
+    printf("New mark on %p\n", e);
+    SymbolTable(e, NULL).dump();
     return new Mark(e);
   }
 
@@ -1539,6 +1541,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
     const char * * i = (const char * *)dlsym(lh, "_macro_funs");
     const char * * e = i + macro_funs_size;
     for (; i != e; ++i) {
+      printf(">>%s\n", *i);
       const Fun * fun = dynamic_cast<const Fun *>(env.find_tls(*i));
       String uniq_name = fun->uniq_name();
       if (fun->is_macro) {

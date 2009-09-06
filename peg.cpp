@@ -565,6 +565,7 @@ private:
 
 const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
+  clock_t start = clock();
   //str.source = new ParseSourceInfo(str, what);
   mids = repls;
   Prod * p = parse.named_prods[what];
@@ -585,6 +586,8 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
     //printf("FAIL\n");
     throw errors.to_error(new ParseSourceInfo(str, what), file);
   }
+  clock_t stop = clock();
+  //printf("PARSE STR ... as %s time: %f\n", ~what, (stop - start)/1000000.0);
   return dummy[0];
 }
 

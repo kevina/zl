@@ -1,0 +1,14 @@
+
+import_file "test109c.zl";
+
+int main() {
+  Zv1 * z = new Zv1;
+  z->x = 10;
+  z->z = 30;
+  z->foo();
+  Zv2 * z = new Zv2;
+  z->x = 10;
+  z->z = 30;
+  z->foo();
+  return 0;
+}

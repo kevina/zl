@@ -1,0 +1,27 @@
+
+import_file "class-new_abi.zl";
+
+class Xv1 : abi_ver(1) {
+  int x;
+  Xv1() {x = 0;}
+};
+
+class Zv1 : public Xv1 : abi_ver(1) {
+  int z;
+  Zv1() {z = 0;}
+  void foo() {printf("%d %d\n", x, z);}
+};
+
+
+class Xv2 : abi_ver(2) {
+  int x;
+  Xv2() {x = 0;}
+};
+
+class Zv2 : public Xv2 : abi_ver(2) {
+  int z;
+  Zv2() {z = 0;}
+  void foo() {printf("%d %d\n", x, z);}
+};
+
+

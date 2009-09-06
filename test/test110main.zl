@@ -1,0 +1,12 @@
+
+import_file "test110c.zl";
+
+int main() {
+  Zv1 * z = new Zv1;
+  z->f();
+  z->h();
+  Zv2 * z = new Zv2;
+  z->f();
+  z->h();
+  return 0;
+}

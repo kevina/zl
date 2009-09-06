@@ -29,8 +29,13 @@ sub run_prog($) {
 
 sub maybe_run_prog($) {
   my $base = $_[0];
-  return unless (-e "$base.res") && (-e "a.out");
-  run_prog($base);
+  return unless -e "$base.res" && -e "a.out";
+  unless (-e "$base.out") {
+    run_prog($base);
+  } else {
+    print "... diff ... \n";
+    sys "diff -u $base.res $base.out";
+  }
 }
 
 sub compile_test($) {
@@ -50,6 +55,7 @@ sub do_test( $ ) {
   my ($base, $ext) = $f =~ /^(.+?)\.([a-z]+)$/ or die;
   eval {
     unlink "a.out";
+    unlink "$base.out";
     print "$f ...\n";
     flush STDIN;
     if ($ext eq 'c' || $ext eq 'zl' || $ext eq 'cpp') {

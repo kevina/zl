@@ -113,6 +113,7 @@ STRUCT_UNION = <%> {"struct"/"union"/"class"}
                    (:<public> ":" "public" {ID})?
                    (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
                    (:<fix_vtable_size> ":" "fix_vtable_size" "(" {EXP} ")" )? # used for test101
+                   (:<abi_ver> ":" "abi_ver" "(" {EXP} ")" )? 
                    {<{...}> "{" {STMT}* "}" }?;
 
 ENUM = <enum> "enum" {ID/} 

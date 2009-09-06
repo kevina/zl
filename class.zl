@@ -147,9 +147,8 @@ Syntax * parse_class(Syntax * p, Environ * env) {
   pre_parse(replace(raw_syntax (declare_user_type (mid name)), m, mark),
             lenv);
 
-  //printf("parse_class %s %s\n", ~name->what(), ~parent_s->to_string());
-  //p->print(); printf("\n"); 
-
+  //printf("parse_class %s %s\n", syntax_to_string(name));
+  
   ModuleInfo * parent_m = NULL;
   UserTypeInfo * parent_vtable = NULL;
   Syntax * parent_vtable_n = NULL;

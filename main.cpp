@@ -69,6 +69,7 @@ int main(int argc, const char *argv[])
       unsigned offset = 1;
       bool debug_mode = false;
       bool zls_mode = false;
+      bool for_ct = false;
       if (argc > offset && strcmp(argv[offset], "-d") == 0) {
         debug_mode = true;
         offset++;
@@ -77,14 +78,22 @@ int main(int argc, const char *argv[])
         zls_mode = true;
         offset++;
       }
+      if (argc > offset && strcmp(argv[offset], "-C") == 0) {
+        for_ct = true;
+        offset++;
+      }
+      String base_name;
       String output_fn;
       if (argc > offset) {
         code = new_source_file(argv[offset]);
         const char * dot = strrchr(argv[offset], '.');
         if (!dot) {
-          output_fn = argv[offset];
+          base_name = argv[offset];
+          output_fn = base_name;
         } else {
           StringBuf buf;
+          buf.append(argv[offset], dot);
+          base_name = buf.freeze(); // will also reset buf
           if (strcmp(dot, ".zls") == 0)
             buf.append(argv[offset]);
           else
@@ -119,12 +128,22 @@ int main(int argc, const char *argv[])
       }
       ast::CompileWriter out;
       out.open(output_fn, "w");
+      if (for_ct) 
+        out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
       ast::compile(env.top_level_symbols, out);
       //ast::CompileWriter out2(ast::CompileWriter::ZLE);
       //out2.open("a.out.zle", "w");
       //ast::compile(env.top_level_symbols, out2);
       //AST::ExecEnviron env;
       //ast->eval(env);
+      if (for_ct) {
+        out.close();
+        StringBuf buf;
+        buf.printf("zls -g -fexceptions -shared -fpic -o %s-fct.so %s", ~base_name, ~output_fn);
+        String line = buf.freeze();
+        printf("%s\n", ~line);
+        system(~line);
+      }
     }
   } catch (Error * err) {
     //if (!err->source)

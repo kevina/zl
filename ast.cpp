@@ -1,5 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <time.h>
 
 #include <cxxabi.h>
 
@@ -2697,17 +2699,37 @@ namespace ast {
   }
 
   Stmt * parse_import_file(const Syntax * p, Environ & env) {
+    clock_t start = clock();
     assert_num_args(p, 1);
     String file_name = *p->arg(0);
     SourceFile * code = new_source_file(file_name);
+    bool env_interface_orig = env.interface;
     try {
       env.interface = true;
       parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env);
     } catch (...) {
-      env.interface = false;
+      env.interface = env_interface_orig;
       throw;
     }
-    env.interface = false;
+    clock_t parse_done = clock();
+    env.interface = env_interface_orig;
+    const char * dot = strrchr(~file_name, '.');
+    StringBuf buf;
+    buf.append("./");
+    if (!dot)
+      buf.append(file_name);
+    else
+      buf.append(~file_name, dot);
+    buf.append("-fct.so");
+    String lib_fn = buf.freeze();
+    int res = access(~lib_fn, F_OK);
+    if (res == 0) {
+      printf("LOADING %s\n", ~lib_fn);
+      load_macro_lib(~lib_fn, env);
+    }
+    clock_t load_done = clock();
+    printf("Import Time: %f  (parse: %f)\n", 
+           (load_done - start)/1000000.0, (parse_done - start)/1000000.0);
     return empty_stmt();
   }
 
@@ -2956,7 +2978,7 @@ namespace ast {
   }
 
   void Fun::compile_prep(CompileEnviron & env) {
-    if (env.for_macro_sep_c && (env_ss || is_macro))
+    if (env.for_macro_sep_c && (env_ss || is_macro) && body)
       env.for_macro_sep_c->macro_funs.push_back(this);
     if (body) {
       body->compile_prep(env);
@@ -3908,9 +3930,9 @@ namespace ast {
       }
       
       unsigned macro_funs_size = cw.for_macro_sep_c->macro_funs.size();
-      cw << "(var _macro_funs_size (unsigned) " << macro_funs_size << ")\n";
+      cw << "(var _macro_funs_size (unsigned) :(__visibility__ (s protected)) " << macro_funs_size << ")\n";
       if (macro_funs_size  > 0 ) {
-        cw << "(var _macro_funs (.array (.ptr (char :const)) " << macro_funs_size << ") (.\n";
+        cw << "(var _macro_funs (.array (.ptr (char :const)) " << macro_funs_size << ") :(__visibility__ (s protected)) (.\n";
         for (Vector<Fun *>::const_iterator i = cw.for_macro_sep_c->macro_funs.begin(), 
                e = cw.for_macro_sep_c->macro_funs.end(); i != e; ++i)
         {
@@ -3921,9 +3943,9 @@ namespace ast {
 
       unsigned syntaxes_size = cw.for_macro_sep_c->syntaxes.size();
       if (syntaxes_size > 0) {
-        cw << "(var _syntaxes_size (unsigned) " << syntaxes_size << ")\n";
+        cw << "(var _syntaxes_size (unsigned) :(__visibility__ (s protected)) " << syntaxes_size << ")\n";
         cw << "(.struct _syntaxes ((.ptr (char :const)) str) ((.ptr (struct UnmarkedSyntax)) syn))\n";
-        cw << "(var _syntaxes (.array (struct _syntaxes) " << syntaxes_size << ") (.\n";
+        cw << "(var _syntaxes (.array (struct _syntaxes) " << syntaxes_size << ") :(__visibility__ (s protected)) (.\n";
         for (Vector<SyntaxC *>::const_iterator i = cw.for_macro_sep_c->syntaxes.begin(), 
                e = cw.for_macro_sep_c->syntaxes.end(); i != e; ++i)
         {

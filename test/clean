@@ -1,3 +1,0 @@
-#!/bin/sh
-
-rm -f *.out *.zls *.log *.s *.so *~ core
