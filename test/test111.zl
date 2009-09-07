@@ -1,0 +1,11 @@
+make_inner_ns nn;
+
+module M {
+  module N {
+    void f`nn() {}
+  }
+}
+
+int main() {
+  M::N::f`nn();
+}

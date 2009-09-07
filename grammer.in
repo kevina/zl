@@ -24,7 +24,8 @@ STMT : "statement" =
     / {BLOCK}
     / {MACRO} / {MAKE_MACRO}
     / {MODULE} / {IMPORT}
-    / {IMPORT_FILE}
+    / <include_file> "include_file" {STRING} ";"
+    / <import_file> "import_file" {STRING} ";"
     / <fluid_binding> "fluid_binding" {ID} ";"
     / <fluid_label>   "fluid_label"   {ID} ";"
     / <fluid_syntax>  "fluid_syntax"  {ID} ";"
@@ -58,9 +59,6 @@ MODULE =
 
 IMPORT = 
     <import> "import" {ID} ";";
-
-IMPORT_FILE = 
-    <import_file> "import_file" {STRING} ";";
 
 ID_LIST =
   <> ({ID} ",")* {ID}?;
@@ -108,7 +106,7 @@ INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
 
 FLOATING_SUFFIX = <f> [fF] / <"long double"> [lL] / <double>;
 
-STRUCT_UNION = <%> {"struct"/"union"/"class"} 
+STRUCT_UNION = <%> {"struct"/"union"/"class"/".class"} 
                    {ID/}
                    (:<public> ":" "public" {ID})?
                    (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
@@ -164,14 +162,14 @@ RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 RAW_ID : "identifier" =
   <<mid>> {MID} / {[@$\a_][$\a_\d]*} SPACING;
 
-ID_W_INNER : "identifier" =
-  <`> {RAW_ID} "`" {RAW_ID} / {RAW_ID};
+ID_W_NS : "identifer" =
+  <::> {RAW_ID} "::" {ID_W_NS} / {RAW_ID};
 
-ID_W_NS =
-  <::> ({ID_W_INNER} "::") {ID_W_NS} / {ID_W_INNER};
+ID_W_INNER =
+  <`> {ID_W_NS} "`" {ID_W_NS} / {ID_W_NS};
 
 ID =
-  <fluid> "fluid" {ID} / {ID_W_NS};
+  <fluid> "fluid" {ID} / {ID_W_INNER};
 
 RAW = 
   <raw> "__raw" {PARAN};
@@ -212,7 +210,7 @@ COMMENT =
 # Special tokens
 #
 
-"[\a_][\a\d_]*" = {_self} ![\a\d_] SPACING;
+"[\a_.][\a\d_]*" = {_self} ![\a\d_] SPACING;
 "[;,]" = {_self} SPACING;
 "[\y]+" : "operator" = {_self} ![\y] SPACING;
 "_" = {_self} SPACING;
