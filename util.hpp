@@ -193,7 +193,10 @@ inline unsigned SourceInfo::size() const {return file()->size();}
 inline const char * SourceInfo::begin() const {return file()->begin();}
 inline const char * SourceInfo::end() const {return file()->end();}
 
-SourceFile * new_source_file(String file);
+String add_dir_if_needed(String file, const SourceInfo * included_from);
+
+SourceFile * new_source_file(String file, const SourceInfo * included_from = NULL);
+
 SourceFile * new_source_file(int fd);
 
 #undef NPOS

@@ -1535,6 +1535,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
 struct Syntaxes {const char * str; const Syntax * syn;};
 
 void load_macro_lib(ParmString lib, Environ & env) {
+  printf("LOADING: %s\n", lib.str());
   void * lh = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
   if (!lh) {
     fprintf(stderr, "ERROR: %s\n", dlerror());
@@ -1544,7 +1545,9 @@ void load_macro_lib(ParmString lib, Environ & env) {
   if (macro_funs_size > 0) {
     const char * * i = (const char * *)dlsym(lh, "_macro_funs");
     const char * * e = i + macro_funs_size;
+    //printf("---\n");
     for (; i != e; ++i) {
+      //printf(">>%s\n", *i);
       const Fun * fun = dynamic_cast<const Fun *>(env.find_tls(*i));
       String uniq_name = fun->uniq_name();
       if (fun->is_macro) {
@@ -1555,6 +1558,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
         *p = fun->env_ss;
       }
     }
+    //printf("^^^\n");
   }
   unsigned syntaxes_size = *(unsigned *)dlsym(lh, "_syntaxes_size");
   if (syntaxes_size > 0) {

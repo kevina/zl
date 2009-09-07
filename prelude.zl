@@ -22,3 +22,5 @@ Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
   return replace(raw_syntax(what name ({...} @$1) @rest), 
                  match_local(m, new_body, NULL), mark);
 }
+
+include_file "class.zl";

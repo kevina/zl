@@ -1,3 +1,0 @@
-#!/bin/sh
-
-diff -u ../class.zl class-new_abi.zl > class-new_abi.zl.patch

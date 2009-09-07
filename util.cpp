@@ -50,7 +50,10 @@ char * pos_to_str(Pos p, char * buf) {
 void SourceFile::read(String file) {
   file_name_ = file;
   int fd = open(file.c_str(), O_RDONLY);
-  assert(fd >= 0);
+  if (fd <= 0) {
+    fprintf(stderr, "SourceFile::read(): Unable to open file \"%s\" for reading\n", ~file);
+    abort();
+  }
   read(fd);
 }
 
@@ -84,8 +87,30 @@ Pos SourceFile::get_pos(const char * s) const {
   return Pos(i - lines_.begin() + 1, s - *i);
 }
 
-SourceFile * new_source_file(String file) {
-  return new SourceFile(file);
+String add_dir_if_needed(String file, const SourceInfo * included_from) {
+  if (file[0] == '/') {
+    return file;
+  } else {
+    StringBuf buf;
+    if (included_from) {
+      const char * ifn = ~included_from->file_name();
+      const char * slash = strrchr(ifn, '/');
+      if (slash)
+        buf.append(ifn, slash + 1);
+      buf.append(file);
+    } else {
+      char buf2[1024];
+      char * wd = getcwd(buf2, 1024);
+      buf.append(wd);
+      buf.append('/');
+      buf.append(file);
+    }
+    return buf.freeze();
+  } 
+}
+
+SourceFile * new_source_file(String file, const SourceInfo * included_from) {
+  return new SourceFile(add_dir_if_needed(file, included_from));
 }
 
 SourceFile * new_source_file(int fd) {

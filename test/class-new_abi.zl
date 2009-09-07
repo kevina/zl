@@ -1,0 +1,90 @@
+
+import_file "../class.zl";
+
+.class ParseClassNewABI : public ParseClass {
+  
+  void init() {
+    ParseClass::init`non_virtual();
+    m = match(m, syntax _parent_ptr, replace_context(syntax _parent_ptr, context));
+    m = match(m, syntax _child_ptr, replace_context(syntax _child_ptr, context));
+  }
+
+  void add_parent_info() {
+    parse_class_var(partly_expand(replace(syntax {parent_n * _parent_ptr;}, m, mark), FieldPos, lenv),
+                    struct_p, module_p);
+
+    Syntax * p_init = replace(syntax {_parent_ptr = malloc(sizeof(parent_n));}, m, mark);
+    need_constructor = true;
+    need_copy_constructor = true;
+    constructor_code[0]->append(p_init);
+    copy_constructor_code[0]->append(p_init);
+    Syntax * p_cleanup = replace(syntax {free(_parent_ptr);}, m, mark);
+    need_destructor = true;
+    destructor_code->append(p_cleanup);
+
+    module_b->append(replace(syntax {macro _parent (:this ths = this) {*ths->_parent_ptr;}}, m, mark));
+
+    create_special_funs(m->var(syntax _parent), 
+                        replace(raw_syntax (parent_n), m, mark), 
+                        0);
+
+    // The setting of the child pointer needs to come after the
+    // parent's constructor is called
+    Syntax * p_init_2 = replace(syntax {_parent_ptr->_child_ptr = this;}, m, mark);
+    constructor_code[0]->append(p_init_2);
+    copy_constructor_code[0]->append(p_init_2);
+    
+    module_p->append(replace(syntax {macro cast_up(p) {(*p).._parent_ptr;}}, m, mark));
+    module_p->append(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>((*p).._child_ptr);}}, m, mark));
+    module_p->append(replace(syntax {make_subtype parent_n cast_up cast_down;}, m, mark));
+  }
+
+  void add_other_info() {
+    ParseClass::add_other_info`non_virtual();
+    parse_class_var(partly_expand(replace(syntax {void * _child_ptr;}, m, mark), FieldPos, lenv),
+                    struct_p, module_p);
+    Syntax * c_init = replace(syntax{_child_ptr = 0;}, m, mark);
+    need_constructor = true;
+    constructor_code[0]->append(replace(syntax{_child_ptr = 0;}, m, mark));
+    need_copy_constructor = true;
+    copy_constructor_code[0]->append(replace(syntax{_child_ptr = 0;}, m, mark));
+  }
+};
+
+Syntax * parse_class_new_abi(Syntax * p, Environ * env) {
+  ParseClassNewABI pc;
+  return pc.parse(p, env, new_mark());
+}
+
+make_syntax_macro class parse_class_new_abi :w_snapshot;
+
+//
+//
+//
+
+size_t zl_abi_version = 1;
+
+Syntax * parse_class_w_abi(Syntax * p, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(abi_ver abi_ver) @rest), p);
+
+  Syntax * body = match_var(m, syntax body);
+  Syntax * abi_ver_s = match_var(m, syntax abi_ver);
+
+  size_t abi_ver = abi_ver_s ? ct_value(abi_ver_s, env) : zl_abi_version;
+
+  printf("parse_class_w_abi %d\n", abi_ver);
+
+  switch (abi_ver) {
+  case 1:
+    return parse_class(p, env);
+  case 2:
+    return parse_class_new_abi(p, env);
+  default:
+    return error(p, "Unknown ABI version %d\n", abi_ver);
+  }
+}
+
+make_syntax_macro class parse_class_w_abi :w_snapshot;
+
+

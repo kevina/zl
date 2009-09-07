@@ -8,13 +8,16 @@ CXXFLAGS = -g
 bin_PROGRAMS=zl
 zl_SOURCES=ast.cpp  expand.cpp charset.cpp  main.cpp  parse.cpp  parse_op.cpp  peg.cpp util.cpp string_buf.cpp fstream.cpp type.cpp parse_decl.cpp symbol_table.cpp iostream.cpp ct_value.cpp
 zl_LDADD=
-#zl_LDADD+= ../gc6.8/gc.a
+#zl_LDADD+= /home/kevina/gc6.8/gc.a
 #zl_LDADD+= -lgc
 #zl_LDADD+= -lgccpp
 zl_LDADD+= -ldl
 zl_LDFLAGS=-Wl,--export-dynamic,--version-script=zl.ld
 
-noinst_DATA=prelude.so
+noinst_DATA=prelude-fct.so
 
-prelude.so: prelude.zlh prelude.zl class.zl zl
-	ulimit -s 1024; ./zl -p > /dev/null
+class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl
+	ulimit -s 1024; ./zl -C -P class-simple.zl > class-simple-fct.log
+
+prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl 
+	ulimit -s 1024; ./zl -C -P prelude.zl > prelude-fct.log

@@ -49,101 +49,88 @@ int main(int argc, const char *argv[])
   SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
   SourceFile * code = NULL;
   try {
-    if (argc == 2 && strcmp(argv[1], "-p") == 0) {
-      SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
-      SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
-      parse_maps(env);
-      parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
-      parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
-      parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
-      //system("gcc -g -O -fexceptions -shared -fpic -o prelude.so prelude.c");
-      ast::CompileWriter out;
-      out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
-      out.open(SOURCE_PREFIX "prelude.zls", "w");
-      ast::compile(env.top_level_symbols, out);
-      out.close();
-      system("zls -O -S -fexceptions -o prelude.zls.s prelude.zls");
-      system("zls -g -O -fexceptions -shared -fpic -o prelude.so prelude.zls");
-      //load_macro_lib("./prelude.so", env);
-    } else {
-      unsigned offset = 1;
-      bool debug_mode = false;
-      bool zls_mode = false;
-      bool for_ct = false;
-      if (argc > offset && strcmp(argv[offset], "-d") == 0) {
-        debug_mode = true;
+    unsigned offset = 1;
+    bool debug_mode = false;
+    bool zls_mode = false;
+    bool for_ct = false;
+    bool load_prelude = true;
+    if (argc > offset && strcmp(argv[offset], "-d") == 0) {
+      debug_mode = true;
+      offset++;
+    } 
+    if (argc > offset && strcmp(argv[offset], "-s") == 0) {
+      zls_mode = true;
         offset++;
-      } 
-      if (argc > offset && strcmp(argv[offset], "-s") == 0) {
-        zls_mode = true;
+    }
+    if (argc > offset && strcmp(argv[offset], "-C") == 0) {
+      for_ct = true;
         offset++;
-      }
-      if (argc > offset && strcmp(argv[offset], "-C") == 0) {
-        for_ct = true;
-        offset++;
-      }
-      String base_name;
-      String output_fn;
-      if (argc > offset) {
-        code = new_source_file(argv[offset]);
-        const char * dot = strrchr(argv[offset], '.');
-        if (!dot) {
+    }
+    if (argc > offset && strcmp(argv[offset], "-P") == 0) {
+      load_prelude = false;
+      offset++;
+    }
+    String base_name;
+    String output_fn;
+    if (argc > offset) {
+      code = new_source_file(argv[offset]);
+      const char * dot = strrchr(argv[offset], '.');
+      if (!dot) {
           base_name = argv[offset];
           output_fn = base_name;
-        } else {
-          StringBuf buf;
-          buf.append(argv[offset], dot);
-          base_name = buf.freeze(); // will also reset buf
-          if (strcmp(dot, ".zls") == 0)
-            buf.append(argv[offset]);
-          else
-            buf.append(argv[offset], dot);
-          buf.append(".zls");
-          output_fn = buf.freeze();
-        }
       } else {
+        StringBuf buf;
+        buf.append(argv[offset], dot);
+        base_name = buf.freeze(); // will also reset buf
+        if (strcmp(dot, ".zls") == 0)
+          buf.append(argv[offset]);
+        else
+          buf.append(argv[offset], dot);
+        buf.append(".zls");
+        output_fn = buf.freeze();
+      }
+    } else {
         code = new_source_file(STDIN_FILENO);
         output_fn = "a.out.zls";
+    }
+    //const Syntax * res = parse_str("TEST", SourceStr(code->entity(), code->begin(), code->end()));
+    //res->print();
+    //printf("\n");
+    //exit(0);
+    //printf("%d\n%s", ast::MACRO_PRELUDE_END - ast::MACRO_PRELUDE, ast::MACRO_PRELUDE);
+    if (zls_mode) {
+      printf("ZLS MODE\n");
+      parse_stmts_raw(SourceStr(code, code->begin(), code->end()), env);
+    } else {
+      parse_maps(env);
+      parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
+      if (debug_mode && !load_prelude) {
+        SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
+        parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
+        //SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
+        //parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
+      } else if (load_prelude) {
+        load_macro_lib(SOURCE_PREFIX "prelude-fct.so", env);
       }
-      //const Syntax * res = parse_str("TEST", SourceStr(code->entity(), code->begin(), code->end()));
-      //res->print();
-      //printf("\n");
-      //exit(0);
-      //printf("%d\n%s", ast::MACRO_PRELUDE_END - ast::MACRO_PRELUDE, ast::MACRO_PRELUDE);
-      if (zls_mode) {
-        printf("ZLS MODE\n");
-        parse_stmts_raw(SourceStr(code, code->begin(), code->end()), env);
-      } else {
-        parse_maps(env);
-        parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
-        if (debug_mode) {
-          SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
-          parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
-          SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
-          parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
-        } else {
-          load_macro_lib(SOURCE_PREFIX "prelude.so", env);
-        }
-        parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
-      }
-      ast::CompileWriter out;
-      out.open(output_fn, "w");
-      if (for_ct) 
-        out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
-      ast::compile(env.top_level_symbols, out);
-      //ast::CompileWriter out2(ast::CompileWriter::ZLE);
-      //out2.open("a.out.zle", "w");
-      //ast::compile(env.top_level_symbols, out2);
-      //AST::ExecEnviron env;
-      //ast->eval(env);
-      if (for_ct) {
-        out.close();
-        StringBuf buf;
-        buf.printf("zls -g -fexceptions -shared -fpic -o %s-fct.so %s", ~base_name, ~output_fn);
-        String line = buf.freeze();
-        printf("%s\n", ~line);
-        system(~line);
-      }
+      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
+    }
+    ast::CompileWriter out;
+    out.open(output_fn, "w");
+    if (for_ct) 
+      out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
+    ast::compile(env.top_level_symbols, out);
+    //ast::CompileWriter out2(ast::CompileWriter::ZLE);
+    //out2.open("a.out.zle", "w");
+    //ast::compile(env.top_level_symbols, out2);
+    //AST::ExecEnviron env;
+    //ast->eval(env);
+    if (for_ct) {
+      out.close();
+      StringBuf buf;
+      buf.printf("zls -g -fexceptions -shared -fpic -o %s-fct.so %s", ~base_name, ~output_fn);
+      String line = buf.freeze();
+      printf("%s\n", ~line);
+      system(~line);
     }
   } catch (Error * err) {
     //if (!err->source)

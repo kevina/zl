@@ -37,6 +37,8 @@
   }
  */
 
+include_file "class-simple.zlh";
+
 static void parse_class_var(Syntax * p, Match * m, Mark * mark,
                             SyntaxList * struct_b, SyntaxList * module_b);
 static Syntax * parse_class_fun(Syntax * p, Match * m, Mark * mark,
@@ -162,7 +164,7 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
       flags->append_flag(m->var(syntax vtable_flag));
     
     // create new vtable class, 
-    vtable = replace (raw_syntax(class _VTable @$1 ({...} $2)),
+    vtable = replace (raw_syntax(.class _VTable @$1 ({...} $2)),
                       match_local(m, flags, vtable_b, 0),
                       mark);
     
@@ -207,7 +209,7 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
   // Now add structure and _vtable to module
   
   if (need_vtable) {
-    module_p->append(replace(raw_syntax (class _VTable), m, mark));
+    module_p->append(replace(raw_syntax (.class _VTable), m, mark));
     exports->append(replace(syntax _VTable, m, mark));
     exports->append(replace(syntax _VTable`outer, m, mark));
   }
@@ -238,9 +240,9 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
   Syntax * module_ = replace(syntax {user_type name {$1; $2;}},
                              match_local(m, module_p, module_b, 0),
                              mark);
-  printf("DONE %s\n", syntax_to_string(name));
-  dump_syntax(module_);
-  printf("---\n");
+  //printf("DONE %s\n", syntax_to_string(name));
+  //dump_syntax(module_);
+  //printf("---\n");
   return module_;
 }
 
@@ -362,6 +364,5 @@ static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
 
   return NULL;
 }
-
 
 

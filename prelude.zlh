@@ -180,4 +180,3 @@ Syntax * parse_class(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;
 make_macro class`syntax parse_class :w_snapshot;
 
-

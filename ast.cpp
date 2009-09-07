@@ -2708,10 +2708,27 @@ namespace ast {
     return empty_stmt();
   }
 
+  Stmt * parse_include_file(const Syntax * p, Environ & env) {
+    clock_t start = clock();
+    assert_num_args(p, 1);
+    String file_name = *p->arg(0);
+    file_name = add_dir_if_needed(file_name, p->str().source);
+    printf("INCLUDING: %s\n", ~file_name);
+    SourceFile * code = new_source_file(file_name);
+    parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env);
+    clock_t parse_done = clock();
+    clock_t load_done = clock();
+    printf("Include Time: %f  (parse: %f)\n", 
+           (load_done - start)/1000000.0, (parse_done - start)/1000000.0);
+    return empty_stmt();
+  }
+
   Stmt * parse_import_file(const Syntax * p, Environ & env) {
     clock_t start = clock();
     assert_num_args(p, 1);
     String file_name = *p->arg(0);
+    file_name = add_dir_if_needed(file_name, p->str().source);
+    printf("IMPORTING: %s\n", ~file_name);
     SourceFile * code = new_source_file(file_name);
     bool env_interface_orig = env.interface;
     try {
@@ -2725,7 +2742,6 @@ namespace ast {
     env.interface = env_interface_orig;
     const char * dot = strrchr(~file_name, '.');
     StringBuf buf;
-    buf.append("./");
     if (!dot)
       buf.append(file_name);
     else
@@ -2734,7 +2750,6 @@ namespace ast {
     String lib_fn = buf.freeze();
     int res = access(~lib_fn, F_OK);
     if (res == 0) {
-      printf("LOADING %s\n", ~lib_fn);
       load_macro_lib(~lib_fn, env);
     }
     clock_t load_done = clock();
@@ -3626,6 +3641,7 @@ namespace ast {
     if (what == "export")  return parse_export(p, env);
     if (what == "add_prop")  return parse_add_prop(p, env);
     if (what == "memberdecl") return parse_memberdecl(p, env);
+    if (what == "include_file") return parse_include_file(p, env);
     if (what == "import_file") return parse_import_file(p, env);
     return 0;
   }

@@ -1,0 +1,5 @@
+
+Syntax * parse_class_simple(Syntax * p, Environ * env);
+
+__raw (make_macro (` .class syntax) parse_class_simple :w_snapshot);
+
