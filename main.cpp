@@ -130,7 +130,13 @@ int main(int argc, const char *argv[])
       buf.printf("zls -g -fexceptions -shared -fpic -o %s-fct.so %s", ~base_name, ~output_fn);
       String line = buf.freeze();
       printf("%s\n", ~line);
-      system(~line);
+      int res = system(~line);
+      if (res == -1) {
+        perror("system(\"zls ...\")");
+        exit(2);
+      } else if (res != 0) {
+        exit(1);
+      }
     }
   } catch (Error * err) {
     //if (!err->source)
