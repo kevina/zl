@@ -1,0 +1,38 @@
+// this exmaple doesn't currently work
+
+Syntax * w_get_set(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, syntax (type, var), syn);
+  Context * context = empty_context();
+
+  Syntax * var = partly_expand(m->var(syntax var), NoPos, env);
+  const char * var_name = syntax_to_string(var);
+
+  char buf[128];
+  snprintf(buf, "get_%s", var_name);
+  m = match (m, syntax get, replace_context(string_to_syntax(buf), context));
+  snprintf(buf, "set_%s", var_name);
+  m = match (m, syntax set, replace_context(string_to_syntax(buf), context));
+
+  return replace(syntax {
+    private:
+      type var; 
+    public:
+      type get() {return var;} 
+      void set(const type & v) {var = v;}}, 
+    m, mark);
+}
+
+make_macro w_get_set;
+
+class Point {
+  w_get_set(int, x);
+  w_get_set(int, y);
+};
+
+//int main() {
+//  Point p;
+//  p.set_x(20);
+//  p.set_y(30);
+//  printf("%d %d\n", p.get_x(), p.get_y());
+//}

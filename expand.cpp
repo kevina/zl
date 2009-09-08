@@ -1227,7 +1227,9 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   //COUT << "\n";
   //p->print();
   //printf("\n////\n");
-  if (p->simple() && asc_isdigit(what.name[0])) {
+  if (p->simple() && pos == NoPos) {
+    return p;
+  } if (p->simple() && asc_isdigit(what.name[0])) {
     return new Syntax(p->str(), NUM, p);
   } else if (is_raw_id(p)) {
     return partly_expand(new Syntax(p->str(), ID, p), pos, env, flags);
@@ -1242,7 +1244,9 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     return partly_expand(reparse("EXP", p->arg(0)), pos, env, flags);
   } else if (what == "parm") {
     //abort();
-    if (pos & ExpPos)
+    if (pos == NoPos)
+      return partly_expand(reparse("ID", p), pos, env, flags);
+    else if (pos & ExpPos)
       return partly_expand(reparse("EXP", p), pos, env, flags);
     else
       return partly_expand(reparse("STMT", p), pos, env, flags);
@@ -1700,6 +1704,8 @@ extern "C" namespace macro_abi {
   }
 
   const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
+    if (sym->is_a("id")) sym = sym->arg(0);
+    if (prop->is_a("id")) prop = prop->arg(0);
     return env->symbols.lookup<TopLevelSymbol>(sym)->get_prop(*prop);
   }
 

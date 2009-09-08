@@ -1,0 +1,38 @@
+
+class X {
+  int x;
+  int y;
+  int z;
+};
+
+Syntax * make_cmp(Syntax * syn, Environ * env) {
+  Mark * mark = new_mark();
+  Match * m = match_args(0, syntax (type), syn);
+  Syntax * res = get_symbol_prop(partly_expand(m->var(syntax type), NoPos, env), 
+                                 syntax fields, env);
+  SyntaxEnum * els = res->args();
+  Syntax * s;
+  SyntaxList * body = new_syntax_list();
+  while ((s = els->next())) {
+    body->append(replace(syntax {if (lhs.$1 != rhs.$1) return false;}, 
+                         match_local(m, s, NULL), mark));
+  }
+  Context * context = empty_context();
+  m = match(m, syntax ==, replace_context(syntax ==, context));
+  m = match(m, syntax !=, replace_context(syntax !=, context));
+  Syntax * res = replace( syntax {
+      bool operator== (const type & lhs, const type & rhs) {$1; return true;}
+      bool operator!= (const type & lhs, const type & rhs) {return !(lhs == rhs);}}, 
+    match_local(m, body, NULL), mark);
+  return res;
+}
+
+make_macro make_cmp;
+
+make_cmp(X,);
+
+int main() {
+  X x, y;
+  return x == y;
+}
+
