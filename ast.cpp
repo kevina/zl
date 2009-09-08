@@ -375,7 +375,7 @@ namespace ast {
   //
 
   void check_type(Exp * exp, TypeCategory * cat) {
-    if (!exp->type->is(cat)) 
+    if (!exp->type->is(cat))
       throw error(exp->syn, "Expected %s type", ~cat->name);
   }
 
@@ -1491,11 +1491,34 @@ namespace ast {
   // BinOp
   //
 
-  BinOp * BinOp::parse_self(const Syntax * p, Environ & env) {
+  struct OverloadExtraCmp {
+    const Type * t;
+    OverloadExtraCmp(const Type * t0) : t(t0) {}
+    bool operator() (SymbolKey, const Symbol * sym) {
+      const Fun * fun = dynamic_cast<const Fun *>(sym);
+      if (!fun) return false;
+      return fun->parms->parms[0].type->effective->unqualified == t;
+    }
+  };
+
+  Exp * BinOp::parse_self(const Syntax * p, Environ & env) {
     syn = p;
     assert_num_args(2);
     lhs = parse_exp(p->arg(0), env);
     rhs = parse_exp(p->arg(1), env);
+    if (lhs->type->effective->unqualified == rhs->type->effective->unqualified
+        && lhs->type->effective->is(USER_C)) 
+    {
+      NoOpGather gather;
+      OverloadExtraCmp cmp(lhs->type->effective->unqualified);
+      // FIXME: Need to preserve marks somehow
+      Fun * fun = find_symbol<Fun>(SymbolKey(what_,OPERATOR_NS), 
+                                   env.symbols.front, NULL, NormalStrategy, gather, cmp);
+      if (fun)
+        return parse_exp(SYN(SYN("call"), 
+                             SYN(mk_id(fun, env)),
+                             SYN(SYN("."), SYN(lhs), SYN(rhs))), env);
+    }
     return construct(env);
   }
   void BinOp::make_ct_value() {}
@@ -2883,9 +2906,23 @@ namespace ast {
 
     //printf("FUN:: %s\n", ~p->to_string());
 
-    SymbolKey name = expand_binding(p->arg(0), env);
+    SymbolKey name;
+    bool is_op = false;
+    if (p->arg(0)->is_a("operator")) {
+      name = *p->arg(0)->arg(0);
+      if (name.name == "==")
+        name.name = "eq";
+      else if (name.name == "!=")
+        name.name = "ne";
+      else
+        throw error(p, "Overloading of \"%s\" not supported yet.\n", ~name.name);
+      name.ns = OPERATOR_NS;
+      is_op = true;
+    } else {
+      name = expand_binding(p->arg(0), env);
+    }
     
-    bool previous_declared = env.symbols.exists_this_scope(name);
+    bool previous_declared = !is_op && env.symbols.exists_this_scope(name);
     Fun * f = NULL;
     if (previous_declared) {
       f = env.symbols.find<Fun>(name);
@@ -2899,8 +2936,16 @@ namespace ast {
         return empty_stmt();
       f->num = name.marks || f->storage_class == SC_STATIC ? NPOS : 0;
       f->where = env.where;
-      env.add(name, f);
       f->parse_forward_i(p, env, collect);
+      env.add(name, f, is_op ? true : false);
+      if (is_op) {
+        if (f->parms->num_parms() != 2)
+          throw error(p, "Expected two paramaters for operator overloading.");
+        if (f->parms->parms[0].type != f->parms->parms[1].type)
+          throw error(p, "Paramater types for operator overloading must match.");
+        if (!f->parms->parms[0].type->is(USER_C))
+          throw error(p, "Paramater types for operator overloading must be user type.");
+      }
     }
     return f;
   }
@@ -2911,6 +2956,18 @@ namespace ast {
     if (!collect.empty())
       collect[0]->finish_parse(env);
     return f;
+  }
+
+  void Fun::uniq_name(OStream & o) const {
+    if (key->ns == OPERATOR_NS) {
+      o << "op$";
+      TopLevelVarDecl::uniq_name(o);
+      o << "$";
+      const UserType * ut = dynamic_cast<const UserType *>(parms->parms[0].type->effective->unqualified);
+      ut->uniq_name(o);
+    } else {
+      TopLevelVarDecl::uniq_name(o);
+    }
   }
   
   AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect & collect) {
@@ -3063,6 +3120,7 @@ namespace ast {
     Vector<Exp *> parms;
     Call * parse_self(const Syntax * p, Environ & env) {
       syn = p;
+      //printf("CALL>>%s\n", ~syn->to_string());
       assert_num_args(2);
       lhs = parse_exp(p->arg(0), env);
       p = p->arg(1);

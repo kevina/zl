@@ -1,0 +1,44 @@
+
+class X {
+  int x;
+};
+
+bool operator== (const X & x, const X & y) {
+  return x.x == y.x;
+}
+
+bool operator!= (const X & x, const X & y) {
+  return x.x != y.x;
+}
+
+class Y {
+ int x;
+};
+
+bool operator== (Y x, Y y) {
+ return x.x == y.x;
+}
+
+bool operator!= (Y x, Y y) {
+ return x.x != y.x;
+}
+
+int main() {
+  {
+    X x, y, z;
+    x.x = 10;
+    y.x = 10;
+    z.x = 20;
+    printf("%d %d\n", x == y, y == z);
+    printf("%d %d\n", x != y, y != z);
+   }
+  {
+    Y x, y, z;
+    x.x = 10;
+    y.x = 10;
+    z.x = 20;
+    printf("%d %d\n", x == y, y == z);
+    printf("%d %d\n", x != y, y != z);
+  }
+  return 0;
+}
