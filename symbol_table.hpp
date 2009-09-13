@@ -187,6 +187,8 @@ namespace ast {
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
     virtual SourceStr source_str() const {return SourceStr();}
+    virtual void add_prop(SymbolName n, const Syntax * s) {abort();}
+    virtual const Syntax * get_prop(SymbolName n) const {abort();}
   protected:
     virtual void uniq_name(OStream & o) const {
       o << name();
@@ -197,11 +199,18 @@ namespace ast {
   // need to made externally visible, they are not necessary
   // global
 
+  struct Props {
+    PropNode * props;
+    Props() : props() {}
+    void add_prop(SymbolName n, const Syntax * s);
+    const Syntax * get_prop(SymbolName n) const;
+  };
+
   struct TopLevelSymbol : virtual public Symbol {
     TopLevelSymbol() : num(), where(), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
     TopLevelSymbol * where;   // NULL if global
-    PropNode * props;
+    Props props;
     using Symbol::uniq_name;
     void uniq_name0(OStream & o) const {
       if (where) {
@@ -226,8 +235,8 @@ namespace ast {
     // if num is zero than leave alone, if NPOS assign uniq num.
     void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
-    virtual void add_prop(SymbolName n, const Syntax * s);
-    virtual const Syntax * get_prop(SymbolName n) const;
+    virtual void add_prop(SymbolName n, const Syntax * s) {props.add_prop(n, s);}
+    virtual const Syntax * get_prop(SymbolName n) const {return props.get_prop(n);}
     void full_name(OStream & o) const {
       if (where) {
         where->full_name(o);

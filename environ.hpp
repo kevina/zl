@@ -127,10 +127,10 @@ namespace ast {
       env.symbols = symbols.new_open_scope();
       return env;
     }
-    Environ new_extended_exp(ExpInsrPoint * ip) {
+    Environ new_extended_exp(ExpInsrPoint * ip, bool force_new_scope) {
       Environ env = *this;
       env.true_top_level = false;
-      if (!env.temp_ip) {
+      if (force_new_scope || !env.temp_ip) {
         env.temp_ip = ip;
         env.exp_ip = ip;
       }

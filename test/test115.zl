@@ -1,0 +1,10 @@
+fluid_binding x;
+
+int main() {
+  int fluid x = 20;
+  __shadow double fluid x = x;
+}
+
+int f(int fluid x) {
+  __shadow double fluid x = x;
+}

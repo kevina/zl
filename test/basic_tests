@@ -11,6 +11,7 @@ $ENV{ZL} = "../zl";
 $ENV{ZLS} = "zls";
 
 my $failed = '';
+my $sigint = 0;
 
 sub sys ($) {
   system $_[0];
@@ -72,6 +73,7 @@ sub do_test( $ ) {
     }
   };
   if ($@) {
+    die $@ if ($sigint);
     print STDERR $@;
     print "... FAILED ($f)\n";
     $failed .= " $f";
@@ -88,13 +90,33 @@ if ( @ARGV > 0) {
   @tests = <F>;
 }
 
-foreach (@tests) {
-  chomp;
-  do_test($_);
+$SIG{INT} = sub {$sigint = 1; die "INTERRUPTED\n";};
+
+eval {
+  foreach (@tests) {
+    chomp;
+    do_test($_);
+  }
+};
+if ($@) {
+  if ($sigint) {
+    print $@;
+    # continue on, don't die
+  } else {
+    die $@;
+  }
 }
+
 
 if ($failed) {
   print "FAILED TESTS: $failed\n";
+  exit 1;
+} elsif ($sigint) {
+  exit 2;
 } else {
-  print "ALL TEST PASSED\n"
+  print "ALL TEST PASSED\n";
+  exit 0;
 }
+
+
+

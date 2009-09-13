@@ -284,7 +284,7 @@ namespace ast {
       name_str = buf.freeze();
       --sz;
     } else if (name_str == ".typeof") {
-      Exp * ast = parse_exp(p->arg(0), env);
+      Exp * ast = parse_exp_for_type(p->arg(0), env);
       Type * t = new TypeOf(ast);
       t->finalize();
       return t;
@@ -294,7 +294,7 @@ namespace ast {
       if (tp->is_a(".type")) {
         t = parse_type(tp->arg(0), env);
       } else {
-        Exp * exp = parse_exp(tp, env);
+        Exp * exp = parse_exp_for_type(tp, env);
         t = exp->type->effective;
       }
       t = t->tprop(p->arg(1), env);

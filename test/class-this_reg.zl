@@ -1,0 +1,43 @@
+import_file "../class.zl";
+
+extern void * this_reg;
+
+.class ParseClassThisReg : public ParseClass {
+
+  Syntax * mk_call(Syntax * fun, Syntax * ths, SyntaxList * parms) {
+    if (ths)
+      return replace(raw_syntax (eblock 
+                                 (var this_reg_save (.ptr (void)) this_reg)
+                                 (assign this_reg (cast (.ptr ($1)) $2))
+                                 (cleanup (assign this_reg this_reg_save))
+                                 (call $3 (. $4))), 
+                     match_local(NULL, name, ths, fun, parms, NULL), mark);
+    else
+      return replace(raw_syntax (call $1 (. $2)), 
+                     match_local(NULL, fun, parms, NULL), mark);
+  }
+
+  SyntaxList * mk_method_parms(Syntax * this_type, SyntaxEnum * parms) {
+    SyntaxList * new_parms = new_syntax_list();
+    new_parms->append_all(parms);
+    return new_parms;
+  }
+
+  Syntax * mk_method_body(Syntax * this_type, Syntax * body) {
+    if (this_type)
+      return replace(raw_syntax(block
+                                (var :__shadow (fluid this) $1 (cast $1 this_reg))
+                                $2), 
+                     match_local(NULL, this_type, body), mark);
+    else
+      return body;
+  }
+
+};
+
+Syntax * parse_class_this_reg(Syntax * p, Environ * env) {
+  ParseClassThisReg pc;
+  return pc.parse(p, env, new_mark());
+}
+
+make_syntax_macro class parse_class_this_reg :w_snapshot;

@@ -693,6 +693,7 @@ namespace ast {
   Stmt * parse_stmt(const Syntax * p, Environ & env);
   Stmt * parse_stmt_decl(const Syntax * p, Environ & env);
   Exp * parse_exp(const Syntax * p, Environ & env);
+  Exp * parse_exp_for_type(const Syntax * p, Environ & env);
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
 
@@ -833,6 +834,9 @@ namespace ast {
   Exp * to_ref(Exp *, Environ &);
   Exp * from_ref(Exp *, Environ &);
   Exp * make_temp(Exp *, Environ &);
+
+  void include_file(String file_name, Environ & env);
+  void import_file(String file_name, Environ & env);
 
 }
 

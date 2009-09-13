@@ -104,7 +104,7 @@ int main(int argc, const char *argv[])
     } else {
       parse_maps(env);
       parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
-      if (debug_mode && !load_prelude) {
+      if (debug_mode && load_prelude) {
         SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
         parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
         //SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
@@ -112,6 +112,9 @@ int main(int argc, const char *argv[])
       } else if (load_prelude) {
         load_macro_lib(SOURCE_PREFIX "prelude-fct.so", env);
       }
+      //if (load_prelude && !for_ct)
+        //ast::import_file(SOURCE_PREFIX "test/class-new_abi.zl", env);
+        //ast::include_file(SOURCE_PREFIX "test/class-this_reg.zlh", env);
       parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
     }
     ast::CompileWriter out;
@@ -145,21 +148,4 @@ int main(int argc, const char *argv[])
     exit(2);
   }
   //sleep(600);
-#if 0
-  SourceFile code;
-  code->read(STDIN_FILENO);
-  Parts dummy;
-  const char * s = code->begin();
-  try {
-    ParseSExp::Res r = ParseSExp::parse_s_exp(s, code->end());
-    assert(s != r.end);
-    printf(">>%.*s<<\n", r.end-s, s);
-    r.parse->print();
-    printf("\n");
-    AST::AST * ast = AST::parse(r.parse);
-    ast->eval(new AST::Environ);
-  } catch (ParseCommon::Error * err) {
-    puts(err->message().c_str());
-  }
-#endif
 }

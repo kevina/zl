@@ -1,0 +1,6 @@
+
+import_file "class-this_reg.zl";
+
+void * this_reg = NULL;
+
+

@@ -1,3 +1,5 @@
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -337,8 +339,8 @@ namespace ast {
   struct Var;
 
   struct ExpInsrPointWrapperBase {
-    ExpInsrPointWrapperBase(Environ & e, ExpInsrPoint::Where w = ExpInsrPoint::ExtendedExp) 
-      : ip(&stmts, w), stmts(NULL), env(e.new_extended_exp(&ip)) {}
+    ExpInsrPointWrapperBase(Environ & e, ExpInsrPoint::Where w = ExpInsrPoint::ExtendedExp, bool force_new_scope = false) 
+      : ip(&stmts, w), stmts(NULL), env(e.new_extended_exp(&ip, force_new_scope)) {}
     ExpInsrPoint ip;
     Stmt * stmts;
     Environ env;
@@ -346,10 +348,12 @@ namespace ast {
   };
 
   struct ExpInsrPointWrapper : public ExpInsrPointWrapperBase {
-    ExpInsrPointWrapper(Environ & e) : ExpInsrPointWrapperBase(e) {}
+    ExpInsrPointWrapper(Environ & e, bool force_new_scope = false) 
+      : ExpInsrPointWrapperBase(e, ExpInsrPoint::ExtendedExp, force_new_scope) {}
     Stmt * finish();
     Stmt * finish(Exp * exp); // if necessary wrap exp in a block
                               // otherwise return estmt
+    Stmt * finish(Stmt * final); 
   };
 
   struct RefInsrPointWrapper : public ExpInsrPointWrapperBase {
@@ -753,7 +757,7 @@ namespace ast {
                                 SYN(lhs),
                                 SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
                                     SYN(SYN("."), SYN(rhs)))),
-                            env);
+                            wrap.env);
     return wrap.finish(call);
   }
 
@@ -817,7 +821,9 @@ namespace ast {
     void add_cleanup(const UserType * ut, Environ & env) {
       if (ut && find_symbol<Symbol>("_destructor", ut->module->syms)) {
         cleanup = new Cleanup;
-        cleanup->code = mk_destructor(mk_id(this, env), env)->as_stmt();
+        ExpInsrPointWrapper wrap(env, true);
+        Exp * call = mk_destructor(mk_id(this, wrap.env), wrap.env);
+        cleanup->code = wrap.finish(call);
       }
     }
 
@@ -889,6 +895,7 @@ namespace ast {
 
   struct AutoVar : public Var {
     AutoVar() : num(), shadow(false) {}
+    AutoVar(const Type * t) : num(), shadow(false) {type = t;}
     mutable unsigned num;
     bool shadow;
     void compile(CompileWriter & f, Phase phase) const {
@@ -906,6 +913,10 @@ namespace ast {
       assign_uniq_num<AutoVar>(this, self->next, stop);
     }
   };
+
+  static AutoVar * new_auto_var(SymbolName n, const Type * t) {
+    return new AutoVar(t);
+  }
 
 
   static unsigned last_temp_num = 0;
@@ -991,7 +1002,13 @@ namespace ast {
         init = NULL;
       } 
     }
-    Stmt * finish_parse(Environ & env) {
+    Stmt * finish_parse(Environ & env0) {
+      // Need to create a new fake scope to capture any dependencies
+      // when initializing the var
+      Environ env = env0.new_scope();
+      env.where = this;
+      env.deps = &deps_;
+      env.for_ct = &for_ct_;
       Var::finish_parse(env);
       env.move_defn(this);
       return empty_stmt();
@@ -1039,7 +1056,7 @@ namespace ast {
       TopLevelVar * v = fresh ? new TopLevelVar : env.symbols.find<TopLevelVar>(name);
       v->num = env.scope >= LEXICAL || name.marks || storage_class == SC_STATIC ? NPOS : 0;
       v->where = env.where;
-      v->deps_closed = true;
+      v->deps_closed = false;
       var = v;
       res = empty_stmt();
     }
@@ -2057,6 +2074,15 @@ namespace ast {
     return b;
   }
 
+  Stmt * ExpInsrPointWrapper::finish(Stmt * final) {
+    if (!stmts) return final;
+    ip.add(final); 
+    Block * b = new Block();
+    b->stmts = stmts;
+    reset();
+    return b;
+  }
+
   Var * RefInsrPointWrapper::finish(Environ & oenv) {
     if (!stmts) return NULL;
     assert(env.temp_ip == &ip);
@@ -2407,9 +2433,14 @@ namespace ast {
   };
 
   Stmt * parse_add_prop(const Syntax * p, Environ & env) {
-    assert_num_args(p, 2);
-    Module * m = dynamic_cast<Module *>(env.where);
-    m->add_prop(*p->arg(0), p->arg(1));
+    assert_num_args(p, 2, 3);
+    if (p->num_args() == 2) {
+      Module * m = dynamic_cast<Module *>(env.where);
+      m->add_prop(*p->arg(0), p->arg(1));
+    } else {
+      Symbol * sym = env.symbols.find<Symbol>(p->arg(0));
+      sym->add_prop(*p->arg(1), p->arg(2));
+    }
     return empty_stmt();
   }
 
@@ -2678,7 +2709,11 @@ namespace ast {
         const Syntax * n = expand_id(arg1->arg(0));
         Syntax * a = new Syntax(*arg1->arg(1));
         a->add_flag(new Syntax(THIS, ptr_exp));
-        const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
+        const Symbol * sym;
+        if (n->is_a("::")) // FIXME: This is hack, and not quite right
+          sym = lookup_symbol<Symbol>(n, DEFAULT_NS, env.symbols.front, NULL, StripMarks);
+        else
+          sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
         call = new Syntax(p->str(), arg1->part(0), new Syntax(ID, new Syntax(n, sym)), a);
       } else {
         const Syntax * n = expand_id(arg1);
@@ -2731,26 +2766,63 @@ namespace ast {
     return empty_stmt();
   }
 
-  Stmt * parse_include_file(const Syntax * p, Environ & env) {
+  struct ImportedFile : public Symbol {
+    bool included;
+    ImportedFile(bool inc = false) : included(inc) {}
+  };
+
+  String get_file_id(String file_name) {
+    struct stat stat_d;
+    int res = stat(~file_name, &stat_d);
+    if (res) {
+      perror(~file_name);
+      abort();
+    }
+    StringBuf buf;
+    buf.printf("fid:%lld:%lu", stat_d.st_dev, stat_d.st_ino);
+    return buf.freeze();
+  }
+
+  void include_file(String file_name, Environ & env) {
+    String file_id = get_file_id(file_name);
+    ImportedFile * imf = env.symbols.find<ImportedFile>(file_id);
+    if (imf) {
+      if (imf->included) {
+        fprintf(stderr, "Error: Trying to include file which is already imported: %s\n", ~file_name);
+        abort();
+      } else {
+        printf("SKIPPING (already included): %s\n", ~file_name);
+        return;
+      }
+    }
     clock_t start = clock();
-    assert_num_args(p, 1);
-    String file_name = *p->arg(0);
-    file_name = add_dir_if_needed(file_name, p->str().source);
     printf("INCLUDING: %s\n", ~file_name);
     SourceFile * code = new_source_file(file_name);
     parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env);
     clock_t parse_done = clock();
     clock_t load_done = clock();
-    printf("Include Time: %f  (parse: %f)\n", 
+    printf("Include Time (%s): %f  (parse: %f)\n", ~file_name,
            (load_done - start)/1000000.0, (parse_done - start)/1000000.0);
-    return empty_stmt();
+    imf = new ImportedFile(true);
+    env.add(file_id, imf);
   }
 
-  Stmt * parse_import_file(const Syntax * p, Environ & env) {
-    clock_t start = clock();
+  Stmt * parse_include_file(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     String file_name = *p->arg(0);
     file_name = add_dir_if_needed(file_name, p->str().source);
+    include_file(file_name, env);
+    return empty_stmt();
+  }
+
+  void import_file(String file_name, Environ & env) {
+    String file_id = get_file_id(file_name);
+    ImportedFile * imf = env.symbols.find<ImportedFile>(file_id);
+    if (imf) {
+      printf("SKIPPING (already imported): %s\n", ~file_name);
+      return;
+    }
+    clock_t start = clock();
     printf("IMPORTING: %s\n", ~file_name);
     SourceFile * code = new_source_file(file_name);
     bool env_interface_orig = env.interface;
@@ -2776,8 +2848,17 @@ namespace ast {
       load_macro_lib(~lib_fn, env);
     }
     clock_t load_done = clock();
-    printf("Import Time: %f  (parse: %f)\n", 
+    printf("Import Time (%s): %f  (parse: %f)\n", ~file_name, 
            (load_done - start)/1000000.0, (parse_done - start)/1000000.0);
+    imf = new ImportedFile();
+    env.add(file_id, imf);
+  }
+
+  Stmt * parse_import_file(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    String file_name = *p->arg(0);
+    file_name = add_dir_if_needed(file_name, p->str().source);
+    import_file(file_name, env);
     return empty_stmt();
   }
 
@@ -3026,7 +3107,7 @@ namespace ast {
          i != e; ++i)
     {
       SymbolName n = i->name;
-      BasicVar * sym = new_other_var(n, i->type);
+      BasicVar * sym = new_auto_var(n, i->type);
       i->sym = sym;
       env.add(n, sym);
       //env.symbols.add(n, sym);
@@ -3094,12 +3175,13 @@ namespace ast {
     Exp * exp;
     Return() {}
     const char * what() const {return "return";}
-    Return * parse_self(const Syntax * p, Environ & env) {
+    Stmt * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       assert_num_args(1);
-      exp = parse_exp(p->arg(0), env);
-      exp = exp->resolve_to(env.frame->return_type, env);
-      return this;
+      ExpInsrPointWrapper wrap(env);
+      exp = parse_exp(p->arg(0), wrap.env);
+      exp = exp->resolve_to(env.frame->return_type, wrap.env);
+      return wrap.finish(this);
     }
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
@@ -3666,6 +3748,11 @@ namespace ast {
 
   Exp * parse_exp(const Syntax * p, Environ & env) {
     return parse_exp(p, env, ExpContext());
+  }
+
+  Exp * parse_exp_for_type(const Syntax * p, Environ & env) {
+    ExpInsrPointWrapper wrap(env);
+    return parse_exp(p, wrap.env, ExpContext());
   }
   
   template<> 

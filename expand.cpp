@@ -449,6 +449,9 @@ struct Macro : public Declaration, public Symbol {
       throw err;
     }
   }
+  Props props;
+  void add_prop(SymbolName n, const Syntax * s) {props.add_prop(n, s);}
+  const Syntax * get_prop(SymbolName n) const {return props.get_prop(n);}
 };
 
 const Syntax * Macro::macro_call = NULL;
@@ -469,6 +472,7 @@ struct SimpleMacro : public Macro {
     assert_num_args(3);
     real_name = expand_binding(p->arg(0), e);
     parms = flatten(p->arg(1));
+    //printf("MAP PARMS %s: %s\n", ~p->arg(0)->what().name, ~parms->to_string());
     free = p->flag("free");
     if (free)
       free = free->arg(0);
@@ -1522,8 +1526,10 @@ void compile_for_ct(Deps & deps, Environ & env) {
       //printf(">>%s\n", ~(*i)->uniq_name());
       void * p = dlsym(lh, (*i)->uniq_name());
       //assert(p);
+      //printf("%p %s\n", *i, ~(*i)->uniq_name());
       (*i)->ct_ptr = p;
-      SymbolNode * env_ss = dynamic_cast<const Fun *>(*i)->env_ss;
+      const Fun * f = dynamic_cast<const Fun *>(*i);
+      SymbolNode * env_ss = f ? f->env_ss : NULL;
       if (env_ss) {
         StringBuf buf;
         buf.printf("%s$env_ss", ~(*i)->uniq_name());
@@ -1706,7 +1712,7 @@ extern "C" namespace macro_abi {
   const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
     if (sym->is_a("id")) sym = sym->arg(0);
     if (prop->is_a("id")) prop = prop->arg(0);
-    return env->symbols.lookup<TopLevelSymbol>(sym)->get_prop(*prop);
+    return env->symbols.lookup<Symbol>(sym)->get_prop(*prop);
   }
 
 }

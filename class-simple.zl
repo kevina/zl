@@ -162,31 +162,28 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
                              match_local(m, parent_vtable_n, NULL), mark));
     if (m->var(syntax vtable_flag))
       flags->append_flag(m->var(syntax vtable_flag));
+
+    if (parent_vtable) {
+      module_b->append(replace(
+                         syntax {void _vtable_init(_VTable * _vt) {parent_n::_vtable_init(_vt); $1;}},
+                         match_local(m, vtable_i, 0),
+                         mark));
+    } else {
+      module_b->append(replace(
+                         syntax {void _vtable_init(_VTable * _vt) {$1;}},
+                         match_local(m, vtable_i, 0),
+                         mark));
+    }
+
+    vtable_b->append(replace(
+                       syntax {macro _constructor(:this ths = this) {_vtable_init(ths);}},
+                       m, mark));
     
     // create new vtable class, 
     vtable = replace (raw_syntax(.class _VTable @$1 ({...} $2)),
                       match_local(m, flags, vtable_b, 0),
                       mark);
     
-    // create static vtable obj
-    // create init function
-    //   and add init code
-    module_b->append(replace(
-      syntax {void _vtable_init(_VTable * _vt) {$1;} },
-      match_local(m, vtable_i, 0),
-      mark));
-    exports->append(replace(syntax _vtable_init, m, mark));
-
-    if (parent_vtable) {
-      module_b->append(replace(
-                         syntax {__static_constructor void init() {parent_n::_vtable_init(&_vtable); _vtable_init(&_vtable);}},
-                         m, mark));
-    } else {
-      module_b->append(replace(
-                         syntax {__static_constructor void init() {_vtable_init(&_vtable);}},
-                         m, mark));
-    }
-
     //printf("Adding _vptr\n");
     if (parent_vtable) {
       module_b->append(replace(
@@ -355,8 +352,7 @@ static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                 replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
       vtable_b->append(replace(raw_syntax (var (mid fpn) (mid pfun)), m, mark));
     }
-    vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid fpn))) 
-                                         (id (` (mid n) internal))), m, mark));
+    vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) (` n internal)), m, mark));
   } else {
     module_b->append(replace(syntax {macro n ($1) {n`internal($2);}},
                              match_local(m, macro_parms, call_parms, 0), mark));

@@ -87,4 +87,3 @@ Syntax * parse_class_w_abi(Syntax * p, Environ * env) {
 
 make_syntax_macro class parse_class_w_abi :w_snapshot;
 
-
