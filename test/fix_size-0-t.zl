@@ -1,0 +1,26 @@
+include_file "fix_size-0.zl";
+
+class X;
+
+class X : fix_size(16) {
+  int x;
+  char c;
+};
+
+class Y : public X : fix_size(32) {
+  int j;
+};
+
+class Z : fix_size(8) {
+  int x;
+  int y;
+};
+
+int main() {
+  printf("%d\n", sizeof(X));
+  Y y;
+  y.x;
+  printf("%d\n", sizeof(Y));
+  printf("%d\n", sizeof(Z));
+  return 0;
+}

@@ -1,17 +1,41 @@
+Syntax * parse_myclass(Syntax * p, Environ * env);
+make_syntax_macro class parse_myclass;
+
 Syntax * parse_myclass(Syntax * p, Environ * env) {
+
   Mark * mark = new_mark();
   
   // to avoid duplicate work
   p = partly_expand_class(p, mark, env);
 
-  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) @rest), p);
+  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) :(fix_vtable_size fix_vtable_size) @rest), p);
+
+  //printf("MY CLASS PARSE on %s\n", syntax_to_string(m->var(syntax name)));
+  //dump_syntax(p);
 
   Syntax * body = match_var(m, syntax body);
   Syntax * fix_size_s = match_var(m, syntax fix_size);
+  Syntax * fix_vtable_s = match_var(m, syntax fix_vtable_size);
 
-  if (!body || !fix_size_s) return parse_class(p, env);
+  if (!body || (!fix_size_s && !fix_vtable_s))
+    return parse_class(p, env);
 
+  SyntaxList * res = new_syntax_list();
 
+  if (fix_vtable_s) {
+    res->append(replace(raw_syntax(smacro vtable_class (@r) 
+                                   (class @r :(fix_size fix_vtable_size))),
+                        m, mark));
+    m = match(m, syntax rest, replace(raw_syntax(@ @rest :(vtable_class vtable_class)),
+                                      m, mark));
+    if (!fix_size_s) {
+      res->append(replace(raw_syntax(class name ({...} body) @rest), m, mark));
+      return res;
+    }
+  }
+
+  printf("FIX SIZE PARSE on %s\n", syntax_to_string(m->var(syntax name)));
+  
   size_t fix_size = ct_value(fix_size_s, env);
 
   m = match(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
@@ -20,6 +44,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
                                    m, mark);
   
   Environ * lenv = temp_environ(env);
+  pre_parse(res, lenv); // to get the vtable_class macro if necessary
   pre_parse(r, lenv);
 
   size_t size = ct_value(replace(syntax (offsetof(name, dummy)), m, mark), lenv);
@@ -31,17 +56,19 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   } else if (fix_size == 0) {
     fix_size = ptr_size;
   }
-  
+
+  //printf("?? %d == %d\n", size, fix_size);
+
   if (size == fix_size) {
 
-    return replace(raw_syntax (class name ({...} body @rest)), m, mark);
+    res->append(replace(raw_syntax (class name ({...} body @rest)), m, mark));
 
   } else if (size < fix_size) {
 
     char buf[32];
     snprintf(buf, 32, "{char dummy[%u];}", fix_size - size);
     m = match(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
-    return replace(raw_syntax (class name ({...} body buffer) @rest), m, mark);
+    res->append(replace(raw_syntax (class name ({...} body buffer) @rest), m, mark));
 
   } else {
     // now go throgh and get offset of each member until it is under
@@ -67,7 +94,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
         }
         ip->append(member);
         if (ip == overflow)
-          main->append(replace(raw_syntax(alias n type (-> (member overflow ptr) n) :need_constructor), m0, mark));
+          main->append(replace(raw_syntax(pseudo_member n type (-> (member overflow ptr) n)), m0, mark));
       } else {
         main->append(member);
       }
@@ -87,61 +114,13 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
       }, match_local(m, overflow, NULL), mark);
     main->replace(overflow_pos, of);
     
-    Syntax * res =  replace(raw_syntax (class name ({...} $1) @rest), 
-                            match_local(m, main, NULL), mark);
-    //printf("===\n");
-    //dump_syntax(res);
-    //printf("^^^\n");
-    return res;
+    res->append(replace(raw_syntax (class name ({...} $1) @rest), 
+                        match_local(m, main, NULL), mark));
   }
-}
 
-make_syntax_macro class parse_myclass;
-
-class X;
-
-class X : fix_size(16) {
-  int x;
-  char c;
-};
-
-class Y : public X : fix_size(32) {
-  int j;
-};
-
-class Z : fix_size(8) {
-  class I {
-    int x;
-  };
-  I i;
-  int x;
-  int y;
-  int z;
-};
-
-class Z2 : fix_size(8) {
-  class I {
-    int x;
-  };
-  I i;
-  int x;
-  int y;
-  int z;
-};
-
-
-int main() {
-  printf("%d\n", sizeof(X));
-  Y y;
-  y.x;
-  printf("%d\n", sizeof(Y));
-  Z z;
-  z.x = 10;
-  z.y = 20;
-  z.z = 30;
-  printf("%d %d %d %d\n", sizeof(Z), z.x, z.y, z.z);
-  Z z2;
-  printf("%d\n", sizeof(Z2));
-  return 0;
+  //printf("===\n");
+  //dump_syntax(res);
+  //printf("^^^\n");
+  return res;
 }
 

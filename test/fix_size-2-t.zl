@@ -1,0 +1,29 @@
+include_file "fix_size-2.zl";
+
+make_syntax_macro class parse_myclass;
+
+class X : fix_size(8) : fix_vtable_size(8) {
+  virtual void foo1() {printf("1\n");}
+  virtual void foo2() {printf("2\n");}
+  virtual void foo3() {printf("3\n");}
+  class Inner : fix_size(8) {
+    int x;
+    int y;
+    int z;
+  };
+  Inner inner;
+};
+
+int main() {
+  X x;
+  x.foo1();
+  x.foo2();
+  x.foo3();
+  x.inner.x = 20;
+  x.inner.y = 30;
+  x.inner.z = 40;
+  printf("%d %d %d\n", x.inner.x, x.inner.y, x.inner.z);
+  printf("%d\n", sizeof(X));
+  return 0;
+}
+

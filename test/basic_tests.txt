@@ -59,7 +59,6 @@ test62.c
 test63.c
 test64.c
 test66.c
-test67.c
 test68.c
 test69.c
 test70.c
@@ -86,13 +85,11 @@ test91.c
 test92.c
 test93.c
 test94.c
-test95.c
 test96.c
 test97.c
 test98.c
 test99.c
 test100.c
-test101.c
 test102.c
 test103.c
 test104.c
@@ -100,9 +97,16 @@ test105.c
 test106.c
 test107.sh
 test108.zl
-test109.sh
-test110.sh
 test111.zl
 test112.zl
 test113.zl
 test115.zl
+
+fix_size-0-t.zl # was 67
+fix_size-1-t.zl # was 95
+fix_size-2-t.zl # was 101
+
+new_abi-t1.sh # was 109
+new_abi-t2.sh # was 110
+
+this_reg-t1.zl

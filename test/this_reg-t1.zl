@@ -1,0 +1,34 @@
+
+include_file "class-w_abi.zl";
+
+class X : abi_ver(1) {
+public:
+  int i;
+  int f() {return i;}
+};
+
+class Y : abi_ver(3) {
+public:
+  int i;
+  int f() {return i;}
+};
+
+class Z {
+public:
+  X x;
+  Y y;
+  int f() {return x.f() + y.f();}
+};
+
+int main() {
+  X x;
+  Y y;
+  x.i = 1;
+  y.i = 2;
+  printf("%d %d\n", x.f(), y.f());
+  Z z;
+  z.x.i = 10;
+  z.y.i = 20;
+  printf("%d\n", z.f());
+  printf("%d %d\n", z.x.f(), z.y.f());
+}

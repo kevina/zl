@@ -1,0 +1,19 @@
+
+import_file "class-w_abi.zl";
+
+class Xv1 : abi_ver(1) {
+  virtual void f() {printf("f\n");}
+};
+
+class Zv1 : public Xv1 : abi_ver(1) {
+  virtual void h() {printf("h\n");}
+};
+
+class Xv2 : abi_ver(2) {
+  virtual void f() {printf("f\n");}
+};
+
+class Zv2 : public Xv2 : abi_ver(2) {
+  virtual void h() {printf("h\n");}
+};
+

@@ -1,5 +1,5 @@
 
-import_file "class-new_abi.zl";
+import_file "class-w_abi.zl";
 
 class Xv1 : abi_ver(1) {
   virtual void f() {printf("f\n");}

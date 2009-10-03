@@ -176,6 +176,9 @@ make_macro make_syntax_macro`syntax parse_make_syntax_macro :w_snapshot;
 
 Syntax * partly_expand_class(Syntax *, Mark *, Environ *);
 
+__raw(smacro pseudo_member (VAR TYPE VAL) 
+      (alias VAR TYPE VAL :need_constructor));
+
 Syntax * parse_class(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;
 make_macro class`syntax parse_class :w_snapshot;

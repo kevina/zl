@@ -1,5 +1,5 @@
 
-import_file "test109c.zl";
+import_file "new_abi-t1-c.zl";
 
 int main() {
   Zv1 * z = new Zv1;

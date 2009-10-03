@@ -1,4 +1,3 @@
-
 import_file "../class.zl";
 
 .class ParseClassNewABI : public ParseClass {
@@ -57,33 +56,3 @@ Syntax * parse_class_new_abi(Syntax * p, Environ * env) {
 }
 
 make_syntax_macro class parse_class_new_abi :w_snapshot;
-
-//
-//
-//
-
-size_t zl_abi_version = 1;
-
-Syntax * parse_class_w_abi(Syntax * p, Environ * env) {
-  Mark * mark = new_mark();
-  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(abi_ver abi_ver) @rest), p);
-
-  Syntax * body = match_var(m, syntax body);
-  Syntax * abi_ver_s = match_var(m, syntax abi_ver);
-
-  size_t abi_ver = abi_ver_s ? ct_value(abi_ver_s, env) : zl_abi_version;
-
-  printf("parse_class_w_abi %d\n", abi_ver);
-
-  switch (abi_ver) {
-  case 1:
-    return parse_class(p, env);
-  case 2:
-    return parse_class_new_abi(p, env);
-  default:
-    return error(p, "Unknown ABI version %d\n", abi_ver);
-  }
-}
-
-make_syntax_macro class parse_class_w_abi :w_snapshot;
-

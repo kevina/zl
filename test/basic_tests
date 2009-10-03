@@ -53,7 +53,7 @@ sub compile_test($) {
 
 sub do_test( $ ) {
   my $f = $_[0];
-  my ($base, $ext) = $f =~ /^(.+?)\.([a-z]+)$/ or die;
+  my ($base, $ext) = $f =~ /^(.+?)\.([a-z]+)$/ or die "Bad Filename: \"$f\"";
   eval {
     unlink "a.out";
     unlink "$base.out";
@@ -95,6 +95,10 @@ $SIG{INT} = sub {$sigint = 1; die "INTERRUPTED\n";};
 eval {
   foreach (@tests) {
     chomp;
+    s/(.+?)\#.+$/$1/;
+    s/^\s+//; 
+    s/\s+$//;
+    next unless /\S/;
     do_test($_);
   }
 };
@@ -117,6 +121,4 @@ if ($failed) {
   print "ALL TEST PASSED\n";
   exit 0;
 }
-
-
 
