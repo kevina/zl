@@ -24,3 +24,6 @@ class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl
 
 prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl 
 	ulimit -s 1024; ./zl -C -P prelude.zl > prelude-fct.log
+
+dist-hook:
+	cp -p $(srcdir)/distextra/* $(distdir)
