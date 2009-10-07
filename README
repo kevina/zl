@@ -1,0 +1,33 @@
+ZL has been tested on Ubuntu 6.06 and 9.04, but it should work with
+any Linux system.  Other Unix-like systems way work.
+
+In order to produce executable code ZL requires a modified version of
+gcc.  So far gcc-4.4.0 has only been tested so its best to stick with
+that version.  Download gcc 4.4.0 from
+ftp://gcc.gnu.org/pub/gcc/releases/gcc-4.4.0 (gcc-core is all that is
+required) and apply the patch gcc-4.4.0-zl.patch.  When configuring
+make sure you enable the zls language:
+
+  tar xf gcc-core-4.4.0.tar.bz2
+  mv gcc-4.4.0-src
+  mkdir gcc-4.4.0
+  mv gcc-4.4.0-src gcc-4.4.0/src
+  pushd gcc-4.4.0/src
+  patch -p0 < PATH_TO_PATCH/gcc-4.4.0-zl.patch # should apply cleanly
+  popd
+  mkdir gcc-4.4.0/obj
+  cd gcc-4.4.0/obj
+  ../src/configure --enable-languages=zls # --prefix=/opt/gcc-4.4-zl/
+  make bootstrap
+  make install
+  sudo ln -s /opt/gcc-4.4-zl/bin/gcc /usr/local/bin/zls
+
+ZL Build instructions
+
+  ./configure
+  make
+  # no need to install, in fact the install target has not been tested
+
+To test ZL, make sure "zls" in your path
+  make -C test test
+

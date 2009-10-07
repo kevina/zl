@@ -9,7 +9,7 @@ class-this_reg-fct.so: ../zl class-this_reg.zl
 class-w_abi-fct.so: ../zl class-w_abi.zl class-new_abi-fct.so class-this_reg-fct.so
 	../zl -C class-w_abi.zl
 
-test:
+test: all
 	./basic_tests
 
 clean:
