@@ -24,6 +24,41 @@ namespace ParsePeg {class Parse;}
 
 class Capture;
 
+const char * NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+  Lookup::iterator i = lookup.find(str.begin);
+  Res * r;
+  if (i == lookup.end()) {
+    r = &lookup[str];
+    r->end = FAIL; // to avoid infinite recursion
+    r->end = prod->match(str, PartsFlags(&r->parts, &r->flags), r->errors);
+    //assert(r->end == FAIL || r->parts.size() == 1);
+  } else {
+    r = &i->second;
+  }
+  errs.add(r->errors);
+  if (parts) {
+    parts.parts->append(r->parts);
+    if (!r->flags.empty()) {
+      if (parts.flags) {
+        parts.flags->merge(r->flags);
+      } else {
+        assert(parts.parts->size() == 0);
+        Syntax * s = new Syntax(new Syntax("@"));
+        s->add_flags(r->flags);
+        parts.parts->append(s);
+        }
+    }
+  }
+  return r->end;
+};
+
+void ParsePeg::Parse::clear_cache() {
+  hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
+  for (; i != e; ++i)
+    i->second->clear_cache();
+}
+
+
 class AlwaysTrue : public Prod {
 public:
   const char * match(SourceStr str, PartsFlags, ParseErrors & errs) {
