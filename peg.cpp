@@ -24,16 +24,29 @@ namespace ParsePeg {class Parse;}
 
 class Capture;
 
+static unsigned indent_level = 0;
+
 const char * NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
   Lookup::iterator i = lookup.find(str.begin);
   Res * r;
   if (i == lookup.end()) {
     r = &lookup[str];
     r->end = FAIL; // to avoid infinite recursion
+    //printf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
+    //indent_level++;
     r->end = prod->match(str, PartsFlags(&r->parts, &r->flags), r->errors);
+    //indent_level--;
+    //if (r->end != FAIL)
+      //printf("%*cNamedProd DONE %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
+    //else
+      //printf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
     //assert(r->end == FAIL || r->parts.size() == 1);
   } else {
     r = &i->second;
+    //if (r->end != FAIL)
+    //  printf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
+    //else
+    //  printf("%*cNamedProd HIT %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
   }
   errs.add(r->errors);
   if (parts) {
@@ -46,13 +59,14 @@ const char * NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & err
         Syntax * s = new Syntax(new Syntax("@"));
         s->add_flags(r->flags);
         parts.parts->append(s);
-        }
+      }
     }
   }
   return r->end;
 };
 
 void ParsePeg::Parse::clear_cache() {
+  //printf("NamedProd CLEAR\n");
   hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
   for (; i != e; ++i)
     i->second->clear_cache();
