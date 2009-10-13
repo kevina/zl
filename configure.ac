@@ -8,6 +8,9 @@ AC_CONFIG_SRCDIR([main.cpp])
 AC_CONFIG_HEADER([config.h])
 
 # Checks for programs.
+if test -z "$CXXFLAGS"; then
+  CXXFLAGS="-g -O"
+fi
 AC_PROG_CXX
 
 # Checks for libraries.
@@ -31,7 +34,5 @@ AC_CONFIG_FILES([Makefile])
 
 AH_TEMPLATE([SOURCE_PREFIX], [])
 AC_DEFINE_UNQUOTED([SOURCE_PREFIX], "`pwd`/") 
-
-AC_SUBST(CXXFLAGS, "-g -O")
 
 AC_OUTPUT
