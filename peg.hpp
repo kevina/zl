@@ -66,8 +66,39 @@ struct ParseErrors : public Vector<const ParseError *> {
   void print(const SourceInfo * file, const SourceFile * grammer);
 };
 
-struct Res {
-  const char * end; // NULL on FALSE
+// Some cached productions are persistent between parses, which saves
+// time, when reparsing.  However, in order to use the cached result
+// two condations need to hold
+//   1) The end of the string being parsed is past the last character
+//      read (for any reason) of the cached result
+///  2) If the cached result read past the end of the string, the end of the 
+//      new string being parsed string is at the same position of the
+//      cached result.
+// To make sure (1) holds, we keep track of the last character read
+// with "read_to".  It is important that this is really the last
+// character read and not one-past as with a typical end pointer,
+// otherwise we couldn't tell the difference between reading the last
+// character, and reading past the end of the string.  (2) is a
+// special case.  For (2) we set read_to to NULL and store the current
+// end-of-string position in str_end.
+
+struct MatchRes {
+  const char * end;     // NULL on FALSE
+  const char * read_to; // last charater read, _not_ one past, if NULL
+                        // then either 1) no characters are read or 2)
+                        // read past the end.  (2) is only holds when
+                        // used as a cached result and str_end is
+                        // non-NULL (see Res below)q
+  explicit MatchRes(const char * e) : end(e), read_to(e) {}
+  MatchRes() {}
+  MatchRes(const char * e, const char * r) : end(e), read_to(r) {}
+  operator bool() const {return end;}
+  bool operator!() const {return !end;}
+};
+
+struct Res : public MatchRes {
+  const char * str_end; // if not NULL than read past end-of-string to this point
+  Res() : str_end() {}
   Parts parts;
   Flags flags;
   ParseErrors errors;
@@ -103,30 +134,37 @@ struct PartsFlags {
 
 class Prod : public gc_cleanup {
 public:
-  virtual const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) = 0;
+  virtual MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) = 0;
   virtual Prod * clone(Prod * = 0) = 0; // the paramater is the new
                                         // prod to use in place of the
                                         // placeholder prod "_self"
   virtual void end_with(Prod * p) {}
   virtual void dump() {}
   virtual void verify() {}
+  bool persistent() const {if (persistent_ == -1) set_persistent(); return persistent_;}
+  virtual void set_persistent() const {}
   virtual ~Prod() {}
-  Prod(const char * p, const char * e) : pos(p), end(e) {}
+  Prod(const char * p, const char * e) : pos(p), end(e), persistent_(-1) {}
 public: // but don't use
   CaptureType capture_type;
   const char * pos;
   const char * end;
+protected:
+  mutable int persistent_;
 };
 
 class SymProd : public Prod {
 public:
-  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     return prod->match(str,parts,errs);
   }
   SymProd(const char * s, const char * e, String n, Prod * p = 0) 
-    : Prod(s,e), name(n), prod(p) {
+    : Prod(s,e), name(n) 
+  {
+    if (p) set_prod(p);
     capture_type.set_to_implicit();
   }
+  void set_persistent() const {persistent_ = prod->persistent();}
   void set_prod(Prod * p) {prod = p;}
   void verify() {
     //assert(prod->capture_type.is_implicit() && prod->capture_type.is_single());
@@ -136,7 +174,7 @@ public:
     if (name == "_self")
       set_prod(p);
     else
-      prod = other.prod->clone(p);
+      set_prod(other.prod->clone(p));
   }
   virtual Prod * clone(Prod * p) {return new SymProd(*this, p);} 
   void dump() {printf("%s", name.c_str());}
@@ -153,7 +191,7 @@ struct PtrLt {
 class NamedProd : public SymProd {
   // named productions are memorized
 public:
-  const char * match(SourceStr str, PartsFlags parts, ParseErrors & errs);
+  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs);
   NamedProd(String n) 
     : SymProd(0,0,n) {}
   virtual Prod * clone(Prod *) {
@@ -162,7 +200,7 @@ public:
   void dump() {printf("%s", name.c_str());}
   void clear_cache() {lookup.clear();}
 private:
-  typedef hash_map<const char *, Res, hash<void *> > Lookup;
+  typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
   Lookup lookup;
 };
 
