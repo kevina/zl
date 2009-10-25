@@ -3,15 +3,18 @@
 
 #ifndef NO_GC
 
-#include <gc/gc_cpp.h>
-#include <gc/gc_allocator.h>
+//#define GC_DEBUG 1
 
-#else // NO_GC
+#include "gc_cpp.hpp"
+#include <gc_allocator.h>
+
+#else
 
 struct gc {};
 struct gc_cleanup {};
 
 #define traceable_allocator std::allocator
+#define gc_allocator std::allocator
 
 #define GC_disable()
 #define GC_MALLOC(size) calloc(size, 1)

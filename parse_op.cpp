@@ -124,7 +124,7 @@ struct SpecialOp : public OpCommon {
   }
 };
 
-struct Ops : public gc_cleanup {
+struct Ops {
   typedef hash_multimap<OpKey, OpCommon *> Lookup;
   Lookup lookup_;
   void parse_self(const Syntax * p) {

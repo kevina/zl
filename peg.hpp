@@ -132,7 +132,7 @@ struct PartsFlags {
   operator bool() const {return parts;}
 };
 
-class Prod : public gc_cleanup {
+class Prod {
 public:
   virtual MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) = 0;
   virtual Prod * clone(Prod * = 0) = 0; // the paramater is the new

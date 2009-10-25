@@ -82,7 +82,7 @@
   };
   
   template <typename P>
-  class HashTable 
+  class HashTable : public gc_cleanup
   {
   public:
     typedef P                     parms_type;

@@ -11,6 +11,8 @@
 #include "hash.hpp"
 #include "iostream.hpp"
 
+//String sample(const char * begin, const char * end, unsigned max_len);
+
 struct StringObj {
   unsigned size;
   char str[];
@@ -30,12 +32,18 @@ public:
   typedef const char * iterator;
   typedef const char * const_iterator;
 
+  //void dump_if_large() {
+  //  if (size() > 256)
+  //    printf("LARGE STR (%d): %s\n", size(), ~sample(begin(), end(), 64));
+  //}
+
   void assign(const char * str, unsigned sz) {
     StringObj * d0 = (StringObj *)GC_MALLOC_ATOMIC(sizeof(StringObj) + sz + 1);
     d0->size = sz;
     memmove(d0->str, str, sz);
     d0->str[sz] = '\0';
     d = d0;
+    //dump_if_large();
   }
   void assign(const char * str, const char * e) {
     assign(str, e - str);
@@ -45,7 +53,7 @@ public:
   String() : d(EMPTY_STRING_OBJ) {}
   String(const SubStr & str) {assign(str);}
   String(const char * str) {assign(str);}
-  String(const StringObj * str) : d(str) {assert(str);}
+  String(const StringObj * str) : d(str) {assert(str); /*dump_if_large();*/}
   String(const char * str, const char * e) {assign(str, e);}
   bool defined() const {return d != EMPTY_STRING_OBJ;}
   unsigned size() const {return d->size;}
@@ -135,7 +143,7 @@ struct Syntax;
 // of syntax contains two parts from the same block then the SourceStr
 // for that syntax is considered the "bounding box" of its parts.
 //
-class SourceInfo : public gc_cleanup {
+class SourceInfo {
 public:
   const SourceInfo * parent;
   SourceInfo(const SourceInfo * p = NULL) : parent(p) {}
@@ -161,7 +169,7 @@ public:
   virtual ~SourceInfo() {}
 };
 
-class SourceFile : public SourceInfo {
+class SourceFile : public SourceInfo, public gc_cleanup {
 private:
   String file_name_;
   char * data_;

@@ -213,7 +213,7 @@ bool ExpandSourceInfo::dump_info_self(OStream & o) const {
 //
 
 // misnamed, now replaces and marks and so much more
-struct ReplTable : public gc_cleanup {
+struct ReplTable {
   typedef Vector<std::pair<SymbolName, const Syntax *> > Table;
   Table table;
   const Syntax * lookup(SymbolName n) const {
@@ -465,7 +465,7 @@ struct SimpleMacro : public Macro {
   const Syntax * repl;
   const SymbolNode * env;
   SimpleMacro * parse_self(const Syntax * p, Environ & e) {
-    //printf("PARSING MAP %s\n%s\n", ~p->arg(0)->what().name, ~p->to_string());
+    //printf("PARSING MAP %s\n%s\n", ~p->arg(0)->to_string(), ~p->to_string());
     env = e.symbols.front;
     //entity = p->str().source;
     def = syn = p;

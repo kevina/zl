@@ -137,7 +137,7 @@ namespace ast {
     return !(lhs == rhs);
   }
 
-  class PrintInst : public gc_cleanup {
+  class PrintInst {
   public:
     virtual void to_string(const TypeInst &, StringBuf & buf) const = 0;
     // declaration is needed to handle C types correctly, perhaps this is not 
@@ -193,7 +193,7 @@ namespace ast {
   extern PrintInst const * const zls_print_inst;
   extern PrintInst const * const zle_print_inst;
 
-  class TypeRelation : public gc_cleanup {
+  class TypeRelation {
   public:
     enum CastType {Implicit, Explicit, Static, Reinterpret, Const, Dynamic};
     virtual Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;

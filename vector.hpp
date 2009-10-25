@@ -13,13 +13,13 @@
 //namespace aspell
 //{
   template <typename T>
-  class Vector : public std::vector<T, traceable_allocator<T> >
+  class Vector : public std::vector<T, gc_allocator<T> > //, public gc_cleanup
   {
   public:
 
     // Bring type definitions from the std::vector class to aspell::Vector
     typedef T value_type;
-    typedef std::vector<T, traceable_allocator<T> > Base;
+    typedef std::vector<T, gc_allocator<T> > Base;
     typedef typename Base::size_type size_type;
     typedef typename Base::difference_type difference_type;
     typedef typename Base::reference reference;

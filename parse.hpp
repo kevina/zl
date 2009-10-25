@@ -124,7 +124,7 @@ struct Replacements;
 
 struct Syntax : public gc {
   static const unsigned D_T = 1;
-  struct D : public gc_cleanup {
+  struct D {
     struct TypeInfo {typedef D type; static const int id = D_T;};
     Parts parts;
     Flags flags;
@@ -132,7 +132,7 @@ struct Syntax : public gc {
     template <typename T> D(ChangeSrc<T> & f, const D & o)
       : parts(f, o.parts), flags(f, o.flags) {}
   };
-  struct Data : public gc {
+  struct Data {
     unsigned type_id;
     void * data;
     Data() : type_id(), data() {}
@@ -491,7 +491,7 @@ struct Syntax : public gc {
   bool is_a(const char * n, const char * p) const {return what_.name == n && num_args() > 0 && arg(0)->is_a(p);}
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
   String sample_w_loc(unsigned max_len = 20) const;
-  virtual ~Syntax() {}
+  //virtual ~Syntax() {}
 };
 
 static inline bool operator==(const Syntax & p, const char * str) {

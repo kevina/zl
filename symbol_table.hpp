@@ -29,7 +29,7 @@ namespace ast {
   struct SymbolNode;
   struct SymbolTable;
 
-  struct Marks {
+  struct Marks : public gc {
     const Mark * mark;
     const Marks * prev;
     Marks(const Mark * m, const Marks * p) 
@@ -37,7 +37,7 @@ namespace ast {
     void to_string(OStream & o, SyntaxGather * g) const;
   };
 
-  struct Mark : public gc_cleanup {
+  struct Mark {
     static unsigned last_id; 
     unsigned id;
     const SymbolNode * env;
@@ -87,7 +87,7 @@ namespace ast {
 
   void marks_ignored(String name);
 
-  struct SymbolName {
+  struct SymbolName : public gc {
     String name;
     //void set_name(String s) {String::operator=(s);}
     const Marks * marks;
@@ -168,7 +168,7 @@ namespace ast {
 
   enum Pass {AllPasses, FirstPass, SecondPass};
 
-  struct Symbol {
+  struct Symbol : public gc {
     typedef ::TypeInfo<Symbol> TypeInfo;
     const SymbolKey * key;
     String name() const {return key->name;}
@@ -199,7 +199,7 @@ namespace ast {
   // need to made externally visible, they are not necessary
   // global
 
-  struct Props {
+  struct Props : public gc {
     PropNode * props;
     Props() : props() {}
     void add_prop(SymbolName n, const Syntax * s);
@@ -262,7 +262,7 @@ namespace ast {
 
   void add_inner_nss(Environ &);
 
-  struct SymbolNode {
+  struct SymbolNode : public gc {
     SymbolKey key;
     Symbol * value;
     SymbolNode * next;
@@ -419,7 +419,6 @@ namespace ast {
                           const SymbolNode * start, const SymbolNode * stop,
                           Strategy strategy, Gather & gather, ExtraCmp & cmp)
   {
-    //printf("LOOKUP %s\n", ~k.to_string());
     const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s1) {
       //fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();

@@ -11,6 +11,11 @@
 #include "peg.hpp"
 #include "expand.hpp"
 
+extern "C" {
+#include <gc_backptr.h>
+  void GC_dump();
+}
+
 //#include "symbol_table.hpp"
 
 void parse_maps(ast::Environ & env) {
@@ -34,6 +39,8 @@ SourceFile * file = 0;
 
 int main(int argc, const char *argv[])
 {
+  //GC_free_space_divisor = 16;
+
   assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
   assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
   parse_exp_->init();
@@ -121,6 +128,9 @@ int main(int argc, const char *argv[])
     out.open(output_fn, "w");
     if (for_ct) 
       out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
+//    printf("FORCING COLLECTION\n");
+//    GC_gcollect();
+//    GC_dump();
     ast::compile(env.top_level_symbols, out);
     //ast::CompileWriter out2(ast::CompileWriter::ZLE);
     //out2.open("a.out.zle", "w");
@@ -141,11 +151,60 @@ int main(int argc, const char *argv[])
         exit(1);
       }
     }
+    out.for_macro_sep_c = NULL;
+
+    //fprintf(stderr, "---------------------------------------------\n");
+    //GC_generate_random_backtrace();
+    //fprintf(stderr, "---------------------------------------------\n");
+    //GC_generate_random_backtrace();
+    //fprintf(stderr, "---------------------------------------------\n");
+    //GC_generate_random_backtrace();
+    //fprintf(stderr, "---------------------------------------------\n");
+    //GC_generate_random_backtrace();
+    //fprintf(stderr, "---------------------------------------------\n");
+    //GC_generate_random_backtrace();
+    //fprintf(stderr, "---------------------------------------------\n");
+
   } catch (Error * err) {
     //if (!err->source)
     //  err->source = code->entity();
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(2);
   }
+
+  parse = ParsePeg::Parse();
+  file = NULL;
+
+    
   //sleep(600);
 }
+
+// int main(int argc, const char *argv[])
+// {
+//   printf("%u %u %u\n", sizeof(Syntax), sizeof(Syntax::D), sizeof(Syntax::Data));
+//   printf("XXX %u\n", sizeof(SymbolName));
+//   printf("XXX %u\n", sizeof(SourceStr));
+//   Syntax syn;
+
+//   int res = main2(argc,argv);
+
+//   printf("FORCING COLLECTION 2\n");
+//   GC_gcollect();
+
+// //   fprintf(stderr, "---------------------------------------------\n");
+// //   GC_generate_random_backtrace();
+// //   fprintf(stderr, "---------------------------------------------\n");
+// //   GC_generate_random_backtrace();
+// //   fprintf(stderr, "---------------------------------------------\n");
+// //   GC_generate_random_backtrace();
+// //   fprintf(stderr, "---------------------------------------------\n");
+// //   GC_generate_random_backtrace();
+// //   fprintf(stderr, "---------------------------------------------\n");
+// //   GC_generate_random_backtrace();
+// //   fprintf(stderr, "---------------------------------------------\n");
+
+
+//   return res;
+// }
+ 
+
