@@ -388,12 +388,12 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
       const Syntax * n = name;
       if (n->simple())
         n = new Syntax(new Syntax("`"), n, new Syntax("tag"));
-      Syntax * struct_union = new Syntax(p->part(0));
-      struct_union->add_part(n);
-      struct_union->set_flags(p);
+      SyntaxBuilder struct_union(p->part(0));
+      struct_union.add_part(n);
+      struct_union.set_flags(p);
       if (body)
-        struct_union->add_part(parse_struct_union_body(body, env));
-      type_scope.push_back(struct_union);
+        struct_union.add_part(parse_struct_union_body(body, env));
+      type_scope.push_back(struct_union.build());
     }
     return true;
   } else {
@@ -403,7 +403,7 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
 
 const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ & env)
 {
-  Syntax * res = new Syntax();
+  SyntaxBuilder res;
   for (unsigned h = 0; h != p0->num_args(); ++h) {
 
     const Syntax * p = p0->arg(h);
@@ -442,7 +442,7 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
             decl = w.make_declaration(id, t);
           }
           
-          res->add_part(decl);
+          res.add_part(decl);
           
           if (i == end) break;
           
@@ -451,10 +451,10 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
           ++i;
         }
     } else {
-      res->add_part(p);
+      res.add_part(p);
     }
   }
-  return res;
+  return res.build();
 }
 
 bool DeclWorking::try_enum(const Syntax * p, Environ & env, bool by_itself) {
@@ -478,11 +478,11 @@ bool DeclWorking::try_enum(const Syntax * p, Environ & env, bool by_itself) {
       name = gen_sym();
     inner_type = new Syntax(p->part(0), name);
     if (body || by_itself) {
-      Syntax * enum_ = new Syntax(p->part(0));
-      enum_->add_part(name);
+      SyntaxBuilder enum_(p->part(0));
+      enum_.add_part(name);
       if (body)
-        enum_->add_part(body);
-      type_scope.push_back(enum_);
+        enum_.add_part(body);
+      type_scope.push_back(enum_.build());
     }
     return true;
   } else {
@@ -492,7 +492,6 @@ bool DeclWorking::try_enum(const Syntax * p, Environ & env, bool by_itself) {
 
 void DeclWorking::make_inner_type(const Syntax * orig) {
   if (!inner_type) {
-    inner_type = new Syntax();
     StringBuf t;
     switch (base_type) {
     case NO_BT:
@@ -574,12 +573,17 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
     // Don't use the resolved symbol the final parse might bind it to
     // a different symbol.  Otherwise "class X {X foo() {...}};" won't
     // work as expected.
-    inner_type->add_part(type_symbol ? type_symbol_p : new Syntax(t.freeze()));
+    inner_type = SYN(type_symbol ? type_symbol_p : SYN(t.freeze()));
   } else {
     // stuct or union
     // nothing to do
   }
-  inner_type->set_flags(qualifiers);
+  if (!qualifiers.empty()) {
+    inner_type = SYN(inner_type->str(),
+                     PARTS(inner_type->parts_begin(), inner_type->parts_end()),
+                     qualifiers);
+    //inner_type->set_flags(qualifiers);
+  }
 }
 
 // returns a type and sets id
@@ -643,7 +647,7 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
                                               const Syntax * parms,
                                               Environ & env)
 {
-  Syntax * ps = new Syntax(new Syntax("."));
+  SyntaxBuilder ps(SYN("."));
   //printf("MAKE FUNCTION TYPE: %s %s\n", ~ret->to_string(), ~parms->to_string());
   Parts::const_iterator i = parms->args_begin();
   Parts::const_iterator end = parms->args_end();
@@ -654,23 +658,23 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
     bool r = w.parse_first_part(i, end, env, false);
     if (!r) throw error(*i, "Expected type or \"...\".");
     if (w.dots) {
-      ps->add_part(w.inner_type); // FIXME: Preserve source info..
+      ps.add_part(w.inner_type); // FIXME: Preserve source info..
     } else {
       w.make_inner_type(parms);
       const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
-      Syntax * p = new Syntax();
+      SyntaxBuilder p;
       assert(t);
-      p->add_part(t);
+      p.add_part(t);
       if (id)
-	p->add_part(id);
-      ps->add_part(p);
+	p.add_part(id);
+      ps.add_part(p.build());
       //ps->add_part(t);
     } 
     if (i == end) break;
     if (!(*i)->eq(",")) throw error(*i, "Expected \",\" got \"%s\".", ~(*i)->to_string());
     ++i;
   }
-  return new Syntax(new Syntax(".fun"), ps, ret);
+  return new Syntax(new Syntax(".fun"), ps.build(), ret);
 }
 
 const Syntax * DeclWorking::parse_init_exp(Parts::const_iterator & i, 
@@ -734,24 +738,21 @@ const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * 
     if (t->is_a(".fun")) {
       return make_function(id, t, NULL);
     } else {
-      Syntax * p = new Syntax(new Syntax("var"));
-      p->add_part(id);
+      SyntaxBuilder res(SYN("var"));
+      res.add_part(id);
       assert(t);
-      p->add_part(t);
+      res.add_part(t);
       if (init)
-        p->add_part(init);
+        res.add_part(init);
       if (storage_class)
-        p->add_flag(storage_class);
+        res.add_flag(storage_class);
       for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();
            i != e; ++i)
-        p->add_flag(*i);
-      return p;
+        res.add_flag(*i);
+      return res.build();
     }
   } else if (what == TYPEDEF) {
-    Syntax * p = new Syntax(new Syntax("talias"));
-    p->add_part(id);
-    p->add_part(t);
-    return p;
+    return SYN(SYN("talias"), id, t);
   } else {
     abort();
   }
@@ -760,22 +761,22 @@ const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * 
 const Syntax * DeclWorking::make_function(const Syntax * id, const Syntax * t, const Syntax * body)
 {
   if (what == VAR) {
-    Syntax * p = new Syntax(new Syntax("fun"));
+    SyntaxBuilder res(SYN("fun"));
     if (inline_)
-      p->add_flag(inline_);
+      res.add_flag(inline_);
     if (virtual_)
-      p->add_flag(virtual_);
+      res.add_flag(virtual_);
     if (storage_class)
-      p->add_flag(storage_class);
+      res.add_flag(storage_class);
     for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();
          i != e; ++i)
-      p->add_flag(*i);
-    p->add_part(id);
-    p->add_part(t->arg(0));
-    p->add_part(t->arg(1));
+      res.add_flag(*i);
+    res.add_part(id);
+    res.add_part(t->arg(0));
+    res.add_part(t->arg(1));
     if (body)
-      p->add_part(body);
-    return p;
+      res.add_part(body);
+    return res.build();
   } else {
     abort();
   }

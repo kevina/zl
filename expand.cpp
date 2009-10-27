@@ -357,7 +357,7 @@ void compile_for_ct(Deps & deps, Environ & env);
 typedef ReplTable::Table Match;
 extern "C" namespace macro_abi {
   typedef const Marks Context;
-  typedef Syntax SyntaxList;
+  typedef MutableSyntax SyntaxList;
   typedef const ::Syntax Syntax;
   typedef Syntax UnmarkedSyntax;
   //struct SyntaxEnum;
@@ -379,23 +379,23 @@ String gen_sym() {
   return buf.freeze();
 }
 
-static void flatten(const char * on, const Syntax * p, Syntax * res) {
+static void flatten(const char * on, const Syntax * p, SyntaxBuilder & res) {
   if (!p->simple() && p->is_a(on)) {
     for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i)
       flatten(on, *i, res);
-    res->add_flags(p);
+    res.add_flags(p);
   } else {
-    res->add_part(p);
+    res.add_part(p);
   }
 }
 
 const Syntax * flatten(const Syntax * p) {
   if (p->simple()) return p;
-  Syntax * res = new Syntax(p->str());
+  SyntaxBuilder res;
   for (Parts::const_iterator i = p->parts_begin(), e = p->parts_end(); i != e; ++i)
     flatten("@", *i, res);
-  res->add_flags(p);
-  return res;
+  res.add_flags(p);
+  return res.build(p->str());
 }
 
 static const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs, 
@@ -606,7 +606,9 @@ extern "C" namespace macro_abi {
   }
   
   SyntaxList * new_syntax_list() {
-    return new ::Syntax(new Syntax("@"));
+    MutableSyntax * syn = new_syntax();
+    syn->add_part(SYN("@"));
+    return syn;
   }
   
   int syntax_list_empty(const SyntaxList * p) {
@@ -716,15 +718,16 @@ bool match_list(Match * m,
       }
       if (v.name[0] == '@') {
         v.name = v.name.c_str() + 1;
-        Syntax * n = new Syntax(new Syntax("@"), r_i, r_end);
+        SyntaxBuilder n(SYN("@"));
+        n.add_parts(r_i, r_end);
         if (with->d.have_d()) {
           const Flags & flags = with->d->flags;
           for (Flags::const_iterator i = flags.begin(), e = flags.end(); i != e; ++i) {
             if (!pattern->flag((*i)->what()))
-              n->add_flag(*i);
+              n.add_flag(*i);
           }
         }
-        r = n;
+        r = n.build();
       }
       if (r) {
         add_match_var(m, v, r);
@@ -976,8 +979,8 @@ static const Syntax * replace(const Syntax * p,
     assert(p->num_args() == 1);
     assert(p->arg(0)->simple());
     assert(p->repl == p->arg(0)->repl);
-    Syntax * res = new Syntax(r->expand_source_info_str(p->str()), 
-                              new Syntax(p->part(0), r->mark, r->expand_source_info(p->part(0))));
+    MutableSyntax * res = new MutableSyntax(r->expand_source_info_str(p->str()), 
+                                            new Syntax(p->part(0), r->mark, r->expand_source_info(p->part(0))));
     res->repl = combine_repl(p->repl, r);
     Syntax * r0 = new Syntax(String(p->arg(0)->str()), r->expand_source_info_str(p->arg(0)->str()));
     r0->repl = res->repl;
@@ -986,7 +989,7 @@ static const Syntax * replace(const Syntax * p,
     return res;
   } else {
   def:
-    Syntax * res = new Syntax(r->expand_source_info_str(p));
+    SyntaxBuilder res;
     for (unsigned i = 0; i != p->num_parts(); ++i) {
       //const Syntax * q = (i == 0 && p->part(0)->simple()) ? p->part(0) : replace(p->part(i), r); // HACK
       bool splice = false;
@@ -997,22 +1000,22 @@ static const Syntax * replace(const Syntax * p,
       if (splice) {
         //printf("??%d %s\n", x, ~q->to_string());
         assert(q->is_a("@")); // FIXME: Error message
-        res->add_parts(q->args_begin(), q->args_end());
-        res->add_flags(q);
+        res.add_parts(q->args_begin(), q->args_end());
+        res.add_flags(q);
       } else {
-        res->add_part(q);
+        res.add_part(q);
       }
     }
     for (Flags::const_iterator i = p->flags_begin(), e = p->flags_end(); i != e; ++i) {
       //printf("~~%s\n", ~(*i)->to_string());
       const Syntax * q = *i;
-      Syntax * r0 = new Syntax(q->part(0)); // FIXME: I think I need to do more with first part
+      SyntaxBuilder r0(q->part(0)); // FIXME: I think I need to do more with first part
       if (q->num_args() > 0) // FIXME: Can there me more than one arg?
-        r0->add_part(replace(q->arg(0), r, rs, allow_plain_mids, NULL));
-      res->add_flag(r0);
+        r0.add_part(replace(q->arg(0), r, rs, allow_plain_mids, NULL));
+      res.add_flag(r0.build());
     }
     //printf("REPLACE Res %d: %s\n", seql, ~res->to_string());
-    return res;
+    return res.build(r->expand_source_info_str(p));
   }
 }
 
@@ -1020,18 +1023,18 @@ const Syntax * replace_context(const Syntax * p, const Marks * context);
 
 const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs, bool splice) {
   if (repl->is_a("@")) {
-    Syntax * res = new Syntax(repl->str(), repl->part(0)); 
+    SyntaxBuilder res(repl->part(0));
     for (Parts::const_iterator i = repl->args_begin(), e = repl->args_end(); i != e; ++i) {
-      res->add_part(replace_mid(mid, *i, r, rs));
+      res.add_part(replace_mid(mid, *i, r, rs));
     }
     for (Flags::const_iterator i = repl->flags_begin(), e = repl->flags_end(); i != e; ++i) {
       const Syntax * q = *i;
-      Syntax * r0 = new Syntax(q->part(0)); // FIXME: I think I need to do more with first part
+      SyntaxBuilder r0(q->part(0)); // FIXME: I think I need to do more with first part
       if (q->num_args() > 0) // FIXME: Can there me more than one arg?
-        r0->add_part(replace_mid(mid, (*i)->part(1), r, rs));
-      res->add_flag(r0);
+        r0.add_part(replace_mid(mid, (*i)->part(1), r, rs));
+      res.add_flag(r0.build());
     }
-    return res;
+    return res.build(repl->str());
   } else {
     ChangeSrc<SplitSourceInfo> cs(repl, r->outer_si ? r->outer_si : new ReplaceSourceInfo(r->expand_si,mid));
     const Syntax * orig_repl = repl;
@@ -1069,11 +1072,11 @@ const Syntax * replace_context(const Syntax * p, const Marks * context) {
     fprintf(stderr, "Unhandled Case\n");
     abort();
   } else {
-    Syntax * res = new Syntax(p->str());
+    SyntaxBuilder res;
     for (unsigned i = 0; i != p->num_parts(); ++i) {
-      res->add_part(replace_context(p->part(i), context));
+      res.add_part(replace_context(p->part(i), context));
     }
-    return res;
+    return res.build(p->str());
   }
 }
 
@@ -1206,7 +1209,7 @@ const Syntax * handle_operator_fun_id(Parts::const_iterator & i,
 
 const Syntax * e_parse_exp(const Syntax * p0, Environ & env, const char * list_is) {
   //printf("e_parse_exp: %s\n", ~p0->to_string());
-  Syntax * tmp = new Syntax(p0->str(), p0->part(0));
+  SyntaxBuilder tmp(p0->part(0));
   Parts::const_iterator i = p0->args_begin(), e = p0->args_end();
   while (i != e) {
     const Syntax * p = NULL;
@@ -1214,9 +1217,9 @@ const Syntax * e_parse_exp(const Syntax * p0, Environ & env, const char * list_i
     if (!p) p = handle_new(i, e, env);
     if (!p) p = handle_operator_fun_id(i, e, env);
     if (!p) p = *i++;
-    tmp->add_part(p);
+    tmp.add_part(p);
   }
-  const Syntax * res = parse_exp_->parse(tmp, list_is);
+  const Syntax * res = parse_exp_->parse(tmp.build(p0->str()), list_is);
   // FIXME: if really an expression than "list" needs to become the
   //        comma operator
   return res;
@@ -1264,8 +1267,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     const Syntax * n = p;
     const Macro * m = env.symbols.find<Macro>(n->arg(0));
     if (m) { // id macro
-      Syntax * a = new Syntax(new Syntax("."));
-      a->set_flags(p);
+      Syntax * a = SYN(PARTS(SYN(".")), FLAGS(p->flags_begin(), p->flags_end()));
       p = m->expand(p, a, env);
       return partly_expand(p, pos, env, flags);
     }
@@ -1288,15 +1290,11 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
         }
       }
       if (TypeSymbol * t = env.symbols.find<TypeSymbol>(n->arg(0))) {
-        Syntax * res = new Syntax("anon");
-        res->add_part(new Syntax(t));
-        res->add_part(a);
+        Syntax * res = SYN(SYN("anon"), SYN(t), a);
         return res;
       }
     }
-    Syntax * res = new Syntax(p->str(), p->part(0));
-    res->add_part(p->arg(0));
-    res->add_part(a);
+    Syntax * res = SYN(p->str(), PARTS(p->part(0), p->arg(0), a));
     p = res;
   } else if (what == "raw") {
     parse_parse::Res r = parse_parse::parse(p->part(1)->str());
@@ -1367,10 +1365,10 @@ extern "C" namespace macro_abi {
   const Syntax * pre_parse(const Syntax * p, Environ * env) {
     p = partly_expand(p, TopLevel, env);
     if (p->is_a("@")) {
-      ::Syntax * res = new ::Syntax(p->str(), p->part(0));
+      SyntaxBuilder res(p->part(0));
       for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i)
-        res->add_part(pre_parse(*i, env));
-      return res;
+        res.add_part(pre_parse(*i, env));
+      return res.build(p->str());
     } else {
       return pre_parse_decl(p, *env);
     }
@@ -1451,7 +1449,7 @@ void assert_num_args(const Syntax * p, unsigned min, unsigned max) {
     throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->what());
 }
 
-void expand_fun_parms(const Syntax * args, Environ & env, Syntax * res) {
+void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res) {
   for (unsigned i = 0; i != args->num_args(); ++i) {
     const Syntax * p = args->arg(i);
     if (p->is_a("@")) {
@@ -1461,12 +1459,12 @@ void expand_fun_parms(const Syntax * args, Environ & env, Syntax * res) {
         p = reparse("TOKENS", p->arg(0));
       //printf("FUN_PARM: %s\n", ~p->to_string());
       if (!p->is_a("...")) {
-        Syntax * r = new Syntax(p->part(0), parse_type(p->part(0), env));
+        Syntax * r = SYN(p->part(0)->str(), parse_type(p->part(0), env));
         if (p->num_parts() == 2) 
-          r->add_part(p->part(1));
-        res->add_part(r);
+          r = SYN(r, p->part(1));
+        res.add_part(r);
       } else {
-        res->add_part(p);
+        res.add_part(p);
       }
     }
   }
@@ -1474,9 +1472,9 @@ void expand_fun_parms(const Syntax * args, Environ & env, Syntax * res) {
 
 Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
   //printf("FUN_PARMS: %s\n", ~parse->to_string());
-  Syntax * res = new Syntax(parse->part(0));
+  SyntaxBuilder res(parse->part(0));
   expand_fun_parms(parse, env, res);
-  Type * type = parse_type(res, env);
+  Type * type = parse_type(res.build(), env);
   Tuple * tuple = dynamic_cast<Tuple *>(type);
   assert(tuple); // FIXME: Error Message?
   return tuple;
@@ -1706,7 +1704,7 @@ extern "C" namespace macro_abi {
     va_start(ap, fmt);
     Error * res = verror(str.source, str.begin, fmt, ap);
     va_end(ap);
-    return new Syntax(p, res);
+    return new Syntax(p->str(), res);
   }
 
   const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {

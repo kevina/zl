@@ -44,6 +44,7 @@ struct Parts : public Vector<const Syntax *> {
                  char sep = ' ', SyntaxGather * = NULL) const;
   Parts() {}
   template <typename T> Parts(ChangeSrc<T> &, const Parts & o);
+  typedef void PartsList;
 };
 
 struct Flags : public gc {
@@ -69,8 +70,8 @@ struct Flags : public gc {
   void to_string(OStream & o, PrintFlags f = PrintFlags(), SyntaxGather * = 0) const;
   Flags() {}
   template <typename T> Flags(ChangeSrc<T> &, const Flags & o);
+  typedef void PartsList;
 };
-
 
 // A Syntax object is:                              d  repl  entity_
 //   Branch                                         X   -       -   
@@ -277,8 +278,8 @@ struct Syntax : public gc {
     : what_("<entity>"), str_(e->source_str()), d(e), repl() {}
 
   template <typename T>
-  Syntax(const Syntax * s, const T * e) 
-    : what_("<entity>"), str_(s->str()), d(e), repl() {}
+  Syntax(const SourceStr & s, const T * e) 
+    : what_("<entity>"), str_(s), d(e), repl() {}
   Syntax(const Parts & ps) : repl(0) {
     d = new D;
     d->parts.append(ps);
@@ -392,6 +393,45 @@ struct Syntax : public gc {
     else return Flags::EMPTY.end();
   }
 
+  void set_src_from_parts() const; // const is a lie
+
+  void print() const;
+  void to_string(OStream & o, PrintFlags f = PrintFlags(), SyntaxGather * = 0) const;
+  String to_string() const;
+  bool eq(const char * n) const {return simple() && what_.name == n;}
+  bool eq(const char * n1, const char * n2) const 
+    {return simple() && (what_.name == n1 || what_.name == n2);}
+  bool eq(const char * n1, const char * n2, const char * n3) const 
+    {return simple() && (what_.name == n1 || what_.name == n2 || what_.name == n3);}
+  bool ne(const char * n) const {return !eq(n);}
+  bool ne(const char * n1, const char * n2) const {return !eq(n1,n2);}
+  bool ne(const char * n1, const char * n2, const char * n3) const 
+    {return !eq(n1,n2,n3);}
+  bool is_a(const char * n) const {return what_.name == n;}
+  bool is_a(String n) const {return what_.name == n;}
+  bool is_a(SymbolName n) const {return what_ == n;}
+  bool is_a(const char * n, const char * p) const {return what_.name == n && num_args() > 0 && arg(0)->is_a(p);}
+  void sample_w_loc(OStream & o, unsigned max_len = 20) const;
+  String sample_w_loc(unsigned max_len = 20) const;
+  //virtual ~Syntax() {}
+};
+
+struct MutableSyntax : public Syntax {
+
+  MutableSyntax() {}
+  MutableSyntax(const SourceStr & s) : Syntax(s) {}
+
+  MutableSyntax(const SourceStr & str, const Syntax * x)
+    : Syntax(str, x) {}
+
+  MutableSyntax(const Syntax & other) : Syntax(other) {}
+
+  //MutableSyntax(const Syntax * o, const ast::Mark * m, const SourceInfo * s)
+  //  : Syntax(o,m,s) {}
+
+  //MutableSyntax(const Syntax * o, const ast::Marks * m)
+  //  : Syntax(o,m) {}
+
   void add_part(const Syntax * p) {
     if (!d.have_d()) make_branch();
     if (d->parts.empty()) what_ = p->string_if_simple();
@@ -435,27 +475,57 @@ struct Syntax : public gc {
     if (!d.have_d()) make_branch();
     d->flags = p->d->flags;
   }
-  void set_src_from_parts() const; // const is a lie
 
-  void print() const;
-  void to_string(OStream & o, PrintFlags f = PrintFlags(), SyntaxGather * = 0) const;
-  String to_string() const;
-  bool eq(const char * n) const {return simple() && what_.name == n;}
-  bool eq(const char * n1, const char * n2) const 
-    {return simple() && (what_.name == n1 || what_.name == n2);}
-  bool eq(const char * n1, const char * n2, const char * n3) const 
-    {return simple() && (what_.name == n1 || what_.name == n2 || what_.name == n3);}
-  bool ne(const char * n) const {return !eq(n);}
-  bool ne(const char * n1, const char * n2) const {return !eq(n1,n2);}
-  bool ne(const char * n1, const char * n2, const char * n3) const 
-    {return !eq(n1,n2,n3);}
-  bool is_a(const char * n) const {return what_.name == n;}
-  bool is_a(String n) const {return what_.name == n;}
-  bool is_a(SymbolName n) const {return what_ == n;}
-  bool is_a(const char * n, const char * p) const {return what_.name == n && num_args() > 0 && arg(0)->is_a(p);}
-  void sample_w_loc(OStream & o, unsigned max_len = 20) const;
-  String sample_w_loc(unsigned max_len = 20) const;
-  //virtual ~Syntax() {}
+};
+
+struct SyntaxBuilder {
+
+  MutableSyntax * syn;
+
+  SyntaxBuilder() {syn = new MutableSyntax;}
+  SyntaxBuilder(const Syntax * x) {syn = new MutableSyntax; syn->add_part(x);}
+
+  Syntax * build() {
+    Syntax * res = syn;
+    syn = NULL;
+    return res;
+  }
+
+  Syntax * build(const SourceStr & str) {
+    syn->str_ = str;
+    Syntax * res = syn;
+    syn = NULL;
+    return res;
+  }
+
+  void add_part(const Syntax * p) {
+    syn->add_part(p);
+  }
+  void add_args(const Syntax * other) {
+    syn->add_args(other);
+  }
+  void add_parts(Parts::const_iterator i, Parts::const_iterator end) {
+    syn->add_parts(i, end);
+  }
+  void add_parts(const Parts & p) {
+    syn->add_parts(p.begin(), p.end());
+  }
+  void add_flag(const Syntax * p) {
+    syn->add_flag(p);
+  }
+  void add_flags(const Flags & f) {
+    syn->add_flags(f);
+  }
+  void add_flags(const Syntax * p) {
+    syn->add_flags(p);
+  }
+  void set_flags(const Flags & p) {
+    syn->set_flags(p);
+  }
+  void set_flags(const Syntax * p) {
+    syn->set_flags(p);
+  }
+
 };
 
 static inline bool operator==(const Syntax & p, const char * str) {
@@ -477,5 +547,157 @@ inline bool Flags::insert(const Syntax * p) {
   data.push_back(p);
   return true;
 }
+
+template <unsigned SIZE>
+struct PartsArray {
+  const Syntax * d[SIZE];
+  typedef const Syntax * const * const_iterator;
+  typedef const Syntax * const * iterator;
+  const_iterator begin() const {return d;}
+  const_iterator end() const {return d + SIZE;}
+  unsigned size() const {return SIZE;}
+  bool empty() const {return SIZE == 0;}
+  typedef void PartsList;
+};
+
+template <typename Itr>
+struct PartsRange {
+  Itr begin_;
+  Itr end_;
+  PartsRange(const Itr & b, const Itr & e) : begin_(b), end_(e) {}
+  typedef Itr const_iterator;
+  typedef Itr iterator;
+  const_iterator begin() const {return begin_;}
+  const_iterator end() const {return end_;}
+  unsigned size() const {return end_ - begin_;}
+  bool empty() const {return begin_ != end_;}
+  typedef void PartsList;
+};
+
+
+static inline PartsArray<1> mk_pt_flg(const Syntax * a) 
+{
+  PartsArray<1> val = {a};
+  return val;
+}
+
+static inline PartsArray<2> mk_pt_flg(const Syntax * a, const Syntax * b) 
+{
+  PartsArray<2> val = {a, b};
+  return val;
+}
+
+static inline PartsArray<3> mk_pt_flg(const Syntax * a, const Syntax * b, 
+                                      const Syntax * c) 
+{
+  PartsArray<3> val = {a, b, c};
+  return val;
+}
+
+static inline PartsArray<4> mk_pt_flg(const Syntax * a, const Syntax * b, 
+                                      const Syntax * c, const Syntax * d) 
+{
+  PartsArray<4> val = {a, b, c, d};
+  return val;
+}
+
+static inline PartsRange<Parts::const_iterator> 
+mk_pt_flg(Parts::const_iterator b, Parts::const_iterator e) 
+{
+  return PartsRange<Parts::const_iterator>(b,e);
+}
+
+static inline PartsRange<Flags::const_iterator> 
+mk_pt_flg(Flags::const_iterator b, Flags::const_iterator e) 
+{
+  return PartsRange<Flags::const_iterator>(b,e);
+}
+
+#define PARTS mk_pt_flg
+#define FLAGS mk_pt_flg
+
+static inline Syntax * new_syntax(const char * n) {return new Syntax(n);}
+static inline Syntax * new_syntax(String n) {return new Syntax(n);}
+static inline Syntax * new_syntax(SymbolName n) {return new Syntax(n);}
+
+static inline Syntax * new_syntax(const Syntax & other) {
+  return new Syntax(other);}
+static inline Syntax * new_syntax(const SourceStr & s, const Syntax & other) {
+  return new Syntax(s, other);}
+
+template <typename T>
+inline Syntax * new_syntax(const T * e) {return new Syntax(e);}
+
+template <typename T>
+inline Syntax * new_syntax(const SourceStr & str, const T * e) {return new Syntax(str, e);}
+
+static inline MutableSyntax * new_syntax() {
+  return new MutableSyntax();}
+static inline MutableSyntax * new_syntax(const SourceStr & str) {
+  return new MutableSyntax(str);}
+
+template <typename T> 
+struct RequireType {
+  RequireType(int) {}
+};
+
+template <typename PartsA, typename FlagsA>
+inline Syntax * new_syntax(const SourceStr & str,
+                           const PartsA & parts, 
+                           const FlagsA & flags,
+                           RequireType<typename PartsA::PartsList> = 0) 
+{
+  Syntax * syn = new Syntax(str);
+  syn->d = new Syntax::D;
+  syn->d->parts.assign(parts.begin(), parts.end());
+  syn->d->flags.data.assign(flags.begin(), flags.end());
+  if (syn->d->parts.size() > 0)
+    syn->what_ = syn->d->parts[0]->string_if_simple();
+  return syn;
+}
+
+template <typename PartsA, typename FlagsA>
+inline Syntax * new_syntax(const PartsA & parts, 
+                           const FlagsA & flags, 
+                           RequireType<typename PartsA::PartsList> = 0) 
+{
+  return new_syntax(SourceStr(), parts, flags);
+}
+
+template <typename PartsA>
+inline Syntax * new_syntax(const PartsA & parts, 
+                           RequireType<typename PartsA::PartsList> = 0) 
+{
+  return new_syntax(parts, PartsArray<0>());
+}
+template <typename PartsA>
+inline Syntax * new_syntax(const SourceStr & str, 
+                           const PartsA & parts,
+                           RequireType<typename PartsA::PartsList> = 0) 
+{
+  return new_syntax(str, parts, PartsArray<0>());
+}
+
+template <typename PartsA, typename FlagsA>
+inline Syntax * new_syntax(const Syntax & other,
+                           const PartsA & parts, 
+                           const FlagsA & flags,
+                           RequireType<typename PartsA::PartsList> = 0) 
+{
+  abort(); // FIXME: Write me, eventually
+}
+
+
+static inline Syntax * new_syntax(const Syntax * x) {
+  return new_syntax(PARTS(x));}
+static inline Syntax * new_syntax(const Syntax * x, const Syntax * y) {
+  return new_syntax(PARTS(x, y));}
+static inline Syntax * new_syntax(const Syntax * x, const Syntax * y, const Syntax * z) {
+  return new_syntax(PARTS(x, y, z));}
+static inline Syntax * new_syntax(const Syntax * x, const Syntax * y, 
+                                  const Syntax * z ,const Syntax * a) {
+  return new_syntax(PARTS(x, y, z, a));}
+
+#define SYN new_syntax
 
 #endif

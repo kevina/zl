@@ -324,7 +324,7 @@ namespace parse_parse {
     const char * start = str.begin;
     str = spacing(str);
     if (*str != '(') throw error(str, "Expected '('");
-    Syntax * res = new Syntax(str);
+    MutableSyntax * res = new_syntax(str);
     ++str;
     str = spacing(str);
     /*const char * name_start = str.begin;

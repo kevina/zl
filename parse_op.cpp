@@ -117,10 +117,11 @@ struct SpecialOp : public OpCommon {
     --i; // backup on
     SourceStr str = fp->str();
     str.adj((*i)->str());
-    Syntax * res = new Syntax(str, new Syntax(name));
-    res->add_parts(working.begin(), working.end());
+    SyntaxBuilder res;
+    res.add_part(SYN(name));
+    res.add_parts(working.begin(), working.end());
     i0 = i;
-    return res;
+    return res.build(str);
   }
 };
 
@@ -325,12 +326,12 @@ public:
   void reduce() {
     const OpInfo & opi = opr_s.back();
     const Op * op = opi.op;
-    Syntax * parse;
+    SyntaxBuilder res;
     if (op->name == "<list>")
-      parse = new Syntax(new Syntax(list_is));
+      res.add_part(SYN(list_is));
     else
-      parse = new Syntax(op->parse);
-    parse->str_ = opi.parse->str(); // FIXME: Is this right
+      res.add_part(op->parse);
+    SourceStr str = opi.parse->str(); // FIXME: Is this right
     if (op->assoc == List) {
       if (val_s.size() < 2)
         throw error(opi.parse, "\"%s\" operator needs 2 operands.",
@@ -342,10 +343,10 @@ public:
       }
       // FIXME: This isn't right when the parts of the list are not
       // from the same file
-      parse->str_.begin = val_s[val_s.size() - num]->str().begin;
-      parse->str_.end = val_s.back()->str().end;
+      str.begin = val_s[val_s.size() - num]->str().begin;
+      str.end = val_s.back()->str().end;
       for (int i = val_s.size() - num; i != val_s.size(); ++i)
-        parse->add_part(val_s[i]);
+        res.add_part(val_s[i]);
       val_s.resize(val_s.size() - num);
     } else if (op->type == Op::Bin) {
       if (val_s.size() < 2)
@@ -353,14 +354,14 @@ public:
                     op->what.c_str());
       const Syntax * p2 = val_s.back(); val_s.pop_back();
       const Syntax * p1 = val_s.back(); val_s.pop_back();
-      parse->str_ = opi.parse->str();
-      if (p1->str().source->block() == parse->str_.source->block())
-        parse->str_.begin = p1->str().begin;
-      if (p2->str().source->block() == parse->str_.source->block())
-        parse->str_.end   = p2->str().end;
-      parse->add_part(p1);
-      if (op->capture_op_itself()) parse->add_part(opi.parse);
-      parse->add_part(p2);
+      str = opi.parse->str();
+      if (p1->str().source->block() == str.source->block())
+        str.begin = p1->str().begin;
+      if (p2->str().source->block() == str.source->block())
+        str.end   = p2->str().end;
+      res.add_part(p1);
+      if (op->capture_op_itself()) res.add_part(opi.parse);
+      res.add_part(p2);
       opr_s.pop_back();
     } else {
       if (val_s.size() < 1)
@@ -368,23 +369,23 @@ public:
                     op->what.c_str());
       const Syntax * p1 = val_s.back(); val_s.pop_back();
       if (op->type == Op::Prefix) {
-        parse->str_ = opi.parse->str();
-        if (p1->str().source->block() == parse->str_.source->block())
-          parse->str_.end   = p1->str().end;
+        str = opi.parse->str();
+        if (p1->str().source->block() == str.source->block())
+          str.end = p1->str().end;
         if (op->capture_op_itself())
-          parse->add_part(opi.parse);
-        parse->add_part(p1);
+          res.add_part(opi.parse);
+        res.add_part(p1);
       } else if (op->type == Op::Postfix) {
-        parse->str_ = opi.parse->str();
-        if (p1->str().source->block() == parse->str_.source->block())
-          parse->str_.begin = p1->str().begin;
-        parse->add_part(p1);
+        str = opi.parse->str();
+        if (p1->str().source->block() == str.source->block())
+          str.begin = p1->str().begin;
+        res.add_part(p1);
         if (op->capture_op_itself())
-          parse->add_part(opi.parse);
+          res.add_part(opi.parse);
       } 
       opr_s.pop_back();
     }
-    val_s.push_back(parse);
+    val_s.push_back(res.build(str));
   }
 };
 

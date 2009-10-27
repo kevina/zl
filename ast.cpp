@@ -28,8 +28,6 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls 
 // each AST node pushes the result on the top of the stack
 //   unless the type is void
 
-#define SYN new Syntax
-
 namespace ast {
 
   struct Var;
@@ -748,6 +746,7 @@ namespace ast {
                                SYN(exp),
                                SYN(SYN("call"), SYN(ID, SYN("_constructor")), SYN(SYN(".")))),
                            wrap.env);
+
     return wrap.finish(call);
   }
 
@@ -2492,7 +2491,7 @@ namespace ast {
 
   extern "C" Syntax * module_imports(const Syntax * p, Environ * env) {
     assert_num_args(p, 1);
-    Syntax * res = new Syntax;
+    SyntaxBuilder res;
     SymbolName n = *p->arg(0);
     GatherMarks gather;
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env->symbols.front, NULL, 
@@ -2504,9 +2503,9 @@ namespace ast {
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
         k.marks = mark(k.marks, *i);
-      res->add_part(new Syntax(k)); // FIXME not quite right
+      res.add_part(new Syntax(k)); // FIXME not quite right
     }
-    return res;
+    return res.build();
   }
 
   struct InnerNSDecl : public Declaration, public InnerNS {
@@ -2707,19 +2706,20 @@ namespace ast {
       if (arg1->is_a("call")) {
         assert_num_args(arg1, 2);
         const Syntax * n = expand_id(arg1->arg(0));
-        Syntax * a = new Syntax(*arg1->arg(1));
-        a->add_flag(new Syntax(THIS, ptr_exp));
+        MutableSyntax * a = new MutableSyntax(*arg1->arg(1));
+        a->add_flag(SYN(THIS, ptr_exp));
         const Symbol * sym;
         if (n->is_a("::")) // FIXME: This is hack, and not quite right
           sym = lookup_symbol<Symbol>(n, DEFAULT_NS, env.symbols.front, NULL, StripMarks);
         else
           sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        call = new Syntax(p->str(), arg1->part(0), new Syntax(ID, new Syntax(n, sym)), a);
+        call = new Syntax(p->str(), arg1->part(0), new Syntax(ID, new Syntax(n->str(), sym)), a);
       } else {
         const Syntax * n = expand_id(arg1);
         const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        Syntax * c = new Syntax(p->str(), ID, new Syntax(n, sym));
-        c->add_flag(new Syntax(THIS, ptr_exp));
+        Syntax * c = new_syntax(p->str(), PARTS(ID, SYN(n->str(), sym)), FLAGS(SYN(THIS, ptr_exp)));
+        //new Syntax(p->str(), ID, new Syntax(n, sym));
+        //c->add_flag(new Syntax(THIS, ptr_exp));
         call = c;
       }
       //printf("member: %s\n", ~call->to_string());

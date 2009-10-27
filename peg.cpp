@@ -76,7 +76,8 @@ MatchRes NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
         parts.flags->merge(r->flags);
       } else {
         assert(parts.parts->size() == 0);
-        Syntax * s = new Syntax(new Syntax("@"));
+        MutableSyntax * s = new_syntax();
+        s->add_part(SYN("@"));
         s->add_flags(r->flags);
         parts.parts->append(s);
       }
@@ -190,40 +191,37 @@ public:
     Flags lflags;
     MatchRes r = prod->match(str, prod->capture_type.is_explicit() ? PartsFlags(&lparts,&lflags) : PartsFlags(), errs);
     if (!r) return r;
-    Syntax * parse;
+    SyntaxBuilder res;
     if (parms.empty()) {
       if (name)
-        parse = new Syntax(name);
-      else
-        parse = new Syntax();
-      parse->add_parts(lparts);
-      parse->set_flags(lflags);
+        res.add_part(name);
+      res.add_parts(lparts);
+      res.set_flags(lflags);
     } else {
       Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
       if (i->start == NPOS) {
-        parse = new Syntax(i->name);
+        res.add_part(i->name);
       } else {
-        parse = new Syntax(lparts[i->start]);
+        res.add_part(lparts[i->start]);
       }
       ++i;
       for (; i != e; ++i) {
         if (i->start == NPOS) {
-          parse->add_part(i->name);
+          res.add_part(i->name);
         } else if (i->start != NPOS) {
           for (int j = i->start; j < i->stop && j < lparts.size(); ++j) {
-            parse->add_part(lparts[j]);
+            res.add_part(lparts[j]);
           }
         }
       }
-      parse->set_flags(lflags);
+      res.set_flags(lflags);
     }
-    parse->str_ = str;
-    parse->str_.end = r.end;
+    str.end = r.end;
     if (capture_as_flag) {
-      parts.flags->insert(parse);
+      parts.flags->insert(res.build(str));
       //printf("FLAG! %s\n", ~parse->to_string());
     } else
-      parts.parts->append(parse);
+      parts.parts->append(res.build(str));
     return r;
   }
 
