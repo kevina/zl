@@ -85,7 +85,7 @@ namespace ast {
       const char * s = ~*vp;
       char * e = (char *)s;
       unsigned long long value = strtoull(s, &e, 0);
-      if (*e) throw error(vp, "Expected Integer");
+      if (*e) throw error(vp, "Expected Unsigned Integer, got \"%s\"", s);
       if (value == 0) t = env.types.inst(".zero", t);
       String n = it->ct_type_name();
       if (n == ".uint8")
@@ -100,9 +100,10 @@ namespace ast {
         abort();
     } else {
       const char * s = ~vp->what().name;
+      if (strcmp(s, "0))") == 0) abort();
       char * e = (char *)s;
       long long value = strtoll(s, &e, 0);
-      if (*e) throw error(vp, "Expected Integer");
+      if (*e) throw error(vp, "Expected Integer, got \"%s\"", s);
       if (value == 0) t = env.types.inst(".zero", t);
       String n = it->ct_type_name();
       if (n == ".int8")

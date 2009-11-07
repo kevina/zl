@@ -145,12 +145,12 @@ static inline const Syntax * try_id(const Syntax * p)
   return is_raw_id(p) ? p : p->is_a("id") ? p->arg(0) : NULL;
 }
 
-const Syntax * handle_operator_fun_id(Parts::const_iterator & i, 
-                                      Parts::const_iterator e,
+const Syntax * handle_operator_fun_id(parts_iterator & i, 
+                                      parts_iterator e,
                                       Environ & env);
 
-const Syntax * handle_w_tilda(Parts::const_iterator & i, 
-                              Parts::const_iterator e,
+const Syntax * handle_w_tilda(parts_iterator & i, 
+                              parts_iterator e,
                               Environ & env);
 
 #endif

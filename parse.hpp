@@ -7,7 +7,6 @@
 
 // common structure used for parse results
 
-struct Syntax;
 struct Annon;
 struct SyntaxGather;
 
@@ -31,8 +30,6 @@ Error * error(const Syntax *, const char * fmt, ...)
   __attribute__ ((format (printf, 2, 3)));
 Error * error(const char * pos, const char * fmt, ...)
   __attribute__ ((format (printf, 2, 3)));
-struct Syntax;
-
 
 struct ParseSourceInfo : public SourceInfo {
   SourceStr str;
@@ -44,7 +41,7 @@ struct ParseSourceInfo : public SourceInfo {
 
 namespace ast {
   inline SymbolKey::SymbolKey(const Syntax & p, const InnerNS * ns0) 
-    : SymbolName(static_cast<const SymbolName &>(p)), ns(ns0 ? ns0 : DEFAULT_NS) {}
+    : SymbolName(p.as_symbol_name()), ns(ns0 ? ns0 : DEFAULT_NS) {}
 
 
 }

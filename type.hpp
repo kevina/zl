@@ -8,7 +8,8 @@
 #include "symbol_table.hpp"
 #include "string_buf.hpp"
 
-struct Syntax;
+namespace syntax_ns { struct SyntaxBase; typedef const SyntaxBase Syntax; }
+using syntax_ns::Syntax;
 
 namespace ast {
 

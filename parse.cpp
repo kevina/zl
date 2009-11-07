@@ -12,7 +12,28 @@
 
 using namespace parse_common;
 
-Vector<const Syntax *> Flags::EMPTY;
+using syntax_ns::SyntaxBase;
+
+SymbolName syntax_ns::UNKNOWN_WHAT("<unknown>");
+SymbolName syntax_ns::SynEntity::WHAT("<entity>");
+
+void SyntaxBase::dump_type_info() {
+  if (type_inf & NUM_PARTS_MASK) printf("PARTS:%u ", type_inf & NUM_PARTS_MASK);
+  if (type_inf & NUM_FLAGS_MASK) printf("FLAGS:%u ", (type_inf & NUM_FLAGS_MASK) << NUM_FLAGS_SHIFT);
+  if (type_inf & PARTS_INLINED) printf("PARTS_INLINED ");
+  else if (type_inf & NUM_PARTS_INLINED) printf("NUM_PARTS_INLINED ");
+  else printf("PARTS_SEPARATE ");
+  if (type_inf & EXPANDABLE) printf("EXPANDABLE ");
+  if (type_inf & SIMPLE) printf("SIMPLE ");
+  if (type_inf & EXTRA_INFO_MASK) {
+    if ((type_inf & TYPE_ID_MASK) == IS_SYN_ENTITY) printf("IS_SYN_ENTITY ");
+    else if ((type_inf & IS_REPARSE) == IS_REPARSE) printf("IS_REPARSE ");
+    else printf("<UNKNOWN:%u> ", (type_inf & EXTRA_INFO_MASK) >> EXTRA_INFO_SHIFT );
+  }
+  if (type_inf & FIRST_PART_SIMPLE) printf("(FIRST_PART_SIMPLE) ");
+  if (type_inf >> 15) printf("<GARBAGE AT END>");
+  printf("\n");
+}
 
 //
 // SourceStr
@@ -60,14 +81,14 @@ void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
   //o << end_pos_str(":", o, "");
 }
 
-void Syntax::sample_w_loc(OStream & o, unsigned max_len) const {
+void SyntaxBase::sample_w_loc(OStream & o, unsigned max_len) const {
   if (!str().empty())
     str().sample_w_loc(o, max_len);
   else
-    o.printf("a %s", ~what_.name);
+    o.printf("a %s", ~what().name);
 }
 
-String Syntax::sample_w_loc(unsigned max_len) const {
+String SyntaxBase::sample_w_loc(unsigned max_len) const {
   StringBuf buf;
   sample_w_loc(buf, max_len);
   return buf.freeze();
@@ -145,12 +166,12 @@ String Error::message() {
 
 // note: if the source info is diffrent for the parts but the source
 //       block is the same, it will use the source info of the first part
-void Syntax::set_src_from_parts() const {
+void SyntaxBase::set_src_from_parts() const {
   //printf("SET SRC FROM PARTS\n");
   SourceStr s = str_; // even though the SubStr is empty it might
                       // contain useful source info
-  for (unsigned i = 0; i != d->parts.size(); ++i) {
-    SourceStr other = d->parts[i]->str();
+  for (unsigned i = 0, sz = num_parts(); i != sz; ++i) {
+    SourceStr other = part(i)->str();
     if (!s.source) {
       s = other;
     } else if (s.source_block() == other.source_block()) {
@@ -169,12 +190,13 @@ void Syntax::set_src_from_parts() const {
   assert((!s.begin && !s.end) || (s.begin && s.end));
   if (s.source) {
     str_ = s;
-  } else if (d->parts.size() > 0) { // FIXME: Is this check really necessary ...
-    str_ = d->parts[0]->str();
+  } else if (num_parts() > 0) { // FIXME: Is this check really necessary ...
+    str_ = part(0)->str();
   }
 }
 
 
+/*
 void Parts::to_string(OStream & o, PrintFlags f, char sep, SyntaxGather * g) const {
   const_iterator i = begin(), e = end(); 
   if (sep == '\n')
@@ -205,6 +227,7 @@ void Flags::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
     ++i;
   }
 }
+*/
 
 bool ParseSourceInfo::dump_info_self(OStream & o) const {
   o << "  when parsing ";
@@ -242,35 +265,60 @@ void Syntax::print() const {
   to_string(COUT);
 }
 
-void Syntax::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
-  if (!d.have_d()) { 
-    if (have_entity())
-      o.printf("(%s)", ~escape(what_.to_string(g)));
-    else if (!what_.defined()) 
-      o.printf("()");
-    else if (what_.empty()) 
+void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
+  SymbolName what_ = what();
+  if (simple()) {
+    assert(what_.defined());
+    if (what_.empty()) 
       o.printf("\"\"");
     else
-      o.printf("%s", ~escape(what_.to_string(g)));
+      o.printf("%s", ~escape(what().to_string(g)));
+  } else if (have_entity()) {
+    o.printf("(%s)", ~escape(what().to_string(g)));
   } else {
     o.printf("(");
-    char sep = ' ';
+      char sep = ' ';
     if (what_ == "{...}" || what_ == "@")
       sep = '\n';
-    d->parts.to_string(o, f, sep, g);
+    if (num_parts() > 0) {
+      parts_iterator i = parts_begin(), e = parts_end(); 
+      if (sep == '\n')
+        f.indent += 2;
+      (*i)->to_string(o, f, g);
+      ++i;
+      while (i != e) {
+        if (sep == '\n') {
+          o.put('\n');
+          for (unsigned i = 0; i < f.indent; ++i)
+            o.put(' ');
+        } else {
+          o.put(sep);
+        }
+        (*i)->to_string(o, f, g);
+        //o << "\n";
+        ++i;
+      }
+    }
     if (sep == '\n') {
       o.put('\n');
       for (unsigned i = 0; i < f.indent; ++i)
         o.put(' ');
     }
-    d->flags.to_string(o, f, g);
+    if (have_flags()) {
+      flags_iterator i = flags_begin(), e = flags_end();
+      while (i != e) {
+        o.printf(" :");
+        (*i)->to_string(o, f, g);
+        ++i;
+      }
+    }
     o.printf(")");
     if (repl)
       repl->to_string(o, f, g);
   }
 }
 
-String Syntax::to_string() const {
+String SyntaxBase::to_string() const {
   StringBuf buf;
   to_string(buf);
   return buf.freeze();
@@ -311,7 +359,7 @@ namespace parse_parse {
     if (*str == '(') {
       return parse(str);
     } else {
-      Syntax * r = new Syntax(str);
+      SyntaxLeaf * r = new SyntaxLeaf(str);
       str = s_id(str, r->what_);
       r->str_.end = str;
       return Res(str, r);
@@ -324,7 +372,8 @@ namespace parse_parse {
     const char * start = str.begin;
     str = spacing(str);
     if (*str != '(') throw error(str, "Expected '('");
-    MutableSyntax * res = new_syntax(str);
+    SyntaxBuilder res;
+    SourceStr rstr = str;
     ++str;
     str = spacing(str);
     /*const char * name_start = str.begin;
@@ -338,25 +387,25 @@ namespace parse_parse {
       if (*str == '(') {
         Res r = parse(str);
         str = r.end;
-        res->add_part(r.parse);
+        res.add_part(r.parse);
       } else if (str[0] == ':' && str[1] != ':') {
         ++str;
         Res r = parse_grp_or_id(str);
         str = r.end;
-        res->add_flag(r.parse);
+        res.add_flag(r.parse);
       } else {
-        Syntax * r = new Syntax(str);
+        SyntaxLeaf * r = new SyntaxLeaf(str);
         str = s_id(str, r->what_);
         r->str_.end = str;
-        res->add_part(r);
+        res.add_part(r);
       }
       str = spacing(str);
     }
     if (str.empty() || *str != ')') throw error(str.source, start, "Unterminated '('");
     ++str;
-    res->str_.end = str;
+    rstr.end = str;
     str = spacing(str);
-    return Res(str, res);
+    return Res(str, res.build(rstr));
   }
 }
 

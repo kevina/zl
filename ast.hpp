@@ -150,7 +150,7 @@ namespace ast {
     //  typedef Exp type; 
     //  static const unsigned id = AST::TypeInfo::id | 1;
     //};
-    void set_syntax_data(Syntax::Data & d) {
+    void set_syntax_data(SynEntity::Data & d) {
       d.type_id = TypeInfo::id;
       d.data = this;
     }

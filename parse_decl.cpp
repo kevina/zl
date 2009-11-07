@@ -32,30 +32,30 @@ void ignore() {}
 static unsigned uniq_num = 0;
 
 struct DeclWorking {
-  DeclWorking(Parts &); // FIXME
+  DeclWorking(SyntaxBuilder &); // FIXME
 
   const Syntax * gen_sym() {
     StringBuf buf;
     buf.printf("_s_%d_", uniq_num++);
-    return new Syntax(buf.freeze());
+    return SYN(buf.freeze());
   }
 
-  Parts & type_scope;
+  SyntaxBuilder & type_scope;
 
-  bool parse_first_part(Parts::const_iterator & i, 
-                        Parts::const_iterator end, 
+  bool parse_first_part(parts_iterator & i, 
+                        parts_iterator end, 
                         Environ & env, 
                         bool top_level = false); 
                          // not really top_level, but can't think of
                          // better name
   const Syntax * parse_outer_type_info(const Syntax * & id, 
-                                      Parts::const_iterator & i, 
-                                      Parts::const_iterator end,
+                                      parts_iterator & i, 
+                                      parts_iterator end,
                                       const Syntax * t,
                                       Environ & env,
                                       bool id_required = true);
-  const Syntax * parse_init_exp(Parts::const_iterator & i, 
-                               Parts::const_iterator end);
+  const Syntax * parse_init_exp(parts_iterator & i, 
+                               parts_iterator end);
 
   typedef Vector<const Syntax *> Attributes;
   Attributes attributes;
@@ -130,10 +130,10 @@ struct DeclWorking {
     else base_type = v;
   }
 
-  Flags qualifiers;
-  bool try_qualifier(const Syntax * p, Flags & qualifiers) {
+  SyntaxBuilder qualifiers;
+  bool try_qualifier(const Syntax * p, SyntaxBuilder & qualifiers) {
     if (p->eq("const", "restrict", "volatile"))
-      qualifiers.insert(p);
+      qualifiers.add_flag(p);
     else return false;
     return true;
   }
@@ -166,7 +166,7 @@ struct DeclWorking {
   }
   bool try_typeof(const Syntax * p, Environ &) {
     if (*p == ".typeof") {
-      inner_type = new Syntax(p->part(0), p->arg(0));
+      inner_type = SYN(p->part(0), p->arg(0));
       return true;
     } else {
       return false;
@@ -178,14 +178,14 @@ struct DeclWorking {
   bool dots;
   Syntax * inner_type;
   void make_inner_type(const Syntax * orig);
-  const Syntax * try_pointers(Parts::const_iterator & i, 
-                              Parts::const_iterator end,
+  const Syntax * try_pointers(parts_iterator & i, 
+                              parts_iterator end,
                               const Syntax * t);
-  const Syntax * try_reference(Parts::const_iterator & i, 
-                               Parts::const_iterator end,
+  const Syntax * try_reference(parts_iterator & i, 
+                               parts_iterator end,
                                const Syntax * t);
-  const Syntax * try_arrays(Parts::const_iterator & i, 
-                            Parts::const_iterator end,
+  const Syntax * try_arrays(parts_iterator & i, 
+                            parts_iterator end,
                            const Syntax * t);
   
   const Syntax * make_declaration(const Syntax * id, const Syntax * t, const Syntax * init = NULL);
@@ -197,7 +197,7 @@ class ParseDeclImpl : public ParseDecl {
 public:
   ParseDeclImpl() {}
   const Syntax * parse_decl(const Syntax * p, Environ &);
-  const Syntax * parse_type(Parts::const_iterator & i, Parts::const_iterator e, Environ &);
+  const Syntax * parse_type(parts_iterator & i, parts_iterator e, Environ &);
   const Syntax * parse_type(const Syntax * p, Environ &);
   
   void init() {}
@@ -206,7 +206,7 @@ public:
 
 ParseDecl * parse_decl_ = new ParseDeclImpl();
 
-DeclWorking::DeclWorking(Parts & p)
+DeclWorking::DeclWorking(SyntaxBuilder & p)
   : type_scope(p), storage_class(NULL), what(VAR),
     sign(NO_SIGN), size(NO_SIZE), base_type(NO_BT),
     inline_(NULL), virtual_(NULL), pure_virtual(false), 
@@ -218,10 +218,12 @@ DeclWorking::DeclWorking(Parts & p)
 
 const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 {
-  Parts res;
+  SyntaxBuilder res;
 
-  Parts::const_iterator i = p->args_begin();
-  Parts::const_iterator end = p->args_end();
+  //printf(">IN>%s\n", ~p->to_string());
+
+  parts_iterator i = p->args_begin();
+  parts_iterator end = p->args_end();
 
   DeclWorking w(res);
 
@@ -235,7 +237,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     if (env.scope >= ast::LEXICAL) return NULL;
 
     if ((*i)->ne("~")) --i;
-    w.inner_type = new Syntax(new Syntax("void"));
+    w.inner_type = SYN(SYN("void"));
 
   } else if (!r) {
 
@@ -266,7 +268,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
       decl = w.make_declaration(id, t);
     }
     
-    res.push_back(decl);
+    res.add_part(decl);
 
     if (i == end) break;
 
@@ -276,31 +278,36 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     
   }
 
-  for (Parts::iterator i = res.begin(), e = res.end(); i != e; ++i) {
+  for (mutable_parts_iterator i = res.parts_begin(), e = res.parts_end(); i != e; ++i) {
     const Syntax * p = *i;
     const Syntax * n = p->arg(0);
     if (n->is_a("::")) {
       const Syntax * c = n->arg(0);
       const Syntax * n2 = n->arg(1);
-      Syntax * p2 = new Syntax(*p);
+      SemiMutableSyntax * p2 = p->clone();
       p2->arg(0) = n2;
-      *i = new Syntax(new Syntax("memberdecl"), c, p2);
+      *i = SYN(SYN("memberdecl"), c, p2);
     }
   }
 
-  if (res.size() == 1)
-    return res[0];
+  Syntax * ret;
+  if (res.num_parts() == 1)
+    ret = res.part(0);
   else
-    return new Syntax(new Syntax("@"), res);
+    ret = SYN(SYN("@"), PARTS(res.parts_begin(), res.parts_end()));
+
+  //printf(">OUT>%s\n", ~ret->to_string());
+  
+  return ret;
 }
 
-const Syntax * ParseDeclImpl::parse_type(Parts::const_iterator & i, 
-                                         Parts::const_iterator end, 
+const Syntax * ParseDeclImpl::parse_type(parts_iterator & i, 
+                                         parts_iterator end, 
                                          Environ & env) 
 {
   if (i == end) return NULL;
   const Syntax * p = *i;
-  Parts dummy;
+  SyntaxBuilder dummy;
   DeclWorking w(dummy);
   const Syntax * id = NULL;
   bool r = w.parse_first_part(i, end, env);
@@ -314,23 +321,23 @@ const Syntax * ParseDeclImpl::parse_type(Parts::const_iterator & i,
 
 
 const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
-  Parts::const_iterator i = p->args_begin();
-  Parts::const_iterator end = p->args_end();
+  parts_iterator i = p->args_begin();
+  parts_iterator end = p->args_end();
   const Syntax * t = parse_type(i, end, env);
   if (i != end) return NULL;
   return t;
 }
 
-bool DeclWorking::parse_first_part(Parts::const_iterator & i, 
-                                   Parts::const_iterator end,
+bool DeclWorking::parse_first_part(parts_iterator & i, 
+                                   parts_iterator end,
                                    Environ & env, 
                                    bool top_level)
 {
-  Parts::const_iterator begin = i;
+  parts_iterator begin = i;
   bool by_itself = top_level && i + 1 == end;
   if (i != end && (*i)->eq("...")) {
     dots = true;
-    inner_type = new Syntax("...", (*i)->str());
+    inner_type = SYN("...", (*i)->str());
     ++i;
   } else while (i != end) {
     const Syntax * cur = *i;
@@ -369,9 +376,9 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
   const Syntax * body = NULL;
   if (p->is_a("struct") || p->is_a("union")) {
     unsigned i = 0;
-    if (p->num_args() == 0) throw error(p->str().source, p->str().end, 
-                                        "Expected indentifer or \"{\" after \"%s\".",
-                                        ~p->what());
+    if (p->num_args() == 0) abort(); //throw error(p->str().source, p->str().end, 
+                            //            "Expected indentifer or \"{\" after \"%s\".",
+                            //            ~p->what());
     name = p->arg(i);
     ++i;
     if (i == p->num_args()) goto finish;
@@ -383,17 +390,17 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
   finish:
     if (name->what().empty())
       name = gen_sym();
-    inner_type = new Syntax(p->part(0), name);
+    inner_type = SYN(p->part(0), name);
     if (body || by_itself) {
       const Syntax * n = name;
       if (n->simple())
-        n = new Syntax(new Syntax("`"), n, new Syntax("tag"));
+        n = SYN(SYN("`"), n, SYN("tag"));
       SyntaxBuilder struct_union(p->part(0));
       struct_union.add_part(n);
       struct_union.set_flags(p);
       if (body)
         struct_union.add_part(parse_struct_union_body(body, env));
-      type_scope.push_back(struct_union.build());
+      type_scope.add_part(struct_union.build());
     }
     return true;
   } else {
@@ -412,8 +419,8 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
 
     if (p->is_a("stmt")) {
 
-        Parts::const_iterator i = p->args_begin();
-        Parts::const_iterator end = p->args_end();
+        parts_iterator i = p->args_begin();
+        parts_iterator end = p->args_end();
         
         {
           bool r = w.parse_first_part(i, end, env);
@@ -476,13 +483,13 @@ bool DeclWorking::try_enum(const Syntax * p, Environ & env, bool by_itself) {
   finish:
     if (name->what().empty())
       name = gen_sym();
-    inner_type = new Syntax(p->part(0), name);
+    inner_type = SYN(p->part(0), name);
     if (body || by_itself) {
       SyntaxBuilder enum_(p->part(0));
       enum_.add_part(name);
       if (body)
         enum_.add_part(body);
-      type_scope.push_back(enum_.build());
+      type_scope.add_part(enum_.build());
     }
     return true;
   } else {
@@ -569,7 +576,7 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
       }
       break;
     }
-    //inner_type->add_part(type_symbol ? new Syntax(type_symbol_p, type_symbol) : new Syntax(t.freeze()));
+    //inner_type->add_part(type_symbol ? SYN(type_symbol_p, type_symbol) : SYN(t.freeze()));
     // Don't use the resolved symbol the final parse might bind it to
     // a different symbol.  Otherwise "class X {X foo() {...}};" won't
     // work as expected.
@@ -581,21 +588,21 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
   if (!qualifiers.empty()) {
     inner_type = SYN(inner_type->str(),
                      PARTS(inner_type->parts_begin(), inner_type->parts_end()),
-                     qualifiers);
+                     FLAGS(qualifiers.flags_begin(), qualifiers.flags_end()));
     //inner_type->set_flags(qualifiers);
   }
 }
 
 // returns a type and sets id
 const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id, 
-                                                 Parts::const_iterator & i, 
-                                                 Parts::const_iterator end,
+                                                 parts_iterator & i, 
+                                                 parts_iterator end,
                                                  const Syntax * t,
                                                  Environ & env,
                                                  bool id_required) 
 {
   assert(t);
-  Parts::const_iterator prev;
+  parts_iterator prev;
   do {
     prev = i;
     t = try_pointers(i, end, t);
@@ -634,9 +641,9 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   }
   
   if (outer) {
-    Parts::const_iterator j = outer->args_begin();
+    parts_iterator j = outer->args_begin();
     t = parse_outer_type_info(id, j, outer->args_end(), t, env, id_required);
-    if (j != outer->d->parts.end()) throw error(*j, "Expected \")\".");
+    if (j != outer->args_end()) throw error(*j, "Expected \")\".");
     return t;
   } else {
     return t;
@@ -649,10 +656,10 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
 {
   SyntaxBuilder ps(SYN("."));
   //printf("MAKE FUNCTION TYPE: %s %s\n", ~ret->to_string(), ~parms->to_string());
-  Parts::const_iterator i = parms->args_begin();
-  Parts::const_iterator end = parms->args_end();
+  parts_iterator i = parms->args_begin();
+  parts_iterator end = parms->args_end();
   if (i != end) for (;;) {
-    Parts::const_iterator begin = i;
+    parts_iterator begin = i;
     DeclWorking w(type_scope);
     const Syntax * id = NULL;
     bool r = w.parse_first_part(i, end, env, false);
@@ -674,48 +681,47 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
     if (!(*i)->eq(",")) throw error(*i, "Expected \",\" got \"%s\".", ~(*i)->to_string());
     ++i;
   }
-  return new Syntax(new Syntax(".fun"), ps.build(), ret);
+  return SYN(SYN(".fun"), ps.build(), ret);
 }
 
-const Syntax * DeclWorking::parse_init_exp(Parts::const_iterator & i, 
-                                            Parts::const_iterator end)
+const Syntax * DeclWorking::parse_init_exp(parts_iterator & i, 
+                                            parts_iterator end)
 {
-  Parts::const_iterator begin = i;
+  parts_iterator begin = i;
   while (i != end && !(*i)->eq(","))
     ++i;
-  Syntax * p = new Syntax(new Syntax("exp"));
-  p->d->parts.append(begin, i);
-  return p;
+  return SYN(SYN("exp"), PARTS(begin, i));
 }
 
-const Syntax * DeclWorking::try_pointers(Parts::const_iterator & i, 
-                                         Parts::const_iterator end,
+const Syntax * DeclWorking::try_pointers(parts_iterator & i, 
+                                         parts_iterator end,
                                          const Syntax * t) 
 {
   while (i != end && (*i)->eq("*")) {
     ++i;
-    Syntax * new_t = new Syntax(new Syntax(".ptr"), t);
-    while (i != end && try_qualifier((*i), new_t->d->flags))
+    SyntaxBuilder res(SYN(".ptr"));
+    res.add_part(t);
+    while (i != end && try_qualifier((*i), res))
       ++i;
-    t = new_t;
+    t = res.build();
   }
   return t;
 }
 
-const Syntax * DeclWorking::try_reference(Parts::const_iterator & i, 
-                                          Parts::const_iterator end,
+const Syntax * DeclWorking::try_reference(parts_iterator & i, 
+                                          parts_iterator end,
                                           const Syntax * t) 
 {
   if (i != end && (*i)->eq("&")) {
     ++i;
-    return new Syntax(new Syntax(".ref"), t);
+    return SYN(SYN(".ref"), t);
   } else {
     return t;
   }
 }
 
-const Syntax * DeclWorking::try_arrays(Parts::const_iterator & i, 
-                                      Parts::const_iterator end,
+const Syntax * DeclWorking::try_arrays(parts_iterator & i, 
+                                      parts_iterator end,
                                       const Syntax * t) 
 {
   Vector<const Syntax *> stack;
@@ -726,7 +732,7 @@ const Syntax * DeclWorking::try_arrays(Parts::const_iterator & i,
   Vector<const Syntax *>::const_reverse_iterator j = stack.rbegin();
   Vector<const Syntax *>::const_reverse_iterator e = stack.rend();
   while (j != e) {
-    t = new Syntax(new Syntax(".array"), t, *j);
+    t = SYN(SYN(".array"), t, *j);
     ++j;
   }
   return t;

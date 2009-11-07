@@ -21,7 +21,7 @@ struct OpKey : public gc {
   Which which;
   OpKey() {}
   // FIXME: operators should proabaly be hygienic
-  OpKey(const SymbolName & wt, Which wc)
+  OpKey(const ast::SymbolName & wt, Which wc)
     : what(wt.name), which(wc) {}
 };
 
@@ -95,11 +95,11 @@ struct SpecialOp : public OpCommon {
       rest[i-2].parse_match_op(p->arg(i));
     }
   }
-  const Syntax * match(Parts::const_iterator & i0, Parts::const_iterator end) const {
-    Parts::const_iterator i = i0;
+  const Syntax * match(parts_iterator & i0, parts_iterator end) const {
+    parts_iterator i = i0;
     const Syntax * fp = *i;
     ++i;
-    Parts working;
+    SyntaxBuilder working;
     Vector<MatchOp>::const_iterator j = rest.begin(), e = rest.end();
     for (; j != e && i != end; ++j, ++i) {
       const Syntax * p = *i;
@@ -108,7 +108,7 @@ struct SpecialOp : public OpCommon {
         else return NULL;
       } else {
         if (j->which == Category && p->is_a(j->what))
-          working.push_back(p);
+          working.add_part(p);
         else
           return NULL;
       }
@@ -117,11 +117,8 @@ struct SpecialOp : public OpCommon {
     --i; // backup on
     SourceStr str = fp->str();
     str.adj((*i)->str());
-    SyntaxBuilder res;
-    res.add_part(SYN(name));
-    res.add_parts(working.begin(), working.end());
     i0 = i;
-    return res.build(str);
+    return SYN(str, SYN(name), PARTS(working.parts_begin(), working.parts_end()));
   }
 };
 
@@ -203,7 +200,7 @@ struct Ops {
     return op;
   }
 
-  const Syntax * i_try_special(const OpKey & k, Parts::const_iterator & i, Parts::const_iterator e) {
+  const Syntax * i_try_special(const OpKey & k, parts_iterator & i, parts_iterator e) {
     pair<Lookup::const_iterator,Lookup::const_iterator> is
       = lookup_.equal_range(k);
      for( ; is.first != is.second; ++is.first) {
@@ -216,7 +213,7 @@ struct Ops {
      return NULL;
   }
   
-  const Syntax * try_special(const Syntax * p, Parts::const_iterator & i, Parts::const_iterator e) {
+  const Syntax * try_special(const Syntax * p, parts_iterator & i, parts_iterator e) {
     const Syntax * res = NULL;
     if (p->simple())
       res = i_try_special(OpKey(p->what(), Symbol), i, e);
@@ -256,7 +253,7 @@ public:
     list_is = l_i;
     Op::Types prev = 0;
     try {
-      for (Parts::const_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i) {
+      for (parts_iterator i = p->args_begin(), e = p->args_end(); i != e; ++i) {
         const Syntax * pop = *i; // parsed op
         Op::Types cur = ops.lookup_types(pop);
         if (cur & Op::Special) {

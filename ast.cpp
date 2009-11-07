@@ -116,7 +116,7 @@ namespace ast {
   static EmptyStmt EMPTY_STMT_OBJ;
   Stmt * const EMPTY_STMT = &EMPTY_STMT_OBJ;
 
-  static const Syntax * ID = new Syntax("id");
+  static const Syntax * ID = new_syntax("id");
 
 
   //
@@ -217,7 +217,7 @@ namespace ast {
   Stmt * Parse<StmtDeclPos>::finish_parse(const Syntax * p) const;
 
   template <typename C, typename P>
-  void add_ast_nodes(Parts::const_iterator i, Parts::const_iterator end, 
+  void add_ast_nodes(parts_iterator i, parts_iterator end, 
                      C & container, const P & prs) {
     for (; i != end; ++i) {
       const Syntax * p = prs.partly_expand(*i);
@@ -230,7 +230,7 @@ namespace ast {
     }
   }
 
-  void add_stmts(Parts::const_iterator i, Parts::const_iterator end, Environ & env)
+  void add_stmts(parts_iterator i, parts_iterator end, Environ & env)
   {
     Parse<StmtDeclPos> prs(env);
     for (; i != end; ++i) {
@@ -255,7 +255,7 @@ namespace ast {
       } 
       last = cur;
     }
-    void add(Parts::const_iterator i, Parts::const_iterator end) {
+    void add(parts_iterator i, parts_iterator end) {
       for (; i != end; ++i) {
         const Syntax * p = prs.partly_expand(*i);
         if (p->is_a("@"))
@@ -1127,7 +1127,7 @@ namespace ast {
   };
 
   static Exp * parse_seq_helper(const Syntax * p, Environ & env, ExpContext c) {
-    Parts::const_iterator i = p->args_begin(), e = p->args_end();
+    parts_iterator i = p->args_begin(), e = p->args_end();
     assert(i != e);
     while (true) {
       const Syntax * p0 = *i++;
@@ -2503,7 +2503,7 @@ namespace ast {
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
         k.marks = mark(k.marks, *i);
-      res.add_part(new Syntax(k)); // FIXME not quite right
+      res.add_part(SYN(k)); // FIXME not quite right
     }
     return res.build();
   }
@@ -2585,7 +2585,7 @@ namespace ast {
       s->type = parse_type(p->arg(1), env);
     } else {
       s->type = env.types.inst(SymbolKey(name, TAG_NS));
-      //parse_stmt_decl(new Syntax(new Syntax("talias"), p->arg(0), new Syntax(s->type)), env);
+      //parse_stmt_decl(SYN(SYN("talias"), p->arg(0), SYN(s->type)), env);
     }
     s->module = env.symbols.lookup<Module>(p->arg(0), OUTER_NS);
     assert(s->num == s->module->num);
@@ -2689,15 +2689,15 @@ namespace ast {
     return empty_stmt();
   }
 
-  static const Syntax * THIS = new Syntax("this");
+  static const Syntax * THIS = SYN("this");
 
   Exp * parse_member_access(const Syntax * p, Environ & env) {
     assert_num_args(p, 2);
     Exp * exp = parse_exp(p->arg(0), env);
     exp = exp->to_effective(env);
-    Syntax * ptr_exp = new Syntax(new Syntax("addrof"), new Syntax(exp));
+    Syntax * ptr_exp = SYN(SYN("addrof"), SYN(exp));
     if (dynamic_cast<const StructUnion *>(exp->type->unqualified)) {
-      const Syntax * np = new Syntax(p->str(), p->part(0), new Syntax(exp), p->arg(1));
+      const Syntax * np = SYN(p->str(), p->part(0), SYN(exp), p->arg(1));
       return (new MemberAccess)->parse_self(np, env);
     } else if (const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified)) {
       // FIXME: Am I calling partly_expand in the right scope here, or correctly at all
@@ -2706,20 +2706,19 @@ namespace ast {
       if (arg1->is_a("call")) {
         assert_num_args(arg1, 2);
         const Syntax * n = expand_id(arg1->arg(0));
-        MutableSyntax * a = new MutableSyntax(*arg1->arg(1));
-        a->add_flag(SYN(THIS, ptr_exp));
+        const Syntax * a = SYN(*arg1->arg(1), PARTS(), FLAGS(SYN(THIS, ptr_exp)));
         const Symbol * sym;
         if (n->is_a("::")) // FIXME: This is hack, and not quite right
           sym = lookup_symbol<Symbol>(n, DEFAULT_NS, env.symbols.front, NULL, StripMarks);
         else
           sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        call = new Syntax(p->str(), arg1->part(0), new Syntax(ID, new Syntax(n->str(), sym)), a);
+        call = SYN(p->str(), arg1->part(0), SYN(ID, SYN(n->str(), sym)), a);
       } else {
         const Syntax * n = expand_id(arg1);
         const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
         Syntax * c = new_syntax(p->str(), PARTS(ID, SYN(n->str(), sym)), FLAGS(SYN(THIS, ptr_exp)));
-        //new Syntax(p->str(), ID, new Syntax(n, sym));
-        //c->add_flag(new Syntax(THIS, ptr_exp));
+        //SYN(p->str(), ID, SYN(n, sym));
+        //c->add_flag(SYN(THIS, ptr_exp));
         call = c;
       }
       //printf("member: %s\n", ~call->to_string());
@@ -2744,8 +2743,8 @@ namespace ast {
     if (!t) throw error(p->arg(0), "Expected user type but got ??");
     if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
     exp->type = change_unqualified(exp->type, t->type);
-    Syntax * res = new Syntax(new Syntax("member"),
-                              new Syntax(exp),
+    Syntax * res = SYN(SYN("member"),
+                              SYN(exp),
                               p->arg(1));
     return (new MemberAccess)->parse_self(res, env);
   };
@@ -2883,9 +2882,9 @@ namespace ast {
     //UserCastCompare cmp(from_base, from_base->parent);
     const UserCast * cast = lookup_symbol<UserCast>(SymbolKey("up_cast", CAST_NS), exp->source_str(), 
                                                     from_base->module->syms);//, NULL, NormalStrategy, gather, cmp);
-    const Syntax * p = new Syntax(new Syntax("call"), 
-                                  new Syntax(new Syntax("id"), new Syntax(cast->cast_macro)),
-                                  new Syntax(new Syntax("."), new Syntax(exp)));
+    const Syntax * p = SYN(SYN("call"), 
+                                  SYN(SYN("id"), SYN(cast->cast_macro)),
+                                  SYN(SYN("."), SYN(exp)));
     Exp * res = parse_exp(p, env);
     res = res->resolve_to(to_ptr, env);
     return cast_up(res, type, env);
@@ -2910,9 +2909,9 @@ namespace ast {
       const UserType * t = dynamic_cast<const UserType *>(parent);
       subexp = cast_down(exp, t, env);
     }
-    const Syntax * p = new Syntax(new Syntax("call"), 
-                                  new Syntax(new Syntax("id"), new Syntax(cast->cast_macro)),
-                                  new Syntax(new Syntax("."), new Syntax(subexp)));
+    const Syntax * p = SYN(SYN("call"), 
+                                  SYN(SYN("id"), SYN(cast->cast_macro)),
+                                  SYN(SYN("."), SYN(subexp)));
     Exp * res = parse_exp(p, env);
     res = res->resolve_to(to_ptr, env);
     return res;
@@ -3467,7 +3466,7 @@ namespace ast {
       sizeof_type = parse_type(p->arg(0)->arg(0), env);
     } else {
       Exp * exp = parse_exp(p->arg(0), env);
-      sizeof_type = parse_type(new Syntax(new Syntax(".typeof"), new Syntax(exp)), env);
+      sizeof_type = parse_type(SYN(SYN(".typeof"), SYN(exp)), env);
     }
     lt_sizeof = sizeof_type->lt_sizeof();
     type = env.types.ct_const(env.types.inst(".size"));
@@ -3507,7 +3506,7 @@ namespace ast {
       abort();
     }
     ChangeSrc<SyntaxSourceInfo> cs(syn);
-    syn = new Syntax(cs, *syn);
+    syn = SYN(cs, *syn);
     SyntaxC::keep_me.push_back(syn);
     return syn;
   }
@@ -3725,7 +3724,7 @@ namespace ast {
     return Parse<StmtDeclPos>(env)(p);
   }
 
-  Stmt * parse_stmts(Parts::const_iterator i, Parts::const_iterator end) {
+  Stmt * parse_stmts(parts_iterator i, parts_iterator end) {
     return NULL;
   }
 
@@ -3871,7 +3870,7 @@ namespace ast {
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
     if (what == "environ_snapshot") return (new EnvironSnapshot)->parse_self(p, env);
     if (what == "c-assign") {
-      AST * ast = try_just_exp(new Syntax(p->str(), p->arg(0), p->arg(1), p->arg(2)), env, c);
+      AST * ast = try_just_exp(SYN(p->str(), p->arg(0), p->arg(1), p->arg(2)), env, c);
       if (!ast) return 0;
       BinOp * binop = dynamic_cast<BinOp *>(ast);
       StringBuf op;

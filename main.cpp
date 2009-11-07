@@ -12,8 +12,9 @@
 #include "expand.hpp"
 
 extern "C" {
-#include <gc_backptr.h>
+//#include <gc_backptr.h>
   void GC_dump();
+  extern unsigned GC_alloc_count;
 }
 
 //#include "symbol_table.hpp"
@@ -39,7 +40,8 @@ SourceFile * file = 0;
 
 int main(int argc, const char *argv[])
 {
-  //GC_free_space_divisor = 16;
+  //GC_disable();
+  //GC_free_space_divisor = 32;
 
   assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
   assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
@@ -128,9 +130,9 @@ int main(int argc, const char *argv[])
     out.open(output_fn, "w");
     if (for_ct) 
       out.for_macro_sep_c = new ast::CompileWriter::ForMacroSepC;
-//    printf("FORCING COLLECTION\n");
-//    GC_gcollect();
-//    GC_dump();
+    //printf("FORCING COLLECTION\n");
+    //GC_gcollect();
+    //GC_dump();
     ast::compile(env.top_level_symbols, out);
     //ast::CompileWriter out2(ast::CompileWriter::ZLE);
     //out2.open("a.out.zle", "w");

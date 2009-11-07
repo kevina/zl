@@ -12,8 +12,8 @@
 #include "string_buf.hpp"
 #include "type_info.hpp"
 #include "source_str.hpp"
+#include "syntax-f.hpp"
 
-struct Syntax;
 struct Error;
 struct SourceStr;
 Error * error(const SourceStr & str, const char * fmt, ...)

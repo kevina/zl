@@ -6,6 +6,7 @@
 #include "parse.hpp"
 #include "parse_common.hpp"
 #include "hash-t.hpp"
+#include "syntax-f.hpp"
 
 #include <typeinfo>
 #include <utility>
@@ -13,8 +14,6 @@
 using std::pair;
 
 struct Prod;
-
-struct Syntax;
 
 // FIXME: Need more effect representation for const strings
 //        (Pool of strings, hash lookup, ...)
@@ -96,11 +95,12 @@ struct MatchRes {
   bool operator!() const {return !end;}
 };
 
+typedef SyntaxBuilderBase SynBuilder;
+
 struct Res : public MatchRes {
   const char * str_end; // if not NULL than read past end-of-string to this point
   Res() : str_end() {}
-  Parts parts;
-  Flags flags;
+  SyntaxBuilderN<2> res;
   ParseErrors errors;
 };
 
@@ -122,6 +122,7 @@ private:
 
 static const char * FAIL = 0;
 
+/*
 struct PartsFlags {
   Parts * parts;
   Flags * flags;
@@ -131,10 +132,11 @@ struct PartsFlags {
     : parts(p), flags(f) {}
   operator bool() const {return parts;}
 };
+*/
 
 class Prod {
 public:
-  virtual MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) = 0;
+  virtual MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) = 0;
   virtual Prod * clone(Prod * = 0) = 0; // the paramater is the new
                                         // prod to use in place of the
                                         // placeholder prod "_self"
@@ -155,7 +157,7 @@ protected:
 
 class SymProd : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
     return prod->match(str,parts,errs);
   }
   SymProd(const char * s, const char * e, String n, Prod * p = 0) 
@@ -191,7 +193,7 @@ struct PtrLt {
 class NamedProd : public SymProd {
   // named productions are memorized
 public:
-  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs);
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs);
   NamedProd(String n) 
     : SymProd(0,0,n) {}
   virtual Prod * clone(Prod *) {

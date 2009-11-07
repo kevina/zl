@@ -4,6 +4,9 @@
 #ifndef NO_GC
 
 //#define GC_DEBUG 1
+//extern "C" {
+//#  include <gc_backptr.h>
+//}
 
 #include "gc_cpp.hpp"
 #include <gc_allocator.h>

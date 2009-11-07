@@ -7,6 +7,7 @@
 #include "gc.hpp"
 #include "vector.hpp"
 #include "parm_string.hpp"
+#include "syntax-f.hpp"
 
 #include "hash.hpp"
 #include "iostream.hpp"
@@ -134,8 +135,6 @@ class OStream;
 class SourceFile;
 
 #define PURE __attribute__ ((pure))
-
-struct Syntax;
 
 //
 // A SourceInfo "block" is part of a "file".  The syntax inside a

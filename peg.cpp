@@ -26,7 +26,7 @@ class Capture;
 
 static unsigned indent_level = 0;
 
-MatchRes NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+MatchRes NamedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
   pair<Lookup::iterator, Lookup::iterator>
     cached = lookup.equal_range(str.begin);
   //if (cached.second - cached.first > 1) 
@@ -42,14 +42,13 @@ MatchRes NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     if (str.end > i->second.read_to) break;
     //else printf("XXX COULD'T USE %s\n", ~name);
   }
-  //printf("%*cParsing: >%s<\n", indent_level, ' ', ~sample(str.begin, str.end, 20));
   Res * r;
   if (i == cached.second) {
     r = &(*((lookup.insert(str, Res())).first)).second;
     r->end = FAIL; // to avoid infinite recursion
     //printf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
     //indent_level++;
-    *static_cast<MatchRes *>(r) = prod->match(str, PartsFlags(&r->parts, &r->flags), r->errors);
+    *static_cast<MatchRes *>(r) = prod->match(str, &r->res, r->errors);
     if (r->read_to >= str.end) {
       //printf("PAST END ON %s\n", ~name);
       r->read_to = NULL;
@@ -59,7 +58,7 @@ MatchRes NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
     //if (r->end != FAIL)
     //  printf("%*cNamedProd DONE %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
     //else
-    //  printf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
+    //  printf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);g
     //assert(r->end == FAIL || r->parts.size() == 1);
   } else {
     r = &i->second;
@@ -70,18 +69,8 @@ MatchRes NamedProd::match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
   }
   errs.add(r->errors);
   if (parts) {
-    parts.parts->append(r->parts);
-    if (!r->flags.empty()) {
-      if (parts.flags) {
-        parts.flags->merge(r->flags);
-      } else {
-        assert(parts.parts->size() == 0);
-        MutableSyntax * s = new_syntax();
-        s->add_part(SYN("@"));
-        s->add_flags(r->flags);
-        parts.parts->append(s);
-      }
-    }
+    parts->add_parts(r->res.parts_begin(), r->res.parts_end());
+    parts->merge_flags(r->res.flags_begin(), r->res.flags_end());
   }
   return *r;
 }
@@ -101,7 +90,7 @@ void ParsePeg::Parse::clear_cache() {
 
 class AlwaysTrue : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
     return MatchRes(str.begin, NULL);
   }
   AlwaysTrue(const char * p, const char * e) : Prod(p,e) {}
@@ -111,18 +100,18 @@ public:
 
 class Capture : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags res, ParseErrors & errs) {
-    if (!res) return prod->match(str, PartsFlags(), errs);
+  MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
+    if (!res) return prod->match(str, NULL, errs);
     if (prod->capture_type.is_single()) {
       //return prod->match(str, parts, errs);
       return prod->match(str, res, errs);
     } else if (prod->capture_type.is_multi()) {
       return prod->match(str, res, errs);
     } else { // type is None
-      MatchRes r = prod->match(str, PartsFlags(), errs);
+      MatchRes r = prod->match(str, NULL, errs);
       if (!r) return r;
-      Syntax * parse = new Syntax(String(str.begin, r.end), str, r.end);
-      res.parts->append(parse);
+      Syntax * parse = SYN(String(str.begin, r.end), str, r.end);
+      res->add_part(parse);
       return r;
     }
   }
@@ -174,6 +163,8 @@ static inline const char * first_non_space(const char * s)
   return s;
 }
 
+void stop() {}
+
 class NamedCapture : public Prod {
 // NamedCapture can also be used as a "forced capture" if name is empty
 private:
@@ -184,51 +175,50 @@ private:
     unsigned stop;
   };
 public:
-  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
-    if (!parts) return prod->match(str, PartsFlags(), errs); 
-    Parts lparts;
-    Flags lflags;
-    MatchRes r = prod->match(str, prod->capture_type.is_explicit() ? PartsFlags(&lparts,&lflags) : PartsFlags(), errs);
-    if (!r) return r;
+    if (!parts) return prod->match(str, NULL, errs); 
     SyntaxBuilder res;
+    if (parms.empty() && name) res.add_part(name);
+    MatchRes r = prod->match(str, prod->capture_type.is_explicit() ? &res : NULL, errs);
+    if (!r) return r;
+    Syntax * res_syn;
+    str.end = r.end;
     if (parms.empty()) {
-      if (name)
-        res.add_part(name);
-      res.add_parts(lparts);
-      res.set_flags(lflags);
+      res_syn = res.build(str);
     } else {
+      SyntaxBuilder res2;
       Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
       if (i->start == NPOS) {
-        res.add_part(i->name);
+        res2.add_part(i->name);
       } else {
-        res.add_part(lparts[i->start]);
+        res2.add_part(res.part(i->start));
       }
       ++i;
       for (; i != e; ++i) {
         if (i->start == NPOS) {
-          res.add_part(i->name);
+          res2.add_part(i->name);
         } else if (i->start != NPOS) {
-          for (int j = i->start; j < i->stop && j < lparts.size(); ++j) {
-            res.add_part(lparts[j]);
+          for (int j = i->start; j < i->stop && j < res.num_parts(); ++j) {
+            res2.add_part(res.part(j));
           }
         }
       }
-      res.set_flags(lflags);
+      res2.set_flags(res.flags_begin(), res.flags_end());
+      res_syn = res2.build(str);
     }
-    str.end = r.end;
     if (capture_as_flag) {
-      parts.flags->insert(res.build(str));
+      parts->add_flag(res_syn);
       //printf("FLAG! %s\n", ~parse->to_string());
     } else
-      parts.parts->append(res.build(str));
+      parts->add_part(res_syn);
     return r;
   }
 
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
   NamedCapture(const char * s, const char * e, Prod * p, String n, bool caf = false)
-    : Prod(s,e), prod(p), name(!n.empty() ? new Syntax(n) : 0), capture_as_flag(caf) 
+    : Prod(s,e), prod(p), name(!n.empty() ? SYN(n) : 0), capture_as_flag(caf) 
     {capture_type.set_to_explicit(); parse_name();}
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : Prod(o), prod(o.prod->clone(p)), name(o.name), parms(o.parms) {}
@@ -242,9 +232,14 @@ private:
   void parse_name() {
     if (!name) return;
     const char * s = ~*name;
+    if (strcmp(s, "%") == 0) {
+      // special case, a single "%" is the same as not having a name
+      name = NULL;
+      return;
+    }
     const char * e = first_space(s);
     if (s[0] != '%' && !*e) {
-      name = new Syntax(parse_common::unescape(s, e, '"')); // FIXME: Add source info
+      name = SYN(parse_common::unescape(s, e, '"')); // FIXME: Add source info
       return;
     }
     unsigned last_used = 0; // FIXME: Misnamed
@@ -252,7 +247,7 @@ private:
     unsigned i = 0;
     for (;;) {
       Parm p;
-      p.name = new Syntax(parse_common::unescape(s, e, '"')); // FIXME: Add source info
+      p.name = SYN(parse_common::unescape(s, e, '"')); // FIXME: Add source info
       String n = ~*p.name;
       if (n == "...") {
         assert(dots == NPOS); // FIXME: Error message
@@ -277,7 +272,7 @@ private:
     }
     if (dots == NPOS) {
       Parm p;
-      p.name = new Syntax("...");
+      p.name = SYN("...");
       dots = parms.size();
       parms.push_back(p);
     }
@@ -292,7 +287,7 @@ private:
 
 class DescProd : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
     ParseErrors my_errs;
     MatchRes r = prod->match(str, parts, my_errs);
     if (my_errs.size() > 0 && !desc.empty() && my_errs.front()->pos <= str) {
@@ -335,7 +330,7 @@ bool prefix_equal(const char * i, const char * e,
 
 class Literal : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
     const char * e = str.begin;
     if (prefix_equal(literal.begin(), literal.end(), e, str.end)) {
       return MatchRes(e, e-1);
@@ -357,7 +352,7 @@ private:
 
 class CharClass : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
     if (!str.empty() && cs[*str]) {
       return MatchRes(str + 1, str);
     } else {
@@ -376,7 +371,7 @@ private:
 
 class Any : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags, ParseErrors & errs)  {
+  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs)  {
     if (!str.empty())
       return MatchRes(str+1, str);
     errs.push_back(new ParseError(pos, str, "<EOF>"));
@@ -390,16 +385,16 @@ public:
 
 class Repeat : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
     const char * read_to = NULL;
     bool matched = false;
     for (;;) {
       if (end_with_) {
-        MatchRes r = end_with_->match(str, PartsFlags(), errs);
+        MatchRes r = end_with_->match(str, NULL, errs);
         read_to = std::max(read_to, r.read_to);
         if (r) break;
       }
-      MatchRes r = prod->match(str, prod->capture_type.is_explicit() ? parts : PartsFlags(), errs);
+      MatchRes r = prod->match(str, prod->capture_type.is_explicit() ? parts : NULL, errs);
       read_to = std::max(read_to, r.read_to);
       if (!r) break;
       str.begin = r.end;
@@ -443,10 +438,10 @@ private:
 
 class Predicate : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
     // FIXME: Correctly handle errors;
     ParseErrors dummy_errs = errs;
-    MatchRes r = prod->match(str, PartsFlags(), dummy_errs);
+    MatchRes r = prod->match(str, NULL, dummy_errs);
     if (dont_match_empty && r.end == str.begin)
       r.end = FAIL;
     if (r) {
@@ -478,18 +473,18 @@ void Repeat::end_with(Prod * p) {
 class Seq : public Prod {
   // NOTE: A Seq _must_ have more than one element
 public: 
-  MatchRes match(SourceStr str, PartsFlags res, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
     unsigned orig_parts_sz, orig_flags_sz;
     if (res)
-      orig_parts_sz = res.parts->size(), orig_flags_sz = res.flags->data.size();
+      orig_parts_sz = res->num_parts(), orig_flags_sz = res->num_flags();
     Vector<Prod *>::iterator 
       i = prods.begin(), e = prods.end();
     const char * read_to = NULL;
     while (i != e) {
-      MatchRes r = (*i)->match(str, (*i)->capture_type.is_explicit() ? res : PartsFlags(), errs);
+      MatchRes r = (*i)->match(str, (*i)->capture_type.is_explicit() ? res : NULL, errs);
       read_to = std::max(read_to, r.read_to);
       if (!r) {
-        if (res) res.parts->resize(orig_parts_sz), res.flags->data.resize(orig_flags_sz);
+        if (res) res->truncate_parts(orig_parts_sz), res->truncate_flags(orig_flags_sz);
         return MatchRes(FAIL, read_to);
       }
       str.begin = r.end;
@@ -542,14 +537,14 @@ private:
 
 class Choice : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
     Vector<Prod *>::iterator 
       i = prods.begin(), e = prods.end();
     const char * read_to = NULL;
     while (i != e) {
-      PartsFlags p = parts;
+      SynBuilder * p = parts;
       if (capture_type.is_explicit() && !(*i)->capture_type.is_explicit())
-        p = PartsFlags();
+        p = NULL;
       MatchRes r = (*i)->match(str, p, errs);
       read_to = std::max(read_to, r.read_to);
       if (r) return MatchRes(r.end, read_to);
@@ -617,17 +612,18 @@ String cur_named_prod;
 
 class S_MId : public Prod {
 public:
-  MatchRes match(SourceStr str, PartsFlags res, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
     //if (!in_repl) return FAIL;
-    Parts prts;
-    //Flags flgs;
-    MatchRes r = prod->match(str, PartsFlags(&prts, NULL), errs);
+    SyntaxBuilder res0;
+    MatchRes r = prod->match(str, &res0, errs);
     if (!r) return r;
-    assert(prts.size() == 1);
-    if (mids && mids->anywhere(*prts[0]->arg(0)) > 0) {
-      Syntax * p = new Syntax(prts[0]->str(), prts[0]->part(0), prts[0]->arg(0), new Syntax(in_named_prod));
+    res0.make_flags_parts();
+    assert(res0.single_part());
+    Syntax * r0 = res0.part(0);
+    if (mids && mids->anywhere(*r0->arg(0)) > 0) {
+      Syntax * p = SYN(r0->str(), r0->part(0), r0->arg(0), SYN(in_named_prod));
       //printf("MATCH MID %s\n", ~p->to_string());
-      if (res) res.parts->append(p);
+      if (res) res->add_part(p);
       return r;
     } else {
       return MatchRes(FAIL, r.read_to); // FIXME Inject Error
@@ -644,63 +640,6 @@ private:
   Prod * prod;
 };
 
-#if 0
-class S_Map : public Prod {
-public:
-  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
-    const char * r = prod->match(str,res, errs);
-    if (r == FAIL) return r;
-    mids.clear();
-    return r;
-  }
-  S_Map(const char * s, const char * e, Prod * p)
-    : Prod(s,e), prod(p) {capture_type = p->capture_type;}
-  S_Map(const S_Map & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)) {}
-  virtual Prod * clone(Prod * p) {return new S_Map(*this, p);}
-private:
-  Prod * prod;
-};
-
-class S_MParm : public Prod {
-public:
-  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
-    Parts prts;
-    const char * r = prod->match(str, &prts, errs);
-    if (r == FAIL) return r;
-    assert (prts.size() == 1);
-    mids.insert(prts[0]->name);
-    if (res) res->append(prts);
-    return r;
-  }
-  S_MParm(const char * s, const char * e, Prod * p)
-    : Prod(s,e), prod(p) {capture_type = p->capture_type;}
-  S_MParm(const S_MParm & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)) {}
-  virtual Prod * clone(Prod * p) {return new S_MParm(*this, p);}
-private:
-  Prod * prod;
-};
-
-class S_Repl : public Prod {
-public:
-  const char * match(SourceStr str, PartsFlags res, ParseErrors & errs) {
-    in_repl = true;
-    const char * r = prod->match(str, res, errs);
-    in_repl = false;
-    return r;
-  }
-  S_Repl(const char * s, const char * e, Prod * p)
-    : Prod(s,e), prod(p) {capture_type = p->capture_type;}
-  S_Repl(const S_Repl & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)) {}
-  virtual Prod * clone(Prod * p) {return new S_Repl(*this, p);}
-private:
-  Prod * prod;
-};
-
-#endif
-
 const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
   clock_t start = clock();
@@ -708,11 +647,10 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
   mids = repls;
   Prod * p = parse.named_prods[what];
   parse.clear_cache();
-  Parts dummy;
-  //Flags dummyf;
+  SyntaxBuilder dummy;
   ParseErrors errors;
   const char * s = str.begin;
-  const char * e = p->match(str, PartsFlags(&dummy,NULL), errors).end;
+  const char * e = p->match(str, &dummy, errors).end;
   mids = 0;
   //assert(s != e);
   //printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
@@ -726,7 +664,9 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
   }
   clock_t stop = clock();
   //printf("PARSE STR ... as %s time: %f\n", ~what, (stop - start)/1000000.0);
-  return dummy[0];
+  dummy.make_flags_parts();
+  assert(dummy.single_part());
+  return dummy.part(0);
 }
 
 namespace ParsePeg {
@@ -799,7 +739,7 @@ namespace ParsePeg {
     for (;i != e; ++i) {
       ParseErrors errors;
       SourceStr str(p->name);
-      str.begin = i->to_match->match(str, PartsFlags(), errors).end;
+      str.begin = i->to_match->match(str, NULL, errors).end;
       if (str.empty()) {
         p->set_prod(i->if_matched->clone(new Capture(p->pos, p->end, 
                                                      new Literal(p->pos, p->end, p->name),
