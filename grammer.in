@@ -130,7 +130,7 @@ SYNTAX_P =
 #  <<mid>> {MID} / {ID} / {BRACE} / <parm> "(" {RAW_TOKEN*} ")"; # / {BRACK};
 
 SYNTAX_STR =
-  ({SYNTAX_P} / <parm> {RAW_TOKEN+}) EOF;
+  ({SYNTAX_P} / <<reparse parm>> {RAW_TOKEN+}) EOF;
 
 #
 # Misc
@@ -148,10 +148,10 @@ EBLOCK = <eblock> "(" "{" {STMT}* "}" ")";
 # Raw Tokens
 #
 
-BRACE = <{}> "{" {RAW_TOKEN*} "}";
-PARAN = <()> "(" {RAW_TOKEN*} ")";
-BRACK = <[]> "[" {RAW_TOKEN*} "]";
-ANGLE = <\<\>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
+BRACE = <<reparse {}>> "{" {RAW_TOKEN*} "}";
+PARAN = <<reparse ()>> "(" {RAW_TOKEN*} ")";
+BRACK = <<reparse []>> "[" {RAW_TOKEN*} "]";
+ANGLE = <<reparse \<\>>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
 
 RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 
@@ -231,7 +231,7 @@ SPLIT_TOKEN = !"," RAW_TOKEN;
 SPLIT = <list> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;
 SPLIT_ITEM = SPLIT_FLAG / SPLIT_PARM;
 SPLIT_FLAG = :<> ':'{ID} "="? {SPLIT_PARM};
-SPLIT_PARM = <parm> {SPLIT_TOKEN*};
+SPLIT_PARM = <<reparse parm>> {SPLIT_TOKEN*};
 PARAN_LIST = "(" {SPLIT} ")";
 
 PARM : "macro paramater" = 

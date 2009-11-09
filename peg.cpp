@@ -3,6 +3,7 @@
 //#include <fcntl.h>
 #include <assert.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include <algorithm>
 #include <functional>
@@ -102,7 +103,14 @@ class Capture : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
     if (!res) return prod->match(str, NULL, errs);
-    if (prod->capture_type.is_single()) {
+    if (reparse_capture) {
+      MatchRes r = prod->match(str, NULL, errs);
+      if (!r) return r;
+      Syntax * parse = new ReparseSyntax(SourceStr(str, r.end));
+      //printf("REPARSE_CAPTURE with %p\n", parse);
+      res->add_part(parse);
+      return r;
+    } else if (prod->capture_type.is_single()) {
       //return prod->match(str, parts, errs);
       return prod->match(str, res, errs);
     } else if (prod->capture_type.is_multi()) {
@@ -111,12 +119,13 @@ public:
       MatchRes r = prod->match(str, NULL, errs);
       if (!r) return r;
       Syntax * parse = SYN(String(str.begin, r.end), str, r.end);
+      //printf("NONE: %s\n", ~parse->to_string());
       res->add_part(parse);
       return r;
     }
   }
   Capture(const char * s, const char * e, Prod * p, bool implicit = false)
-    : Prod(s,e), prod(p) {
+    : Prod(s,e), prod(p), reparse_capture(false) {
     if (implicit)
       capture_type.set_to_implicit();
     else
@@ -134,6 +143,8 @@ public:
   void dump() {printf("{"); prod->dump(); printf("}");}
 private:
   Prod * prod;
+public: // but don't use
+  bool reparse_capture;
 };
 
 static inline const char * first_space(const char * s) 
@@ -283,6 +294,40 @@ private:
   const Syntax * name;
   Vector<Parm> parms;
   bool capture_as_flag;
+};
+
+class ReparseOuter : public Prod {
+public:
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+    //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
+    if (!parts) return prod->match(str, NULL, errs); 
+    SyntaxBuilderN<2> res;
+    MatchRes r = prod->match(str, &res, errs);
+    if (!r) return r;
+    assert(res.num_parts() == 1);
+    ReparseSyntax * syn = const_cast<ReparseSyntax *>(res.part(0)->as_reparse());
+    syn->str_ = SourceStr(str, r.end);
+    syn->parts_[0] = name;
+    syn->finalize();
+    parts->add_part(syn);
+    return r;
+  }
+  ReparseOuter(const char * s, const char * e, Prod * p, String n)
+    : Prod(s,e), prod(p), name(SYN(n)) 
+    {
+      capture_type.set_to_explicit();
+      name = SYN(parse_common::unescape(n.begin(), n.end(), '"')); // FIXME: Add source info
+    }
+  ReparseOuter(const ReparseOuter & o, Prod * p = 0)
+    : Prod(o), prod(o.prod->clone(p)), name(o.name) {}
+  virtual Prod * clone(Prod * p) {return new ReparseOuter(*this, p);}
+  void verify() {
+    prod->verify();
+  }
+  void dump() {printf("{"); prod->dump(); printf("}");}
+private:
+  Prod * prod;
+  const Syntax * name;
 };
 
 class DescProd : public Prod {
@@ -783,6 +828,7 @@ namespace ParsePeg {
     SubStr name;
     SubStr special;
     SubStr special_arg;
+    enum SpecialType {SP_NONE, SP_MID, SP_REPARSE} sp = SP_NONE;
     if (*str == ':') {
       capture_as_flag = true;
       named_capture = true;
@@ -801,25 +847,39 @@ namespace ParsePeg {
         special.end = str;
         if (str == end) throw error(str, "Unterminated >");
         if (asc_isspace(*str)) {
-          ++str;
           str = spacing(str, end);
-          special_arg.begin = str;
-          while (str != end && *str != '>')
-            ++str;
-          special_arg.end = str;
+          str = quote('>', str-1, end, special_arg);
           if (str == end) throw error(str, "Unterminated >");
+        } else {
+          ++str;
         }
-        ++str;
-        name = special;
+        if (special == "mid") {
+          name = special;
+          sp = SP_MID;
+        } else if (special == "reparse") {
+          name = special_arg;
+          sp = SP_REPARSE;
+        }
+        else
+          throw error(start, "Unknown special");
         str = require_symbol('>', str, end);
       } else {
         str = quote('>', str, end, name);
       }
     }
+    bool found_capture = false;
     while (str != end && *str != eos && *str != '/') {
       Res r = sequence2(str, end);
       str = r.end;
       prods.push_back(r.prod);
+      if (sp == SP_REPARSE) {
+        if (Capture * c = dynamic_cast<Capture *>(r.prod)) {
+          if (found_capture)
+            throw error(start, "Only one capture allowed for reparse special.");
+          c->reparse_capture = true;
+          found_capture = true;
+        }
+      }
     }
     Prod * prod;
     if (prods.size() == 0)
@@ -828,16 +888,10 @@ namespace ParsePeg {
       prod = prods[0];
     else
       prod = new Seq(start, str, prods);
-    if (String(special) == "mid")
+    if (sp == SP_MID)
       return Res(new S_MId(start, str, prod, String(special_arg)));
-    //else if (special == "map") 
-    //  return Res(new S_Map(start, str, prod));
-    //else if (special == "mparm") 
-    //  return Res(new S_MParm(start, str, prod));
-    //else if (special == "repl") 
-    //  return Res(new S_Repl(start, str, prod));
-    else if (!special.empty()) 
-      throw error(start, "Unknown special");
+    else if (sp == SP_REPARSE)
+      return Res(new ReparseOuter(start, str, prod, name));
     if (named_capture)
       return Res(new NamedCapture(start, str, prod, name, capture_as_flag));
     else

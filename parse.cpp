@@ -18,8 +18,10 @@ SymbolName syntax_ns::UNKNOWN_WHAT("<unknown>");
 SymbolName syntax_ns::SynEntity::WHAT("<entity>");
 
 void SyntaxBase::dump_type_info() {
-  if (type_inf & NUM_PARTS_MASK) printf("PARTS:%u ", type_inf & NUM_PARTS_MASK);
-  if (type_inf & NUM_FLAGS_MASK) printf("FLAGS:%u ", (type_inf & NUM_FLAGS_MASK) << NUM_FLAGS_SHIFT);
+  if ((type_inf & NUM_PARTS_INLINED) || (type_inf & NUM_PARTS_MASK)) 
+    printf("PARTS:%u ", type_inf & NUM_PARTS_MASK);
+  if (type_inf & NUM_FLAGS_MASK) 
+    printf("FLAGS:%u ", (type_inf & NUM_FLAGS_MASK) << NUM_FLAGS_SHIFT);
   if (type_inf & PARTS_INLINED) printf("PARTS_INLINED ");
   else if (type_inf & NUM_PARTS_INLINED) printf("NUM_PARTS_INLINED ");
   else printf("PARTS_SEPARATE ");
@@ -275,7 +277,9 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
       o.printf("%s", ~escape(what().to_string(g)));
   } else if (have_entity()) {
     o.printf("(%s)", ~escape(what().to_string(g)));
-  } else {
+  } else if (is_reparse()) {
+    o.printf("(%s ...)", ~escape(what().to_string(g)));
+  } else if (have_parts()) {
     o.printf("(");
       char sep = ' ';
     if (what_ == "{...}" || what_ == "@")
@@ -315,6 +319,8 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
     o.printf(")");
     if (repl)
       repl->to_string(o, f, g);
+  } else {
+    abort();
   }
 }
 

@@ -37,6 +37,7 @@ namespace syntax_ns {
   struct Leaf;
   typedef Leaf SyntaxLeaf;
   struct Reparse;
+  typedef Reparse ReparseSyntax;
   struct SynEntity;
 
   struct PrintFlags {
@@ -44,11 +45,17 @@ namespace syntax_ns {
     PrintFlags(unsigned i = 0) : indent(i) {}
   };
 
+  struct ReparseInfo {
+    const SourceStr & str;
+    const Replacements * repl;
+    ReparseInfo(const SourceStr & s, const Replacements * r)
+      : str(s), repl(r) {}
+  };
+
   // Class inheritance:
   //   SyntaxBase <= <NumPartsInlined> <= NoParts <= Leaf*
   //                                              <= SynEntity*
-  //                                              <= Reparse* -- unused for now
-  //              <= SemiMutable <= <NumPartsInlined> <= PartsInlined*
+  //              <= SemiMutable <= <NumPartsInlined> <= PartsInlined* <= Reparse*
   //                             <= [1] <= PartsSeparate* <= [2] <= Expandable*
   // Notes:
   //   Classes without a * are considered abstract
@@ -102,8 +109,8 @@ namespace syntax_ns {
   static const unsigned    NO_PARTS_MASK = PARTS_LAYOUT_MASK;
   static const unsigned IS_LEAF = IS_NO_PARTS | SIMPLE;
   static const unsigned IS_SYN_ENTITY  = (0x1 << EXTRA_INFO_SHIFT) | IS_NO_PARTS;
-  static const unsigned IS_REPARSE     = (0x2 << EXTRA_INFO_SHIFT) | IS_NO_PARTS;
   static const unsigned IS_PARTS_INLINED = NUM_PARTS_INLINED | PARTS_INLINED;
+  static const unsigned IS_REPARSE     = (0x2 << EXTRA_INFO_SHIFT) | IS_PARTS_INLINED;
   static const unsigned IS_PARTS_SEPARATE = PARTS_SEPARATE;
   static const unsigned    PARTS_SEPARATE_MASK = PARTS_LAYOUT_MASK;
   static const unsigned IS_EXPANDABLE = IS_PARTS_SEPARATE | EXPANDABLE;
@@ -112,7 +119,7 @@ namespace syntax_ns {
 
   static const unsigned LEAF_TI = 1 | IS_LEAF | FIRST_PART_SIMPLE;
   static const unsigned SYN_ENTITY_TI = 1 | IS_SYN_ENTITY;
-  static const unsigned REPARSE_TI = 1 | IS_SYN_ENTITY;
+  static const unsigned REPARSE_TI = 1 | IS_REPARSE;
 
   typedef Syntax * const * parts_iterator;
   typedef Syntax * const * flags_iterator;
@@ -133,16 +140,19 @@ namespace syntax_ns {
     bool no_parts() const {return (type_inf & NO_PARTS_MASK) == IS_NO_PARTS;}
     bool have_parts() const {return !no_parts();}
     bool num_parts_inlined() const {return type_inf & NUM_PARTS_INLINED;}
-    bool parts_inlined() const {return type_inf & PARTS_INLINED;}
     
-    // parts_separate does not test is PartsSeparate is the most
-    // derived type, for that use is_parts_separate
+    // parts_inlined/separate does not test for the most deried type,
+    // for that use is_parts_inlined/separate
+    bool parts_inlined() const {return type_inf & PARTS_INLINED;}
+    bool is_parts_inlined() const {return (type_inf & TYPE_ID_MASK) == IS_PARTS_INLINED;}
     bool parts_separate() const {return (type_inf & PARTS_SEPARATE_MASK) == IS_PARTS_SEPARATE;}
     bool is_parts_separate() const {return (type_inf & TYPE_ID_MASK) == IS_PARTS_SEPARATE;}
 
     bool expandable() const {return type_inf & EXPANDABLE;}
 
     bool have_entity() const {return (type_inf & TYPE_ID_MASK) == IS_SYN_ENTITY;}
+
+    bool is_reparse() const {return (type_inf & TYPE_ID_MASK) == IS_REPARSE;}
 
     inline const NoParts * as_no_parts() const;
     inline const PartsInlined * as_parts_inlined() const;
@@ -186,6 +196,10 @@ namespace syntax_ns {
     inline const char * operator ~ () const;
     inline SymbolName string_if_simple() const;
     inline const SourceStr & str() const;
+
+    // Note: these are only valid for Reparse type
+    inline ReparseInfo inner() const;
+    inline ReparseInfo outer() const;
 
     void print() const;
     void to_string(OStream & o, PrintFlags f = PrintFlags(), SyntaxGather * = 0) const;
@@ -284,9 +298,8 @@ namespace syntax_ns {
   protected:
     PartsInlined(unsigned tinf, const SourceStr & str = SourceStr())
       : SemiMutable(tinf, str) {}
-  private:
-    // PartsInlined is a variable length structure, thus cannot call
-    // copy constructor directly
+    // PartsInlined is a variable length structure, thus should not
+    // call copy constructor directly unless you know what your doing
     PartsInlined(const PartsInlined & other) : SemiMutable(other) {}
   };
 
@@ -305,8 +318,6 @@ namespace syntax_ns {
   {
     PartsInlined * syn = new_parts_inlined(str, (pe - p) + (fe - f));
     syn->copy_in(p, pe, f, fe);
-    if (syn->what() == "struct" && syn->num_parts() == 1)
-      abort();
     return syn;
   }
 
@@ -608,8 +619,15 @@ namespace syntax_ns {
     SynEntity * clone() const {return new SynEntity(*this);}
   };
 
-  struct Reparse : public NoParts {
+  struct Reparse : public PartsInlined {
     SourceStr inner_;
+    ReparseInfo outer() const {return ReparseInfo(str_, repl);}
+    ReparseInfo inner() const {return ReparseInfo(inner_, repl);}
+    Reparse(const SourceStr & str) : PartsInlined(REPARSE_TI),  inner_(str) {}
+    Reparse(const Syntax * p, const Replacements * r, const SourceStr & o, const SourceStr & i)
+      : PartsInlined(REPARSE_TI, o), inner_(i) {repl = r; parts_[0] = p; finalize();}
+    Reparse(const Reparse & other) : PartsInlined(other), inner_(other.inner_) {parts_[0] = other.parts_[0];}
+    Reparse * clone() const {return new Reparse(*this);}
   };
   
   extern SymbolName UNKNOWN_WHAT;
@@ -633,6 +651,7 @@ namespace syntax_ns {
     return static_cast<const SynEntity *>(this);
   }
   inline const Reparse * SyntaxBase::as_reparse() const {
+    assert(is_reparse());
     return static_cast<const Reparse *>(this);
   }
 
@@ -647,18 +666,19 @@ namespace syntax_ns {
   }
 
   inline SemiMutable * SyntaxBase::clone() const {
-    if (parts_inlined()) return as_parts_inlined()->clone();
+    if (is_parts_inlined()) return as_parts_inlined()->clone();
     if (is_parts_separate()) return as_parts_separate()->clone();
     if (expandable()) return as_expandable()->clone();
     abort();
   }
 
   inline SyntaxBase * SyntaxBase::shallow_clone() const {
-    if (parts_inlined()) return as_parts_inlined()->clone();
+    if (is_parts_inlined()) return as_parts_inlined()->clone();
     if (is_parts_separate()) return as_parts_separate()->clone();
     if (expandable()) return as_expandable()->clone();
     if (simple()) return as_leaf()->clone();
     if (have_entity()) return as_syn_entity()->clone();
+    if (is_reparse()) return as_reparse()->clone();
     abort();
   }
 
@@ -748,6 +768,9 @@ namespace syntax_ns {
     if (have_parts() && str_.empty()) set_src_from_parts(); 
     return str_;
   }
+
+  inline ReparseInfo SyntaxBase::inner() const {return as_reparse()->inner();}
+  inline ReparseInfo SyntaxBase::outer() const {return as_reparse()->outer();}
   
   inline bool SyntaxBase::eq(const char * n) const {return simple() && as_leaf()->what_.name == n;}
   inline bool SyntaxBase::eq(const char * n1, const char * n2) const 
@@ -1200,6 +1223,8 @@ using syntax_ns::MutableSyntax;
 using syntax_ns::SemiMutableSyntax;
 using syntax_ns::PrintFlags;
 using syntax_ns::SynEntity;
+using syntax_ns::ReparseSyntax;
+using syntax_ns::ReparseInfo;
 using syntax_ns::new_syntax;
 using syntax_ns::mk_pt_flg;
 

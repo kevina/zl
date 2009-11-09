@@ -30,6 +30,8 @@ struct SourceStr : public SubStr {
     : SubStr(s), source(f) {}
   SourceStr(const SourceInfo * f, SubStr s) 
     : SubStr(s), source(f) {}
+  SourceStr(const SourceStr & other, const char * e)
+    : SubStr(other.begin, e), source(other.source) {}
   operator const char * & () {return begin;}
   operator const char * () const {return begin;}
   void clear() {

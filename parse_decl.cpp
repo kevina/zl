@@ -623,7 +623,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     id = p;
     ++i;
   } else if ((*i)->is_a("()")) {
-    outer = reparse("TOKENS", (*i)->arg(0));
+    outer = reparse("TOKENS", (*i)->inner());
     ++i;
   } else
   def: 
@@ -633,7 +633,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   if (i == end) {
     // do nothing
   } else if ((*i)->is_a("()")) {
-    t = make_function_type(t, reparse("TOKENS", (*i)->arg(0)), env);
+    t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
     ++i;
   } else {
     // we are an array of type t
@@ -726,7 +726,7 @@ const Syntax * DeclWorking::try_arrays(parts_iterator & i,
 {
   Vector<const Syntax *> stack;
   while (i != end && (*i)->is_a("[]")) {
-    stack.push_back(reparse("ARRAY_SIZE", (*i)->arg(0)));
+    stack.push_back(reparse("ARRAY_SIZE", (*i)->inner()));
     ++i;
   }
   Vector<const Syntax *>::const_reverse_iterator j = stack.rbegin();

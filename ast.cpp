@@ -2946,7 +2946,7 @@ namespace ast {
     assert_num_args(p, 2);
     const Syntax * t = p->arg(0);
     if (t->is_a("<>")) {
-      t = reparse("TOKENS", t->arg(0));
+      t = reparse("TOKENS", t->inner());
       t = parse_decl_->parse_type(t, env);
     } else if (t->is_a(".type")) {
       t = t->arg(0);

@@ -87,7 +87,7 @@ struct MatchRes {
                         // then either 1) no characters are read or 2)
                         // read past the end.  (2) is only holds when
                         // used as a cached result and str_end is
-                        // non-NULL (see Res below)q
+                        // non-NULL (see Res below)
   explicit MatchRes(const char * e) : end(e), read_to(e) {}
   MatchRes() {}
   MatchRes(const char * e, const char * r) : end(e), read_to(r) {}

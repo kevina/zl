@@ -123,6 +123,14 @@ OP_CMP(SubStr, String);
 CSTR_OP_CMP(String, const char *);
 CSTR_OP_CMP(const char *, String);
 
+static inline bool operator==(SubStr x, const char * y) {
+  int res = strncmp(x.begin, y, x.size());
+  if (res != 0) return false;
+  return y[x.size()] == '\0'; // we know y is as least as long as x
+                              // otherwise strncmp will return
+                              // non-zero
+}
+
 struct Pos {
   unsigned line;
   unsigned col;
