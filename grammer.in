@@ -72,20 +72,13 @@ MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <repa
 # C Token
 #
 
-TOKEN_ : "token_" =  <<mid>> {MID} !("`" / "::") /  
+TOKEN_ : "token" =  <<mid PARM>> {MID} !("`" / "::") /  
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {RAW} / {TEMPLATE_CALL}
          / {BRACK} / {CONST}
          / {ID} / {SYM};
 
-TOKEN : "token" =  <<mid PARM>> {MID} !("`" / "::") / 
-         {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX} 
-         / {RAW} / {TEMPLATE_CALL}
-         / {BRACK} / {CONST}
-         / {ID} / {SYM} 
-         / {PARAN} / {BRACE};
-
-#TOKEN : "token" = TOKEN_ / PARAN;
+TOKEN = {TOKEN_} / {PARAN} / {BRACE};
 
 # FIXME: Add support for hex-floats
 CONST = <f> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SPACING
@@ -229,7 +222,7 @@ STMTS = <@> {STMT}*;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
 SPLIT = <list> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;
-SPLIT_ITEM = SPLIT_FLAG / SPLIT_PARM;
+SPLIT_ITEM = {SPLIT_FLAG} / {SPLIT_PARM};
 SPLIT_FLAG = :<> ':'{ID} "="? {SPLIT_PARM};
 SPLIT_PARM = <<reparse parm>> {SPLIT_TOKEN*};
 PARAN_LIST = "(" {SPLIT} ")";

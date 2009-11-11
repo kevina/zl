@@ -49,17 +49,22 @@ MatchRes NamedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs)
     r->end = FAIL; // to avoid infinite recursion
     //printf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
     //indent_level++;
-    *static_cast<MatchRes *>(r) = prod->match(str, &r->res, r->errors);
+    //if (prod->capture_type.is_none())
+    //  printf("NP: %s: %d %d\n", ~name, (bool)parts, (CaptureType::Type)prod->capture_type);
+    *static_cast<MatchRes *>(r) = prod->match(str, (prod->capture_type.is_any() ? &r->res : NULL), r->errors);
     if (r->read_to >= str.end) {
       //printf("PAST END ON %s\n", ~name);
       r->read_to = NULL;
       r->str_end = str.end;
     }
     //indent_level--;
-    //if (r->end != FAIL)
-    //  printf("%*cNamedProd DONE %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
-    //else
-    //  printf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);g
+    //if (r->end != FAIL) {
+    //  printf("%*cNamedProd DONE %s %p (%p) \"%s\" %p\n", indent_level, ' ', ~name, str.begin, r->end, ~sample(str.begin, r->end), str.end);
+    //  if (SubStr(str.begin, r->end) == "environ_snapshot()")
+    //    printf("  SYN: %s\n", ~r->res.build()->to_string());
+    //}
+    // else
+    //  printf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
     //assert(r->end == FAIL || r->parts.size() == 1);
   } else {
     r = &i->second;
@@ -110,10 +115,8 @@ public:
       //printf("REPARSE_CAPTURE with %p\n", parse);
       res->add_part(parse);
       return r;
-    } else if (prod->capture_type.is_single()) {
-      //return prod->match(str, parts, errs);
-      return prod->match(str, res, errs);
-    } else if (prod->capture_type.is_multi()) {
+    } else if (prod->capture_type.is_any()) {
+      //assert(prod->capture_type == capture_type);
       return prod->match(str, res, errs);
     } else { // type is None
       MatchRes r = prod->match(str, NULL, errs);
@@ -126,7 +129,7 @@ public:
   }
   Capture(const char * s, const char * e, Prod * p, bool implicit = false)
     : Prod(s,e), prod(p), reparse_capture(false) {
-    if (implicit)
+    if (implicit && p->capture_type.is_none())
       capture_type.set_to_implicit();
     else
       capture_type.set_to_explicit();
@@ -146,6 +149,11 @@ private:
 public: // but don't use
   bool reparse_capture;
 };
+
+Prod * new_capture(const char * s, const char * e, Prod * p, bool implicit = false) {
+  if (implicit && p->capture_type.is_any()) return p;
+  return new Capture(s,e,p,implicit);
+}
 
 static inline const char * first_space(const char * s) 
 {
@@ -454,7 +462,7 @@ public:
   Repeat(const char * s, const char * e, Prod * p, bool o1, bool o2) 
     : Prod(s,e), prod(p), optional(o1), once(o2), end_with_() {
     if (p->capture_type.is_explicit())
-      capture_type.set_to_explicit(false);
+      capture_type.set_to_explicit();
     else
       capture_type.set_to_none();
   }
@@ -548,10 +556,8 @@ public:
     }
     if (num == 0)
       capture_type.set_to_none();
-    else if (num == 1)
-      capture_type.set_to_explicit(true);
-    else
-      capture_type.set_to_explicit(false);
+    else if (num >= 1)
+      capture_type.set_to_explicit();
   }
   void set_persistent() const {
     persistent_ = true;
@@ -609,18 +615,18 @@ public:
       if (x == y) {
         // noop
       } else if (x.is_explicit() || y.is_explicit()) {
-        x = CaptureType::ExplicitMulti;
+        x = CaptureType::Explicit;
         //printf("ct: %d\n", (int)x);
       } else {
         x = CaptureType::Implicit;
       }
     }
-    if (x == CaptureType::Implicit) {
-      for (i = prods.begin(); i != end; ++i) {
-        if ((*i)->capture_type.is_none())
-          *i = new Capture((*i)->pos, (*i)->end, *i, true);
-      }
-    }
+    //if (x == CaptureType::Implicit) {
+    //  for (i = prods.begin(); i != end; ++i) {
+    //    if ((*i)->capture_type.is_none())
+    //      *i = new Capture((*i)->pos, (*i)->end, *i, true);
+    //  }
+    //}
     capture_type = x;
   }
   Choice(const Choice & o, Prod * p = 0) : Prod(o) {
@@ -731,21 +737,24 @@ namespace ParsePeg {
     String name;
     str = spacing(str, end);
     while (str != end) {
+      bool explicit_capture = false;
       if (*str == '"') {
+        // ie a defination of a special token
         str = symbol('"', str, end);
-        Res sr = peg(str, end, '"', true);
+        Res sr = peg(str, end, '"', explicit_capture);
         str = sr.end;
         str = require_symbol('"', str, end);
         sr.prod->verify();
         String desc;
         str = opt_desc(str, end, desc);
         str = require_symbol('=', str, end);
-        Res r = peg(str, end, ';', true);
+        Res r = peg(str, end, ';', explicit_capture);
         r.prod->verify();
         token_rules.push_back(TokenRule(sr.prod, 
                                         desc.empty() ? r.prod : new DescProd(str, r.end, desc, r.prod)));
         str = r.end;
       } else {
+        explicit_capture = false;
         str = id(str, end, name);
         cur_named_prod = name; 
         NamedProd * & p = named_prods[name];
@@ -754,8 +763,10 @@ namespace ParsePeg {
         String desc;
         str = opt_desc(str, end, desc);
         str = require_symbol('=', str, end);
-        Res r = peg(str, end, ';', true);
+        //bool explicit_capture = false;
+        Res r = peg(str, end, ';', explicit_capture/*, true*/);
         r.prod->verify();
+        //if (name == "SPLIT_FLAG") stop();
         p->set_prod(desc.empty() ? r.prod : new DescProd(str, r.end, desc, r.prod));
         str = r.end;
       }
@@ -795,16 +806,17 @@ namespace ParsePeg {
     throw error(pos, "Could not find a match for token symbol: %s", p->name.c_str());
   }
 
-  Res Parse::peg(const char * str, const char * end, char eos, bool capture, bool implicit) 
+  Res Parse::peg(const char * str, const char * end, char eos, 
+                 bool & explicit_capture, bool capture, bool implicit) 
   {
     const char * start = str;
     str = spacing(str, end);
     Vector<Prod *> prods;
     while (str != end) {
-      Res r = sequence(str, end, eos);
+      Res r = sequence(str, end, eos, explicit_capture);
       str = r.end;
       if (capture)
-        prods.push_back(new Capture(start, end, r.prod, implicit));
+        prods.push_back(new_capture(start, end, r.prod, implicit));
       else 
         prods.push_back(r.prod);
       const char * s = symbol('/', str, end);
@@ -819,7 +831,7 @@ namespace ParsePeg {
     }
   }
   
-  Res Parse::sequence(const char * str, const char * end, char eos) 
+  Res Parse::sequence(const char * str, const char * end, char eos, bool & explicit_capture) 
   {
     const char * start = str;
     Vector<Prod *> prods;
@@ -869,7 +881,7 @@ namespace ParsePeg {
     }
     bool found_capture = false;
     while (str != end && *str != eos && *str != '/') {
-      Res r = sequence2(str, end);
+      Res r = sequence2(str, end, explicit_capture);
       str = r.end;
       prods.push_back(r.prod);
       if (sp == SP_REPARSE) {
@@ -898,14 +910,14 @@ namespace ParsePeg {
       return Res(str, prod);
   }
 
-  Res Parse::sequence2(const char * str, const char * end)
+  Res Parse::sequence2(const char * str, const char * end, bool & explicit_capture)
   {
     const char * start = str;
-    Res r1 = prefix(str, end);
+    Res r1 = prefix(str, end, explicit_capture);
     str = r1.end;
     if (*str == '.') {
       str = symbol('.', str, end);
-      Res r2 = prefix(str, end);
+      Res r2 = prefix(str, end, explicit_capture);
       str = r2.end;
       r1.prod->end_with(r2.prod); // FIXME: Maybe should memorize r2
       Vector<Prod *> prods;
@@ -923,28 +935,28 @@ namespace ParsePeg {
     abort();
   }
 
-  Res Parse::prefix(const char * str, const char * end) 
+  Res Parse::prefix(const char * str, const char * end, bool & explicit_capture) 
   {
     const char * start = str;
     if (*str == '!') {
       str = symbol('!', str, end);
-      Res r = suffix(str, end);
+      Res r = suffix(str, end, explicit_capture);
       str = r.end;
       return Res(new Predicate(start, str, r.prod, true));
     } else if (*str == '&') {
       str = symbol('&', str, end);
-      Res r = suffix(str, end);
+      Res r = suffix(str, end, explicit_capture);
       str = r.end;
       return Res(new Predicate(start, str, r.prod, false));
     } else {
-      return suffix(str, end);
+      return suffix(str, end, explicit_capture);
     }
   }
 
-  Res Parse::suffix(const char * str, const char * end) 
+  Res Parse::suffix(const char * str, const char * end, bool & explicit_capture) 
   {
     const char * start = str;
-    Res r = primary(str, end);
+    Res r = primary(str, end, explicit_capture);
     str = r.end;
     if (*str == '?') {
       str = symbol('?', str, end);
@@ -960,19 +972,20 @@ namespace ParsePeg {
     }
   }
 
-  Res Parse::primary(const char * str, const char * end) 
+  Res Parse::primary(const char * str, const char * end, bool & explicit_capture) 
   {
     const char * start = str;
     if (*str == '(') {
       str = symbol('(', str, end);
-      Res r = peg(str, end, ')');
+      Res r = peg(str, end, ')', explicit_capture);
       str = require_symbol(')', r.end, end);
       return Res(str, r.prod);
     } else if (*str == '{') {
+      explicit_capture = true;
       str = symbol('{', str, end);
-      Res r = peg(str, end, '}', true, false);
+      Res r = peg(str, end, '}', explicit_capture, true, false);
       str = require_symbol('}', r.end, end);
-      return Res(new Capture(start, str, r.prod));
+      return Res(new_capture(start, str, r.prod));
     } else if (*str == '\'') {
       return literal(str, end);
     } else if (*str == '"') {

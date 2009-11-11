@@ -1,5 +1,3 @@
-
-
 #include <set> // FIXME: Should't need to include here
 
 #include "gc.hpp"
@@ -67,7 +65,7 @@ struct ParseErrors : public Vector<const ParseError *> {
 
 // Some cached productions are persistent between parses, which saves
 // time, when reparsing.  However, in order to use the cached result
-// two condations need to hold
+// two condations need to hold:
 //   1) The end of the string being parsed is past the last character
 //      read (for any reason) of the cached result
 ///  2) If the cached result read past the end of the string, the end of the 
@@ -105,34 +103,21 @@ struct Res : public MatchRes {
 };
 
 struct CaptureType {
-  enum Type {Explicit, ExplicitMulti, Implicit, None};
+  enum Type {Explicit, Implicit, None};
   operator Type () const {return type;}
   CaptureType(Type t = None) : type(t) {}
-  bool is_explicit() const {return type == Explicit || type == ExplicitMulti;}
+  bool is_explicit() const {return type == Explicit;}
   bool is_implicit() const {return type == Implicit;}
   bool is_none()     const {return type == None;}
-  bool is_single()   const {return type == Explicit || type == Implicit;}
-  bool is_multi()    const {return type == ExplicitMulti;}
-  void set_to_explicit(bool single = true) {type = single ? Explicit : ExplicitMulti;}
-  void set_to_implicit()              {type = Implicit;}
-  void set_to_none()                  {type = None;}
+  bool is_any()      const {return type != None;}
+  void set_to_explicit() {type = Explicit;}
+  void set_to_implicit() {type = Implicit;}
+  void set_to_none()     {type = None;}
 private:
   Type type;
 };
 
 static const char * FAIL = 0;
-
-/*
-struct PartsFlags {
-  Parts * parts;
-  Flags * flags;
-  PartsFlags()
-    : parts(), flags() {}
-  PartsFlags(Parts * p, Flags * f)
-    : parts(p), flags(f) {}
-  operator bool() const {return parts;}
-};
-*/
 
 class Prod {
 public:
@@ -167,7 +152,10 @@ public:
     capture_type.set_to_implicit();
   }
   void set_persistent() const {persistent_ = prod->persistent();}
-  void set_prod(Prod * p) {prod = p;}
+  void set_prod(Prod * p) {
+    prod = p;
+    //if (p->capture_type.is_any())
+  }
   void verify() {
     //assert(prod->capture_type.is_implicit() && prod->capture_type.is_single());
   }
@@ -254,13 +242,15 @@ namespace ParsePeg {
 
     void top(const char * str, const char * end);
 
-    Res peg(const char * str, const char * end, char eos, bool capture = false, bool implicit = true);
-    Res sequence(const char * str, const char * end, char eos);
-    Res sequence2(const char * str, const char * end);
+    Res peg(const char * str, const char * end, char eos, 
+            bool & explicit_capture,
+            bool capture = false, bool implicit = true);
+    Res sequence(const char * str, const char * end, char eos, bool & explicit_capture);
+    Res sequence2(const char * str, const char * end, bool & explicit_capture);
     Res desc_label(const char * str, const char * end);
-    Res prefix(const char * str, const char * end);
-    Res suffix(const char * str, const char * end);
-    Res primary(const char * str, const char * end);
+    Res prefix(const char * str, const char * end, bool & explicit_capture);
+    Res suffix(const char * str, const char * end, bool & explicit_capture);
+    Res primary(const char * str, const char * end, bool & explicit_capture);
     Res literal(const char * str, const char * end);
     Res token(const char * str, const char * end);
     Res char_class(const char * str, const char * end);

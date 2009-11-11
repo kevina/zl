@@ -1137,6 +1137,7 @@ namespace syntax_ns {
     typedef MutableExternParts<PartsExpandable<NoOpHooks > > Base;
 
     bool single_part() const {return num_parts() == 1 && num_flags() == 0;}
+    bool empty() const {return num_parts() == 0 && num_flags() == 0;}
     
     void make_flags_parts() {
       if (num_flags() > 0) {
