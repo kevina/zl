@@ -102,22 +102,14 @@ struct Res : public MatchRes {
   ParseErrors errors;
 };
 
-struct CaptureType {
-  enum Type {Explicit, Implicit, None};
-  operator Type () const {return type;}
-  CaptureType(Type t = None) : type(t) {}
-  bool is_explicit() const {return type == Explicit;}
-  bool is_implicit() const {return type == Implicit;}
-  bool is_none()     const {return type == None;}
-  bool is_any()      const {return type != None;}
-  void set_to_explicit() {type = Explicit;}
-  void set_to_implicit() {type = Implicit;}
-  void set_to_none()     {type = None;}
-private:
-  Type type;
-};
 
 static const char * FAIL = 0;
+
+//class Prod {
+//  virtual ~Prod() = 0;
+//};
+
+enum CaptureType {NoCapture, CanGiveCapture, ExplicitCapture, ReparseCapture};
 
 class Prod {
 public:
@@ -131,7 +123,8 @@ public:
   bool persistent() const {if (persistent_ == -1) set_persistent(); return persistent_;}
   virtual void set_persistent() const {}
   virtual ~Prod() {}
-  Prod(const char * p, const char * e) : pos(p), end(e), persistent_(-1) {}
+  Prod(const char * p, const char * e) 
+    : capture_type(NoCapture), pos(p), end(e), persistent_(-1) {}
 public: // but don't use
   CaptureType capture_type;
   const char * pos;
@@ -140,38 +133,55 @@ protected:
   mutable int persistent_;
 };
 
-class SymProd : public Prod {
-public:
+enum CaptureQ {DontCapture, DoCapture};
+
+namespace ParsePeg {struct Res;}
+
+struct ProdWrap {
+  Prod * prod;
+  bool capture;
+  ProdWrap() : prod(NULL), capture(false) {}
+  ProdWrap(Prod * p, CaptureQ c) : prod(p), capture(c) {}
+  void get_capture_from_prod() {
+    capture = prod->capture_type >= ExplicitCapture;}
+  explicit ProdWrap(Prod * p) : prod(p) {get_capture_from_prod();}
+  //void operator=(const Prod * p) {prod = p; get_capture_from_prod();}
   MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
-    return prod->match(str,parts,errs);
-  }
-  SymProd(const char * s, const char * e, String n, Prod * p = 0) 
-    : Prod(s,e), name(n) 
-  {
-    if (p) set_prod(p);
-    capture_type.set_to_implicit();
-  }
-  void set_persistent() const {persistent_ = prod->persistent();}
-  void set_prod(Prod * p) {
-    prod = p;
-    //if (p->capture_type.is_any())
-  }
+    return prod->match(str, capture ? parts : NULL, errs);}
+  ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
+  void verify() {prod->verify();}
+  bool persistent() const {return prod->persistent();}
+private:
+  ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
+};
+
+typedef Prod ProdImpl;
+
+class SymProd : public ProdImpl {
+public:
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs);
+  SymProd(const char * s, const char * e, String n) 
+    : Prod(s,e), name(n) {capture_type = CanGiveCapture;}
+  SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
+    : Prod(s,e), name(n) {capture_type = CanGiveCapture; set_prod(p);}
+  void set_persistent() const {persistent_ = prod.persistent();}
+  void set_prod(const ProdWrap & p) {prod = p;}
   void verify() {
     //assert(prod->capture_type.is_implicit() && prod->capture_type.is_single());
   }
   SymProd(const SymProd & other, Prod * p = 0) : Prod(other), name(other.name) 
   {
     if (name == "_self")
-      set_prod(p);
+      set_prod(ProdWrap(p));
     else
-      set_prod(other.prod->clone(p));
+      set_prod(other.prod.clone(p));
   }
   virtual Prod * clone(Prod * p) {return new SymProd(*this, p);} 
   void dump() {printf("%s", name.c_str());}
 public: // but treat as protected
   String name;
 //protected:
-  Prod * prod;
+  ProdWrap prod;
 };
 
 struct PtrLt {
@@ -182,8 +192,7 @@ class NamedProd : public SymProd {
   // named productions are memorized
 public:
   MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs);
-  NamedProd(String n) 
-    : SymProd(0,0,n) {}
+  NamedProd(String n) : SymProd(0,0,n) {}
   virtual Prod * clone(Prod *) {
     return this; // don't copy prod with name
   }
@@ -196,8 +205,8 @@ private:
 
 class TokenProd : public SymProd {
 public:
-  TokenProd(const char * s, const char * e, String n, Prod * p = 0) 
-    : SymProd(s, e, n, p) {}
+  TokenProd(const char * s, const char * e, String n) 
+    : SymProd(s, e, n) {}
   TokenProd(const TokenProd & o, Prod * p = 0) : SymProd(o,p) {}
   virtual Prod * clone(Prod * p) {return new TokenProd(*this, p);}
   void dump() {printf("\"%s\"", name.c_str());}
@@ -208,12 +217,18 @@ namespace ParsePeg {
   using namespace parse_common;
   using parse_common::symbol;
 
-  struct Res {
+  enum Context {NormalContext, ReparseContext};
+  enum CaptureNeed {DontNeedCapture, NeedCapture, NeedReparseCapture};
+
+  struct Res : public ProdWrap {
     const char * end;
-    Prod * prod;
     Res() {}
-    Res(const char * e, Prod * p) : end(e), prod(p) {}
-    Res(Prod * p) : end(p->end), prod(p) {assert(end);}
+    Res(const char * e, Prod * p, CaptureQ c) : ProdWrap(p, c), end(e) {}
+    Res(const char * e, Prod * p) : ProdWrap(p), end(e) {}
+    Res(const char * e, const ProdWrap & p) : ProdWrap(p), end(e) {}
+    Res(Prod * p, CaptureQ c) : ProdWrap(p, c), end(p->end) {assert(end);}
+    explicit Res(Prod * p) : ProdWrap(p), end(p->end) {assert(end);}
+    explicit Res(const ProdWrap & p) : ProdWrap(p), end(p.prod->end) {assert(end);}
   };
 
   template <typename T>
@@ -242,15 +257,13 @@ namespace ParsePeg {
 
     void top(const char * str, const char * end);
 
-    Res peg(const char * str, const char * end, char eos, 
-            bool & explicit_capture,
-            bool capture = false, bool implicit = true);
-    Res sequence(const char * str, const char * end, char eos, bool & explicit_capture);
-    Res sequence2(const char * str, const char * end, bool & explicit_capture);
+    Res peg(const char * str, const char * end, char eos, CaptureNeed = DontNeedCapture);
+    Res sequence(const char * str, const char * end, char eos);
+    Res sequence2(const char * str, const char * end, Context);
     Res desc_label(const char * str, const char * end);
-    Res prefix(const char * str, const char * end, bool & explicit_capture);
-    Res suffix(const char * str, const char * end, bool & explicit_capture);
-    Res primary(const char * str, const char * end, bool & explicit_capture);
+    Res prefix(const char * str, const char * end, Context);
+    Res suffix(const char * str, const char * end, Context);
+    Res primary(const char * str, const char * end, Context);
     Res literal(const char * str, const char * end);
     Res token(const char * str, const char * end);
     Res char_class(const char * str, const char * end);
