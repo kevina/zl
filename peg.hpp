@@ -5,9 +5,12 @@
 #include "parse_common.hpp"
 #include "hash-t.hpp"
 #include "syntax-f.hpp"
+#include "charset.hpp"
 
 #include <typeinfo>
 #include <utility>
+
+//#define NO_ERROR_HANDLING
 
 using std::pair;
 
@@ -29,6 +32,7 @@ struct ParseError {
     }
 };
 
+#ifndef NO_ERROR_HANDLING
 struct ParseErrors : public Vector<const ParseError *> {
   void add(const ParseError * err) {
     if (empty() || front()->pos == err->pos) {
@@ -62,6 +66,21 @@ struct ParseErrors : public Vector<const ParseError *> {
   Error * to_error(const SourceInfo *, const SourceFile * grammer);
   void print(const SourceInfo * file, const SourceFile * grammer);
 };
+#else
+struct ParseErrors {
+  void add(const ParseError * err) {}
+  void add(const ParseErrors & other) {}
+  void push_unique(const ParseError * err) {}
+  Error * to_error(const SourceInfo *, const SourceFile * grammer);
+  unsigned size() const {return 0;}
+  const ParseError * front() const {abort();}
+  const ParseError * operator[] (unsigned) const {abort();}
+  bool empty() const {return true;}
+  void push_back(const ParseError *) {}
+  void print(const SourceInfo * file, const SourceFile * grammer);
+};
+#endif
+
 
 // Some cached productions are persistent between parses, which saves
 // time, when reparsing.  However, in order to use the cached result
@@ -189,18 +208,27 @@ struct PtrLt {
 };
 
 class NamedProd : public SymProd {
-  // named productions are memorized
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs);
-  NamedProd(String n) : SymProd(0,0,n) {}
+  NamedProd(String n) : SymProd(0, 0, n) {}
+  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p) {}
   virtual Prod * clone(Prod *) {
     return this; // don't copy prod with name
   }
   void dump() {printf("%s", name.c_str());}
+  virtual void clear_cache() {}
+};
+
+class CachedProd : public NamedProd {
+  // named productions are memorized
+public:
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs);
+  CachedProd(String n) : NamedProd(n) {/*cs = (char *) GC_MALLOC(256);*/}
   void clear_cache() {lookup.clear();}
 private:
   typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
   Lookup lookup;
+  //char * cs;
+  //CharSet cs;
 };
 
 class TokenProd : public SymProd {
@@ -249,6 +277,7 @@ namespace ParsePeg {
     const char * begin;
 
     hash_map<String, NamedProd *> named_prods;
+    hash_set<String> trans_prods;
     Vector< Sym<NamedProd> > unresolved_syms;
     Vector< Sym<TokenProd> > token_syms;
     Vector<TokenRule>        token_rules;
@@ -270,6 +299,16 @@ namespace ParsePeg {
     Res identifier(const char * str, const char * end);
 
     void resolve_token_symbol(TokenProd *, const char *);
+
+    NamedProd * new_named_prod(String n) {
+      if (trans_prods.have(n)) {
+        return new NamedProd(n);
+      } else {
+        return new CachedProd(n);
+      }
+    };
+
+    void parse_hints_file(const char * str, const char * end);
   };
 
 }

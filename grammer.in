@@ -1,3 +1,5 @@
+#@hint_file "/home/kevina/zl/grammer.hint";
+#@hint_file "/home/kevina/zl/grammer.allt";
 
 TOP = <top> SPACING {STMT}+;
 
@@ -39,6 +41,7 @@ STMT : "statement" =
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
     / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
+#    / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
    ;
 
 CASE_LABEL =
@@ -60,11 +63,15 @@ MODULE =
 IMPORT = 
     <import> "import" {ID} ";";
 
+#ID_LIST =
+#  <> ({ID} ",")* {ID}?;
 ID_LIST =
-  <> ({ID} ",")* {ID}?;
+  <> ({ID} ("," {ID})*)?;
 
+#MATCH_LIST =
+#  <> ({MATCH} ",")* {MATCH}?;
 MATCH_LIST =
-  <> ({MATCH} ",")* {MATCH}?;
+  <> ({MATCH} ("," {MATCH})*)?;
 
 MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
 
@@ -72,13 +79,14 @@ MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <repa
 # C Token
 #
 
-TOKEN_ : "token" =  <<mid PARM>> {MID} !("`" / "::") /  
+TOKEN_ : "token'" =  <<mid PARM>> {MID} !("`" / "::") /  
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {RAW} / {TEMPLATE_CALL}
          / {BRACK} / {CONST}
          / {ID} / {SYM};
 
-TOKEN = {TOKEN_} / {PARAN} / {BRACE};
+TOKEN : "token" = {TOKEN_} 
+      / {PARAN} / {BRACE};
 
 # FIXME: Add support for hex-floats
 CONST = <f> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SPACING
@@ -155,11 +163,17 @@ RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
 RAW_ID : "identifier" =
   <<mid>> {MID} / {[@$\a_][$\a_\d]*} SPACING;
 
-ID_W_NS : "identifer" =
-  <::> {RAW_ID} "::" {ID_W_NS} / {RAW_ID};
+#ID_W_NS : "identifer" =
+#  <::> {RAW_ID} "::" {ID_W_NS} / {RAW_ID};
 
-ID_W_INNER =
-  <`> {ID_W_NS} "`" {ID_W_NS} / {ID_W_NS};
+ID_W_NS : "identifer" =
+  <<>> {RAW_ID} ("::" {ID_W_NS} = <::>)?;
+
+#ID_W_INNER =
+#  <`> {ID_W_NS} "`" {ID_W_NS} / {ID_W_NS};
+
+ID_W_INNER = 
+  <<>> {ID_W_NS} ("`" {ID_W_NS} = <`>)?;
 
 ID =
   <fluid> "fluid" {ID} / {ID_W_INNER};

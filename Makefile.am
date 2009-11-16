@@ -21,10 +21,10 @@ noinst_DATA=prelude-fct.so
 EXTRA_DIST = test/* zl.ld ops.in grammer.in grammer.ins \
   class-simple.zl class.zl prelude.zl class-simple.zlh  prelude.zlh
 
-class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl
+class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl grammer.in
 	ulimit -s 1024; ./zl -C -P class-simple.zl > class-simple-fct.log
 
-prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl 
+prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in
 	ulimit -s 1024; ./zl -C -P prelude.zl > prelude-fct.log
 
 dist-hook:

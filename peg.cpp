@@ -19,6 +19,12 @@
 
 #include "hash-t.hpp"
 
+#ifdef DUMP_PERFORMANCE_INFO
+#  define pprintf(...) printf(__VA_ARGS__)
+#else
+#  define pprintf
+#endif
+
 namespace ParsePeg {class Parse;}
 
 //namespace Peg {
@@ -36,7 +42,8 @@ MatchRes SymProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
   return r;
 }
 
-MatchRes NamedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+MatchRes CachedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+  //if (cs[(unsigned char)*str.begin]) abort();
   pair<Lookup::iterator, Lookup::iterator>
     cached = lookup.equal_range(str.begin);
   //if (cached.second - cached.first > 1) 
@@ -54,30 +61,41 @@ MatchRes NamedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs)
   }
   Res * r;
   if (i == cached.second) {
-    r = &(*((lookup.insert(str, Res())).first)).second;
-    r->end = FAIL; // to avoid infinite recursion
-    //printf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
-    //indent_level++;
+    r = &(*((lookup.insert(str.begin).first))).second;
+    //r = &(*((lookup.insert(str.begin, Res()).first))).second;
+    Res & r0 = *r;
+    //Res r0;
+    //r->end = FAIL; // to avoid infinite recursion
+    pprintf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
     //if (prod->capture_type.is_none())
     //  printf("NP: %s: %d %d\n", ~name, (bool)parts, (CaptureType::Type)prod->capture_type);
-    *static_cast<MatchRes *>(r) = prod.match(str, &r->res, r->errors);
+    indent_level++;
+    *static_cast<MatchRes *>(&r0) = prod.match(str, &r0.res, r0.errors);
+    indent_level--;
+    //if (!r0) {
+    //  assert(r0.res.empty());
+    //  errs.add(r0.errors);
+    //  return r0;
+    //}
+    //assert(r0.errors.empty());
+    //r = &(*((lookup.insert(str, r0)).first)).second;
+    if (!r0.res.empty()) assert(!r->res.empty());
     if (r->read_to >= str.end) {
       //printf("PAST END ON %s\n", ~name);
       r->read_to = NULL;
       r->str_end = str.end;
     }
-    //indent_level--;
-    //if (r->end != FAIL)
-    //  printf("%*cNamedProd DONE %s %p (%p) \"%s\" %p\n", indent_level, ' ', ~name, str.begin, r->end, ~sample(str.begin, r->end), str.end);
-    //else
-    //  printf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
+    if (r->end != FAIL)
+      pprintf("%*cNamedProd DONE %s %p (%p) \"%s\" %p\n", indent_level, ' ', ~name, str.begin, r->end, ~sample(str.begin, r->end), str.end);
+    else
+      pprintf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
     //assert(r->end == FAIL || r->parts.size() == 1);
   } else {
     r = &i->second;
-    //if (r->end != FAIL)
-    //  printf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
-    //else
-    //  printf("%*cNamedProd HIT %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
+    if (r->end != FAIL)
+      pprintf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
+    else
+      pprintf("%*cNamedProd HIT %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
   }
   errs.add(r->errors);
   if (parts) {
@@ -90,10 +108,9 @@ MatchRes NamedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs)
 }
 
 void ParsePeg::Parse::clear_cache() {
-  //printf("NamedProd CLEAR\n");
+  pprintf("NamedProd CLEAR\n");
   hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
   for (; i != e; ++i) {
-    // printf("%s %s persistent\n", ~i->second->name, i->second->persistent() ? "is" : "is not");
     if (!i->second->persistent()) {
       //printf("CLEARING %s\n", ~i->second->name);
       i->second->clear_cache();
@@ -194,11 +211,8 @@ static inline const char * first_non_space(const char * s)
   return s;
 }
 
-void stop() {}
-
-class NamedCapture : public ProdImpl {
-// NamedCapture can also be used as a "forced capture" if name is empty
-private:
+class GatherParts {
+protected:
   struct Parm { // one or the other
     Parm() : start(NPOS), stop(NPOS) {}
     const Syntax * name;
@@ -206,62 +220,17 @@ private:
     unsigned stop;
   };
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
-    //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
-    if (!parts) return prod.match(str, NULL, errs); 
-    SyntaxBuilder res;
-    if (parms.empty() && name) res.add_part(name);
-    MatchRes r = prod.match(str, &res, errs);
-    if (!r) return r;
-    Syntax * res_syn;
-    str.end = r.end;
-    if (parms.empty()) {
-      res_syn = res.build(str);
-    } else {
-      SyntaxBuilder res2;
-      Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
-      if (i->start == NPOS) {
-        res2.add_part(i->name);
-      } else {
-        res2.add_part(res.part(i->start));
-      }
-      ++i;
-      for (; i != e; ++i) {
-        if (i->start == NPOS) {
-          res2.add_part(i->name);
-        } else if (i->start != NPOS) {
-          for (int j = i->start; j < i->stop && j < res.num_parts(); ++j) {
-            res2.add_part(res.part(j));
-          }
-        }
-      }
-      res2.set_flags(res.flags_begin(), res.flags_end());
-      res_syn = res2.build(str);
-    }
-    if (capture_as_flag) {
-      parts->add_flag(res_syn);
-      //printf("FLAG! %s\n", ~parse->to_string());
-    } else
-      parts->add_part(res_syn);
-    return r;
+  Syntax * gather(SourceStr str, SynBuilder & in);
+  void add_part(Syntax * syn, SynBuilder * res) {
+    if (capture_as_flag)
+      res->add_flag(syn);
+    else
+      res->add_part(syn);
   }
-
-  // FIXME: Should take in Syntax or SourceStr rater than String so we
-  // can keep track of where the name came from
-  NamedCapture(const char * s, const char * e, const ProdWrap & p, String n, bool caf = false)
-    : Prod(s,e),
-      prod(p), 
-      name(!n.empty() ? SYN(n) : 0), 
+  GatherParts(String n, bool caf = false)
+    : name(!n.empty() ? SYN(n) : 0), 
       capture_as_flag(caf) 
-    {capture_type = ExplicitCapture; parse_name();}
-  NamedCapture(const NamedCapture & o, Prod * p = 0)
-    : Prod(o), prod(o.prod.clone(p)), name(o.name), parms(o.parms) {}
-  virtual Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
-  void set_persistent() const {persistent_ = prod.persistent();}
-  void verify() {
-    prod.verify();
-  }
-  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
+    {parse_name();}
 private:
   void parse_name() {
     if (!name) return;
@@ -313,10 +282,138 @@ private:
     parms[dots].start = last_used;
     parms[dots].stop = NPOS;
   }
-  ProdWrap prod;
+protected:
   const Syntax * name;
   Vector<Parm> parms;
   bool capture_as_flag;
+};
+
+Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
+  SyntaxBuilder res2;
+  Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
+  if (i->start == NPOS) {
+    res2.add_part(i->name);
+    } else {
+    res2.add_part(in.part(i->start));
+  }
+  ++i;
+  for (; i != e; ++i) {
+    if (i->start == NPOS) {
+      res2.add_part(i->name);
+    } else if (i->start != NPOS) {
+      for (int j = i->start; j < i->stop && j < in.num_parts(); ++j) {
+        res2.add_part(in.part(j));
+      }
+    }
+  }
+  res2.set_flags(in.flags_begin(), in.flags_end());
+  return res2.build(str);
+}
+
+
+class NamedCapture : public ProdImpl, public GatherParts {
+// NamedCapture can also be used as a "forced capture" if name is empty
+public:
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+    //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
+    if (!parts) return prod.match(str, NULL, errs); 
+    SyntaxBuilder res;
+    if (parms.empty() && name) res.add_part(name);
+    MatchRes r = prod.match(str, &res, errs);
+    if (!r) return r;
+    str.end = r.end;
+    Syntax * res_syn = parms.empty() ? res.build(str) : gather(str, res);
+    add_part(res_syn, parts);
+    return r;
+  }
+
+  // FIXME: Should take in Syntax or SourceStr rater than String so we
+  // can keep track of where the name came from
+  NamedCapture(const char * s, const char * e, const ProdWrap & p, String n, bool caf = false)
+    : Prod(s,e), GatherParts(n, caf), prod(p)
+    {capture_type = ExplicitCapture;}
+  NamedCapture(const NamedCapture & o, Prod * p = 0)
+    : Prod(o), GatherParts(o), prod(o.prod.clone(p)) {}
+  virtual Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
+  void set_persistent() const {persistent_ = prod.persistent();}
+  void verify() {
+    prod.verify();
+  }
+  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
+private:
+  ProdWrap prod;
+};
+
+class PlaceHolderCapture : public ProdImpl {
+// NamedCapture can also be used as a "forced capture" if name is empty
+public:
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+    // FIXME: Explain what the hell is going on here
+    if (!parts) return prod.match(str, NULL, errs); 
+    syntax_ns::SynEntity placeholder(str, parts);
+    //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
+    SyntaxBuilder res;
+    res.add_part(&placeholder);
+    MatchRes r = prod.match(str, &res, errs);
+    if (!r) return r;
+    if (!res.empty()) {
+      //fprintf(stderr, "EMPTY!\n");
+      //fprintf(stderr, ">>%s\n", ~res.build()->to_string());
+      // we didn't grab the parts with GatherPartsProd and make it
+      // into a syntax object, so just merge the results
+      parts->add_parts(res.parts_begin() + 1, res.parts_end());
+      parts->merge_flags(res.flags_begin(), res.flags_end());
+    } 
+    return r;
+  }
+    
+  // FIXME: Should take in Syntax or SourceStr rater than String so we
+  // can keep track of where the name came from
+  PlaceHolderCapture(const char * s, const char * e, const ProdWrap & p)
+    : Prod(s,e), prod(p)
+    {capture_type = ExplicitCapture;}
+  PlaceHolderCapture(const PlaceHolderCapture & o, Prod * p = 0)
+    : Prod(o), prod(o.prod.clone(p)) {}
+  virtual Prod * clone(Prod * p) {return new PlaceHolderCapture(*this, p);}
+  void set_persistent() const {persistent_ = prod.persistent();}
+  void verify() {
+    prod.verify();
+  }
+  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
+private:
+  ProdWrap prod;
+};
+
+
+class GatherPartsProd : public ProdImpl, public GatherParts {
+// NamedCapture can also be used as a "forced capture" if name is empty
+public:
+  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+    //fprintf(stderr, "NOW COMES THE FUN!\n");
+    //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
+    if (!parts) return MatchRes(str.begin, NULL);
+    // FIXME: Explain what the hell is going on here
+    SynBuilder * res = parts->part(0)->entity<SynBuilder>();
+    SourceStr rstr(parts->part(0)->str(), str.begin);
+    if (parms.empty() && name) parts->part(0) = name;
+    else                       ++parts->parts_;
+    Syntax * res_syn = parms.empty() ? parts->build(str) : gather(str, *parts);
+    parts->invalidate();
+    add_part(res_syn, res);
+    return MatchRes(str.begin, NULL);
+  }
+
+  // FIXME: Should take in Syntax or SourceStr rater than String so we
+  // can keep track of where the name came from
+  GatherPartsProd(const char * s, const char * e, String n, bool caf = false)
+    : Prod(s,e), GatherParts(n, caf)
+    {capture_type = ExplicitCapture;}
+  GatherPartsProd(const GatherPartsProd & o, Prod * p = 0)
+    : Prod(o), GatherParts(o) {}
+  virtual Prod * clone(Prod * p) {return new GatherPartsProd(*this, p);}
+  void set_persistent() const {persistent_ = true;}
+  void verify() {}
+  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
 };
 
 class ReparseOuter : public ProdImpl {
@@ -356,6 +453,8 @@ private:
 class DescProd : public ProdImpl {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+    return prod.match(str, parts, errs);
+#ifndef NO_ERROR_HANDLING
     ParseErrors my_errs;
     MatchRes r = prod.match(str, parts, my_errs);
     if (my_errs.size() > 0 && !desc.empty() && my_errs.front()->pos <= str) {
@@ -366,6 +465,7 @@ public:
       errs.add(my_errs);
     }
     return r;
+#endif
   }
   DescProd(const char * s, const char * e, String n, const ProdWrap & p) 
     : Prod(s, e),  desc(n), prod(p) {capture_type = p.capture ? ExplicitCapture : NoCapture;}
@@ -403,9 +503,11 @@ public:
     if (prefix_equal(literal.begin(), literal.end(), e, str.end)) {
       return MatchRes(e, e-1);
     } else {
+#ifndef NO_ERROR_HANDLING
       StringBuf buf;
       buf << "\"" << literal << "\"";
       errs.add(new ParseError(pos, str, buf.freeze()));
+#endif
       return MatchRes(FAIL, e);
     }
   }
@@ -424,7 +526,9 @@ public:
     if (!str.empty() && cs[*str]) {
       return MatchRes(str + 1, str);
     } else {
+#ifndef NO_ERROR_HANDLING
       errs.add(new ParseError(pos, str, "<charset>")); // FIXME 
+#endif
       return MatchRes(FAIL, str);
     }
   }
@@ -442,7 +546,9 @@ public:
   MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs)  {
     if (!str.empty())
       return MatchRes(str+1, str);
+#ifndef NO_ERROR_HANDLING
     errs.push_back(new ParseError(pos, str, "<EOF>"));
+#endif
     return MatchRes(FAIL, str);
   }
   Any(const char * s, const char * e) : Prod(s,e) {}
@@ -677,6 +783,7 @@ private:
 };
 
 const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
+  pprintf("BEGIN %s\n", ~what);
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
   clock_t start = clock();
   //str.source = new ParseSourceInfo(str, what);
@@ -722,11 +829,36 @@ namespace ParsePeg {
     String name;
     str = spacing(str, end);
     while (str != end) {
-      bool explicit_capture = false;
-      if (*str == '"') {
+      if (*str == '@') {
+        ++str;
+        // a derivative
+        str = id(str, end, name);
+        if (name == "hint_file") {
+          SubStr file0;
+          str = spacing(str, end);
+          assert(*str == '"'); // fixme error message
+          str = quote('"', str, end, file0);
+          StringBuf file1;
+          unescape(file0.begin, file0.end, file1, '"');
+          String file = file1.freeze();
+          //fprintf(stderr, "hint_file = %s\n", ~file);
+          SourceFile * hints = new_source_file(file);
+          try {
+            parse_hints_file(hints->begin(), hints->end());
+          } catch (Error * err) {
+            // OK this is very bad, fix latter
+            err->source = hints;
+            //fprintf(stderr, "%s\n", err->message().c_str());
+            exit(1);
+          }
+        } else {
+          throw error(str, "Unknown directive: %s\n", ~name);
+        }
+      } else if (*str == '"') {
         // ie a defination of a special token
         str = symbol('"', str, end);
         Res sr = peg(str, end, '"');
+        pprintf("PARSING TOKEN PROD: %s\n", ~sample(str, sr.end));
         str = sr.end;
         str = require_symbol('"', str, end);
         sr.prod->verify();
@@ -739,12 +871,12 @@ namespace ParsePeg {
                                         desc.empty() ? r.prod : new DescProd(str, r.end, desc, r)));
         str = r.end;
       } else {
-        explicit_capture = false;
         str = id(str, end, name);
+        pprintf("PARSING NAMED PROD: %s\n", ~name);
         cur_named_prod = name; 
         NamedProd * & p = named_prods[name];
         //printf("NAME: %s %p\n", name.c_str(), p);
-        if (p == 0) p = new NamedProd(name);
+        if (p == 0) p = new_named_prod(name);
         String desc;
         str = opt_desc(str, end, desc);
         str = require_symbol('=', str, end);
@@ -757,7 +889,7 @@ namespace ParsePeg {
       }
       str = require_symbol(';', str, end);
     }
-
+    pprintf("PARSING DONE\n");
     // resolve symbols
     for (Vector< Sym<NamedProd> >::const_iterator 
            i = unresolved_syms.begin(), e = unresolved_syms.end(); i != e; ++i) 
@@ -772,6 +904,14 @@ namespace ParsePeg {
     {
       resolve_token_symbol(i->prod, i->pos);
     }
+    
+    hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
+    for (; i != e; ++i)
+      if (i->second->persistent())
+        pprintf("IS PERSISTENT: %s\n", ~i->second->name);
+      else
+        pprintf("is not persistent: %s\n", ~i->second->name);
+    pprintf("PERSISTENT ONE\n");
   }
 
   void Parse::resolve_token_symbol(TokenProd * p, const char * pos) 
@@ -847,7 +987,7 @@ namespace ParsePeg {
     SubStr name;
     SubStr special;
     SubStr special_arg;
-    enum SpecialType {SP_NONE, SP_MID, SP_REPARSE} sp = SP_NONE;
+    enum SpecialType {SP_NONE, SP_NAME_LATER, SP_MID, SP_REPARSE} sp = SP_NONE;
     if (*str == ':') {
       capture_as_flag = true;
       named_capture = true;
@@ -872,7 +1012,9 @@ namespace ParsePeg {
         } else {
           ++str;
         }
-        if (special == "mid") {
+        if (special == "") {
+          sp = SP_NAME_LATER;
+        } else if (special == "mid") {
           name = special;
           sp = SP_MID;
         } else if (special == "reparse") {
@@ -910,7 +1052,9 @@ namespace ParsePeg {
       prod = prods[0];
     else
       prod = ProdWrap(new Seq(start, str, prods));
-    if (sp == SP_MID)
+    if (sp == SP_NAME_LATER)
+      return Res(new PlaceHolderCapture(start, str, prod));
+    else if (sp == SP_MID)
       return Res(new S_MId(start, str, prod, String(special_arg)));
     else if (sp == SP_REPARSE)
       return Res(new ReparseOuter(start, str, prod.prod, name));
@@ -958,6 +1102,13 @@ namespace ParsePeg {
       Res r = suffix(str, end, NormalContext);
       str = r.end;
       return Res(new Predicate(start, str, r.prod, false));
+    } else if (*str == '=') {
+      str = symbol('=', str, end);
+      str = spacing(str, end);
+      if (*str != '<') throw error (str, "'<' expected");
+      SubStr name;
+      str = quote('>', str, end, name);
+      return Res(new GatherPartsProd(start, str, String(name)));
     } else {
       return suffix(str, end, context);
     }
@@ -1085,12 +1236,35 @@ namespace ParsePeg {
       // FIXME: Check that we really can use this symbol here
       return Res(new SymProd(start, str, name));
     } else {
+      pprintf("PARSING    DEP: %s\n", ~name);
       NamedProd * & p = named_prods[name];
-      if (p == 0) p = new NamedProd(name);
+      if (p == 0) p = new_named_prod(name);
       unresolved_syms.push_back(Sym<NamedProd>(start, p));
       return Res(str, p);
       //return Res(str, p);
     }
+  }
+
+  void Parse::parse_hints_file(const char * str, const char * end) {
+    str = spacing(str, end);
+    while (str != end) {
+      String prod;
+      str = id(str, end, prod);
+      str = require_symbol(':', str, end);
+      while (str != end && *str != ';') {
+        String hint;
+        str = id(str, end, hint);
+        if (hint == "trans") {
+          //printf("trans %s\n", ~prod);
+          trans_prods.insert(prod);
+        } else {
+          throw error(str, "Unknown hint: %s\n", ~hint);
+        }
+      }
+      str = require_symbol(';', str, end);
+    }
+    if (str != end)
+      throw error(str, "Expected EOF\n");
   }
 }
 

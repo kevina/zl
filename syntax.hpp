@@ -18,6 +18,7 @@ namespace syntax_ns {
   inline void stop() {}
 
   using std::copy;
+  using std::copy_backward;
   using ast::SymbolName;
 
   // This namespace is to hide lots of internally used symbols, do _not_
@@ -396,7 +397,7 @@ namespace syntax_ns {
     flags_iterator         flags_end()   const {return flags_end_;}
     mutable_flags_iterator flags_end()         {return flags_end_;}
 
-    unsigned alloc_size() {return flags_end_ - parts_;}
+    unsigned alloc_size() const {return flags_end_ - parts_;}
   };
 
   // "T" must inherate from Entity, it must also define add_part_hook
@@ -418,6 +419,16 @@ namespace syntax_ns {
     void truncate_flags(unsigned sz) {
       assert(sz <= this->num_flags());
       flags_ = flags_end_ - sz;
+    }
+
+    void invalidate() {
+      parts_ = parts_end_ = NULL;
+      flags_ = flags_end_ = NULL;
+    };
+
+    void clear() {
+      parts_end_ = parts_;
+      flags_ = flags_end_;
     }
 
     void add_part(Syntax * p) {
@@ -1136,6 +1147,8 @@ namespace syntax_ns {
 
     typedef MutableExternParts<PartsExpandable<NoOpHooks > > Base;
 
+    typedef ::TypeInfo<SyntaxBuilderBase> TypeInfo;
+
     bool single_part() const {return num_parts() == 1 && num_flags() == 0;}
     bool empty() const {return num_parts() == 0 && num_flags() == 0;}
     
@@ -1147,12 +1160,36 @@ namespace syntax_ns {
     }
 
     // after build is called this object should be considered frozen
-    Syntax * build(const SourceStr & str = SourceStr()) {
+    Syntax * build(const SourceStr & str = SourceStr()) const {
       if (alloc_size() <= COPY_THRESHOLD) {
         return new_syntax(str, PARTS(parts_, parts_end_), FLAGS(flags_, flags_end_));
       } else {
         // note, this doesn't actually copy anything
         return new PartsSeparate(str, parts_, parts_end_, flags_, flags_end_);
+      }
+    }
+
+    // after build is called this object should be considered frozen
+    Syntax * build(const SourceStr & str, Syntax * syn) {
+      if (alloc_size() <= COPY_THRESHOLD) {
+        return new_syntax(str, syn, PARTS(parts_, parts_end_), FLAGS(flags_, flags_end_));
+      } else {
+        if (flags_ - parts_end_ >= 1) {
+          copy_backward(parts_, parts_end_, parts_end_ + 1);
+          parts_[0] = syn;
+          return new PartsSeparate(str, parts_, parts_end_, flags_, flags_end_);
+        } else {
+          unsigned new_size = alloc_size() + 1;
+          Syntax * * buf = (Syntax * *)GC_MALLOC(new_size * sizeof(void *));
+          unsigned parts_sz = parts_end_ - parts_;
+          unsigned flags_sz = flags_end_ - flags_;
+          copy(parts_, parts_end_, buf + 1); // leave space for new item
+          copy(flags_, flags_end_, buf + new_size - flags_sz);
+          buf[0] = syn;
+          return new PartsSeparate(str, 
+                                   buf, buf + parts_sz + 1, 
+                                   buf + new_size - flags_sz, buf + new_size);
+        }
       }
     }
 
@@ -1179,8 +1216,12 @@ namespace syntax_ns {
       {
         if (other.parts_ == other.data) {
           copy(other.data, other.data + INIT_SIZE, data);
-          parts_ = parts_end_ = data;
-          flags_ = flags_end_ = data + INIT_SIZE;
+          //parts_ = parts_end_ = data;
+          //flags_ = flags_end_ = data + INIT_SIZE;
+          parts_ = data;
+          parts_end_ = parts_ + other.num_parts();
+          flags_end_ = data + INIT_SIZE;
+          flags_ = flags_end_ - other.num_flags();
         } else {
           direct_copy(other);
         }

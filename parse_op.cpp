@@ -146,13 +146,13 @@ struct Ops {
       if (p->arg(i)->is_a("special")) {
         SpecialOp * op = new SpecialOp;
         op->parse_self(p->arg(i));
-        lookup_.insert(pair<OpKey,OpCommon *>(*op,op));      
+        lookup_.insert(Pair<OpKey,OpCommon *>(*op,op));      
       } else {
         Op * op = new Op;
         op->parse_self(p->arg(i));
         op->level = level;
         op->assoc = assoc;
-        lookup_.insert(pair<OpKey,OpCommon *>(*op,op));      
+        lookup_.insert(Pair<OpKey,OpCommon *>(*op,op));      
       }
     }
   }
