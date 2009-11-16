@@ -84,7 +84,8 @@
   }
 
   template <class P>
-  std::pair<typename HashTable<P>::iterator,bool> HashTable<P>::insert(const Value & to_insert)
+  template <class T>
+  std::pair<typename HashTable<P>::iterator,bool> HashTable<P>::insert(const T & to_insert)
   {
     bool have;
     iterator put_me_here = find_i(parms_.key(to_insert), have);

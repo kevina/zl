@@ -144,7 +144,8 @@
     const_iterator end()   const {return const_iterator(table_end_,*table_end_);}
     size_type size() const  {return size_;}
     bool      empty() const {return size_ + 1;}
-    std::pair<iterator,bool> insert(const value_type &); 
+    template <typename T>
+    std::pair<iterator,bool> insert(const T &); 
     void erase(iterator);
     size_type erase(const key_type &);
     void clear() {del(), init(0);}
@@ -285,19 +286,46 @@
       : Base(s, Parms(h,e)) {}
   };
 
+  // a less stupid version of pair, see below
+  template <typename F, typename S> 
+  struct Pair {
+    typedef F first_type;
+    typedef S second_type;
+    F first;
+    S second;
+    Pair() : first(), second() {}
+    Pair(const F & f) : first(f), second() {}
+    // ^^ std::pair does not provide this constructor, which there is
+    //    no way to initialize the first element with a value and the
+    //    second with the default constructor -- an unnecessary copy
+    //    has to be made of the second element.
+    Pair(const F & f, const S & s) : first(f), second(s) {}
+    template <typename F1, typename F2>
+    Pair(const Pair<F1,F2> & other) 
+      : first(other.first), second(other.second) {}
+  };
+
+  template <typename F, typename S> 
+  bool operator==(const Pair<F,S> & x, const Pair<F,S> & y) {
+    return x.first == y.first && x.second == y.second;
+  };
+  
   template <typename K, typename V, typename HF, typename E, bool m>
   struct HashMapParms 
   {
-    typedef std::pair<const K,V> Value;
+    typedef Pair<const K,V> Value;
     typedef const K         Key;
     static const bool is_multi = m;
     HF hash;
     E  equal;
     const K & key(const Value & v) {return v.first;}
+    const K & key(const K & k) {return k;}
     HashMapParms() {}
     HashMapParms(const HF & h) : hash(h) {}
     HashMapParms(const HF & h, const E & e) : hash(h), equal(e) {}
   };
+
+
 
   template <typename K, typename V, typename HF = hash<K>, typename E = std::equal_to<K> >
   class hash_map : public HashTable<HashMapParms<K,V,HF,E,false> >
