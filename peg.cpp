@@ -19,6 +19,8 @@
 
 #include "hash-t.hpp"
 
+//#define DUMP_PERFORMANCE_INFO
+
 #ifdef DUMP_PERFORMANCE_INFO
 #  define pprintf(...) printf(__VA_ARGS__)
 #else
@@ -33,16 +35,21 @@ class Capture;
 
 static unsigned indent_level = 0;
 
-MatchRes SymProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
-  if (!parts) return prod.match(str,NULL,errs);
-  MatchRes r = prod.match(str,parts,errs);
+MatchRes SymProd::match(SourceStr str, SynBuilder * parts) {
+  if (!parts) return prod.match(str,NULL);
+  MatchRes r = prod.match(str,parts);
   if (!r) return r;
   if (!prod.capture)
     parts->add_part(SYN(String(str.begin, r.end), str, r.end));
   return r;
 }
 
-MatchRes CachedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+const char * SymProd::match_f(SourceStr str, ParseErrors & errs) {
+  return prod.match_f(str,errs);
+}
+
+MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
+  //printf("%*cMATCH %s\n", indent_level, ' ', ~name);
   //if (cs[(unsigned char)*str.begin]) abort();
   pair<Lookup::iterator, Lookup::iterator>
     cached = lookup.equal_range(str.begin);
@@ -70,7 +77,7 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs
     //if (prod->capture_type.is_none())
     //  printf("NP: %s: %d %d\n", ~name, (bool)parts, (CaptureType::Type)prod->capture_type);
     indent_level++;
-    *static_cast<MatchRes *>(&r0) = prod.match(str, &r0.res, r0.errors);
+    *static_cast<MatchRes *>(&r0) = prod.match(str, &r0.res);
     indent_level--;
     //if (!r0) {
     //  assert(r0.res.empty());
@@ -97,53 +104,76 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts, ParseErrors & errs
     else
       pprintf("%*cNamedProd HIT %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
   }
-  errs.add(r->errors);
   if (parts) {
     if (!prod.capture && *r)
       r->res.add_part(SYN(String(str.begin, r->end), str, r->end));
     parts->add_parts(r->res.parts_begin(), r->res.parts_end());
     parts->merge_flags(r->res.flags_begin(), r->res.flags_end());
   }
+  //printf("%*cMATCH %s RES = %p\n", indent_level, ' ', ~name, r->end);
   return *r;
+}
+
+const char * CachedProd::match_f(SourceStr str, ParseErrors & errs) {
+  pair<Lookup::iterator, Lookup::iterator>
+    cached = lookup.equal_range(str.begin);
+  Lookup::iterator i = cached.first;
+  for (; i != cached.second; ++i) {
+    if (i->second.str_end) 
+      if (str.end == i->second.str_end) break;
+      else continue;
+    if (str.end > i->second.read_to) break;
+  }
+  if (i == cached.second || i->second.end == FAIL) {
+    return prod.match_f(str,errs);
+  } else {
+    return i->second.end;
+  }
 }
 
 void ParsePeg::Parse::clear_cache() {
   pprintf("NamedProd CLEAR\n");
   hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
   for (; i != e; ++i) {
-    if (!i->second->persistent()) {
-      //printf("CLEARING %s\n", ~i->second->name);
+    if (!i->second->persistent())
       i->second->clear_cache();
-    }
   }
 }
 
 class AlwaysTrue : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder *) {
     return MatchRes(str.begin, NULL);
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return str.begin;
   }
   AlwaysTrue(const char * p, const char * e) : Prod(p,e) {}
   virtual Prod * clone(Prod *) {return new AlwaysTrue(*this);}
+  PersistentRes calc_just_persistent() {return PersistentRes(true);}
   void dump() {printf(" _TRUE ");}
 };
 
 class Capture : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
-    if (!res) return prod->match(str, NULL, errs);
-    MatchRes r = prod->match(str, NULL, errs);
+  MatchRes match(SourceStr str, SynBuilder * res) {
+    if (!res) return prod->match(str, NULL);
+    MatchRes r = prod->match(str, NULL);
     if (!r) return r;
     Syntax * parse = SYN(String(str.begin, r.end), str, r.end);
     //printf("NONE: %s\n", ~parse->to_string());
     res->add_part(parse);
     return r;
   }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return prod->match_f(str, errs);
+  }
   Capture(const char * s, const char * e, Prod * p)
     : Prod(s,e), prod(p) {capture_type = ExplicitCapture;}
   Capture(Prod * p)
     : Prod(p->pos, p->end), prod(p) {capture_type = ExplicitCapture;}
-  void set_persistent() const {persistent_ = prod->persistent();}
+  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
+
   void verify() {
     // FIXME: Make error message
     //assert(prod->capture_type.is_none() || prod->capture_type.is_single());
@@ -159,18 +189,21 @@ private:
 
 class ReparseInner : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
-    if (!res) return prod->match(str, NULL, errs);
-    MatchRes r = prod->match(str, NULL, errs);
+  MatchRes match(SourceStr str, SynBuilder * res) {
+    if (!res) return prod->match(str, NULL);
+    MatchRes r = prod->match(str, NULL);
     if (!r) return r;
     Syntax * parse = new ReparseSyntax(SourceStr(str, r.end));
     //printf("REPARSE_CAPTURE with %p\n", parse);
     res->add_part(parse);
     return r;
   }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return prod->match_f(str, errs);
+  }
   ReparseInner(const char * s, const char * e, Prod * p)
     : Prod(s,e), prod(p) {capture_type = ReparseCapture;}
-  void set_persistent() const {persistent_ = prod->persistent();}
+  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
   void verify() {
     // FIXME: Make error message
     //assert(prod->capture_type.is_none() || prod->capture_type.is_single());
@@ -314,19 +347,21 @@ Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
 class NamedCapture : public ProdImpl, public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts) {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
-    if (!parts) return prod.match(str, NULL, errs); 
+    if (!parts) return prod.match(str, NULL); 
     SyntaxBuilder res;
     if (parms.empty() && name) res.add_part(name);
-    MatchRes r = prod.match(str, &res, errs);
+    MatchRes r = prod.match(str, &res);
     if (!r) return r;
     str.end = r.end;
     Syntax * res_syn = parms.empty() ? res.build(str) : gather(str, res);
     add_part(res_syn, parts);
     return r;
   }
-
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return prod.match_f(str, errs);
+  }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
   NamedCapture(const char * s, const char * e, const ProdWrap & p, String n, bool caf = false)
@@ -335,7 +370,7 @@ public:
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : Prod(o), GatherParts(o), prod(o.prod.clone(p)) {}
   virtual Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
-  void set_persistent() const {persistent_ = prod.persistent();}
+  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
   void verify() {
     prod.verify();
   }
@@ -347,14 +382,14 @@ private:
 class PlaceHolderCapture : public ProdImpl {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts) {
     // FIXME: Explain what the hell is going on here
-    if (!parts) return prod.match(str, NULL, errs); 
+    if (!parts) return prod.match(str, NULL); 
     syntax_ns::SynEntity placeholder(str, parts);
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     SyntaxBuilder res;
     res.add_part(&placeholder);
-    MatchRes r = prod.match(str, &res, errs);
+    MatchRes r = prod.match(str, &res);
     if (!r) return r;
     if (!res.empty()) {
       //fprintf(stderr, "EMPTY!\n");
@@ -366,6 +401,9 @@ public:
     } 
     return r;
   }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return prod.match_f(str, errs);
+  }
     
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
@@ -375,7 +413,7 @@ public:
   PlaceHolderCapture(const PlaceHolderCapture & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)) {}
   virtual Prod * clone(Prod * p) {return new PlaceHolderCapture(*this, p);}
-  void set_persistent() const {persistent_ = prod.persistent();}
+  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
   void verify() {
     prod.verify();
   }
@@ -388,7 +426,7 @@ private:
 class GatherPartsProd : public ProdImpl, public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts) {
     //fprintf(stderr, "NOW COMES THE FUN!\n");
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return MatchRes(str.begin, NULL);
@@ -402,7 +440,9 @@ public:
     add_part(res_syn, res);
     return MatchRes(str.begin, NULL);
   }
-
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return str.begin;
+  }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
   GatherPartsProd(const char * s, const char * e, String n, bool caf = false)
@@ -411,18 +451,18 @@ public:
   GatherPartsProd(const GatherPartsProd & o, Prod * p = 0)
     : Prod(o), GatherParts(o) {}
   virtual Prod * clone(Prod * p) {return new GatherPartsProd(*this, p);}
-  void set_persistent() const {persistent_ = true;}
+  PersistentRes calc_just_persistent() {return PersistentRes(true);}
   void verify() {}
   void dump() {/*printf("{"); prod->dump(); printf("}");*/}
 };
 
 class ReparseOuter : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts) {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
-    if (!parts) return prod->match(str, NULL, errs); 
+    if (!parts) return prod->match(str, NULL); 
     SyntaxBuilderN<2> res;
-    MatchRes r = prod->match(str, &res, errs);
+    MatchRes r = prod->match(str, &res);
     if (!r) return r;
     assert(res.num_parts() == 1);
     ReparseSyntax * syn = const_cast<ReparseSyntax *>(res.part(0)->as_reparse());
@@ -431,6 +471,9 @@ public:
     syn->finalize();
     parts->add_part(syn);
     return r;
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return prod->match_f(str, errs);
   }
   ReparseOuter(const char * s, const char * e, Prod * p, String n)
     : Prod(s,e), prod(p), name(SYN(n)) 
@@ -444,6 +487,7 @@ public:
   void verify() {
     prod->verify();
   }
+  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
   void dump() {printf("{"); prod->dump(); printf("}");}
 private:
   Prod * prod;
@@ -452,11 +496,12 @@ private:
 
 class DescProd : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
-    return prod.match(str, parts, errs);
-#ifndef NO_ERROR_HANDLING
+  MatchRes match(SourceStr str, SynBuilder * parts) {
+    return prod.match(str, parts);
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
     ParseErrors my_errs;
-    MatchRes r = prod.match(str, parts, my_errs);
+    const char * r = prod.match_f(str, my_errs);
     if (my_errs.size() > 0 && !desc.empty() && my_errs.front()->pos <= str) {
       errs.add(new ParseError(pos, str, desc));
     } else if (my_errs.size() > 0 && !desc.empty() && my_errs.front()->expected == "<charset>") {
@@ -465,7 +510,6 @@ public:
       errs.add(my_errs);
     }
     return r;
-#endif
   }
   DescProd(const char * s, const char * e, String n, const ProdWrap & p) 
     : Prod(s, e),  desc(n), prod(p) {capture_type = p.capture ? ExplicitCapture : NoCapture;}
@@ -473,7 +517,7 @@ public:
     prod = o.prod.clone(p);
   }
   virtual Prod * clone(Prod * p) {return new DescProd(*this, p);}
-  void set_persistent() const {persistent_ = prod.persistent();}
+  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
   void verify() {prod.verify();}
 private:
   String desc;
@@ -498,77 +542,89 @@ bool prefix_equal(const char * i, const char * e,
 
 class Literal : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder *) {
+    const char * e = str.begin;
+    if (prefix_equal(literal.begin(), literal.end(), e, str.end))
+      return MatchRes(e, e-1);
+    else
+      return MatchRes(FAIL, e);
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
     const char * e = str.begin;
     if (prefix_equal(literal.begin(), literal.end(), e, str.end)) {
-      return MatchRes(e, e-1);
+      return e;
     } else {
-#ifndef NO_ERROR_HANDLING
       StringBuf buf;
       buf << "\"" << literal << "\"";
       errs.add(new ParseError(pos, str, buf.freeze()));
-#endif
-      return MatchRes(FAIL, e);
+      return FAIL;
     }
-  }
+  }  
   Literal(const char * s, const char * e, String l)
     : Prod(s,e), literal(l) {}
   virtual Prod * clone(Prod * p) {return new Literal(*this);}
   void dump() {printf("'%s'", literal.c_str());}
-  void set_persistent() const {persistent_ = true;}
+  PersistentRes calc_just_persistent() {return PersistentRes(true);}
 private:
   String literal;
 };
 
 class CharClass : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
-    if (!str.empty() && cs[*str]) {
+  MatchRes match(SourceStr str, SynBuilder *) {
+    if (!str.empty() && cs[*str])
       return MatchRes(str + 1, str);
-    } else {
-#ifndef NO_ERROR_HANDLING
-      errs.add(new ParseError(pos, str, "<charset>")); // FIXME 
-#endif
+    else
       return MatchRes(FAIL, str);
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    if (!str.empty() && cs[*str]) {
+      return str + 1;
+    } else {
+      errs.add(new ParseError(pos, str, "<charset>")); // FIXME 
+      return FAIL;
     }
   }
   CharClass(const char * s, const char * e, const CharSet & cs0) 
     : Prod(s,e), cs(cs0) {}
   virtual Prod * clone(Prod * p) {return new CharClass(*this);}
   void dump() {printf("[]");}
-  void set_persistent() const {persistent_ = true;}
+  PersistentRes calc_just_persistent() {return PersistentRes(true);}
 private:
   CharSet cs;
 };
 
 class Any : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs)  {
+  MatchRes match(SourceStr str, SynBuilder *)  {
     if (!str.empty())
       return MatchRes(str+1, str);
-#ifndef NO_ERROR_HANDLING
-    errs.push_back(new ParseError(pos, str, "<EOF>"));
-#endif
     return MatchRes(FAIL, str);
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs)  {
+    if (!str.empty())
+      return str+1;
+    errs.push_back(new ParseError(pos, str, "<EOF>"));
+    return FAIL;
   }
   Any(const char * s, const char * e) : Prod(s,e) {}
   virtual Prod * clone(Prod * p) {return new Any(*this);}
   void dump() {printf("_");}
-  void set_persistent() const {persistent_ = true;}
+  PersistentRes calc_just_persistent() {return PersistentRes(true);}
 };
 
 class Repeat : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts) {
     const char * read_to = NULL;
     bool matched = false;
     for (;;) {
       if (end_with_) {
-        MatchRes r = end_with_->match(str, NULL, errs);
+        MatchRes r = end_with_->match(str, NULL);
         read_to = std::max(read_to, r.read_to);
         if (r) break;
       }
-      MatchRes r = prod.match(str, parts, errs);
+      MatchRes r = prod.match(str, parts);
       read_to = std::max(read_to, r.read_to);
       if (!r) break;
       str.begin = r.end;
@@ -579,6 +635,24 @@ public:
       return MatchRes(str, read_to);
     else 
       return MatchRes(FAIL, read_to);
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    bool matched = false;
+    for (;;) {
+      if (end_with_) {
+        const char * r = end_with_->match_f(str, errs);
+        if (r) break;
+      }
+      const char * r = prod.match_f(str, errs);
+      if (!r) break;
+      str.begin = r;
+      matched = true;
+      if (once) break;
+    }
+    if (matched || optional)
+      return str;
+    else 
+      return FAIL;
   }
   Repeat(const char * s, const char * e, const ProdWrap & p, bool o1, bool o2) 
     : Prod(s,e), prod(p), optional(o1), once(o2), end_with_() 
@@ -593,10 +667,11 @@ public:
   virtual void end_with(Prod * p);
   virtual Prod * clone(Prod * p) {return new Repeat(*this, p);}
   void dump() {}
-  void set_persistent() const {
-    persistent_ = prod.persistent();
+  PersistentRes calc_just_persistent() {
+    PersistentRes r = prod.calc_persistent();
     if (end_with_)
-      if (!end_with_->persistent()) persistent_ = false;
+      r |= end_with_->calc_persistent();
+    return r;
   }
   void verify() {prod.verify(); if (end_with_) end_with_->verify();}
 private:
@@ -608,10 +683,8 @@ private:
 
 class Predicate : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, ParseErrors & errs) {
-    // FIXME: Correctly handle errors;
-    ParseErrors dummy_errs = errs;
-    MatchRes r = prod->match(str, NULL, dummy_errs);
+  MatchRes match(SourceStr str, SynBuilder *) {
+    MatchRes r = prod->match(str, NULL);
     if (dont_match_empty && r.end == str.begin)
       r.end = FAIL;
     if (r) {
@@ -620,6 +693,10 @@ public:
       return MatchRes(invert ? str : FAIL, r.read_to);
     }
   }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    // FIXME: Correctly handle errors;
+    return Predicate::match(str, NULL).end;
+  }
   Predicate(const char * s, const char * e, Prod * p, bool inv, bool dme = false) 
     : Prod(s,e), prod(p), invert(inv), dont_match_empty(dme) {}
   Predicate(const Predicate & o, Prod * p = 0)
@@ -627,7 +704,7 @@ public:
       invert(o.invert), dont_match_empty(o.dont_match_empty) {}
   virtual Prod * clone(Prod * p) {return new Predicate(*this, p);}
   void dump() {}
-  void set_persistent() const {persistent_ = prod->persistent();}
+  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
   void verify() {prod->verify();}
 private:
   Prod * prod;
@@ -652,7 +729,7 @@ static inline CaptureType get_capture_type(const Vector<ProdWrap> & p)
 class Seq : public ProdImpl {
   // NOTE: A Seq _must_ have more than one element
 public: 
-  MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * res) {
     unsigned orig_parts_sz, orig_flags_sz;
     if (res)
       orig_parts_sz = res->num_parts(), orig_flags_sz = res->num_flags();
@@ -660,7 +737,7 @@ public:
       i = prods.begin(), e = prods.end();
     const char * read_to = NULL;
     while (i != e) {
-      MatchRes r = i->match(str, res, errs);
+      MatchRes r = i->match(str, res);
       read_to = std::max(read_to, r.read_to);
       if (!r) {
         if (res) res->truncate_parts(orig_parts_sz), res->truncate_flags(orig_flags_sz);
@@ -671,16 +748,27 @@ public:
     }
     return MatchRes(str.begin, read_to);
   }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    Vector<ProdWrap>::iterator 
+      i = prods.begin(), e = prods.end();
+    while (i != e) {
+      const char * r = i->match_f(str, errs);
+      if (!r)
+        return FAIL;
+      str.begin = r;
+      ++i;
+    }
+    return str.begin;
+  }
   Seq(const char * s, const char * e, const Vector<ProdWrap> & p)
     : Prod(s, e), prods(p) 
     {capture_type = get_capture_type(prods);}
-  void set_persistent() const {
-    persistent_ = true;
-    for (Vector<ProdWrap>::const_iterator 
+  PersistentRes calc_just_persistent() {
+    PersistentRes r;
+    for (Vector<ProdWrap>::iterator 
            i = prods.begin(), e = prods.end(); i != e; ++i)
-    {
-      if (!i->persistent()) persistent_ = false;
-    }
+      r |= i->calc_persistent();
+    return r;
   }
   void verify() {
     for (Vector<ProdWrap>::iterator 
@@ -704,17 +792,27 @@ private:
 
 class Choice : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * parts) {
     Vector<ProdWrap>::iterator 
       i = prods.begin(), e = prods.end();
     const char * read_to = NULL;
     while (i != e) {
-      MatchRes r = i->match(str, parts, errs);
+      MatchRes r = i->match(str, parts);
       read_to = std::max(read_to, r.read_to);
       if (r) return MatchRes(r.end, read_to);
       ++i;
     }
     return MatchRes(FAIL, read_to);
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    Vector<ProdWrap>::iterator 
+      i = prods.begin(), e = prods.end();
+    while (i != e) {
+      const char * r = i->match_f(str, errs);
+      if (r) return r;
+      ++i;
+    }
+    return FAIL;
   }
   Choice(const char * s, const char * e, const Vector<ProdWrap> & p)
     : Prod(s, e), prods(p) 
@@ -727,13 +825,12 @@ public:
       prods.push_back(i->clone(p));
     }
   }
-  void set_persistent() const {
-    persistent_ = true;
-    for (Vector<ProdWrap>::const_iterator 
+  PersistentRes calc_just_persistent() {
+    PersistentRes r;
+    for (Vector<ProdWrap>::iterator 
            i = prods.begin(), e = prods.end(); i != e; ++i)
-    {
-      if (!i->persistent()) persistent_ = false;
-    }
+      r |= i->calc_persistent();
+    return r;
   }
   void verify() {
     for (Vector<ProdWrap>::iterator 
@@ -754,10 +851,10 @@ String cur_named_prod;
 
 class S_MId : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * res, ParseErrors & errs) {
+  MatchRes match(SourceStr str, SynBuilder * res) {
     //if (!in_repl) return FAIL;
     SyntaxBuilder res0;
-    MatchRes r = prod->match(str, &res0, errs);
+    MatchRes r = prod->match(str, &res0);
     if (!r) return r;
     res0.make_flags_parts();
     assert(res0.single_part());
@@ -768,15 +865,34 @@ public:
       if (res) res->add_part(p);
       return r;
     } else {
-      return MatchRes(FAIL, r.read_to); // FIXME Inject Error
+      return MatchRes(FAIL, r.read_to);
     }
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    //if (!in_repl) return FAIL;
+    SyntaxBuilder res0;
+    MatchRes r = prod->match(str, &res0);
+    if (!r) {
+      const char * r0 = prod->match_f(str, errs);
+      assert(!r0);
+      return FAIL;
+    }
+    res0.make_flags_parts();
+    assert(res0.single_part());
+    Syntax * r0 = res0.part(0);
+    if (mids && mids->anywhere(*r0->arg(0)) > 0) {
+      return r.end;
+    } else {
+      return FAIL; // FIXME: Inject Error
+    }
+
   }
   S_MId(const char * s, const char * e, const ProdWrap & p, String inp = String())
     : Prod(s,e), in_named_prod(inp.empty() ? cur_named_prod : inp), prod(new NamedCapture(s, e, p, "mid")) {capture_type = ExplicitCapture;}
   S_MId(const S_MId & o, Prod * p = 0)
     : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod->clone(p)) {}
   virtual Prod * clone(Prod * p) {return new S_MId(*this, p);}
-  void set_persistent() const {persistent_ = false;}
+  PersistentRes calc_just_persistent() {return PersistentRes(false);}
 private:
   String in_named_prod;
   Prod * prod;
@@ -791,9 +907,8 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
   Prod * p = parse.named_prods[what];
   parse.clear_cache();
   SyntaxBuilder dummy;
-  ParseErrors errors;
   const char * s = str.begin;
-  const char * e = p->match(str, &dummy, errors).end;
+  const char * e = p->match(str, &dummy).end;
   mids = 0;
   //assert(s != e);
   //printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
@@ -802,7 +917,10 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
     //dummy[0]->print();
     //printf("\n");
   } else {
-    //printf("FAIL\n");
+    //printf("GETTING ERROR\n");
+    ParseErrors errors;
+    const char * e0 = p->match_f(str, errors);
+    assert(e0 == e);
     throw errors.to_error(new ParseSourceInfo(str, what), file);
   }
   clock_t stop = clock();
@@ -906,21 +1024,23 @@ namespace ParsePeg {
     }
     
     hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
-    for (; i != e; ++i)
+    for (; i != e; ++i) {
+      i->second->calc_persistent();
       if (i->second->persistent())
         pprintf("IS PERSISTENT: %s\n", ~i->second->name);
       else
         pprintf("is not persistent: %s\n", ~i->second->name);
-    pprintf("PERSISTENT ONE\n");
+    }
+    pprintf("PERSISTENT DONE\n");
   }
 
   void Parse::resolve_token_symbol(TokenProd * p, const char * pos) 
   {
     Vector<TokenRule>::iterator i = token_rules.begin(), e = token_rules.end();
     for (;i != e; ++i) {
-      ParseErrors errors;
+      //ParseErrors errors;
       SourceStr str(p->name);
-      str.begin = i->to_match->match(str, NULL, errors).end;
+      str.begin = i->to_match->match(str, NULL).end;
       if (str.empty()) {
         p->set_prod(ProdWrap(i->if_matched->clone(new Capture(new Literal(p->pos, p->end, p->name)))));
         return;

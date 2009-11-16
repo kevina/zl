@@ -10,8 +10,6 @@
 #include <typeinfo>
 #include <utility>
 
-//#define NO_ERROR_HANDLING
-
 using std::pair;
 
 struct Prod;
@@ -32,7 +30,6 @@ struct ParseError {
     }
 };
 
-#ifndef NO_ERROR_HANDLING
 struct ParseErrors : public Vector<const ParseError *> {
   void add(const ParseError * err) {
     if (empty() || front()->pos == err->pos) {
@@ -66,21 +63,6 @@ struct ParseErrors : public Vector<const ParseError *> {
   Error * to_error(const SourceInfo *, const SourceFile * grammer);
   void print(const SourceInfo * file, const SourceFile * grammer);
 };
-#else
-struct ParseErrors {
-  void add(const ParseError * err) {}
-  void add(const ParseErrors & other) {}
-  void push_unique(const ParseError * err) {}
-  Error * to_error(const SourceInfo *, const SourceFile * grammer);
-  unsigned size() const {return 0;}
-  const ParseError * front() const {abort();}
-  const ParseError * operator[] (unsigned) const {abort();}
-  bool empty() const {return true;}
-  void push_back(const ParseError *) {}
-  void print(const SourceInfo * file, const SourceFile * grammer);
-};
-#endif
-
 
 // Some cached productions are persistent between parses, which saves
 // time, when reparsing.  However, in order to use the cached result
@@ -118,7 +100,6 @@ struct Res : public MatchRes {
   const char * str_end; // if not NULL than read past end-of-string to this point
   Res() : str_end() {}
   SyntaxBuilderN<2> res;
-  ParseErrors errors;
 };
 
 
@@ -130,17 +111,65 @@ static const char * FAIL = 0;
 
 enum CaptureType {NoCapture, CanGiveCapture, ExplicitCapture, ReparseCapture};
 
+class Prod;
+
+struct PersistentRes {
+  // "val" is only final if deps is empty
+  bool val;
+  Vector<Prod *> deps;
+  PersistentRes(bool v = true) : val(v) {}
+  PersistentRes(Prod * d) : val(true), deps() {deps.push_back(d);}
+  bool have_dep(Prod * p) const {
+    for (Vector<Prod *>::const_iterator 
+           i = deps.begin(), e = deps.end(); i != e; ++i)
+      if (*i == p) return true;
+    return false;
+  }
+  void add_dep(Prod * p) {
+    if (!have_dep(p)) deps.push_back(p);
+  }
+  void remove_dep(Prod * p) {
+    for (Vector<Prod *>::iterator 
+           i = deps.begin(), e = deps.end(); i != e; ++i) {
+      if (*i == p) {
+        deps.erase(i);
+        return;
+      }
+    }
+  }
+  void operator |= (const PersistentRes & o) {
+    if (o.val == false) val = false;
+    for (Vector<Prod *>::const_iterator 
+           i = o.deps.begin(), e = o.deps.end(); i != e; ++i)
+      add_dep(*i);
+  }
+};
+
 class Prod {
 public:
-  virtual MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) = 0;
+  virtual MatchRes match(SourceStr str, SynBuilder * parts) = 0;
+  // FIXME: explain match_f: ...
+  virtual const char * match_f(SourceStr str, ParseErrors & errs) = 0;
   virtual Prod * clone(Prod * = 0) = 0; // the paramater is the new
                                         // prod to use in place of the
                                         // placeholder prod "_self"
   virtual void end_with(Prod * p) {}
   virtual void dump() {}
   virtual void verify() {}
-  bool persistent() const {if (persistent_ == -1) set_persistent(); return persistent_;}
-  virtual void set_persistent() const {}
+  bool persistent() const {assert(persistent_ >= 0); return persistent_;}
+  PersistentRes calc_persistent() {
+    if (persistent_ >= 0) return PersistentRes(persistent_);
+    if (persistent_ == -2) return PersistentRes(this);
+    persistent_ = -2;
+    PersistentRes r = calc_just_persistent();
+    r.remove_dep(this);
+    if (r.deps.empty()) 
+      persistent_ = r.val;
+    else
+      persistent_ = -1; // need to try again
+    return r;
+  }
+  virtual PersistentRes calc_just_persistent() = 0;
   virtual ~Prod() {}
   Prod(const char * p, const char * e) 
     : capture_type(NoCapture), pos(p), end(e), persistent_(-1) {}
@@ -149,7 +178,7 @@ public: // but don't use
   const char * pos;
   const char * end;
 protected:
-  mutable int persistent_;
+  int persistent_;
 };
 
 enum CaptureQ {DontCapture, DoCapture};
@@ -165,11 +194,14 @@ struct ProdWrap {
     capture = prod->capture_type >= ExplicitCapture;}
   explicit ProdWrap(Prod * p) : prod(p) {get_capture_from_prod();}
   //void operator=(const Prod * p) {prod = p; get_capture_from_prod();}
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs) {
-    return prod->match(str, capture ? parts : NULL, errs);}
+  MatchRes match(SourceStr str, SynBuilder * parts) {
+    return prod->match(str, capture ? parts : NULL);}
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return prod->match_f(str, errs);}
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
   void verify() {prod->verify();}
   bool persistent() const {return prod->persistent();}
+  PersistentRes calc_persistent() {return prod->calc_persistent();}
 private:
   ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
 };
@@ -178,12 +210,13 @@ typedef Prod ProdImpl;
 
 class SymProd : public ProdImpl {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs);
+  MatchRes match(SourceStr str, SynBuilder * parts);
+  const char * match_f(SourceStr str, ParseErrors & errs);
   SymProd(const char * s, const char * e, String n) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture;}
   SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture; set_prod(p);}
-  void set_persistent() const {persistent_ = prod.persistent();}
+  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
   void set_prod(const ProdWrap & p) {prod = p;}
   void verify() {
     //assert(prod->capture_type.is_implicit() && prod->capture_type.is_single());
@@ -221,13 +254,13 @@ public:
 class CachedProd : public NamedProd {
   // named productions are memorized
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, ParseErrors & errs);
+  MatchRes match(SourceStr str, SynBuilder * parts);
+  const char * match_f(SourceStr str, ParseErrors & errs);
   CachedProd(String n) : NamedProd(n) {/*cs = (char *) GC_MALLOC(256);*/}
   void clear_cache() {lookup.clear();}
 private:
   typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
   Lookup lookup;
-  //char * cs;
   //CharSet cs;
 };
 
