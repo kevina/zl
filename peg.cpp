@@ -251,6 +251,7 @@ public:
   void dump() {printf("%s", name.c_str());}
 public: // but treat as protected
   String name;
+  String desc;
 //protected:
   ProdWrap prod;
 };
@@ -330,7 +331,8 @@ namespace ParsePeg {
   struct TokenRule {
     Prod * to_match;
     Prod * if_matched;
-    TokenRule(Prod * p1, Prod * p2) : to_match(p1), if_matched(p2) {}
+    String desc;
+    TokenRule(Prod * p1, Prod * p2, String d) : to_match(p1), if_matched(p2), desc(d) {}
   };
 
   class Parse {
@@ -405,7 +407,20 @@ MatchRes SymProd::match(SourceStr str, SynBuilder * parts) {
 }
 
 const char * SymProd::match_f(SourceStr str, ParseErrors & errs) {
-  return prod.match_f(str,errs);
+  if (desc.empty()) {
+    return prod.match_f(str,errs);
+  } else {
+    ParseErrors my_errs;
+    const char * r = prod.match_f(str, my_errs);
+    if (my_errs.size() > 0 && my_errs.front()->pos <= str) {
+      errs.add(new ParseError(pos, str, desc));
+    } else if (my_errs.size() > 0 && my_errs.front()->expected == "<charset>") {
+      errs.add(new ParseError(pos, str, desc));
+    } else {
+      errs.add(my_errs);
+    }
+    return r;
+  }
 }
 
 MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
@@ -497,7 +512,7 @@ const char * CachedProd::match_f(SourceStr str, ParseErrors & errs) {
     if (str.end > i->second.read_to) break;
   }
   if (i == cached.second || i->second.end == FAIL) {
-    return prod.match_f(str,errs);
+    return NamedProd::match_f(str,errs);
   } else {
     return i->second.end;
   }
@@ -855,37 +870,6 @@ public:
 private:
   Prod * prod;
   const Syntax * name;
-};
-
-class DescProd : public Prod {
-public:
-  MatchRes match(SourceStr str, SynBuilder * parts) {
-    return prod.match(str, parts);
-  }
-  const char * match_f(SourceStr str, ParseErrors & errs) {
-    ParseErrors my_errs;
-    const char * r = prod.match_f(str, my_errs);
-    if (my_errs.size() > 0 && !desc.empty() && my_errs.front()->pos <= str) {
-      errs.add(new ParseError(pos, str, desc));
-    } else if (my_errs.size() > 0 && !desc.empty() && my_errs.front()->expected == "<charset>") {
-      errs.add(new ParseError(pos, str, desc));
-    } else {
-      errs.add(my_errs);
-    }
-    return r;
-  }
-  DescProd(const char * s, const char * e, String n, const ProdWrap & p) 
-    : Prod(s, e),  desc(n), prod(p) {capture_type = p.capture ? ExplicitCapture : NoCapture;}
-  DescProd(const DescProd & o, Prod * p = 0) : Prod(o), desc(o.desc) {
-    prod = o.prod.clone(p);
-  }
-  virtual Prod * clone(Prod * p) {return new DescProd(*this, p);}
-  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
-  int first_char() const {return prod.first_char();}
-  void verify() {prod.verify();}
-private:
-  String desc;
-  ProdWrap prod;
 };
 
 // similar to std::equal but will also keep track of the last
@@ -1352,8 +1336,7 @@ namespace ParsePeg {
         str = require_symbol('=', str, end);
         Res r = peg(str, end, ';');
         r.prod->verify();
-        token_rules.push_back(TokenRule(sr.prod, 
-                                        desc.empty() ? r.prod : new DescProd(str, r.end, desc, r)));
+        token_rules.push_back(TokenRule(sr.prod, r.prod, desc));
         str = r.end;
       } else {
         str = id(str, end, name);
@@ -1369,7 +1352,8 @@ namespace ParsePeg {
         Res r = peg(str, end, ';');
         r.prod->verify();
         //if (name == "SPLIT_FLAG") stop();
-        p->set_prod(desc.empty() ? r : ProdWrap(new DescProd(str, r.end, desc, r)));
+        p->desc = desc;
+        p->set_prod(r);
         str = r.end;
       }
       str = require_symbol(';', str, end);
@@ -1409,6 +1393,7 @@ namespace ParsePeg {
       SourceStr str(p->name);
       str.begin = i->to_match->match(str, NULL).end;
       if (str.empty()) {
+        p->desc = i->desc;
         p->set_prod(ProdWrap(i->if_matched->clone(new Capture(new Literal(p->pos, p->end, p->name)))));
         return;
       }
