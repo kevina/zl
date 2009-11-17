@@ -226,9 +226,7 @@ private:
   ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
 };
 
-typedef Prod ProdImpl;
-
-class SymProd : public ProdImpl {
+class SymProd : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts);
   const char * match_f(SourceStr str, ParseErrors & errs);
@@ -514,7 +512,7 @@ void ParsePeg::Parse::clear_cache() {
   }
 }
 
-class AlwaysTrue : public ProdImpl {
+class AlwaysTrue : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *) {
     return MatchRes(str.begin, NULL);
@@ -528,7 +526,7 @@ public:
   void dump() {printf(" _TRUE ");}
 };
 
-class Capture : public ProdImpl {
+class Capture : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * res) {
     if (!res) return prod->match(str, NULL);
@@ -706,7 +704,7 @@ Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
 }
 
 
-class NamedCapture : public ProdImpl, public GatherParts {
+class NamedCapture : public Prod, public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
@@ -742,7 +740,7 @@ private:
   ProdWrap prod;
 };
 
-class PlaceHolderCapture : public ProdImpl {
+class PlaceHolderCapture : public Prod {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
@@ -787,7 +785,7 @@ private:
 };
 
 
-class GatherPartsProd : public ProdImpl, public GatherParts {
+class GatherPartsProd : public Prod, public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
@@ -820,7 +818,7 @@ public:
   void dump() {/*printf("{"); prod->dump(); printf("}");*/}
 };
 
-class ReparseOuter : public ProdImpl {
+class ReparseOuter : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
@@ -859,7 +857,7 @@ private:
   const Syntax * name;
 };
 
-class DescProd : public ProdImpl {
+class DescProd : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
     return prod.match(str, parts);
@@ -936,7 +934,7 @@ private:
   String literal;
 };
 
-class CharClass : public ProdImpl {
+class CharClass : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *) {
     if (!str.empty() && cs[*str])
@@ -961,7 +959,7 @@ private:
   CharSet cs;
 };
 
-class Any : public ProdImpl {
+class Any : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *)  {
     if (!str.empty())
@@ -980,7 +978,7 @@ public:
   PersistentRes calc_just_persistent() {return PersistentRes(true);}
 };
 
-class Repeat : public ProdImpl {
+class Repeat : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
     const char * read_to = NULL;
@@ -1049,7 +1047,7 @@ private:
   Prod * end_with_;
 };
 
-class Predicate : public ProdImpl {
+class Predicate : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *) {
     MatchRes r = prod->match(str, NULL);
@@ -1094,7 +1092,7 @@ static inline CaptureType get_capture_type(const Vector<ProdWrap> & p)
   return t;
 }
 
-class Seq : public ProdImpl {
+class Seq : public Prod {
   // NOTE: A Seq _must_ have more than one element
 public: 
   MatchRes match(SourceStr str, SynBuilder * res) {
@@ -1159,7 +1157,7 @@ private:
   Vector<ProdWrap> prods;
 };
 
-class Choice : public ProdImpl {
+class Choice : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
     Vector<ProdWrap>::iterator 
@@ -1218,7 +1216,7 @@ bool in_repl = false;
 const Replacements * mids;
 String cur_named_prod;
 
-class S_MId : public ProdImpl {
+class S_MId : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * res) {
     //if (!in_repl) return FAIL;
