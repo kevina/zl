@@ -11,6 +11,7 @@
 #include "parse_op.hpp"
 #include "parse_decl.hpp"
 #include "syntax_gather.hpp"
+#include "asc_ctype.hpp"
 
 #include "hash-t.hpp"
 

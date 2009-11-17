@@ -34,10 +34,6 @@ void parse_maps(ast::Environ & env) {
   }
 }
 
-// FIXME: No global
-ParsePeg::Parse parse;
-SourceFile * file = 0;
-
 int main(int argc, const char *argv[])
 {
   //GC_disable();
@@ -46,12 +42,10 @@ int main(int argc, const char *argv[])
   assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
   assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
   parse_exp_->init();
-  file = new_source_file(SOURCE_PREFIX "grammer.in");
   ast::Environ env;
   try {
-    parse.top(file->begin(), file->end());
+    parse_peg(SOURCE_PREFIX "grammer.in");
   } catch (Error * err) {
-    err->source = file;
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
@@ -174,10 +168,6 @@ int main(int argc, const char *argv[])
     exit(2);
   }
 
-  parse = ParsePeg::Parse();
-  file = NULL;
-
-    
   //sleep(600);
 }
 
