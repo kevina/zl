@@ -171,6 +171,7 @@ public:
   }
   virtual PersistentRes calc_just_persistent() = 0;
   virtual ~Prod() {}
+  virtual int first_char() const {return -2;}
   Prod(const char * p, const char * e) 
     : capture_type(NoCapture), pos(p), end(e), persistent_(-1) {}
 public: // but don't use
@@ -202,6 +203,7 @@ struct ProdWrap {
   void verify() {prod->verify();}
   bool persistent() const {return prod->persistent();}
   PersistentRes calc_persistent() {return prod->calc_persistent();}
+  int first_char() const {return prod->first_char();}
 private:
   ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
 };
@@ -217,6 +219,7 @@ public:
   SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture; set_prod(p);}
   PersistentRes calc_just_persistent() {return prod.calc_persistent();}
+  int first_char() const {return prod.first_char();}
   void set_prod(const ProdWrap & p) {prod = p;}
   void verify() {
     //assert(prod->capture_type.is_implicit() && prod->capture_type.is_single());
@@ -248,6 +251,9 @@ public:
     return this; // don't copy prod with name
   }
   void dump() {printf("%s", name.c_str());}
+  virtual void finalize() {
+    calc_persistent();
+  }
   virtual void clear_cache() {}
 };
 
@@ -256,11 +262,17 @@ class CachedProd : public NamedProd {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts);
   const char * match_f(SourceStr str, ParseErrors & errs);
-  CachedProd(String n) : NamedProd(n) {/*cs = (char *) GC_MALLOC(256);*/}
+  CachedProd(String n) : NamedProd(n), first_char_(-3) {/*cs = (char *) GC_MALLOC(256);*/}
   void clear_cache() {lookup.clear();}
+  int first_char() const {return first_char_ > -3 ? first_char_ : prod.first_char();}
+  void finalize() {
+    NamedProd::finalize();
+    first_char_ = prod.first_char();
+  }
 private:
   typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
   Lookup lookup;
+  int first_char_;
   //CharSet cs;
 };
 

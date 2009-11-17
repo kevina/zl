@@ -50,7 +50,14 @@ const char * SymProd::match_f(SourceStr str, ParseErrors & errs) {
 
 MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
   //printf("%*cMATCH %s\n", indent_level, ' ', ~name);
+  if (first_char_ >= 0 && 
+      (str.begin == str.end || first_char_ != *str.begin)) {
+    //printf("%s FAST FAIL ON '%c'\n", ~name, prod.first_char());
+    return MatchRes(FAIL, str.begin);
+  }
   //if (cs[(unsigned char)*str.begin]) abort();
+  //if (prod.first_char() >= 0)
+  //  printf("%s COULD FAST FAIL ON '%c'\n", ~name, prod.first_char());
   pair<Lookup::iterator, Lookup::iterator>
     cached = lookup.equal_range(str.begin);
   //if (cached.second - cached.first > 1) 
@@ -64,15 +71,17 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
       if (str.end == i->second.str_end) break;
       else continue;
     if (str.end > i->second.read_to) break;
-    //else printf("XXX COULD'T USE %s\n", ~name);
+    else {
+      //printf("XXX SHOULD'T USE %s %p %p !> %p \"%s\"\n", ~name, str.begin, str.end, i->second.read_to, ~sample(str.begin, i->second.read_to+1));
+      //break;
+    }
   }
   Res * r;
   if (i == cached.second) {
     r = &(*((lookup.insert(str.begin).first))).second;
-    //r = &(*((lookup.insert(str.begin, Res()).first))).second;
+    r->end = FAIL; // to avoid infinite recursion
     Res & r0 = *r;
     //Res r0;
-    //r->end = FAIL; // to avoid infinite recursion
     pprintf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
     //if (prod->capture_type.is_none())
     //  printf("NP: %s: %d %d\n", ~name, (bool)parts, (CaptureType::Type)prod->capture_type);
@@ -87,15 +96,18 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
     //assert(r0.errors.empty());
     //r = &(*((lookup.insert(str, r0)).first)).second;
     if (!r0.res.empty()) assert(!r->res.empty());
+    // XXX: MEGA HACK!
+    //if (name == "SPACING")
+    //  r->read_to = str.begin - 1;
     if (r->read_to >= str.end) {
       //printf("PAST END ON %s\n", ~name);
       r->read_to = NULL;
       r->str_end = str.end;
     }
     if (r->end != FAIL)
-      pprintf("%*cNamedProd DONE %s %p (%p) \"%s\" %p\n", indent_level, ' ', ~name, str.begin, r->end, ~sample(str.begin, r->end), str.end);
+      pprintf("%*cNamedProd DONE %s %p (%p %p) \"%s\" %p\n", indent_level, ' ', ~name, str.begin, r->end, r->read_to, ~sample(str.begin, r->end), str.end);
     else
-      pprintf("%*cNamedProd DONE %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
+      pprintf("%*cNamedProd DONE %s %p (FAIL %p) %p\n", indent_level, ' ', ~name, str.begin, r->read_to, str.end);
     //assert(r->end == FAIL || r->parts.size() == 1);
   } else {
     r = &i->second;
@@ -173,7 +185,7 @@ public:
   Capture(Prod * p)
     : Prod(p->pos, p->end), prod(p) {capture_type = ExplicitCapture;}
   PersistentRes calc_just_persistent() {return prod->calc_persistent();}
-
+  int first_char() const {return prod->first_char();}
   void verify() {
     // FIXME: Make error message
     //assert(prod->capture_type.is_none() || prod->capture_type.is_single());
@@ -183,11 +195,11 @@ public:
     : Prod(o), prod(o.prod->clone(p)) {}
   virtual Capture * clone(Prod * p) {return new Capture(*this, p);}
   void dump() {printf("{"); prod->dump(); printf("}");}
-private:
+protected:
   Prod * prod;
 };
 
-class ReparseInner : public ProdImpl {
+class ReparseInner : public Capture {
 public:
   MatchRes match(SourceStr str, SynBuilder * res) {
     if (!res) return prod->match(str, NULL);
@@ -198,23 +210,11 @@ public:
     res->add_part(parse);
     return r;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs) {
-    return prod->match_f(str, errs);
-  }
   ReparseInner(const char * s, const char * e, Prod * p)
-    : Prod(s,e), prod(p) {capture_type = ReparseCapture;}
+    : Capture(s,e,p) {capture_type = ReparseCapture;}
   PersistentRes calc_just_persistent() {return prod->calc_persistent();}
-  void verify() {
-    // FIXME: Make error message
-    //assert(prod->capture_type.is_none() || prod->capture_type.is_single());
-    prod->verify();
-  }
-  ReparseInner(const ReparseInner & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)) {}
+  ReparseInner(const ReparseInner & o, Prod * p = 0) : Capture(o, p) {}
   virtual ReparseInner * clone(Prod * p) {return new ReparseInner(*this, p);}
-  void dump() {printf("{"); prod->dump(); printf("}");}
-private:
-  Prod * prod;
 };
 
 static inline const char * first_space(const char * s) 
@@ -371,6 +371,7 @@ public:
     : Prod(o), GatherParts(o), prod(o.prod.clone(p)) {}
   virtual Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
   PersistentRes calc_just_persistent() {return prod.calc_persistent();}
+  int first_char() const {return prod.first_char();}
   void verify() {
     prod.verify();
   }
@@ -414,6 +415,7 @@ public:
     : Prod(o), prod(o.prod.clone(p)) {}
   virtual Prod * clone(Prod * p) {return new PlaceHolderCapture(*this, p);}
   PersistentRes calc_just_persistent() {return prod.calc_persistent();}
+  int first_char() const {return prod.first_char();}
   void verify() {
     prod.verify();
   }
@@ -488,6 +490,7 @@ public:
     prod->verify();
   }
   PersistentRes calc_just_persistent() {return prod->calc_persistent();}
+  int first_char() const {return prod->first_char();}
   void dump() {printf("{"); prod->dump(); printf("}");}
 private:
   Prod * prod;
@@ -518,6 +521,7 @@ public:
   }
   virtual Prod * clone(Prod * p) {return new DescProd(*this, p);}
   PersistentRes calc_just_persistent() {return prod.calc_persistent();}
+  int first_char() const {return prod.first_char();}
   void verify() {prod.verify();}
 private:
   String desc;
@@ -565,6 +569,7 @@ public:
   virtual Prod * clone(Prod * p) {return new Literal(*this);}
   void dump() {printf("'%s'", literal.c_str());}
   PersistentRes calc_just_persistent() {return PersistentRes(true);}
+  int first_char() const {return literal[0];}
 private:
   String literal;
 };
@@ -673,6 +678,7 @@ public:
       r |= end_with_->calc_persistent();
     return r;
   }
+  int first_char() const {return optional ? -2 : prod.first_char();}
   void verify() {prod.verify(); if (end_with_) end_with_->verify();}
 private:
   ProdWrap prod;
@@ -770,6 +776,7 @@ public:
       r |= i->calc_persistent();
     return r;
   }
+  int first_char() const {return prods[0].first_char();}
   void verify() {
     for (Vector<ProdWrap>::iterator 
            i = prods.begin(), e = prods.end(); i != e; ++i)
@@ -1025,7 +1032,7 @@ namespace ParsePeg {
     
     hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
     for (; i != e; ++i) {
-      i->second->calc_persistent();
+      i->second->finalize();
       if (i->second->persistent())
         pprintf("IS PERSISTENT: %s\n", ~i->second->name);
       else
