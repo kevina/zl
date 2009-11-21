@@ -7,7 +7,7 @@
 
 #include <algorithm>
 #include <functional>
-#include <set>
+#include <bitset>
 
 #include "peg.hpp"
 
@@ -19,6 +19,7 @@
 
 #include "hash-t.hpp"
 
+//#define XXX
 
 //#define DUMP_PERFORMANCE_INFO
 
@@ -131,12 +132,34 @@ enum CaptureType {NoCapture, CanGiveCapture, ExplicitCapture, ReparseCapture};
 
 class Prod;
 
-struct PersistentRes {
-  // "val" is only final if deps is empty
-  bool val;
+typedef std::bitset<128> BitSet;
+
+enum {PP_NORMAL, PP_OPTIONAL, PP_PREDICATE};
+
+struct ProdPropsBase {
+#ifdef XXX
+  BitSet first_char;
+  unsigned char first_char_high; // 0 none, 1 some, 2 all
+  unsigned char what; // PP_*
+  bool may_match_empty;
+#endif
+  bool persistent;
+  ProdPropsBase() 
+    : 
+#ifdef XXX
+    first_char_high(0), what(PP_NORMAL), may_match_empty(false), 
+#endif
+      persistent(true) {}
+};
+
+struct ProdProps : public ProdPropsBase {
+  // values are only valid if deps is empty
   Vector<Prod *> deps;
-  PersistentRes(bool v = true) : val(v) {}
-  PersistentRes(Prod * d) : val(true), deps() {deps.push_back(d);}
+  ProdProps() {}
+  ProdProps(const ProdPropsBase & o) : ProdPropsBase(o) {}
+  ProdProps(const ProdProps & o);
+  ProdProps(Prod * d) {deps.push_back(d);}
+  // merge_info does not merge char info
   bool have_dep(Prod * p) const {
     for (Vector<Prod *>::const_iterator 
            i = deps.begin(), e = deps.end(); i != e; ++i)
@@ -155,13 +178,62 @@ struct PersistentRes {
       }
     }
   }
-  void operator |= (const PersistentRes & o) {
-    if (o.val == false) val = false;
+  void merge_info(const ProdProps & o) { 
+    persistent &= o.persistent;
     for (Vector<Prod *>::const_iterator 
            i = o.deps.begin(), e = o.deps.end(); i != e; ++i)
       add_dep(*i);
   }
+  void invert_char_info() {
+#ifdef XXX
+    first_char.flip();
+    first_char_high = 2 - first_char_high;
+    may_match_empty = !may_match_empty;
+#endif
+  }
 };
+
+ProdProps::ProdProps(const ProdProps & o) 
+  : ProdPropsBase(o), deps(o.deps) 
+{
+  printf("COPYING\n");
+}
+
+
+static void merge_for_choice(ProdProps & x, const ProdProps & y) {
+#ifdef XXX
+  x.what = PP_NORMAL;
+  x.first_char |= y.first_char;
+  x.first_char_high = std::max(x.first_char_high,y.first_char_high);
+  x.may_match_empty |= y.may_match_empty;
+#endif
+  x.merge_info(y);
+}
+
+// sequenced need to be merged in the inverse order!
+static void merge_for_seq(const ProdProps & x, ProdProps & y, bool first) {
+#ifdef XXX
+  y.what = PP_NORMAL;
+  if (x.deps.empty()) {
+    if (x.what == PP_NORMAL || first) {
+      y.first_char = x.first_char;
+      y.first_char_high = x.first_char_high;
+      y.may_match_empty = y.may_match_empty;
+      first = false;
+    } else if (x.what == PP_PREDICATE) {
+      y.first_char &= x.first_char;
+      y.first_char_high = std::min(y.first_char_high, x.first_char_high);
+      y.may_match_empty &= x.may_match_empty;
+    } else if (x.what == PP_OPTIONAL) {
+      y.first_char |= x.first_char;
+      y.first_char_high = std::max(y.first_char_high, x.first_char_high);
+      y.may_match_empty |= x.may_match_empty;
+    }
+  }
+#endif
+  y.merge_info(x);
+}
+
 
 class Prod {
 public:
@@ -173,31 +245,16 @@ public:
                                         // placeholder prod "_self"
   virtual void end_with(Prod * p) {}
   virtual void dump() {}
-  virtual void verify() {}
-  bool persistent() const {assert(persistent_ >= 0); return persistent_;}
-  PersistentRes calc_persistent() {
-    if (persistent_ >= 0) return PersistentRes(persistent_);
-    if (persistent_ == -2) return PersistentRes(this);
-    persistent_ = -2;
-    PersistentRes r = calc_just_persistent();
-    r.remove_dep(this);
-    if (r.deps.empty()) 
-      persistent_ = r.val;
-    else
-      persistent_ = -1; // need to try again
-    return r;
-  }
-  virtual PersistentRes calc_just_persistent() = 0;
+  virtual ProdProps finalize() = 0;
   virtual ~Prod() {}
   virtual int first_char() const {return -2;}
+  //virtual bool optional() const = 0;
   Prod(const char * p, const char * e) 
-    : capture_type(NoCapture), pos(p), end(e), persistent_(-1) {}
+    : capture_type(NoCapture), pos(p), end(e) {}
 public: // but don't use
   CaptureType capture_type;
   const char * pos;
   const char * end;
-protected:
-  int persistent_;
 };
 
 enum CaptureQ {DontCapture, DoCapture};
@@ -218,10 +275,9 @@ struct ProdWrap {
   const char * match_f(SourceStr str, ParseErrors & errs) {
     return prod->match_f(str, errs);}
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
-  void verify() {prod->verify();}
-  bool persistent() const {return prod->persistent();}
-  PersistentRes calc_persistent() {return prod->calc_persistent();}
+  ProdProps finalize() {return prod->finalize();}
   int first_char() const {return prod->first_char();}
+  //bool optional() const {return prod->optional();}
 private:
   ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
 };
@@ -234,12 +290,7 @@ public:
     : Prod(s,e), name(n) {capture_type = CanGiveCapture;}
   SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture; set_prod(p);}
-  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
-  int first_char() const {return prod.first_char();}
-  void set_prod(const ProdWrap & p) {prod = p;}
-  void verify() {
-    //assert(prod->capture_type.is_implicit() && prod->capture_type.is_single());
-  }
+  ProdProps finalize() {return prod.finalize();}
   SymProd(const SymProd & other, Prod * p = 0) : Prod(other), name(other.name) 
   {
     if (name == "_self")
@@ -248,7 +299,8 @@ public:
       set_prod(other.prod.clone(p));
   }
   virtual Prod * clone(Prod * p) {return new SymProd(*this, p);} 
-  void dump() {printf("%s", name.c_str());}
+  void set_prod(const ProdWrap & p) {prod = p;}
+  //void dump() {printf("%s", name.c_str());}
 public: // but treat as protected
   String name;
   String desc;
@@ -262,16 +314,35 @@ struct PtrLt {
 
 class NamedProd : public SymProd {
 public:
-  NamedProd(String n) : SymProd(0, 0, n) {}
-  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p) {}
+  NamedProd(String n) : SymProd(0, 0, n), finalize_status(FS_NEED) {}
+  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p), finalize_status(FS_NEED) {}
   virtual Prod * clone(Prod *) {
     return this; // don't copy prod with name
   }
   void dump() {printf("%s", name.c_str());}
-  virtual void finalize() {
-    calc_persistent();
+  ProdProps finalize() {
+    if (finalize_status == FS_DONE) return ProdProps(props);
+    else if (finalize_status == FS_IN_PROGRESS) return ProdProps(this);
+    else return finish_finalize();
+    finalize_status = FS_IN_PROGRESS;
+    //printf("YEAH BABY!\n");
+    ProdProps r = prod.finalize();
+    r.remove_dep(this);
+    if (r.deps.empty()) {
+      props = r;
+      finalize_status = FS_DONE;
+    } else {
+      // will need to try again
+      finalize_status = FS_NEED;
+    }
+    return r;
   }
+  bool persistent() const {return props.persistent;}
   virtual void clear_cache() {}
+public:
+  ProdPropsBase props;
+private:
+  enum FinalizeStatus {FS_NEED, FS_IN_PROGRESS, FS_DONE} finalize_status;
 };
 
 class CachedProd : public NamedProd {
@@ -282,10 +353,6 @@ public:
   CachedProd(String n) : NamedProd(n), first_char_(-3) {/*cs = (char *) GC_MALLOC(256);*/}
   void clear_cache() {lookup.clear();}
   int first_char() const {return first_char_ > -3 ? first_char_ : prod.first_char();}
-  void finalize() {
-    NamedProd::finalize();
-    first_char_ = prod.first_char();
-  }
 private:
   typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
   Lookup lookup;
@@ -536,9 +603,17 @@ public:
     return str.begin;
   }
   AlwaysTrue(const char * p, const char * e) : Prod(p,e) {}
-  virtual Prod * clone(Prod *) {return new AlwaysTrue(*this);}
-  PersistentRes calc_just_persistent() {return PersistentRes(true);}
-  void dump() {printf(" _TRUE ");}
+  Prod * clone(Prod *) {return new AlwaysTrue(*this);}
+  ProdProps finalize() {
+    ProdProps r;
+#ifdef XXX
+    r.first_char.set();
+    r.first_char_high = 2;
+    r.may_match_empty = true;
+#endif
+    return r;
+  }
+  //void dump() {printf(" _TRUE ");}
 };
 
 class Capture : public Prod {
@@ -559,13 +634,9 @@ public:
     : Prod(s,e), prod(p) {capture_type = ExplicitCapture;}
   Capture(Prod * p)
     : Prod(p->pos, p->end), prod(p) {capture_type = ExplicitCapture;}
-  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
+  ProdProps finalize() {return prod->finalize();}
   int first_char() const {return prod->first_char();}
-  void verify() {
-    // FIXME: Make error message
-    //assert(prod->capture_type.is_none() || prod->capture_type.is_single());
-    prod->verify();
-  }
+  //bool optional() const {return prod->optional();}
   Capture(const Capture & o, Prod * p = 0)
     : Prod(o), prod(o.prod->clone(p)) {}
   virtual Capture * clone(Prod * p) {return new Capture(*this, p);}
@@ -587,7 +658,7 @@ public:
   }
   ReparseInner(const char * s, const char * e, Prod * p)
     : Capture(s,e,p) {capture_type = ReparseCapture;}
-  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
+  ProdProps finalize() {return prod->finalize();}
   ReparseInner(const ReparseInner & o, Prod * p = 0) : Capture(o, p) {}
   virtual ReparseInner * clone(Prod * p) {return new ReparseInner(*this, p);}
 };
@@ -718,8 +789,26 @@ Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
   return res2.build(str);
 }
 
+class NamedCaptureBase : public Prod {
+public:
+  const char * match_f(SourceStr str, ParseErrors & errs) {
+    return prod.match_f(str, errs);
+  }
+  // FIXME: Should take in Syntax or SourceStr rater than String so we
+  // can keep track of where the name came from
+  NamedCaptureBase(const char * s, const char * e, const ProdWrap & p)
+    : Prod(s,e), prod(p)
+    {capture_type = ExplicitCapture;}
+  NamedCaptureBase(const NamedCaptureBase & o, Prod * p = 0)
+    : Prod(o), prod(o.prod.clone(p)) {}
+  ProdProps finalize() {return prod.finalize();}
+  int first_char() const {return prod.first_char();}
+  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
+protected:
+  ProdWrap prod;
+};
 
-class NamedCapture : public Prod, public GatherParts {
+class NamedCapture : public NamedCaptureBase , public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
@@ -734,28 +823,16 @@ public:
     add_part(res_syn, parts);
     return r;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs) {
-    return prod.match_f(str, errs);
-  }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
   NamedCapture(const char * s, const char * e, const ProdWrap & p, String n, bool caf = false)
-    : Prod(s,e), GatherParts(n, caf), prod(p)
-    {capture_type = ExplicitCapture;}
+    : NamedCaptureBase(s,e,p), GatherParts(n, caf) {}
   NamedCapture(const NamedCapture & o, Prod * p = 0)
-    : Prod(o), GatherParts(o), prod(o.prod.clone(p)) {}
-  virtual Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
-  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
-  int first_char() const {return prod.first_char();}
-  void verify() {
-    prod.verify();
-  }
-  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
-private:
-  ProdWrap prod;
+    : NamedCaptureBase(o, p), GatherParts(o) {}
+  Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
 };
 
-class PlaceHolderCapture : public Prod {
+class PlaceHolderCapture : public NamedCaptureBase {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
@@ -777,30 +854,17 @@ public:
     } 
     return r;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs) {
-    return prod.match_f(str, errs);
-  }
-    
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
   PlaceHolderCapture(const char * s, const char * e, const ProdWrap & p)
-    : Prod(s,e), prod(p)
-    {capture_type = ExplicitCapture;}
+    : NamedCaptureBase(s,e,p) {}
   PlaceHolderCapture(const PlaceHolderCapture & o, Prod * p = 0)
-    : Prod(o), prod(o.prod.clone(p)) {}
-  virtual Prod * clone(Prod * p) {return new PlaceHolderCapture(*this, p);}
-  PersistentRes calc_just_persistent() {return prod.calc_persistent();}
-  int first_char() const {return prod.first_char();}
-  void verify() {
-    prod.verify();
-  }
-  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
-private:
-  ProdWrap prod;
+    : NamedCaptureBase(o, p) {}
+  Prod * clone(Prod * p) {return new PlaceHolderCapture(*this, p);}
 };
 
 
-class GatherPartsProd : public Prod, public GatherParts {
+class GatherPartsProd : public AlwaysTrue, public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
@@ -817,20 +881,14 @@ public:
     add_part(res_syn, res);
     return MatchRes(str.begin, NULL);
   }
-  const char * match_f(SourceStr str, ParseErrors & errs) {
-    return str.begin;
-  }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
   GatherPartsProd(const char * s, const char * e, String n, bool caf = false)
-    : Prod(s,e), GatherParts(n, caf)
+    : AlwaysTrue(s,e), GatherParts(n, caf)
     {capture_type = ExplicitCapture;}
   GatherPartsProd(const GatherPartsProd & o, Prod * p = 0)
-    : Prod(o), GatherParts(o) {}
+    : AlwaysTrue(o), GatherParts(o) {}
   virtual Prod * clone(Prod * p) {return new GatherPartsProd(*this, p);}
-  PersistentRes calc_just_persistent() {return PersistentRes(true);}
-  void verify() {}
-  void dump() {/*printf("{"); prod->dump(); printf("}");*/}
 };
 
 class ReparseOuter : public Prod {
@@ -861,10 +919,7 @@ public:
   ReparseOuter(const ReparseOuter & o, Prod * p = 0)
     : Prod(o), prod(o.prod->clone(p)), name(o.name) {}
   virtual Prod * clone(Prod * p) {return new ReparseOuter(*this, p);}
-  void verify() {
-    prod->verify();
-  }
-  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
+  ProdProps finalize() {return prod->finalize();}
   int first_char() const {return prod->first_char();}
   void dump() {printf("{"); prod->dump(); printf("}");}
 private:
@@ -912,8 +967,18 @@ public:
     : Prod(s,e), literal(l) {}
   virtual Prod * clone(Prod * p) {return new Literal(*this);}
   void dump() {printf("'%s'", literal.c_str());}
-  PersistentRes calc_just_persistent() {return PersistentRes(true);}
   int first_char() const {return literal[0];}
+  ProdProps finalize() {
+    ProdProps r;
+#ifdef XXX
+    unsigned char c = literal[0];
+    if (c < 128)
+      r.first_char.set(c, 1);
+    else
+      r.first_char_high = true;
+#endif
+    return r;
+  }
 private:
   String literal;
 };
@@ -937,8 +1002,21 @@ public:
   CharClass(const char * s, const char * e, const CharSet & cs0) 
     : Prod(s,e), cs(cs0) {}
   virtual Prod * clone(Prod * p) {return new CharClass(*this);}
-  void dump() {printf("[]");}
-  PersistentRes calc_just_persistent() {return PersistentRes(true);}
+  //void dump() {printf("[]");}
+  ProdProps finalize() {
+    ProdProps r;
+#ifdef XXX
+    for (unsigned i = 0; i < 128; ++i)
+      if (cs[i]) r.first_char.set(i, 1);
+    int c = 0;
+    for (unsigned i = 128; i < 256; ++i)
+      if (cs[i]) ++c;
+    if (c == 0) r.first_char_high = 0;
+    else if (c < 128) r.first_char_high = 1;
+    else r.first_char_high = 2;
+#endif
+    return r;
+  }
 private:
   CharSet cs;
 };
@@ -959,7 +1037,14 @@ public:
   Any(const char * s, const char * e) : Prod(s,e) {}
   virtual Prod * clone(Prod * p) {return new Any(*this);}
   void dump() {printf("_");}
-  PersistentRes calc_just_persistent() {return PersistentRes(true);}
+  ProdProps finalize() {
+    ProdProps r;
+#ifdef XXX
+    r.first_char.set();
+    r.first_char_high = true;
+#endif
+    return r;
+  }
 };
 
 class Repeat : public Prod {
@@ -1016,14 +1101,22 @@ public:
   virtual void end_with(Prod * p);
   virtual Prod * clone(Prod * p) {return new Repeat(*this, p);}
   void dump() {}
-  PersistentRes calc_just_persistent() {
-    PersistentRes r = prod.calc_persistent();
-    if (end_with_)
-      r |= end_with_->calc_persistent();
+  ProdProps finalize() {
+    ProdProps r;
+    bool first = true;
+    merge_for_seq(prod.finalize(), r, first);
+    if (end_with_) {
+      ProdProps r0 = end_with_->finalize();
+      r0.invert_char_info();
+      merge_for_seq(r0, r, first);
+    }
+#ifdef XXX
+    if (optional)
+      r.may_match_empty = true;
+#endif
     return r;
   }
   int first_char() const {return optional ? -2 : prod.first_char();}
-  void verify() {prod.verify(); if (end_with_) end_with_->verify();}
 private:
   ProdWrap prod;
   bool optional;
@@ -1053,9 +1146,19 @@ public:
     : Prod(o), prod(o.prod->clone(p)), 
       invert(o.invert), dont_match_empty(o.dont_match_empty) {}
   virtual Prod * clone(Prod * p) {return new Predicate(*this, p);}
-  void dump() {}
-  PersistentRes calc_just_persistent() {return prod->calc_persistent();}
-  void verify() {prod->verify();}
+  //void dump() {}
+  ProdProps finalize() {
+    ProdProps r = prod->finalize();
+#ifdef XXX
+    r.what = PP_PREDICATE;
+    if (dont_match_empty)
+      r.may_match_empty = false;
+    if (invert) {
+      r.invert_char_info();
+    }
+#endif
+    return r;
+  }
 private:
   Prod * prod;
   bool invert;
@@ -1113,20 +1216,17 @@ public:
   Seq(const char * s, const char * e, const Vector<ProdWrap> & p)
     : Prod(s, e), prods(p) 
     {capture_type = get_capture_type(prods);}
-  PersistentRes calc_just_persistent() {
-    PersistentRes r;
-    for (Vector<ProdWrap>::iterator 
-           i = prods.begin(), e = prods.end(); i != e; ++i)
-      r |= i->calc_persistent();
+  ProdProps finalize() {
+    Vector<ProdWrap>::reverse_iterator 
+      i = prods.rbegin(), e = prods.rend();
+    ProdProps r;
+    bool first = true;
+    for (; i != e; ++i)
+      merge_for_seq(i->finalize(), r, first);
     return r;
   }
-  int first_char() const {return prods[0].first_char();}
-  void verify() {
-    for (Vector<ProdWrap>::iterator 
-           i = prods.begin(), e = prods.end(); i != e; ++i)
-      i->verify();
-  }
 
+  int first_char() const {return prods[0].first_char();}
   Seq(const Seq & o, Prod * p = 0) : Prod(o) {
     prods.reserve(o.prods.size());
     for (Vector<ProdWrap>::const_iterator 
@@ -1176,24 +1276,135 @@ public:
       prods.push_back(i->clone(p));
     }
   }
-  PersistentRes calc_just_persistent() {
-    PersistentRes r;
-    for (Vector<ProdWrap>::iterator 
-           i = prods.begin(), e = prods.end(); i != e; ++i)
-      r |= i->calc_persistent();
-    return r;
-  }
-  void verify() {
-    for (Vector<ProdWrap>::iterator 
-           i = prods.begin(), e = prods.end(); i != e; ++i) {
-      i->verify();
-    }
-  }
+  ProdProps finalize();
   virtual Prod * clone(Prod * p) {return new Choice(*this, p);}
   void dump() {}
 private:
+  static const unsigned CHAR_HIGH = 128;
+  static const unsigned CHAR_EOF = 129;
   Vector<ProdWrap> prods;
+  ProdWrap * * jump_table;
+  ProdWrap * jump_table_data;
 };
+
+struct WorkingNode {
+  ProdWrap * prod;
+  enum {LAST_PREPENDED, LEN, JUMP_POS} tag;
+  union {
+    WorkingNode * last_prepended;
+    unsigned len;
+    ProdWrap * jump_pos;
+  };
+  WorkingNode * next;
+  WorkingNode(ProdWrap * p, WorkingNode * n = NULL)
+    : prod(p), tag(LAST_PREPENDED), next(n) {last_prepended = NULL;}
+};
+
+static inline void prepend_node(WorkingNode * & t, ProdWrap * p) {
+  WorkingNode * n = t->last_prepended;
+  if (!n || n->prod != p) {
+    n = new WorkingNode(p, t);
+    t->tag = WorkingNode::LAST_PREPENDED;
+    t->last_prepended = n;
+  }
+  t = n;
+}
+
+
+
+ProdProps Choice::finalize() {
+  typedef WorkingNode Node;
+  ProdProps res;
+  Vector<ProdWrap>::iterator 
+    i = prods.begin(), e = prods.end();
+  Node * dummy = NULL;
+  Node * sel[130];
+  bool do_jump_table = prods.size() > 3;
+  //printf("DO JUMP TABLE: %d\n", do_jump_table);
+  if (do_jump_table) {
+    dummy = new Node(NULL);
+    for (unsigned i = 0; i < 130; ++i)
+      sel[i] = dummy;
+  }
+  for (; i != e; ++i) {
+    ProdProps r = i->finalize();
+    merge_for_choice(res, i->finalize());
+#ifdef XXX
+    if (do_jump_table) {
+      for (unsigned j = 0; j < 128; ++j) {
+        if (r.first_char[j])
+          prepend_node(sel[j], &*i);
+      }
+      if (r.first_char_high) 
+        prepend_node(sel[CHAR_HIGH], &*i);
+      if (r.may_match_empty)
+        prepend_node(sel[CHAR_EOF], &*i);
+    }
+#endif
+  }
+#ifdef XXX
+  if (do_jump_table) {
+    unsigned num = 0;
+    unsigned total_len = 0;
+    unsigned min_len = UINT_MAX;
+    dummy->tag = Node::LEN;
+    dummy->len = 0;
+    for (unsigned j = 0; j < 130; ++j) {
+      if (sel[j]->tag == Node::LAST_PREPENDED) {
+        unsigned len = 0;
+        for (Node * n = sel[j]; n != dummy; n = n->next)
+          len++;
+        num += 1;
+        total_len += len;
+        min_len = std::min(min_len, len);
+        assert(sel[j]->prod);
+        sel[j]->tag = Node::LEN;
+        sel[j]->len = len;
+      }
+    }
+    if (min_len >= prods.size() - 1) {
+      goto ret;
+    }
+    jump_table = (ProdWrap * *)GC_MALLOC(sizeof(void *) * 130);
+    unsigned jump_table_data_size = num + total_len + 1;
+    jump_table_data = (ProdWrap *)GC_MALLOC(sizeof(Prod) * jump_table_data_size);
+    new (jump_table_data + 0) ProdWrap;
+    ProdWrap * pos = jump_table_data + 1;
+    for (unsigned j = 0; j < 130; ++j) {
+      if (sel[j]->tag == Node::JUMP_POS) {
+        jump_table[j] = sel[j]->jump_pos;
+      } else if (sel[j]->len == 0) {
+        jump_table[j] = jump_table_data + 0;
+      } else if (sel[j]->len > 0) {
+        assert(pos - jump_table_data < jump_table_data_size);
+        unsigned len = sel[j]->len;
+        // the data is in the reverse order...
+        pos += len + 1;
+        new (--pos) ProdWrap;
+        for (Node * n = sel[j]; n != dummy; n = n->next) {
+          new (--pos) ProdWrap(*n->prod);
+        }
+        jump_table[j] = pos;
+        sel[j]->tag = Node::JUMP_POS;
+        sel[j]->jump_pos = pos;
+        pos += len + 1;
+      }
+    }
+    //printf("\n---\nww %u\n", prods.size());
+    //for (unsigned j = 0; j != 130; ++j) {
+    //  printf("xx %u %u\n", j, jump_table[j] - jump_table_data);
+    //}
+    //for (unsigned j = 0; j != jump_table_data_size; ++j) {
+    //  if (!jump_table_data[j].prod) printf("\n" "yy %u:", j + 1);
+    //  else printf(" %p", jump_table_data[j].prod);
+    //}
+    //printf("\n");
+  }
+#endif
+ret:
+  return res;
+}
+
 
 // FIXME: These should't be global
 bool in_repl = false;
@@ -1243,7 +1454,7 @@ public:
   S_MId(const S_MId & o, Prod * p = 0)
     : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod->clone(p)) {}
   virtual Prod * clone(Prod * p) {return new S_MId(*this, p);}
-  PersistentRes calc_just_persistent() {return PersistentRes(false);}
+  ProdProps finalize() {ProdProps r = prod->finalize(); r.persistent = false; return r;}
 private:
   String in_named_prod;
   Prod * prod;
@@ -1330,12 +1541,12 @@ namespace ParsePeg {
         pprintf("PARSING TOKEN PROD: %s\n", ~sample(str, sr.end));
         str = sr.end;
         str = require_symbol('"', str, end);
-        sr.prod->verify();
+        //sr.prod->verify();
         String desc;
         str = opt_desc(str, end, desc);
         str = require_symbol('=', str, end);
         Res r = peg(str, end, ';');
-        r.prod->verify();
+        //r.prod->verify();
         token_rules.push_back(TokenRule(sr.prod, r.prod, desc));
         str = r.end;
       } else {
@@ -1350,7 +1561,7 @@ namespace ParsePeg {
         str = require_symbol('=', str, end);
         //bool explicit_capture = false;
         Res r = peg(str, end, ';');
-        r.prod->verify();
+        //r.prod->verify();
         //if (name == "SPLIT_FLAG") stop();
         p->desc = desc;
         p->set_prod(r);
@@ -1381,6 +1592,15 @@ namespace ParsePeg {
         pprintf("IS PERSISTENT: %s\n", ~i->second->name);
       else
         pprintf("is not persistent: %s\n", ~i->second->name);
+      //printf("%s INFO:\n", ~i->second->name);
+      //for (unsigned j = 0; j < 128; ++j) {
+      //  if (i->second->props.first_char[j]) 
+      //    printf("  may have %u '%c'\n", j, (j >= 32 && j < 127 ? j : ' '));
+      //}
+      //if (i->second->props.first_char_high)
+      //  printf("  may have first char high (%u)\n", i->second->props.first_char_high);
+      //if (i->second->props.may_match_empty)
+      //  printf("  may match empty\n");
     }
     pprintf("PERSISTENT DONE\n");
   }
