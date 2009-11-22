@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <functional>
 #include <bitset>
+#include <typeinfo>
 
 #include "peg.hpp"
 
@@ -19,7 +20,7 @@
 
 #include "hash-t.hpp"
 
-//#define XXX
+#define XXX
 
 //#define DUMP_PERFORMANCE_INFO
 
@@ -32,6 +33,8 @@
 using std::pair;
 
 struct Prod;
+
+static unsigned indent_level = 0;
 
 // FIXME: Need more effect representation for const strings
 //        (Pool of strings, hash lookup, ...)
@@ -150,6 +153,12 @@ struct ProdPropsBase {
     first_char_high(0), what(PP_NORMAL), may_match_empty(false), 
 #endif
       persistent(true) {}
+  void reset() {
+    first_char.reset();
+    first_char_high = 0;
+    what = PP_NORMAL;
+    may_match_empty = false;
+  }
 };
 
 struct ProdProps : public ProdPropsBase {
@@ -157,9 +166,10 @@ struct ProdProps : public ProdPropsBase {
   Vector<Prod *> deps;
   ProdProps() {}
   ProdProps(const ProdPropsBase & o) : ProdPropsBase(o) {}
-  ProdProps(const ProdProps & o);
   ProdProps(Prod * d) {deps.push_back(d);}
   // merge_info does not merge char info
+  bool no_deps() const {return deps.empty();}
+  bool have_deps() const {return !deps.empty();}
   bool have_dep(Prod * p) const {
     for (Vector<Prod *>::const_iterator 
            i = deps.begin(), e = deps.end(); i != e; ++i)
@@ -191,14 +201,32 @@ struct ProdProps : public ProdPropsBase {
     may_match_empty = !may_match_empty;
 #endif
   }
+  void reset() {
+    ProdPropsBase::reset();
+    deps.clear();
+  }
 };
 
-ProdProps::ProdProps(const ProdProps & o) 
-  : ProdPropsBase(o), deps(o.deps) 
-{
-  printf("COPYING\n");
-}
-
+#if 0
+struct ProdProps : public ProdPropsBase {
+  // values are only valid if dep is NULL;
+  Prod * dep;
+  ProdProps(Prod * d = NULL) : dep(d) {}
+  // merge_info does not merge char info
+  inline void merge_info(const ProdProps & o);
+  void invert_char_info() {
+#ifdef XXX
+    first_char.flip();
+    first_char_high = 2 - first_char_high;
+    may_match_empty = !may_match_empty;
+#endif
+  }
+  void reset() {
+    ProdPropsBase::reset();
+    dep = NULL;
+  }
+};
+#endif
 
 static void merge_for_choice(ProdProps & x, const ProdProps & y) {
 #ifdef XXX
@@ -214,7 +242,7 @@ static void merge_for_choice(ProdProps & x, const ProdProps & y) {
 static void merge_for_seq(const ProdProps & x, ProdProps & y, bool first) {
 #ifdef XXX
   y.what = PP_NORMAL;
-  if (x.deps.empty()) {
+  if (x.no_deps()) {
     if (x.what == PP_NORMAL || first) {
       y.first_char = x.first_char;
       y.first_char_high = x.first_char_high;
@@ -245,17 +273,62 @@ public:
                                         // placeholder prod "_self"
   virtual void end_with(Prod * p) {}
   virtual void dump() {}
-  virtual ProdProps finalize() = 0;
+  // calc_props should also set props_ if the value is final (ie no
+  // deps)
+  virtual const ProdProps & calc_props() {abort();}
+  const ProdProps & props() const {assert (props_); return *props_;}
+  const ProdProps & props() {
+    //printf("%*c:(%s):%p(%p):%s\n", indent_level, ' ', typeid(*this).
+    //       name(), props_, (props_ ? props_->dep : NULL),
+    //       pos ? ~sample(pos, end, 40) : "");
+    if (!props_) {
+      //indent_level++;
+      const ProdProps & r = calc_props(); 
+      //indent_level--;
+      return r;
+    } else {
+      //if (!d_name().empty()) printf("%*c#%s\n", indent_level, ' ', ~d_name());
+      return *props_;
+    }
+  }
+  void set_props(const ProdProps & o) {if (o.no_deps()) props_ = &o;}
   virtual ~Prod() {}
   virtual int first_char() const {return -2;}
+  virtual String d_name() const {return String();}
   //virtual bool optional() const = 0;
   Prod(const char * p, const char * e) 
-    : capture_type(NoCapture), pos(p), end(e) {}
-public: // but don't use
+    : capture_type(NoCapture), pos(p), end(e), props_(NULL) {}
+public: // but don't useq
   CaptureType capture_type;
   const char * pos;
   const char * end;
+protected:
+  const ProdProps * props_;
 };
+
+#if 0
+class DummyProd  : public Prod {
+public:
+  DummyProd() : Prod(NULL, NULL) {}
+  MatchRes match(SourceStr str, SynBuilder * parts) {abort();}
+  const char * match_f(SourceStr str, ParseErrors & errs) {abort();}
+  Prod * clone(Prod * = 0) {abort();}
+};
+
+DummyProd DUMMY_PROD;
+
+inline void ProdProps::merge_info(const ProdProps & o) { 
+  persistent &= o.persistent;
+  if (o.dep) {
+    if (!dep || dep == o.dep) dep = o.dep;
+    else {
+      printf("%*c??%p %p <%p>\n", indent_level, ' ', dep, o.dep, &DUMMY_PROD);
+      dep = &DUMMY_PROD;
+    }
+  }
+}
+#endif
+
 
 enum CaptureQ {DontCapture, DoCapture};
 
@@ -275,7 +348,7 @@ struct ProdWrap {
   const char * match_f(SourceStr str, ParseErrors & errs) {
     return prod->match_f(str, errs);}
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
-  ProdProps finalize() {return prod->finalize();}
+  const ProdProps & props() {return prod->props();}
   int first_char() const {return prod->first_char();}
   //bool optional() const {return prod->optional();}
 private:
@@ -290,7 +363,11 @@ public:
     : Prod(s,e), name(n) {capture_type = CanGiveCapture;}
   SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture; set_prod(p);}
-  ProdProps finalize() {return prod.finalize();}
+  const ProdProps & calc_props() {
+    const ProdProps & r = prod.props();
+    set_props(r);
+    return r;
+  }
   SymProd(const SymProd & other, Prod * p = 0) : Prod(other), name(other.name) 
   {
     if (name == "_self")
@@ -314,35 +391,36 @@ struct PtrLt {
 
 class NamedProd : public SymProd {
 public:
-  NamedProd(String n) : SymProd(0, 0, n), finalize_status(FS_NEED) {}
-  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p), finalize_status(FS_NEED) {}
+  NamedProd(String n) : SymProd(0, 0, n), props_this(this) {}
+  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p) {}
   virtual Prod * clone(Prod *) {
     return this; // don't copy prod with name
   }
   void dump() {printf("%s", name.c_str());}
-  ProdProps finalize() {
-    if (finalize_status == FS_DONE) return ProdProps(props);
-    else if (finalize_status == FS_IN_PROGRESS) return ProdProps(this);
-    else return finish_finalize();
-    finalize_status = FS_IN_PROGRESS;
+  const ProdProps & calc_props() {
+    assert(!props_);
+    props_ = &props_this;
+    //printf("%*cFINALIZING %s %p\n", indent_level, ' ', ~name, this);
+    //indent_level += 2;
     //printf("YEAH BABY!\n");
-    ProdProps r = prod.finalize();
-    r.remove_dep(this);
-    if (r.deps.empty()) {
-      props = r;
-      finalize_status = FS_DONE;
+    props_obj = prod.props();
+    //indent_level -= 2;
+    props_obj.remove_dep(this);
+    if (props_obj.no_deps()) {
+      //printf("%*cSUCCESS %s\n", indent_level, ' ', ~name);
+      props_ = &props_obj;
     } else {
-      // will need to try again
-      finalize_status = FS_NEED;
+      //printf("%*cFAILED %s\n", indent_level, ' ', ~name);
+      props_ = NULL;
     }
-    return r;
+    return props_obj;
   }
-  bool persistent() const {return props.persistent;}
+  String d_name() const {return name;}
+  bool persistent() const {return props().persistent;}
   virtual void clear_cache() {}
 public:
-  ProdPropsBase props;
-private:
-  enum FinalizeStatus {FS_NEED, FS_IN_PROGRESS, FS_DONE} finalize_status;
+  ProdProps props_this;
+  ProdProps props_obj;
 };
 
 class CachedProd : public NamedProd {
@@ -461,8 +539,6 @@ namespace ParsePeg {class Parse;}
 //namespace Peg {
 
 class Capture;
-
-static unsigned indent_level = 0;
 
 MatchRes SymProd::match(SourceStr str, SynBuilder * parts) {
   if (!parts) return prod.match(str,NULL);
@@ -602,17 +678,14 @@ public:
   const char * match_f(SourceStr str, ParseErrors & errs) {
     return str.begin;
   }
-  AlwaysTrue(const char * p, const char * e) : Prod(p,e) {}
-  Prod * clone(Prod *) {return new AlwaysTrue(*this);}
-  ProdProps finalize() {
-    ProdProps r;
-#ifdef XXX
-    r.first_char.set();
-    r.first_char_high = 2;
-    r.may_match_empty = true;
-#endif
-    return r;
+  AlwaysTrue(const char * p, const char * e) : Prod(p,e) {
+    props_obj.first_char.set();
+    props_obj.first_char_high = 2;
+    props_obj.may_match_empty = true;
+    props_ = &props_obj;
   }
+  Prod * clone(Prod *) {return new AlwaysTrue(*this);}
+  ProdProps props_obj;
   //void dump() {printf(" _TRUE ");}
 };
 
@@ -634,7 +707,11 @@ public:
     : Prod(s,e), prod(p) {capture_type = ExplicitCapture;}
   Capture(Prod * p)
     : Prod(p->pos, p->end), prod(p) {capture_type = ExplicitCapture;}
-  ProdProps finalize() {return prod->finalize();}
+  const ProdProps & calc_props() {
+    const ProdProps & r = prod->props();
+    set_props(r);
+    return r;
+  }
   int first_char() const {return prod->first_char();}
   //bool optional() const {return prod->optional();}
   Capture(const Capture & o, Prod * p = 0)
@@ -658,7 +735,6 @@ public:
   }
   ReparseInner(const char * s, const char * e, Prod * p)
     : Capture(s,e,p) {capture_type = ReparseCapture;}
-  ProdProps finalize() {return prod->finalize();}
   ReparseInner(const ReparseInner & o, Prod * p = 0) : Capture(o, p) {}
   virtual ReparseInner * clone(Prod * p) {return new ReparseInner(*this, p);}
 };
@@ -801,7 +877,11 @@ public:
     {capture_type = ExplicitCapture;}
   NamedCaptureBase(const NamedCaptureBase & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)) {}
-  ProdProps finalize() {return prod.finalize();}
+  const ProdProps & calc_props() {
+    const ProdProps & r = prod.props();
+    set_props(r);
+    return r;
+  }
   int first_char() const {return prod.first_char();}
   void dump() {/*printf("{"); prod->dump(); printf("}");*/}
 protected:
@@ -919,7 +999,11 @@ public:
   ReparseOuter(const ReparseOuter & o, Prod * p = 0)
     : Prod(o), prod(o.prod->clone(p)), name(o.name) {}
   virtual Prod * clone(Prod * p) {return new ReparseOuter(*this, p);}
-  ProdProps finalize() {return prod->finalize();}
+  const ProdProps & calc_props() {
+    const ProdProps & r = prod->props();
+    set_props(r);
+    return r;
+  }
   int first_char() const {return prod->first_char();}
   void dump() {printf("{"); prod->dump(); printf("}");}
 private:
@@ -964,23 +1048,21 @@ public:
     }
   }  
   Literal(const char * s, const char * e, String l)
-    : Prod(s,e), literal(l) {}
+    : Prod(s,e), literal(l) 
+    {
+      unsigned char c = literal[0];
+      if (c < 128)
+        props_obj.first_char.set(c, 1);
+      else
+        props_obj.first_char_high = true;
+      props_ = &props_obj;
+    }
   virtual Prod * clone(Prod * p) {return new Literal(*this);}
   void dump() {printf("'%s'", literal.c_str());}
   int first_char() const {return literal[0];}
-  ProdProps finalize() {
-    ProdProps r;
-#ifdef XXX
-    unsigned char c = literal[0];
-    if (c < 128)
-      r.first_char.set(c, 1);
-    else
-      r.first_char_high = true;
-#endif
-    return r;
-  }
 private:
   String literal;
+  ProdProps props_obj;
 };
 
 class CharClass : public Prod {
@@ -1000,25 +1082,23 @@ public:
     }
   }
   CharClass(const char * s, const char * e, const CharSet & cs0) 
-    : Prod(s,e), cs(cs0) {}
+    : Prod(s,e), cs(cs0)
+    {
+      for (unsigned i = 0; i < 128; ++i)
+        if (cs[i]) props_obj.first_char.set(i, 1);
+      int c = 0;
+      for (unsigned i = 128; i < 256; ++i)
+        if (cs[i]) ++c;
+      if (c == 0) props_obj.first_char_high = 0;
+      else if (c < 128) props_obj.first_char_high = 1;
+      else props_obj.first_char_high = 2;
+      props_ = &props_obj;
+    }
   virtual Prod * clone(Prod * p) {return new CharClass(*this);}
   //void dump() {printf("[]");}
-  ProdProps finalize() {
-    ProdProps r;
-#ifdef XXX
-    for (unsigned i = 0; i < 128; ++i)
-      if (cs[i]) r.first_char.set(i, 1);
-    int c = 0;
-    for (unsigned i = 128; i < 256; ++i)
-      if (cs[i]) ++c;
-    if (c == 0) r.first_char_high = 0;
-    else if (c < 128) r.first_char_high = 1;
-    else r.first_char_high = 2;
-#endif
-    return r;
-  }
 private:
   CharSet cs;
+  ProdProps props_obj;
 };
 
 class Any : public Prod {
@@ -1034,17 +1114,15 @@ public:
     errs.push_back(new ParseError(pos, str, "<EOF>"));
     return FAIL;
   }
-  Any(const char * s, const char * e) : Prod(s,e) {}
+  Any(const char * s, const char * e) : Prod(s,e) 
+    {
+      props_obj.first_char.set();
+      props_obj.first_char_high = true;
+      props_ = &props_obj;
+    }
   virtual Prod * clone(Prod * p) {return new Any(*this);}
   void dump() {printf("_");}
-  ProdProps finalize() {
-    ProdProps r;
-#ifdef XXX
-    r.first_char.set();
-    r.first_char_high = true;
-#endif
-    return r;
-  }
+  ProdProps props_obj;
 };
 
 class Repeat : public Prod {
@@ -1101,24 +1179,26 @@ public:
   virtual void end_with(Prod * p);
   virtual Prod * clone(Prod * p) {return new Repeat(*this, p);}
   void dump() {}
-  ProdProps finalize() {
-    ProdProps r;
+  const ProdProps & calc_props() {
+    props_obj.reset();
     bool first = true;
-    merge_for_seq(prod.finalize(), r, first);
+    merge_for_seq(prod.props(), props_obj, first);
     if (end_with_) {
-      ProdProps r0 = end_with_->finalize();
+      ProdProps r0 = end_with_->props();
       r0.invert_char_info();
-      merge_for_seq(r0, r, first);
+      merge_for_seq(r0, props_obj, first);
     }
 #ifdef XXX
     if (optional)
-      r.may_match_empty = true;
+      props_obj.may_match_empty = true;
 #endif
-    return r;
+    set_props(props_obj);
+    return props_obj;
   }
   int first_char() const {return optional ? -2 : prod.first_char();}
 private:
   ProdWrap prod;
+  ProdProps props_obj;
   bool optional;
   bool once;
   Prod * end_with_;
@@ -1147,20 +1227,22 @@ public:
       invert(o.invert), dont_match_empty(o.dont_match_empty) {}
   virtual Prod * clone(Prod * p) {return new Predicate(*this, p);}
   //void dump() {}
-  ProdProps finalize() {
-    ProdProps r = prod->finalize();
+  const ProdProps & calc_props() {
+    props_obj = prod->props();
 #ifdef XXX
-    r.what = PP_PREDICATE;
+    props_obj.what = PP_PREDICATE;
     if (dont_match_empty)
-      r.may_match_empty = false;
+      props_obj.may_match_empty = false;
     if (invert) {
-      r.invert_char_info();
+      props_obj.invert_char_info();
     }
+    set_props(props_obj);
 #endif
-    return r;
+    return props_obj;
   }
 private:
   Prod * prod;
+  ProdProps props_obj;
   bool invert;
   bool dont_match_empty;
 };
@@ -1216,14 +1298,15 @@ public:
   Seq(const char * s, const char * e, const Vector<ProdWrap> & p)
     : Prod(s, e), prods(p) 
     {capture_type = get_capture_type(prods);}
-  ProdProps finalize() {
+  const ProdProps & calc_props() {
     Vector<ProdWrap>::reverse_iterator 
       i = prods.rbegin(), e = prods.rend();
-    ProdProps r;
+    props_obj.reset();
     bool first = true;
     for (; i != e; ++i)
-      merge_for_seq(i->finalize(), r, first);
-    return r;
+      merge_for_seq(i->props(), props_obj, first);
+    set_props(props_obj);
+    return props_obj;
   }
 
   int first_char() const {return prods[0].first_char();}
@@ -1239,19 +1322,39 @@ public:
   void dump() {}
 private:
   Vector<ProdWrap> prods;
+  ProdProps props_obj;
 };
 
 class Choice : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
-    Vector<ProdWrap>::iterator 
-      i = prods.begin(), e = prods.end();
     const char * read_to = NULL;
-    while (i != e) {
-      MatchRes r = i->match(str, parts);
-      read_to = std::max(read_to, r.read_to);
-      if (r) return MatchRes(r.end, read_to);
-      ++i;
+    if (false && jump_table) {
+      ProdWrap * i;
+      if (str.empty())
+        i = jump_table[CHAR_EOF];
+      else {
+        unsigned c = str[0];
+        if (c < 128)
+          i = jump_table[c];
+        else
+          i = jump_table[CHAR_HIGH];
+      }
+      while (i->prod) {
+        MatchRes r = i->match(str, parts);
+        read_to = std::max(read_to, r.read_to);
+        if (r) return MatchRes(r.end, read_to);
+        ++i;
+      }
+    } else {
+      Vector<ProdWrap>::iterator 
+        i = prods.begin(), e = prods.end();
+      while (i != e) {
+        MatchRes r = i->match(str, parts);
+        read_to = std::max(read_to, r.read_to);
+        if (r) return MatchRes(r.end, read_to);
+        ++i;
+      }
     }
     return MatchRes(FAIL, read_to);
   }
@@ -1266,9 +1369,9 @@ public:
     return FAIL;
   }
   Choice(const char * s, const char * e, const Vector<ProdWrap> & p)
-    : Prod(s, e), prods(p) 
+    : Prod(s, e), prods(p), jump_table() 
     {capture_type = get_capture_type(prods);}
-  Choice(const Choice & o, Prod * p = 0) : Prod(o) {
+  Choice(const Choice & o, Prod * p = 0) : Prod(o), jump_table() {
     prods.reserve(o.prods.size());
     for (Vector<ProdWrap>::const_iterator 
            i = o.prods.begin(), e = o.prods.end(); i != e; ++i) 
@@ -1276,13 +1379,22 @@ public:
       prods.push_back(i->clone(p));
     }
   }
-  ProdProps finalize();
+  const ProdProps & calc_props() {
+    Vector<ProdWrap>::iterator 
+      i = prods.begin(), e = prods.end();
+    props_obj.reset();
+    for (; i != e; ++i)
+      merge_for_choice(props_obj, i->props());
+    set_props(props_obj);
+    return props_obj;
+  }
   virtual Prod * clone(Prod * p) {return new Choice(*this, p);}
   void dump() {}
 private:
   static const unsigned CHAR_HIGH = 128;
   static const unsigned CHAR_EOF = 129;
   Vector<ProdWrap> prods;
+  ProdProps props_obj;
   ProdWrap * * jump_table;
   ProdWrap * jump_table_data;
 };
@@ -1311,7 +1423,7 @@ static inline void prepend_node(WorkingNode * & t, ProdWrap * p) {
 }
 
 
-
+#if 0
 ProdProps Choice::finalize() {
   typedef WorkingNode Node;
   ProdProps res;
@@ -1331,9 +1443,12 @@ ProdProps Choice::finalize() {
     merge_for_choice(res, i->finalize());
 #ifdef XXX
     if (do_jump_table) {
+      printf("%*c<>%d\n", indent_level, ' ', i - prods.begin());
       for (unsigned j = 0; j < 128; ++j) {
-        if (r.first_char[j])
+        if (r.first_char[j]) {
+          printf("%*c  HAVE %d\n", indent_level, ' ', j); 
           prepend_node(sel[j], &*i);
+        }
       }
       if (r.first_char_high) 
         prepend_node(sel[CHAR_HIGH], &*i);
@@ -1390,20 +1505,26 @@ ProdProps Choice::finalize() {
         pos += len + 1;
       }
     }
-    //printf("\n---\nww %u\n", prods.size());
-    //for (unsigned j = 0; j != 130; ++j) {
-    //  printf("xx %u %u\n", j, jump_table[j] - jump_table_data);
-    //}
-    //for (unsigned j = 0; j != jump_table_data_size; ++j) {
-    //  if (!jump_table_data[j].prod) printf("\n" "yy %u:", j + 1);
-    //  else printf(" %p", jump_table_data[j].prod);
-    //}
-    //printf("\n");
+    printf("\n%*c---\nww %u\n", indent_level, ' ', prods.size());
+    for (unsigned j = 0; j != 130; ++j) {
+      printf("xx %u (%c) %u\n", j, (j >= 32 && j < 127 ? j : '?'), jump_table[j] - jump_table_data);
+    }
+    for (unsigned j = 0; j != jump_table_data_size; ++j) {
+      if (!jump_table_data[j].prod) printf("\n" "yy %u:", j + 1);
+      else {
+        Vector<ProdWrap>::iterator i = prods.begin(), e = prods.end();
+        while (i != e && i->prod != jump_table_data[j].prod) ++i;
+        assert (i != e);
+        printf(" %d", i - prods.begin());
+      }
+    }
+    printf("\n");
   }
 #endif
 ret:
   return res;
 }
+#endif
 
 
 // FIXME: These should't be global
@@ -1454,10 +1575,16 @@ public:
   S_MId(const S_MId & o, Prod * p = 0)
     : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod->clone(p)) {}
   virtual Prod * clone(Prod * p) {return new S_MId(*this, p);}
-  ProdProps finalize() {ProdProps r = prod->finalize(); r.persistent = false; return r;}
+  const ProdProps & calc_props() {
+    props_obj = prod->props(); 
+    props_obj.persistent = false; 
+    set_props(props_obj);
+    return props_obj;
+  }
 private:
   String in_named_prod;
   Prod * prod;
+  ProdProps props_obj;
 };
 
 const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
@@ -1586,8 +1713,8 @@ namespace ParsePeg {
     }
     
     hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
-    for (; i != e; ++i) {
-      i->second->finalize();
+    for (i = named_prods.begin(); i != e; ++i) {
+      i->second->props(); 
       if (i->second->persistent())
         pprintf("IS PERSISTENT: %s\n", ~i->second->name);
       else
