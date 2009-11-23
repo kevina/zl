@@ -20,8 +20,6 @@
 
 #include "hash-t.hpp"
 
-#define XXX
-
 //#define DUMP_PERFORMANCE_INFO
 
 #ifdef DUMP_PERFORMANCE_INFO
@@ -138,18 +136,13 @@ typedef std::bitset<128> BitSet;
 enum {PP_OPTIONAL, PP_NORMAL, PP_PREDICATE};
 
 struct ProdPropsBase {
-#ifdef XXX
   BitSet first_char;
   unsigned char what; // PP_*
   unsigned char first_char_high; // 0 none, 1 some, 2 all
   bool first_char_eof;
-#endif
   bool persistent;
   ProdPropsBase() 
-    : 
-#ifdef XXX
-    what(PP_NORMAL), first_char_high(0), first_char_eof(false), 
-#endif
+    : what(PP_NORMAL), first_char_high(0), first_char_eof(false), 
       persistent(true) {}
   void reset() {
     what = PP_NORMAL;
@@ -179,11 +172,9 @@ struct ProdProps : public ProdPropsBase {
     deps = std::max(deps, o.deps);
   }
   void invert_char_info() {
-#ifdef XXX
     first_char.flip();
     first_char_high = 2 - first_char_high;
     first_char_eof = !first_char_eof;
-#endif
   }
   void reset() {
     ProdPropsBase::reset();
@@ -212,68 +203,16 @@ static bool operator==(const ProdProps & x, const ProdProps & y) {
     x.deps == y.deps;
 }
 
-
-#if 0
-struct ProdProps : public ProdPropsBase {
-  // values are only valid if deps is empty
-  Vector<Prod *> deps;
-  ProdProps() {}
-  ProdProps(const ProdPropsBase & o) : ProdPropsBase(o) {}
-  ProdProps(Prod * d) {deps.push_back(d);}
-  // merge_info does not merge char info
-  bool no_deps() const {return deps.empty();}
-  bool have_deps() const {return !deps.empty();}
-  bool have_dep(Prod * p) const {
-    for (Vector<Prod *>::const_iterator 
-           i = deps.begin(), e = deps.end(); i != e; ++i)
-      if (*i == p) return true;
-    return false;
-  }
-  void add_dep(Prod * p) {
-    if (!have_dep(p)) deps.push_back(p);
-  }
-  void remove_dep(Prod * p) {
-    for (Vector<Prod *>::iterator 
-           i = deps.begin(), e = deps.end(); i != e; ++i) {
-      if (*i == p) {
-        deps.erase(i);
-        return;
-      }
-    }
-  }
-  void merge_info(const ProdProps & o) { 
-    persistent &= o.persistent;
-    for (Vector<Prod *>::const_iterator 
-           i = o.deps.begin(), e = o.deps.end(); i != e; ++i)
-      add_dep(*i);
-  }
-  void invert_char_info() {
-#ifdef XXX
-    first_char.flip();
-    first_char_high = 2 - first_char_high;
-    may_match_eof = !may_match_eof;
-#endif
-  }
-  void reset() {
-    ProdPropsBase::reset();
-    deps.clear();
-  }
-};
-#endif
-
 static void merge_for_choice(ProdProps & x, const ProdProps & y) {
-#ifdef XXX
   x.what = std::min(x.what, y.what);
   x.first_char |= y.first_char;
   x.first_char_high = std::max(x.first_char_high,y.first_char_high);
   x.first_char_eof |= y.first_char_eof;
-#endif
   x.merge_info(y);
 }
 
 // sequenced need to be merged in the inverse order!
 static void merge_for_seq(const ProdProps & x, ProdProps & y, bool & first) {
-#ifdef XXX
   if (x.what == PP_NORMAL || first) {
     y.what = x.what;
     y.first_char = x.first_char;
@@ -291,7 +230,6 @@ static void merge_for_seq(const ProdProps & x, ProdProps & y, bool & first) {
     y.first_char_high = std::max(y.first_char_high, x.first_char_high);
     y.first_char_eof |= x.first_char_eof;
   }
-#endif
   y.merge_info(x);
 }
 
@@ -1235,10 +1173,8 @@ public:
       r0.invert_char_info();
       merge_for_seq(r0, props_obj, first);
     }
-#ifdef XXX
     if (optional)
       props_obj.what = PP_OPTIONAL;
-#endif
     set_props(props_obj);
     return props_obj;
   }
@@ -1276,7 +1212,6 @@ public:
   //void dump() {}
   const ProdProps & calc_props() {
     props_obj = prod->props();
-#ifdef XXX
     props_obj.what = PP_PREDICATE;
     if (dont_match_empty)
       props_obj.first_char_eof = false;
@@ -1284,7 +1219,6 @@ public:
       props_obj.invert_char_info();
     }
     set_props(props_obj);
-#endif
     return props_obj;
   }
   void finalize() {prod->finalize();}
@@ -1502,7 +1436,6 @@ void Choice::finalize() {
   }
   for (; i != e; ++i) {
     i->finalize();
-#ifdef XXX
     if (do_jump_table) {
       const ProdProps & r = i->props();
       if (r.what == PP_OPTIONAL) {
@@ -1522,9 +1455,7 @@ void Choice::finalize() {
           prepend_node(sel[CHAR_EOF], &*i);
       }
     }
-#endif
   }
-#ifdef XXX
   if (do_jump_table) {
     unsigned num = 0;
     unsigned total_len = 0;
@@ -1587,7 +1518,6 @@ void Choice::finalize() {
 //     }
 //     printf("\n");
   }
-#endif
 ret:
   0;
 }
