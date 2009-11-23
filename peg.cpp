@@ -39,8 +39,6 @@ static unsigned indent_level = 0;
 // FIXME: Need more effect representation for const strings
 //        (Pool of strings, hash lookup, ...)
 
-// FIXME: Need an optimization pass to eliminate unnecessary "Capture"s
-
 struct ParseError {
   const char * grammer_pos;
   const char * pos;
@@ -137,30 +135,85 @@ class Prod;
 
 typedef std::bitset<128> BitSet;
 
-enum {PP_NORMAL, PP_OPTIONAL, PP_PREDICATE};
+enum {PP_OPTIONAL, PP_NORMAL, PP_PREDICATE};
 
 struct ProdPropsBase {
 #ifdef XXX
   BitSet first_char;
-  unsigned char first_char_high; // 0 none, 1 some, 2 all
   unsigned char what; // PP_*
-  bool may_match_empty;
+  unsigned char first_char_high; // 0 none, 1 some, 2 all
+  bool first_char_eof;
 #endif
   bool persistent;
   ProdPropsBase() 
     : 
 #ifdef XXX
-    first_char_high(0), what(PP_NORMAL), may_match_empty(false), 
+    what(PP_NORMAL), first_char_high(0), first_char_eof(false), 
 #endif
       persistent(true) {}
   void reset() {
+    what = PP_NORMAL;
     first_char.reset();
     first_char_high = 0;
-    what = PP_NORMAL;
-    may_match_empty = false;
+    first_char_eof = false;
   }
 };
 
+// a dependency is represented as a position on the stack frame
+
+unsigned stack_depth = UINT_MAX - 1;
+
+struct ProdProps : public ProdPropsBase {
+  // values are only valid if deps is empty
+  unsigned deps;
+  ProdProps() : deps() {}
+  ProdProps(const ProdPropsBase & o) : ProdPropsBase(o) {}
+  ProdProps(unsigned d) {deps = d;}
+  // merge_info does not merge char info
+  bool no_deps() const {return deps == 0;}
+  bool have_deps() const {return deps != 0;}
+  bool no_deps_but(unsigned d) const {return deps <= d;}
+  void clear_deps() {deps = 0;}
+  void merge_info(const ProdProps & o) { 
+    persistent &= o.persistent;
+    deps = std::max(deps, o.deps);
+  }
+  void invert_char_info() {
+#ifdef XXX
+    first_char.flip();
+    first_char_high = 2 - first_char_high;
+    first_char_eof = !first_char_eof;
+#endif
+  }
+  void reset() {
+    ProdPropsBase::reset();
+    deps = 0;
+  }
+  int single_char() const {
+    if (what == PP_OPTIONAL) return -1;
+    if (first_char_high || first_char_eof) return -1;
+    if (first_char.count() > 1) return -1;
+    return first_char._Find_first();
+  }
+  bool may_match(const char * str, const char * end) const {
+    if (what == PP_OPTIONAL) return true;
+    if (str == end) return first_char_eof;
+    unsigned char c = *str;
+    if (c < 128) return first_char[c];
+    else return first_char_high;
+  }
+};
+
+static bool operator==(const ProdProps & x, const ProdProps & y) {
+  return x.first_char == y.first_char && 
+    x.first_char_high == y.first_char_high && 
+    x.first_char_eof == y.first_char_eof &&
+    x.persistent == y.persistent &&
+    x.deps == y.deps;
+}
+
+
+#if 0
 struct ProdProps : public ProdPropsBase {
   // values are only valid if deps is empty
   Vector<Prod *> deps;
@@ -198,7 +251,7 @@ struct ProdProps : public ProdPropsBase {
 #ifdef XXX
     first_char.flip();
     first_char_high = 2 - first_char_high;
-    may_match_empty = !may_match_empty;
+    may_match_eof = !may_match_eof;
 #endif
   }
   void reset() {
@@ -206,57 +259,37 @@ struct ProdProps : public ProdPropsBase {
     deps.clear();
   }
 };
-
-#if 0
-struct ProdProps : public ProdPropsBase {
-  // values are only valid if dep is NULL;
-  Prod * dep;
-  ProdProps(Prod * d = NULL) : dep(d) {}
-  // merge_info does not merge char info
-  inline void merge_info(const ProdProps & o);
-  void invert_char_info() {
-#ifdef XXX
-    first_char.flip();
-    first_char_high = 2 - first_char_high;
-    may_match_empty = !may_match_empty;
-#endif
-  }
-  void reset() {
-    ProdPropsBase::reset();
-    dep = NULL;
-  }
-};
 #endif
 
 static void merge_for_choice(ProdProps & x, const ProdProps & y) {
 #ifdef XXX
-  x.what = PP_NORMAL;
+  x.what = std::min(x.what, y.what);
   x.first_char |= y.first_char;
   x.first_char_high = std::max(x.first_char_high,y.first_char_high);
-  x.may_match_empty |= y.may_match_empty;
+  x.first_char_eof |= y.first_char_eof;
 #endif
   x.merge_info(y);
 }
 
 // sequenced need to be merged in the inverse order!
-static void merge_for_seq(const ProdProps & x, ProdProps & y, bool first) {
+static void merge_for_seq(const ProdProps & x, ProdProps & y, bool & first) {
 #ifdef XXX
-  y.what = PP_NORMAL;
-  if (x.no_deps()) {
-    if (x.what == PP_NORMAL || first) {
-      y.first_char = x.first_char;
-      y.first_char_high = x.first_char_high;
-      y.may_match_empty = y.may_match_empty;
-      first = false;
-    } else if (x.what == PP_PREDICATE) {
-      y.first_char &= x.first_char;
+  if (x.what == PP_NORMAL || first) {
+    y.what = x.what;
+    y.first_char = x.first_char;
+    y.first_char_high = x.first_char_high;
+    y.first_char_eof  = x.first_char_eof;
+    first = false;
+  } else if (x.what == PP_PREDICATE) {
+    y.what = PP_PREDICATE;
+    y.first_char &= x.first_char;
       y.first_char_high = std::min(y.first_char_high, x.first_char_high);
-      y.may_match_empty &= x.may_match_empty;
-    } else if (x.what == PP_OPTIONAL) {
-      y.first_char |= x.first_char;
-      y.first_char_high = std::max(y.first_char_high, x.first_char_high);
-      y.may_match_empty |= x.may_match_empty;
-    }
+      y.first_char_eof &= x.first_char_eof;
+  } else if (x.what == PP_OPTIONAL) {
+    y.what = std::max(y.what, x.what);
+    y.first_char |= x.first_char;
+    y.first_char_high = std::max(y.first_char_high, x.first_char_high);
+    y.first_char_eof |= x.first_char_eof;
   }
 #endif
   y.merge_info(x);
@@ -291,9 +324,8 @@ public:
       return *props_;
     }
   }
-  void set_props(const ProdProps & o) {if (o.no_deps()) props_ = &o;}
+  virtual void finalize() = 0;
   virtual ~Prod() {}
-  virtual int first_char() const {return -2;}
   virtual String d_name() const {return String();}
   //virtual bool optional() const = 0;
   Prod(const char * p, const char * e) 
@@ -303,32 +335,9 @@ public: // but don't useq
   const char * pos;
   const char * end;
 protected:
+  void set_props(const ProdProps & o) {if (o.no_deps()) props_ = &o;}
   const ProdProps * props_;
 };
-
-#if 0
-class DummyProd  : public Prod {
-public:
-  DummyProd() : Prod(NULL, NULL) {}
-  MatchRes match(SourceStr str, SynBuilder * parts) {abort();}
-  const char * match_f(SourceStr str, ParseErrors & errs) {abort();}
-  Prod * clone(Prod * = 0) {abort();}
-};
-
-DummyProd DUMMY_PROD;
-
-inline void ProdProps::merge_info(const ProdProps & o) { 
-  persistent &= o.persistent;
-  if (o.dep) {
-    if (!dep || dep == o.dep) dep = o.dep;
-    else {
-      printf("%*c??%p %p <%p>\n", indent_level, ' ', dep, o.dep, &DUMMY_PROD);
-      dep = &DUMMY_PROD;
-    }
-  }
-}
-#endif
-
 
 enum CaptureQ {DontCapture, DoCapture};
 
@@ -349,7 +358,7 @@ struct ProdWrap {
     return prod->match_f(str, errs);}
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
   const ProdProps & props() {return prod->props();}
-  int first_char() const {return prod->first_char();}
+  void finalize() {prod->finalize();}
   //bool optional() const {return prod->optional();}
 private:
   ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
@@ -368,6 +377,7 @@ public:
     set_props(r);
     return r;
   }
+  void finalize() {prod.finalize();}
   SymProd(const SymProd & other, Prod * p = 0) : Prod(other), name(other.name) 
   {
     if (name == "_self")
@@ -389,38 +399,53 @@ struct PtrLt {
   bool operator() (const char * x, const char * y) const {return x < y;}
 };
 
+//register unsigned esp asm("esp");
+
 class NamedProd : public SymProd {
 public:
-  NamedProd(String n) : SymProd(0, 0, n), props_this(this) {}
-  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p) {}
+  NamedProd(String n) : SymProd(0, 0, n), finalized(false) {}
+  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p), finalized(false) {}
   virtual Prod * clone(Prod *) {
     return this; // don't copy prod with name
   }
   void dump() {printf("%s", name.c_str());}
   const ProdProps & calc_props() {
-    assert(!props_);
-    props_ = &props_this;
+    //unsigned esp0 = esp;
+    props_obj.deps = stack_depth;
+    props_ = &props_obj;
     //printf("%*cFINALIZING %s %p\n", indent_level, ' ', ~name, this);
     //indent_level += 2;
     //printf("YEAH BABY!\n");
-    props_obj = prod.props();
+    stack_depth--;
+    const ProdProps & r = prod.props();
+    stack_depth++;
     //indent_level -= 2;
-    props_obj.remove_dep(this);
-    if (props_obj.no_deps()) {
+    if (r.no_deps_but(stack_depth)) {
       //printf("%*cSUCCESS %s\n", indent_level, ' ', ~name);
-      props_ = &props_obj;
+      props_obj = r;
+      props_obj.clear_deps();
+      stack_depth--;
+      const ProdProps & r2 = prod.props();
+      stack_depth++;
+      assert(props_obj == r2);
+      return props_obj;
     } else {
       //printf("%*cFAILED %s\n", indent_level, ' ', ~name);
       props_ = NULL;
+      return r;
     }
-    return props_obj;
   }
   String d_name() const {return name;}
   bool persistent() const {return props().persistent;}
+  void finalize() {
+    if (finalized) return;
+    finalized = true;
+    prod.finalize();
+  }
   virtual void clear_cache() {}
 public:
-  ProdProps props_this;
   ProdProps props_obj;
+  bool finalized;
 };
 
 class CachedProd : public NamedProd {
@@ -430,7 +455,18 @@ public:
   const char * match_f(SourceStr str, ParseErrors & errs);
   CachedProd(String n) : NamedProd(n), first_char_(-3) {/*cs = (char *) GC_MALLOC(256);*/}
   void clear_cache() {lookup.clear();}
-  int first_char() const {return first_char_ > -3 ? first_char_ : prod.first_char();}
+  void finalize() {
+    if (finalized) return;
+    finalized = true;
+    prod.finalize();
+    int c = props_->single_char();
+    if (c >= 0)
+      first_char_ = c;
+    //printf("XXX %s\n", ~name);
+    //for (unsigned j = 0; j != 128; ++j) {
+    //  printf("  xxx %u (%c) %u\n", j, (j >= 32 && j < 127 ? j : '?'), props_->first_char[j]);
+    //}
+  }
 private:
   typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
   Lookup lookup;
@@ -570,7 +606,10 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
   //printf("%*cMATCH %s\n", indent_level, ' ', ~name);
   if (first_char_ >= 0 && 
       (str.begin == str.end || first_char_ != *str.begin)) {
-    //printf("%s FAST FAIL ON '%c'\n", ~name, prod.first_char());
+    //printf("%s FAST FAIL ON '%c'\n", ~name, first_char_);
+    return MatchRes(FAIL, str.begin);
+  } else if (!props_->may_match(str.begin, str.end)) {
+    //printf("%s fast fail on '%c'\n", ~name, str.begin < str.end ? *str.begin : '\0');
     return MatchRes(FAIL, str.begin);
   }
   //if (cs[(unsigned char)*str.begin]) abort();
@@ -679,13 +718,15 @@ public:
     return str.begin;
   }
   AlwaysTrue(const char * p, const char * e) : Prod(p,e) {
+    props_obj.what = PP_OPTIONAL;
     props_obj.first_char.set();
     props_obj.first_char_high = 2;
-    props_obj.may_match_empty = true;
+    props_obj.first_char_eof = true;
     props_ = &props_obj;
   }
   Prod * clone(Prod *) {return new AlwaysTrue(*this);}
   ProdProps props_obj;
+  void finalize() {}
   //void dump() {printf(" _TRUE ");}
 };
 
@@ -712,7 +753,7 @@ public:
     set_props(r);
     return r;
   }
-  int first_char() const {return prod->first_char();}
+  void finalize() {prod->finalize();}
   //bool optional() const {return prod->optional();}
   Capture(const Capture & o, Prod * p = 0)
     : Prod(o), prod(o.prod->clone(p)) {}
@@ -882,7 +923,7 @@ public:
     set_props(r);
     return r;
   }
-  int first_char() const {return prod.first_char();}
+  void finalize() {prod.finalize();}
   void dump() {/*printf("{"); prod->dump(); printf("}");*/}
 protected:
   ProdWrap prod;
@@ -910,6 +951,10 @@ public:
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : NamedCaptureBase(o, p), GatherParts(o) {}
   Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
+  void finalize() {
+    prod.finalize();
+  }
+  String d_name() const {return name ? name->to_string() : String("<>");}
 };
 
 class PlaceHolderCapture : public NamedCaptureBase {
@@ -1004,7 +1049,7 @@ public:
     set_props(r);
     return r;
   }
-  int first_char() const {return prod->first_char();}
+  void finalize() {prod->finalize();}
   void dump() {printf("{"); prod->dump(); printf("}");}
 private:
   Prod * prod;
@@ -1059,7 +1104,7 @@ public:
     }
   virtual Prod * clone(Prod * p) {return new Literal(*this);}
   void dump() {printf("'%s'", literal.c_str());}
-  int first_char() const {return literal[0];}
+  void finalize() {}
 private:
   String literal;
   ProdProps props_obj;
@@ -1095,6 +1140,7 @@ public:
       props_ = &props_obj;
     }
   virtual Prod * clone(Prod * p) {return new CharClass(*this);}
+  void finalize() {}
   //void dump() {printf("[]");}
 private:
   CharSet cs;
@@ -1122,6 +1168,7 @@ public:
     }
   virtual Prod * clone(Prod * p) {return new Any(*this);}
   void dump() {printf("_");}
+  void finalize() {}
   ProdProps props_obj;
 };
 
@@ -1190,12 +1237,12 @@ public:
     }
 #ifdef XXX
     if (optional)
-      props_obj.may_match_empty = true;
+      props_obj.what = PP_OPTIONAL;
 #endif
     set_props(props_obj);
     return props_obj;
   }
-  int first_char() const {return optional ? -2 : prod.first_char();}
+  void finalize() {prod.finalize(); if (end_with_) end_with_->finalize();}
 private:
   ProdWrap prod;
   ProdProps props_obj;
@@ -1232,7 +1279,7 @@ public:
 #ifdef XXX
     props_obj.what = PP_PREDICATE;
     if (dont_match_empty)
-      props_obj.may_match_empty = false;
+      props_obj.first_char_eof = false;
     if (invert) {
       props_obj.invert_char_info();
     }
@@ -1240,6 +1287,7 @@ public:
 #endif
     return props_obj;
   }
+  void finalize() {prod->finalize();}
 private:
   Prod * prod;
   ProdProps props_obj;
@@ -1308,8 +1356,11 @@ public:
     set_props(props_obj);
     return props_obj;
   }
-
-  int first_char() const {return prods[0].first_char();}
+  void finalize() {
+    for (Vector<ProdWrap>::iterator 
+           i = prods.begin(), e = prods.end(); i != e; ++i)
+      i->finalize();
+  }
   Seq(const Seq & o, Prod * p = 0) : Prod(o) {
     prods.reserve(o.prods.size());
     for (Vector<ProdWrap>::const_iterator 
@@ -1329,7 +1380,9 @@ class Choice : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
     const char * read_to = NULL;
-    if (false && jump_table) {
+    if (jump_table) {
+      read_to = str.begin;
+      //printf("using jump table\n");
       ProdWrap * i;
       if (str.empty())
         i = jump_table[CHAR_EOF];
@@ -1380,14 +1433,24 @@ public:
     }
   }
   const ProdProps & calc_props() {
-    Vector<ProdWrap>::iterator 
-      i = prods.begin(), e = prods.end();
+    //printf("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n");
     props_obj.reset();
-    for (; i != e; ++i)
-      merge_for_choice(props_obj, i->props());
+    for (Vector<ProdWrap>::iterator 
+           i = prods.begin(), e = prods.end(); i != e; ++i) 
+    {
+      const ProdProps & r = i->props();
+      //printf("ZZZ <%s>\n", ~i->prod->d_name());
+      //for (unsigned j = 0; j != 128; ++j) {
+      //  printf("  zzz %u (%c) %u\n", j, (j >= 32 && j < 127 ? j : '?'), r.first_char[j]);
+      //}
+      //printf(" zzz %d\n", UINT_MAX - r.deps);
+      merge_for_choice(props_obj, r);
+    }
+    //printf("zzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n");
     set_props(props_obj);
     return props_obj;
   }
+  void finalize();
   virtual Prod * clone(Prod * p) {return new Choice(*this, p);}
   void dump() {}
 private:
@@ -1423,8 +1486,7 @@ static inline void prepend_node(WorkingNode * & t, ProdWrap * p) {
 }
 
 
-#if 0
-ProdProps Choice::finalize() {
+void Choice::finalize() {
   typedef WorkingNode Node;
   ProdProps res;
   Vector<ProdWrap>::iterator 
@@ -1439,21 +1501,26 @@ ProdProps Choice::finalize() {
       sel[i] = dummy;
   }
   for (; i != e; ++i) {
-    ProdProps r = i->finalize();
-    merge_for_choice(res, i->finalize());
+    i->finalize();
 #ifdef XXX
     if (do_jump_table) {
-      printf("%*c<>%d\n", indent_level, ' ', i - prods.begin());
-      for (unsigned j = 0; j < 128; ++j) {
-        if (r.first_char[j]) {
-          printf("%*c  HAVE %d\n", indent_level, ' ', j); 
+      const ProdProps & r = i->props();
+      if (r.what == PP_OPTIONAL) {
+        for (unsigned j = 0; j < 130; ++j)
           prepend_node(sel[j], &*i);
+      } else {
+        //printf("%*c<>%d\n", indent_level, ' ', i - prods.begin());
+        for (unsigned j = 0; j < 128; ++j) {
+          if (r.first_char[j]) {
+            //printf("%*c  HAVE %d\n", indent_level, ' ', j); 
+            prepend_node(sel[j], &*i);
+          }
         }
+        if (r.first_char_high) 
+          prepend_node(sel[CHAR_HIGH], &*i);
+        if (r.first_char_eof)
+          prepend_node(sel[CHAR_EOF], &*i);
       }
-      if (r.first_char_high) 
-        prepend_node(sel[CHAR_HIGH], &*i);
-      if (r.may_match_empty)
-        prepend_node(sel[CHAR_EOF], &*i);
     }
 #endif
   }
@@ -1505,27 +1572,25 @@ ProdProps Choice::finalize() {
         pos += len + 1;
       }
     }
-    printf("\n%*c---\nww %u\n", indent_level, ' ', prods.size());
-    for (unsigned j = 0; j != 130; ++j) {
-      printf("xx %u (%c) %u\n", j, (j >= 32 && j < 127 ? j : '?'), jump_table[j] - jump_table_data);
-    }
-    for (unsigned j = 0; j != jump_table_data_size; ++j) {
-      if (!jump_table_data[j].prod) printf("\n" "yy %u:", j + 1);
-      else {
-        Vector<ProdWrap>::iterator i = prods.begin(), e = prods.end();
-        while (i != e && i->prod != jump_table_data[j].prod) ++i;
-        assert (i != e);
-        printf(" %d", i - prods.begin());
-      }
-    }
-    printf("\n");
+//     printf("\n%*c---\nww %u\n", indent_level, ' ', prods.size());
+//     for (unsigned j = 0; j != 130; ++j) {
+//       printf("xx %u (%c) %u\n", j, (j >= 32 && j < 127 ? j : '?'), jump_table[j] - jump_table_data);
+//     }
+//     for (unsigned j = 0; j != jump_table_data_size; ++j) {
+//       if (!jump_table_data[j].prod) printf("\n" "yy %u:", j + 1);
+//       else {
+//         Vector<ProdWrap>::iterator i = prods.begin(), e = prods.end();
+//         while (i != e && i->prod != jump_table_data[j].prod) ++i;
+//         assert (i != e);
+//         printf(" %d", i - prods.begin());
+//       }
+//     }
+//     printf("\n");
   }
 #endif
 ret:
-  return res;
+  0;
 }
-#endif
-
 
 // FIXME: These should't be global
 bool in_repl = false;
@@ -1581,6 +1646,7 @@ public:
     set_props(props_obj);
     return props_obj;
   }
+  void finalize() {prod->finalize();}
 private:
   String in_named_prod;
   Prod * prod;
@@ -1714,7 +1780,8 @@ namespace ParsePeg {
     
     hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
     for (i = named_prods.begin(); i != e; ++i) {
-      i->second->props(); 
+      //printf("AAA %s\n", ~i->second->name);
+      i->second->props();
       if (i->second->persistent())
         pprintf("IS PERSISTENT: %s\n", ~i->second->name);
       else
@@ -1730,6 +1797,11 @@ namespace ParsePeg {
       //  printf("  may match empty\n");
     }
     pprintf("PERSISTENT DONE\n");
+    //for (i = named_prods.begin(); i != e; ++i) {
+    //  printf("MAY MATCH EMPTY? %s %d\n", ~i->second->name, i->second->props().may_match_empty);
+    //}
+    for (i = named_prods.begin(); i != e; ++i)
+      i->second->finalize();
   }
 
   void Parse::resolve_token_symbol(TokenProd * p, const char * pos) 
@@ -2132,4 +2204,3 @@ void ParseErrors::print(const SourceInfo * file, const SourceFile * grammer)
     printf("\n");
   }
 }
-
