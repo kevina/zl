@@ -1,4 +1,4 @@
-#@hint_file "/home/kevina/zl/grammer.hint";
+#@hint_file "/home/kevina/zl/grammer2.hint";
 #@hint_file "/home/kevina/zl/grammer.allt";
 
 TOP = <top> SPACING {STMT}+;
@@ -10,7 +10,7 @@ SLIST = <@> SPACING {STMT}+;
 #
 
 STMT : "statement" = 
-      <<mid PARM>> {MID} ";"
+      <<mid PARM>> {RAW_ID} ";"
     / <lcstmt> {CASE_LABEL} ":" {STMT}
     / <lstmt> {ID} ":" {STMT}
     / <if>    "if" "(" {EXP} ")" {STMT} ("else" {STMT})?
@@ -37,11 +37,11 @@ STMT : "statement" =
     / <make_subtype> "make_subtype" {ID} {ID} {ID}? ";"
     / <finalize_user_type> "finalize_user_type" {TOKEN} ";"
     / <export> "export" {ID} ("," {ID})* ";"
-    / <add_prop> "add_prop" {RAW_ID} {SYNTAX_P} ";"
+    / <add_prop> "add_prop" {BASIC_ID} {SYNTAX_P} ";"
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
-    / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
-#    / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
+#   / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
+    / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / ({TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
    ;
 
 CASE_LABEL =
@@ -73,13 +73,13 @@ ID_LIST =
 MATCH_LIST =
   <> ({MATCH} ("," {MATCH})*)?;
 
-MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
+MATCH = <<mid>> {RAW_ID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
 
 #
 # C Token
 #
 
-TOKEN_ : "token'" =  <<mid PARM>> {MID} !("`" / "::") /  
+TOKEN_ : "token'" =  <<mid PARM>> {RAW_ID} !("`" / "::") /  
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {RAW} / {TEMPLATE_CALL}
          / {BRACK} / {CONST}
@@ -127,8 +127,8 @@ SYNTAX =
   / <raw_syntax> "raw_syntax" {PARAN};
 
 SYNTAX_P =
-  <<mid>> {MID} / {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
-#  <<mid>> {MID} / {ID} / {BRACE} / <parm> "(" {RAW_TOKEN*} ")"; # / {BRACK};
+  <<mid>> {RAW_ID} / {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
+#  <<mid>> {RAW_ID} / {ID} / {BRACE} / <parm> "(" {RAW_TOKEN*} ")"; # / {BRACK};
 
 SYNTAX_STR =
   ({SYNTAX_P} / <<reparse parm>> {RAW_TOKEN+}) EOF;
@@ -139,7 +139,7 @@ SYNTAX_STR =
 
 EXP = <exp> {TOKEN}+;
 
-INIT = <<mid>> {MID} / <init> {TOKEN}+;
+INIT = <<mid>> {RAW_ID} / <init> {TOKEN}+;
 
 BLOCK = <block> "{" {STMT}* "}";
 
@@ -154,20 +154,25 @@ PARAN = <<reparse ()>> "(" {RAW_TOKEN*} ")";
 BRACK = <<reparse []>> "[" {RAW_TOKEN*} "]";
 ANGLE = <<reparse \<\>>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
 
-RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / COMMENT / [^\)\]\}];
+# RAW_ID and CONST is not strictly needed but it will make reparsing
+# the string more efficient
+RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / RAW_ID / CONST / WHITE_SPACE / [^\)\]\}];
 
 #
 # Lex Like Tokens
 #
 
-RAW_ID : "identifier" =
-  <<mid>> {MID} / {[@$\a_][$\a_\d]*} SPACING;
+RAW_ID : "identifier" = 
+  {[@$\a_][$\a_\d]*} SPACING;
+
+BASIC_ID : "identifier" =
+  <<mid>> {RAW_ID} / {RAW_ID};
 
 #ID_W_NS : "identifer" =
-#  <::> {RAW_ID} "::" {ID_W_NS} / {RAW_ID};
+#  <::> {BASIC_ID} "::" {ID_W_NS} / {BASIC_ID};
 
 ID_W_NS : "identifer" =
-  <<>> {RAW_ID} ("::" {ID_W_NS} = <::>)?;
+  <<>> {BASIC_ID} ("::" {ID_W_NS} = <::>)?;
 
 #ID_W_INNER =
 #  <`> {ID_W_NS} "`" {ID_W_NS} / {ID_W_NS};
@@ -183,9 +188,6 @@ RAW =
 
 TEMPLATE_CALL =
   <%> {"implicit_cast"/"reinterpret_cast"} {ANGLE} {PARAN};
-
-MID : "macro identifier" = 
-     {[@$\a_][\a_\d]*} SPACING;
 
 NUM : "number" = 
     {[\d]+('.'[\d]+)?} SPACING;
@@ -204,14 +206,16 @@ SYM : "symbol" =
    '+'  / '-'  / '*'  / '/'  / '%'  / '/'  / '&'  / '^'  / '|' /
    '=' / '<' / '>' / '?' / ':' / ',' / '.' / '!' / '~'} SPACING;
 
+WHITE_SPACE =
+  ([\s]+ / COMMENT)+;
+
 SPACING : "spacing" =
-   [\s]* COMMENT?
-   ;
+  WHITE_SPACE?;
 
 COMMENT = 
-    '//' [^\n]* [\n] SPACING
-  / '#' [^\n]* [\n] SPACING
-  / '/*' _* . '*/' SPACING;
+    '//' [^\n]* [\n]
+  / '#' [^\n]* [\n]
+  / '/*' _* . '*/';
 
 #
 # Special tokens

@@ -20,7 +20,7 @@
 
 #include "hash-t.hpp"
 
-//#define DUMP_PERFORMANCE_INFO
+#define DUMP_PERFORMANCE_INFO
 
 #ifdef DUMP_PERFORMANCE_INFO
 #  define pprintf(...) printf(__VA_ARGS__)
@@ -1584,7 +1584,7 @@ private:
 };
 
 const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
-  pprintf("BEGIN %s\n", ~what);
+  pprintf("BEGIN %s: %s\n", ~what, ~sample(str.begin, str.end));
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
   clock_t start = clock();
   //str.source = new ParseSourceInfo(str, what);
