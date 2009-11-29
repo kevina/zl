@@ -20,13 +20,6 @@
 
 #include "hash-t.hpp"
 
-#define GC_DEBUG 1
-extern "C" {
-  void GC_print_finalization_stats();
-  //void GC_default_print_heap_obj_proc(void * p);
-}
-
-
 //#define DUMP_PERFORMANCE_INFO
 
 #ifdef DUMP_PERFORMANCE_INFO
@@ -34,8 +27,6 @@ extern "C" {
 #else
 #  define pprintf
 #endif
-
-//#define ZZZ
 
 using std::pair;
 
@@ -405,11 +396,8 @@ bool operator==(const CacheKey & x, const CacheKey & y) {
 
 struct Cache {
   typedef CacheKey Key;
-  //typedef hash_map<Key,Res>                 NormalData;
   typedef tiny_hash<hash_map<Key,Res>,4,32> Data;
-  //typedef tiny_hash<hash_map<Key,Res>,4,32> PersistentData;
-  Data       * data;
-  //PersistentData * persistent;
+  Data * data;
   void reset(Data * p) {
     pprintf("NamedProd CLEAR\n");
     run_id++;
@@ -425,59 +413,37 @@ struct Cache {
     LookupRes(Res & r, bool e) : res(r), exists(e) {}
   };
   LookupRes lookup(NamedProd * prod, SourceStr str) {
-#if 0
-    if (prod->persistent()) {
-      pair<PersistentData::value_type *, bool> 
-        cached = persistent->insert(Key(prod, str.begin));
-      Res & r = cached.first->second;
-      //unsigned run_id = prod->persistent() ? 0 : ::run_id;
-      if (cached.second) {
-        //r.run_id = run_id;
-        return LookupRes(r, false);
-      } else if (true /*r.run_id == run_id*/) {
+    pair<Data::value_type *, bool> 
+      cached = data->insert(Key(prod, str.begin));
+    Res & r = cached.first->second;
+    unsigned run_id = prod->persistent() ? 0 : ::run_id;
+    if (cached.second) {
+      r.run_id = run_id;
+      return LookupRes(r, false);
+    } else if (r.run_id == run_id) {
         return LookupRes(r, true);
-        //} else {
-        //r.~Res();
-        //new (&r) Res;
-        //r.run_id = run_id;
-        //return LookupRes(r, false);
-      }
-    } else 
-#endif
-    {
-      //pair<NormalData::iterator, bool>
-      pair<Data::value_type *, bool> 
-        cached = data->insert(Key(prod, str.begin));
-      Res & r = cached.first->second;
-      unsigned run_id = prod->persistent() ? 0 : ::run_id;
-      if (cached.second) {
-        r.run_id = run_id;
-        return LookupRes(r, false);
-      } else if (r.run_id == run_id) {
-        return LookupRes(r, true);
-      } else {
-        r.~Res();
-        new (&r) Res;
-        r.run_id = run_id;
-        return LookupRes(r, false);
-      }
+    } else {
+      r.~Res();
+      new (&r) Res;
+      r.run_id = run_id;
+      return LookupRes(r, false);
     }
-  }  
-  struct NewPersistent {
+  }
+  struct NewCache {
     Data * orig;
-    inline NewPersistent(Data * nw = new Data);
-    inline ~NewPersistent();
+    inline NewCache(Data * nw = new Data);
+    inline ~NewCache();
   };
 };
 
 Cache cache;
 
-inline Cache::NewPersistent::NewPersistent(Data * nw) {
+inline Cache::NewCache::NewCache(Data * nw) {
   orig = cache.data;
   cache.data = nw;
 }
 
-inline Cache::NewPersistent::~NewPersistent() {
+inline Cache::NewCache::~NewCache() {
   cache.data = orig;
 }
 
@@ -553,6 +519,7 @@ namespace ParsePeg {
 
   class Parse {
   public:
+    SourceFile * file;
     const char * begin;
 
     hash_map<String, NamedProd *> named_prods;
@@ -593,14 +560,13 @@ namespace ParsePeg {
 }
 
 ParsePeg::Parse parse;
-SourceFile * file = NULL;
 
 void parse_peg(const char * fn) {
-  file = new_source_file(fn);
+  parse.file = new_source_file(fn);
   try {
-    parse.top(file->begin(), file->end());
+    parse.top(parse.file->begin(), parse.file->end());
   } catch (Error * err) {
-    err->source = file;
+    err->source = parse.file;
     throw err;
   }
 }
@@ -1023,7 +989,7 @@ public:
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return prod->match(str, NULL); 
     SyntaxBuilderN<2> res;
-    Cache::NewPersistent np;
+    Cache::NewCache nc;
     MatchRes r = prod->match(str, &res);
     if (!r) return r;
     assert(res.num_parts() == 1);
@@ -1685,7 +1651,7 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls,
     const char * e0 = p->match_f(str, errors);
     assert(e0 == e);
     //local_cache->data.dump_stats();
-    throw errors.to_error(new ParseSourceInfo(str, what), file);
+    throw errors.to_error(new ParseSourceInfo(str, what), parse.file);
   }
   //local_cache->data.dump_stats();
   clock_t stop = clock();
@@ -1717,15 +1683,16 @@ namespace ParsePeg {
         // a derivative
         str = id(str, end, name);
         if (name == "hint_file") {
-          SubStr file0;
+          SubStr fn0;
           str = spacing(str, end);
           assert(*str == '"'); // fixme error message
-          str = quote('"', str, end, file0);
-          StringBuf file1;
-          unescape(file0.begin, file0.end, file1, '"');
-          String file = file1.freeze();
+          str = quote('"', str, end, fn0);
+          StringBuf fn1;
+          unescape(fn0.begin, fn0.end, fn1, '"');
+          String fn = fn1.freeze();
+          fn = add_dir_if_needed(fn, file);
           //fprintf(stderr, "hint_file = %s\n", ~file);
-          SourceFile * hints = new_source_file(file);
+          SourceFile * hints = new_source_file(fn);
           try {
             parse_hints_file(hints->begin(), hints->end());
           } catch (Error * err) {

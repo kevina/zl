@@ -1,5 +1,5 @@
-#@hint_file "/home/kevina/zl/grammer.hint";
-#@hint_file "/home/kevina/zl/grammer.allt";
+@hint_file "grammer.hint";
+#@hint_file "grammer.allt";
 
 TOP = <top> SPACING {STMT}+;
 
