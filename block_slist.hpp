@@ -36,6 +36,13 @@
   
   public:
 
+    void steal(BlockSList & other) {
+      first_block = other.first_block;
+      first_available = other.first_available;
+      other.first_block = NULL;
+      other.first_available = NULL;
+    }
+
     BlockSList() 
       // Default constructor.
       // add_block must be called before any nodes are available

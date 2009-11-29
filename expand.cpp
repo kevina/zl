@@ -869,7 +869,7 @@ const Syntax * reparse(String what, ReparseInfo p, ReplTable * r, const Replacem
   }
   const Syntax * res;
   try {
-    res = parse_str(what, p.str, &combined_repls);
+    res = parse_str(what, p.str, &combined_repls, p.cache);
   } catch (Error * err) {
     //Annon * annon = new ReparseAnnon(p, what);
     //annon->prev = p->str().annon; // FIXME: Is this right
@@ -976,6 +976,7 @@ static const Syntax * replace(const Syntax * p,
     Syntax * res = 
       new ReparseSyntax(SYN(p->part(0), r->mark, r->expand_source_info(p->part(0))),
                         combine_repl(p->repl, r),
+                        p->as_reparse()->cache,
                         r->expand_source_info_str(p->outer().str),
                         r->expand_source_info_str(p->inner().str));
     //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());

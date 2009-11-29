@@ -5,7 +5,6 @@
 
 #include "environ.hpp"
 #include "gc.hpp"
-#include "hash-t.hpp" //FIXME
 #include "parse.hpp"
 #include "fstream.hpp"
 #include "symbol_table.hpp"

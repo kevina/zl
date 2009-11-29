@@ -1,4 +1,4 @@
-#@hint_file "/home/kevina/zl/grammer2.hint";
+#@hint_file "/home/kevina/zl/grammer.hint";
 #@hint_file "/home/kevina/zl/grammer.allt";
 
 TOP = <top> SPACING {STMT}+;
@@ -41,7 +41,7 @@ STMT : "statement" =
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
 #   / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
-    / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / ({TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
+    / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
    ;
 
 CASE_LABEL =

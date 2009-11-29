@@ -41,6 +41,7 @@
 #define autil__hash_t_hh
 
 #include <cstdlib>
+#include <cstdio>
 #include <new>
 
 #include "hash.hpp"
@@ -70,7 +71,7 @@
   void HashTable<P>::create_table(PrimeIndex i) {
     prime_index_ = i;
     table_size_ = primes[prime_index_];
-    table_ = reinterpret_cast<Node * *>(GC_MALLOC_UNCOLLECTABLE((table_size_+1) * sizeof(Node *)));
+    table_ = reinterpret_cast<Node * *>(GC_MALLOC/*_UNCOLLECTABLE*/((table_size_+1) * sizeof(Node *)));
     table_end_ = table_ + table_size_;
     *table_end_ = reinterpret_cast<Node *>(table_end_);
   }
@@ -81,6 +82,24 @@
     size_ = 0;
     create_table(i);
     node_pool_.add_block(primes[i]);
+  }
+
+  template <class P>
+  HashTable<P>::HashTable(Node * n, unsigned sz, NodePool & other)
+  {
+    size_ = 0;
+    create_table(next_largest(sz));
+    node_pool_.steal(other);
+    while (n != 0) {
+      Node * * put_me_here = table_ + (parms_.hash(parms_.key(n->data)) % table_size_);
+      Node * tmp = n;
+      n = n->next;
+      tmp->next = *put_me_here;
+      *put_me_here = tmp;
+      ++size_;
+    }
+    assert(sz == size_);
+    node_pool_.add_block(table_size_ - size_);
   }
 
   template <class P>
@@ -226,6 +245,103 @@
 	n->next = table_[i];
 	table_[i] = n;
       }
+    }
+  }
+
+  template <class P>
+  void HashTable<P>::dump_stats() {
+    using std::printf;
+    printf("LOAD: %f  SIZE %u:  BUCKETS: %u\n", (double)size_ / (double)table_size_, size_, table_size_);
+    Vector<unsigned> tally;
+    Vector<unsigned> tally2;
+    Vector<const Key *> uniq;
+    Vector<std::pair<unsigned long, unsigned> > gather;
+    for (Node * * i = table_; i != table_end_; ++i) {
+      unsigned c = 0;
+      Node * n = *i;
+      gather.clear();
+      uniq.clear();
+      //printf("---\n");
+      while (n) {
+        ++c;
+        unsigned j = 0;
+        const Key & k = parms_.key(n->data);
+        while (j != uniq.size() && !(*uniq[j] == k)) ++j;
+        if (j == uniq.size()) {
+          uniq.push_back(&k);
+          j = 0;
+          unsigned h = parms_.hash(k);
+          while (j != gather.size() && gather[j].first != h) ++j;
+          if (j == gather.size()) gather.resize(j+1);
+          gather[j].first = h;
+          gather[j].second++;
+        }
+        n = n->next;
+        //printf("  %u %u\n", h, j);
+      }
+      if (tally.size() <= c) tally.resize(c+1);
+      tally[c]++;
+      for (unsigned j = 0; j != gather.size(); ++j) {
+        unsigned c = gather[j].second;
+        if (tally2.size() <= c) tally2.resize(c+1);
+        tally2[c]++;
+      }
+      if (c > 16) {
+        n = *i;
+        while (n) {
+          const Key & k = parms_.key(n->data);
+          printf("?? %lu %p %p\n", parms_.hash(k), k.prod, k.str);
+          n = n->next;
+        }
+        printf("---\n");
+      }
+    }
+    for (unsigned i = 0; i != tally.size(); ++i)
+      printf(" -- %u: %u (%f)\n", i, tally[i], (double)tally[i]/(double)table_size_);
+    for (unsigned i = 0; i != tally2.size(); ++i)
+      printf(" == %u: %u (%f)\n", i, tally2[i], (double)tally2[i]/(double)table_size_);
+  }
+
+  template <typename H, unsigned INIT_SZ, unsigned MAX_SZ>
+  template <class T>
+  std::pair<typename tiny_hash<H,INIT_SZ,MAX_SZ>::value_type *,bool> tiny_hash<H,INIT_SZ,MAX_SZ>::insert_i(const T & to_insert)
+  {
+    unsigned sz = 0;
+    if (!first) node_pool_.add_block(INIT_SZ);
+    Node * * n = &first;
+    for (; *n; n = &(*n)->next) {
+      if (typename H::Parms().equal(H::Parms::key((*n)->data),typename H::Parms().key(to_insert))) 
+        return std::pair<value_type *,bool>(&(*n)->data, false);
+      ++sz;
+    }
+    Node * new_node = node_pool_.new_node();
+    if (new_node == 0) {
+      if (sz * 2 <= MAX_SZ) {
+        node_pool_.add_block(sz); // effectively doubling the size
+        new_node = node_pool_.new_node();
+      } else {
+        hash = new H(first, sz, node_pool_);
+        return insert(to_insert);
+      }
+    }
+    new 
+      (const_cast<void *>(reinterpret_cast<const void *>(&new_node->data))) 
+      typename H::Value(to_insert);
+    *n = new_node;
+    new_node->next = NULL;
+    return std::pair<value_type *,bool>(&new_node->data,true);
+  }
+
+  template <typename H, unsigned INIT_SZ, unsigned MAX_SZ>
+  void tiny_hash<H,INIT_SZ,MAX_SZ>::dump_stats() {
+    if (hash) {
+      hash->dump_stats();
+    } else {
+      unsigned c = 0;
+      for (Node * n = first; n; n = n->next) {
+        ++c;
+      }
+      printf("TINY HASH: %u\n", c);
     }
   }
 

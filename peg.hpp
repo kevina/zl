@@ -7,6 +7,6 @@
 void parse_peg(const char * fn);
 
 struct Replacements;
-const Syntax * parse_str(String what, SourceStr str, const Replacements * repls = 0);
+const Syntax * parse_str(String what, SourceStr str, const Replacements * repls = NULL, void * cache = NULL);
 
 #endif

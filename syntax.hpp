@@ -49,8 +49,9 @@ namespace syntax_ns {
   struct ReparseInfo {
     const SourceStr & str;
     const Replacements * repl;
-    ReparseInfo(const SourceStr & s, const Replacements * r)
-      : str(s), repl(r) {}
+    void * cache;
+    ReparseInfo(const SourceStr & s, const Replacements * r, void * c)
+      : str(s), repl(r), cache(c) {}
   };
 
   // Class inheritance:
@@ -632,12 +633,13 @@ namespace syntax_ns {
 
   struct Reparse : public PartsInlined {
     SourceStr inner_;
-    ReparseInfo outer() const {return ReparseInfo(str_, repl);}
-    ReparseInfo inner() const {return ReparseInfo(inner_, repl);}
-    Reparse(const SourceStr & str) : PartsInlined(REPARSE_TI),  inner_(str) {}
-    Reparse(const Syntax * p, const Replacements * r, const SourceStr & o, const SourceStr & i)
-      : PartsInlined(REPARSE_TI, o), inner_(i) {repl = r; parts_[0] = p; finalize();}
-    Reparse(const Reparse & other) : PartsInlined(other), inner_(other.inner_) {parts_[0] = other.parts_[0];}
+    void * cache;
+    ReparseInfo outer() const {return ReparseInfo(str_, repl, cache);}
+    ReparseInfo inner() const {return ReparseInfo(inner_, repl, cache);}
+    Reparse(const SourceStr & str) : PartsInlined(REPARSE_TI),  inner_(str), cache() {}
+    Reparse(const Syntax * p, const Replacements * r, void * c, const SourceStr & o, const SourceStr & i)
+      : PartsInlined(REPARSE_TI, o), inner_(i), cache(c) {repl = r; parts_[0] = p; finalize();}
+    Reparse(const Reparse & other) : PartsInlined(other), inner_(other.inner_), cache(other.cache) {parts_[0] = other.parts_[0];}
     Reparse * clone() const {return new Reparse(*this);}
   };
   

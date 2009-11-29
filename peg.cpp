@@ -20,13 +20,22 @@
 
 #include "hash-t.hpp"
 
-#define DUMP_PERFORMANCE_INFO
+#define GC_DEBUG 1
+extern "C" {
+  void GC_print_finalization_stats();
+  //void GC_default_print_heap_obj_proc(void * p);
+}
+
+
+//#define DUMP_PERFORMANCE_INFO
 
 #ifdef DUMP_PERFORMANCE_INFO
 #  define pprintf(...) printf(__VA_ARGS__)
 #else
 #  define pprintf
 #endif
+
+//#define ZZZ
 
 using std::pair;
 
@@ -98,25 +107,13 @@ struct ParseErrors : public Vector<const ParseError *> {
 // special case.  For (2) we set read_to to NULL and store the current
 // end-of-string position in str_end.
 
-struct MatchRes {
-  const char * end;     // NULL on FALSE
-  const char * read_to; // last charater read, _not_ one past, if NULL
-                        // then either 1) no characters are read or 2)
-                        // read past the end.  (2) is only holds when
-                        // used as a cached result and str_end is
-                        // non-NULL (see Res below)
-  explicit MatchRes(const char * e) : end(e), read_to(e) {}
-  MatchRes() {}
-  MatchRes(const char * e, const char * r) : end(e), read_to(r) {}
-  operator bool() const {return end;}
-  bool operator!() const {return !end;}
-};
+typedef const char * MatchRes;
 
 typedef SyntaxBuilderBase SynBuilder;
 
-struct Res : public MatchRes {
-  const char * str_end; // if not NULL than read past end-of-string to this point
-  Res() : str_end() {}
+struct Res {
+  const char * end;
+  unsigned run_id;
   SyntaxBuilderN<2> res;
 };
 
@@ -232,7 +229,7 @@ static void merge_for_seq(const ProdProps & x, ProdProps & y, bool & first) {
   }
   y.merge_info(x);
 }
-
+class NamedProd;
 
 class Prod {
 public:
@@ -374,17 +371,116 @@ public:
     }
   }
   String d_name() const {return name;}
-  bool persistent() const {return props().persistent;}
+  bool persistent() const {return props_obj.persistent;}
   void finalize() {
     if (finalized) return;
     finalized = true;
     prod.finalize();
   }
   virtual void clear_cache() {}
+  virtual int cache_size() {return -1;}
 public:
   ProdProps props_obj;
   bool finalized;
 };
+
+
+unsigned run_id = 1; // persistent prod always have a run_id of 0
+
+struct CacheKey {
+  Prod * prod;
+  const char * str;
+  CacheKey(Prod * p, const char * s) : prod(p), str(s) {}
+};
+
+template <> struct hash<CacheKey>   {
+  unsigned long operator()(const CacheKey & k) const {
+    return (unsigned long)k.prod ^ (unsigned long)k.str;
+  }
+};
+
+bool operator==(const CacheKey & x, const CacheKey & y) {
+  return x.prod == y.prod && x.str == y.str;
+}
+
+struct Cache {
+  typedef CacheKey Key;
+  //typedef hash_map<Key,Res>                 NormalData;
+  typedef tiny_hash<hash_map<Key,Res>,4,32> Data;
+  //typedef tiny_hash<hash_map<Key,Res>,4,32> PersistentData;
+  Data       * data;
+  //PersistentData * persistent;
+  void reset(Data * p) {
+    pprintf("NamedProd CLEAR\n");
+    run_id++;
+    data = p;
+    //normal.clear();
+    //normal.~NormalData();
+    //new (&normal) NormalData;
+    //persistent = p;
+  }
+  struct LookupRes {
+    Res & res;
+    bool exists;
+    LookupRes(Res & r, bool e) : res(r), exists(e) {}
+  };
+  LookupRes lookup(NamedProd * prod, SourceStr str) {
+#if 0
+    if (prod->persistent()) {
+      pair<PersistentData::value_type *, bool> 
+        cached = persistent->insert(Key(prod, str.begin));
+      Res & r = cached.first->second;
+      //unsigned run_id = prod->persistent() ? 0 : ::run_id;
+      if (cached.second) {
+        //r.run_id = run_id;
+        return LookupRes(r, false);
+      } else if (true /*r.run_id == run_id*/) {
+        return LookupRes(r, true);
+        //} else {
+        //r.~Res();
+        //new (&r) Res;
+        //r.run_id = run_id;
+        //return LookupRes(r, false);
+      }
+    } else 
+#endif
+    {
+      //pair<NormalData::iterator, bool>
+      pair<Data::value_type *, bool> 
+        cached = data->insert(Key(prod, str.begin));
+      Res & r = cached.first->second;
+      unsigned run_id = prod->persistent() ? 0 : ::run_id;
+      if (cached.second) {
+        r.run_id = run_id;
+        return LookupRes(r, false);
+      } else if (r.run_id == run_id) {
+        return LookupRes(r, true);
+      } else {
+        r.~Res();
+        new (&r) Res;
+        r.run_id = run_id;
+        return LookupRes(r, false);
+      }
+    }
+  }  
+  struct NewPersistent {
+    Data * orig;
+    inline NewPersistent(Data * nw = new Data);
+    inline ~NewPersistent();
+  };
+};
+
+Cache cache;
+
+inline Cache::NewPersistent::NewPersistent(Data * nw) {
+  orig = cache.data;
+  cache.data = nw;
+}
+
+inline Cache::NewPersistent::~NewPersistent() {
+  cache.data = orig;
+}
+
 
 class CachedProd : public NamedProd {
   // named productions are memorized
@@ -392,7 +488,8 @@ public:
   MatchRes match(SourceStr str, SynBuilder * parts);
   const char * match_f(SourceStr str, ParseErrors & errs);
   CachedProd(String n) : NamedProd(n), first_char_(-3) {/*cs = (char *) GC_MALLOC(256);*/}
-  void clear_cache() {lookup.clear();}
+  //void clear_cache() {lookup.clear();}
+  //int cache_size() {return lookup.size();}
   void finalize() {
     if (finalized) return;
     finalized = true;
@@ -406,8 +503,8 @@ public:
     //}
   }
 private:
-  typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
-  Lookup lookup;
+  //typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
+  //Lookup lookup;
   int first_char_;
   //CharSet cs;
 };
@@ -519,7 +616,7 @@ MatchRes SymProd::match(SourceStr str, SynBuilder * parts) {
   MatchRes r = prod.match(str,parts);
   if (!r) return r;
   if (!prod.capture)
-    parts->add_part(SYN(String(str.begin, r.end), str, r.end));
+    parts->add_part(SYN(String(str.begin, r), str, r));
   return r;
 }
 
@@ -545,35 +642,17 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
   if (first_char_ >= 0 && 
       (str.begin == str.end || first_char_ != *str.begin)) {
     //printf("%s FAST FAIL ON '%c'\n", ~name, first_char_);
-    return MatchRes(FAIL, str.begin);
+    return FAIL;
   } else if (!props_->may_match(str.begin, str.end)) {
     //printf("%s fast fail on '%c'\n", ~name, str.begin < str.end ? *str.begin : '\0');
-    return MatchRes(FAIL, str.begin);
+    return FAIL;
   }
   //if (cs[(unsigned char)*str.begin]) abort();
   //if (prod.first_char() >= 0)
   //  printf("%s COULD FAST FAIL ON '%c'\n", ~name, prod.first_char());
-  pair<Lookup::iterator, Lookup::iterator>
-    cached = lookup.equal_range(str.begin);
-  //if (cached.second - cached.first > 1) 
-  //  printf("MORE THAN ONE in %s\n", ~name);
-  Lookup::iterator i = cached.first;
-  //int num = -1;
-  for (; i != cached.second; ++i) {
-    //++num;
-    //if (num > 1) printf("XXX %s %d\n", ~name, num);
-    if (i->second.str_end) 
-      if (str.end == i->second.str_end) break;
-      else continue;
-    if (str.end > i->second.read_to) break;
-    else {
-      //printf("XXX SHOULD'T USE %s %p %p !> %p \"%s\"\n", ~name, str.begin, str.end, i->second.read_to, ~sample(str.begin, i->second.read_to+1));
-      //break;
-    }
-  }
-  Res * r;
-  if (i == cached.second) {
-    r = &(*((lookup.insert(str.begin).first))).second;
+  Cache::LookupRes lookup_res = cache.lookup(this, str);
+  Res * r = &lookup_res.res;
+  if (!lookup_res.exists) {
     r->end = FAIL; // to avoid infinite recursion
     Res & r0 = *r;
     //Res r0;
@@ -581,7 +660,7 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
     //if (prod->capture_type.is_none())
     //  printf("NP: %s: %d %d\n", ~name, (bool)parts, (CaptureType::Type)prod->capture_type);
     indent_level++;
-    *static_cast<MatchRes *>(&r0) = prod.match(str, &r0.res);
+    r->end = prod.match(str, &r0.res);
     indent_level--;
     //if (!r0) {
     //  assert(r0.res.empty());
@@ -594,63 +673,47 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts) {
     // XXX: MEGA HACK!
     //if (name == "SPACING")
     //  r->read_to = str.begin - 1;
-    if (r->read_to >= str.end) {
-      //printf("PAST END ON %s\n", ~name);
-      r->read_to = NULL;
-      r->str_end = str.end;
-    }
-    if (r->end != FAIL)
-      pprintf("%*cNamedProd DONE %s %p (%p %p) \"%s\" %p\n", indent_level, ' ', ~name, str.begin, r->end, r->read_to, ~sample(str.begin, r->end), str.end);
-    else
-      pprintf("%*cNamedProd DONE %s %p (FAIL %p) %p\n", indent_level, ' ', ~name, str.begin, r->read_to, str.end);
-    //assert(r->end == FAIL || r->parts.size() == 1);
   } else {
-    r = &i->second;
     if (r->end != FAIL)
       pprintf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
     else
       pprintf("%*cNamedProd HIT %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
   }
   if (parts) {
-    if (!prod.capture && *r)
+    if (!prod.capture && r->end)
       r->res.add_part(SYN(String(str.begin, r->end), str, r->end));
     parts->add_parts(r->res.parts_begin(), r->res.parts_end());
     parts->merge_flags(r->res.flags_begin(), r->res.flags_end());
   }
   //printf("%*cMATCH %s RES = %p\n", indent_level, ' ', ~name, r->end);
-  return *r;
+  return r->end;
 }
 
 const char * CachedProd::match_f(SourceStr str, ParseErrors & errs) {
-  pair<Lookup::iterator, Lookup::iterator>
-    cached = lookup.equal_range(str.begin);
-  Lookup::iterator i = cached.first;
-  for (; i != cached.second; ++i) {
-    if (i->second.str_end) 
-      if (str.end == i->second.str_end) break;
-      else continue;
-    if (str.end > i->second.read_to) break;
-  }
-  if (i == cached.second || i->second.end == FAIL) {
+  Cache::LookupRes r = cache.lookup(this, str);
+  if (!r.exists || r.res.end == FAIL) {
     return NamedProd::match_f(str,errs);
   } else {
-    return i->second.end;
+    return r.res.end;
   }
 }
 
 void ParsePeg::Parse::clear_cache() {
-  pprintf("NamedProd CLEAR\n");
-  hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
-  for (; i != e; ++i) {
-    if (!i->second->persistent())
-      i->second->clear_cache();
-  }
+  //run_id++;
+  //cache->data.dump_stats();
+  //global_cache.data.clear();
+  //hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
+  //for (; i != e; ++i) {
+  //  //printf("NamedProd %s SIZE: %d\n", ~i->second->name, i->second->cache_size());
+  //  if (!i->second->persistent())
+  //    i->second->clear_cache();
+  //}
 }
 
 class AlwaysTrue : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *) {
-    return MatchRes(str.begin, NULL);
+    return str.begin;
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
     return str.begin;
@@ -674,7 +737,7 @@ public:
     if (!res) return prod->match(str, NULL);
     MatchRes r = prod->match(str, NULL);
     if (!r) return r;
-    Syntax * parse = SYN(String(str.begin, r.end), str, r.end);
+    Syntax * parse = SYN(String(str.begin, r), str, r);
     //printf("NONE: %s\n", ~parse->to_string());
     res->add_part(parse);
     return r;
@@ -707,7 +770,7 @@ public:
     if (!res) return prod->match(str, NULL);
     MatchRes r = prod->match(str, NULL);
     if (!r) return r;
-    Syntax * parse = new ReparseSyntax(SourceStr(str, r.end));
+    Syntax * parse = new ReparseSyntax(SourceStr(str, r));
     //printf("REPARSE_CAPTURE with %p\n", parse);
     res->add_part(parse);
     return r;
@@ -877,7 +940,7 @@ public:
     if (parms.empty() && name) res.add_part(name);
     MatchRes r = prod.match(str, &res);
     if (!r) return r;
-    str.end = r.end;
+    str.end = r;
     Syntax * res_syn = parms.empty() ? res.build(str) : gather(str, res);
     add_part(res_syn, parts);
     return r;
@@ -933,7 +996,7 @@ public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
     //fprintf(stderr, "NOW COMES THE FUN!\n");
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
-    if (!parts) return MatchRes(str.begin, NULL);
+    if (!parts) return str.begin;
     // FIXME: Explain what the hell is going on here
     SynBuilder * res = parts->part(0)->entity<SynBuilder>();
     SourceStr rstr(parts->part(0)->str(), str.begin);
@@ -942,7 +1005,7 @@ public:
     Syntax * res_syn = parms.empty() ? parts->build(str) : gather(str, *parts);
     parts->invalidate();
     add_part(res_syn, res);
-    return MatchRes(str.begin, NULL);
+    return str.begin;
   }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
@@ -960,12 +1023,14 @@ public:
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return prod->match(str, NULL); 
     SyntaxBuilderN<2> res;
+    Cache::NewPersistent np;
     MatchRes r = prod->match(str, &res);
     if (!r) return r;
     assert(res.num_parts() == 1);
     ReparseSyntax * syn = const_cast<ReparseSyntax *>(res.part(0)->as_reparse());
-    syn->str_ = SourceStr(str, r.end);
+    syn->str_ = SourceStr(str, r);
     syn->parts_[0] = name;
+    syn->cache = cache.data;
     syn->finalize();
     parts->add_part(syn);
     return r;
@@ -1015,9 +1080,9 @@ public:
   MatchRes match(SourceStr str, SynBuilder *) {
     const char * e = str.begin;
     if (prefix_equal(literal.begin(), literal.end(), e, str.end))
-      return MatchRes(e, e-1);
+      return e;
     else
-      return MatchRes(FAIL, e);
+      return FAIL;
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
     const char * e = str.begin;
@@ -1052,9 +1117,9 @@ class CharClass : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *) {
     if (!str.empty() && cs[*str])
-      return MatchRes(str + 1, str);
+      return str + 1;
     else
-      return MatchRes(FAIL, str);
+      return FAIL;
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
     if (!str.empty() && cs[*str]) {
@@ -1089,8 +1154,8 @@ class Any : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *)  {
     if (!str.empty())
-      return MatchRes(str+1, str);
-    return MatchRes(FAIL, str);
+      return str+1;
+    return FAIL;
   }
   const char * match_f(SourceStr str, ParseErrors & errs)  {
     if (!str.empty())
@@ -1118,20 +1183,24 @@ public:
     for (;;) {
       if (end_with_) {
         MatchRes r = end_with_->match(str, NULL);
+#if 0
         read_to = std::max(read_to, r.read_to);
+#endif
         if (r) break;
       }
       MatchRes r = prod.match(str, parts);
+#if 0
       read_to = std::max(read_to, r.read_to);
+#endif
       if (!r) break;
-      str.begin = r.end;
+      str.begin = r;
       matched = true;
       if (once) break;
     }
     if (matched || optional)
-      return MatchRes(str, read_to);
+      return str;
     else 
-      return MatchRes(FAIL, read_to);
+      return FAIL;
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
     bool matched = false;
@@ -1191,17 +1260,17 @@ class Predicate : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *) {
     MatchRes r = prod->match(str, NULL);
-    if (dont_match_empty && r.end == str.begin)
-      r.end = FAIL;
+    if (dont_match_empty && r == str.begin)
+      r = FAIL;
     if (r) {
-      return MatchRes(invert ? FAIL : str, r.read_to);
+      return MatchRes(invert ? FAIL : str /*, r.read_to*/);
     } else {
-      return MatchRes(invert ? str : FAIL, r.read_to);
+      return MatchRes(invert ? str : FAIL /*, r.read_to*/);
     }
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
     // FIXME: Correctly handle errors;
-    return Predicate::match(str, NULL).end;
+    return Predicate::match(str, NULL);
   }
   Predicate(const char * s, const char * e, Prod * p, bool inv, bool dme = false) 
     : Prod(s,e), prod(p), invert(inv), dont_match_empty(dme) {}
@@ -1255,15 +1324,17 @@ public:
     const char * read_to = NULL;
     while (i != e) {
       MatchRes r = i->match(str, res);
+#if 0
       read_to = std::max(read_to, r.read_to);
+#endif
       if (!r) {
         if (res) res->truncate_parts(orig_parts_sz), res->truncate_flags(orig_flags_sz);
-        return MatchRes(FAIL, read_to);
+        return FAIL;
       }
-      str.begin = r.end;
+      str.begin = r;
       ++i;
     }
-    return MatchRes(str.begin, read_to);
+    return str.begin;
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
     Vector<ProdWrap>::iterator 
@@ -1315,7 +1386,6 @@ public:
   MatchRes match(SourceStr str, SynBuilder * parts) {
     const char * read_to = NULL;
     if (jump_table) {
-      read_to = str.begin;
       //printf("using jump table\n");
       ProdWrap * i;
       if (str.empty())
@@ -1329,8 +1399,7 @@ public:
       }
       while (i->prod) {
         MatchRes r = i->match(str, parts);
-        read_to = std::max(read_to, r.read_to);
-        if (r) return MatchRes(r.end, read_to);
+        if (r) return r;
         ++i;
       }
     } else {
@@ -1338,12 +1407,11 @@ public:
         i = prods.begin(), e = prods.end();
       while (i != e) {
         MatchRes r = i->match(str, parts);
-        read_to = std::max(read_to, r.read_to);
-        if (r) return MatchRes(r.end, read_to);
+        if (r) return r;
         ++i;
       }
     }
-    return MatchRes(FAIL, read_to);
+    return FAIL;
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
     Vector<ProdWrap>::iterator 
@@ -1543,7 +1611,7 @@ public:
       if (res) res->add_part(p);
       return r;
     } else {
-      return MatchRes(FAIL, r.read_to);
+      return MatchRes(FAIL /*, r.read_to*/);
     }
   }
   const char * match_f(SourceStr str, ParseErrors & errs) {
@@ -1559,7 +1627,7 @@ public:
     assert(res0.single_part());
     Syntax * r0 = res0.part(0);
     if (mids && mids->anywhere(*r0->arg(0)) > 0) {
-      return r.end;
+      return r;
     } else {
       return FAIL; // FIXME: Inject Error
     }
@@ -1583,17 +1651,27 @@ private:
   ProdProps props_obj;
 };
 
-const Syntax * parse_str(String what, SourceStr str, const Replacements * repls) {
+const Syntax * parse_str(String what, SourceStr str, const Replacements * repls, void * cache) {
   pprintf("BEGIN %s: %s\n", ~what, ~sample(str.begin, str.end));
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
   clock_t start = clock();
   //str.source = new ParseSourceInfo(str, what);
   mids = repls;
   Prod * p = parse.named_prods[what];
-  parse.clear_cache();
+  //parse.clear_cache();
+  //Cache local;
+  //if (!cache) {
+  //  printf("%s: no cache on: %s\n", ~what, ~sample(str.begin, str.end, 60));
+  //} else {
+  //  printf("%s: CACHE ON: %s\n", ~what, ~sample(str.begin, str.end, 60));
+  //}
+  ::cache.reset(cache ? (Cache::Data *)cache : new Cache::Data);
+  //local_cache = new Cache; //&local;
+  //GC_print_finalization_stats();
   SyntaxBuilder dummy;
   const char * s = str.begin;
-  const char * e = p->match(str, &dummy).end;
+  const char * e = p->match(str, &dummy);
+  //::cache.data->dump_stats();
   mids = 0;
   //assert(s != e);
   //printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
@@ -1606,8 +1684,10 @@ const Syntax * parse_str(String what, SourceStr str, const Replacements * repls)
     ParseErrors errors;
     const char * e0 = p->match_f(str, errors);
     assert(e0 == e);
+    //local_cache->data.dump_stats();
     throw errors.to_error(new ParseSourceInfo(str, what), file);
   }
+  //local_cache->data.dump_stats();
   clock_t stop = clock();
   //printf("PARSE STR ... as %s time: %f\n", ~what, (stop - start)/1000000.0);
   dummy.make_flags_parts();
@@ -1740,7 +1820,7 @@ namespace ParsePeg {
     for (;i != e; ++i) {
       //ParseErrors errors;
       SourceStr str(p->name);
-      str.begin = i->to_match->match(str, NULL).end;
+      str.begin = i->to_match->match(str, NULL);
       if (str.empty()) {
         p->desc = i->desc;
         p->set_prod(ProdWrap(i->if_matched->clone(new Capture(new Literal(p->pos, p->end, p->name)))));

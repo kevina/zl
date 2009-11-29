@@ -14,6 +14,7 @@
 #include "parse_op.hpp"
 #include "parse_decl.hpp"
 #include "expand.hpp"
+#include "peg.hpp"
 
 #include "syntax_gather.hpp"
 
@@ -21,9 +22,6 @@
 #include "hash-t.hpp"
 
 //#define NO_ELIDE
-
-// from peg.hpp
-const Syntax * parse_str(String what, SourceStr str, const Replacements * repls = 0);
 
 // each AST node pushes the result on the top of the stack
 //   unless the type is void

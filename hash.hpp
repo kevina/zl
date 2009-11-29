@@ -82,7 +82,7 @@
   };
   
   template <typename P>
-  class HashTable : public gc_cleanup
+  class HashTable /*: public gc_cleanup*/
   {
   public:
     typedef P                     parms_type;
@@ -126,7 +126,7 @@
     void create_table(PrimeIndex);
     iterator find_i(const Key &, bool & have);
     std::pair<iterator, iterator> equal_range_i(const Key & to_find, int & c);
-    
+
   public:
     
     HashTable() {init(0);}
@@ -134,7 +134,7 @@
     HashTable(int size) : prime_index_(0) {init(next_largest(size));}
     HashTable(int size, const Parms & p) 
       : prime_index_(0), parms_(p) {init(next_largest(size));}
-
+    HashTable(Node * n, unsigned sz, NodePool &);
     HashTable(const HashTable & other) {copy(other);}
     HashTable& operator=(const HashTable & other) {del(); copy(other); return *this;}
     ~HashTable() {del();}
@@ -180,6 +180,8 @@
     }
         
     void resize(Size s) {resize_i(next_largest(s));}
+
+    void dump_stats();
 
     //other niceties: swap, copy, equal
 
@@ -318,8 +320,8 @@
     static const bool is_multi = m;
     HF hash;
     E  equal;
-    const K & key(const Value & v) {return v.first;}
-    const K & key(const K & k) {return k;}
+    static const K & key(const Value & v) {return v.first;}
+    static const K & key(const K & k) {return k;}
     HashMapParms() {}
     HashMapParms(const HF & h) : hash(h) {}
     HashMapParms(const HF & h, const E & e) : hash(h), equal(e) {}
@@ -344,6 +346,7 @@
 
     hash_map(size_type s = 0, const HF & h = HF(), const E & e = E()) 
       : Base(s, Parms(h,e)) {}
+    hash_map(typename Base::Node * n, unsigned sz, typename Base::NodePool & o) : Base(n, sz, o) {}
     using Base::insert;
     data_type & operator[](const key_type & k) 
     {
@@ -376,6 +379,32 @@
       return insert(value_type(k,d));
     }
   };
+
+  template <typename H, unsigned INIT_SZ = 8, unsigned MAX_SZ = 32>
+  class tiny_hash {
+  public:
+    typedef typename H::value_type value_type;
+    typedef BlockSList<value_type>  NodePool;
+    typedef typename NodePool::Node Node;
+    tiny_hash() : first(), hash() {}
+    template <class T>
+    std::pair<value_type * ,bool> insert(const T & to_insert) {
+      if (hash) {
+        std::pair<typename H::iterator,bool> r = hash->insert(to_insert);
+        return std::pair<value_type *,bool>(&*r.first, r.second);
+      } else {
+        return insert_i(to_insert);
+      }
+    }
+    void dump_stats();
+  private:
+    Node * first;
+    H * hash;
+    NodePool node_pool_;
+    template <class T>
+    std::pair<value_type * ,bool> insert_i(const T & to_insert);
+  };
+
 //}
 
 #endif
