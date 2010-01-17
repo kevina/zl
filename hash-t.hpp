@@ -86,6 +86,7 @@
 
   template <class P>
   HashTable<P>::HashTable(Node * n, unsigned sz, NodePool & other)
+    : prime_index_(0) 
   {
     size_ = 0;
     create_table(next_largest(sz));
