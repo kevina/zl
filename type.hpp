@@ -152,52 +152,18 @@ namespace ast {
     virtual ~PrintInst() {}
   };
 
-  class GenericPrintInst : public PrintInst { 
-  public:
-    enum Mode {ZLS_MODE, ZL_MODE} mode;
-    GenericPrintInst(Mode m = ZL_MODE) : mode(m) {}
-    void to_string(const TypeInst &, StringBuf & buf) const;
-    void declaration(String var, const TypeInst &, StringBuf & buf) const;
-  private:
-    void to_string0(const TypeInst &, StringBuf & buf) const;
-  };
-
-  class CPrintInst : public PrintInst { 
-  public:
-    enum Mode {C_MODE, ZL_MODE} mode;
-    CPrintInst(Mode m = C_MODE) : mode(m) {}
-    void to_string(const TypeInst &, StringBuf & buf) const;
-    void declaration(String var, const TypeInst & t, StringBuf & buf, bool parentheses) const;
-    void declaration(String var, const TypeInst & t, StringBuf & buf) const {
-      declaration(var, t, buf, false);
-    }
-  };
-
-  class ZLPrintInst : public CPrintInst { 
-  public:
-    ZLPrintInst() : CPrintInst(ZL_MODE) {}
-  };
-
-  class ZLSPrintInst : public GenericPrintInst { 
-  public:
-    ZLSPrintInst() : GenericPrintInst(ZLS_MODE) {}
-  };
-
-  class ZLEPrintInst : public GenericPrintInst { 
-  public:
-    ZLEPrintInst() : GenericPrintInst(ZL_MODE) {}
-  };
-
   extern PrintInst const * const generic_print_inst;
   extern PrintInst const * const c_print_inst;
   extern PrintInst const * const zl_print_inst;
   extern PrintInst const * const zls_print_inst;
   extern PrintInst const * const zle_print_inst;
+  extern PrintInst const * const mangle_print_inst;
 
   class TypeRelation {
   public:
     enum CastType {Implicit, Explicit, Static, Reinterpret, Const, Dynamic};
-    virtual Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit) const = 0;
+    enum CheckOnlyType {CheckOnlyFalse, CheckOnly};
+    virtual Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit, CheckOnlyType = CheckOnlyFalse) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
     virtual void resolve_assign(Exp * &, Exp * &, Environ & env) const = 0;
     virtual Exp * to_effective(Exp * exp, Environ & env) const = 0;

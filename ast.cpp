@@ -297,6 +297,7 @@ namespace ast {
     //assert(!env.symbols.exists_this_scope(k));
     if (!shadow_ok && env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
+      //abort();
     }
     SymbolNode * local = env.symbols.add(k, this);
     assert(!key);
@@ -320,6 +321,7 @@ namespace ast {
         fprintf(stderr, "TLS MISMATCH %s\n", ~uniq_key);
       }
       abort();
+      //goto finish;
       //return;
     }
     tl = env.top_level_symbols->add(uniq_key, this);
@@ -1508,7 +1510,8 @@ namespace ast {
   struct OverloadExtraCmp {
     const Type * t;
     OverloadExtraCmp(const Type * t0) : t(t0) {}
-    bool operator() (SymbolKey, const Symbol * sym) {
+    bool operator() (const SymbolNode * n) {
+      const Symbol * sym = n->value;
       const Fun * fun = dynamic_cast<const Fun *>(sym);
       if (!fun) return false;
       return fun->parms->parms[0].type->effective->unqualified == t;
@@ -2738,9 +2741,12 @@ namespace ast {
     //printf("::"); p->arg(1)->print(); printf("\n");
     SymbolName id = *expand_id(p->arg(1));
     const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified);
+    assert(t);
     if (!t) throw error(p->arg(0), "Expected user type but got ??");
     if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
-    exp->type = change_unqualified(exp->type, t->type);
+    // FIXME: Should't change the type of an exp as it can cause
+    //   problems when p->arg(0) is an entity
+    exp->type = change_unqualified(exp->type, t->type); 
     Syntax * res = SYN(SYN("member"),
                               SYN(exp),
                               p->arg(1));
@@ -2979,6 +2985,20 @@ namespace ast {
   }
 #endif
 
+  struct SigMatchExtraCmp {
+    const Tuple * to_find;
+    SigMatchExtraCmp(const Tuple * to_find_0) : to_find(to_find_0) {}
+    bool operator() (const SymbolNode * n) {
+      if (!to_find) return true;
+      const Tuple * have = n->value->overloadable();
+      if (!have) return false;
+      if (to_find->parms.size() != have->parms.size()) return false;
+      for (unsigned i = 0; i != to_find->parms.size(); ++i)
+        if (to_find->parms[i].type->root != have->parms[i].type->root) return false;
+      return true;
+    }
+  };
+
   Stmt * parse_fun_forward(const Syntax * p, Environ & env, Collect & collect) {
     assert_num_args(p,3,4);
 
@@ -3000,10 +3020,15 @@ namespace ast {
       name = expand_binding(p->arg(0), env);
     }
     
-    bool previous_declared = !is_op && env.symbols.exists_this_scope(name);
     Fun * f = NULL;
+    if (!is_op) {
+      const Tuple * parms = expand_fun_parms(p->arg(1), env);
+      NoOpGather gather;
+      SigMatchExtraCmp cmp(parms);
+      f = find_symbol<Fun>(name, env.symbols.front, env.symbols.back, ThisScope, gather, cmp);
+    }
+    bool previous_declared = f;
     if (previous_declared) {
-      f = env.symbols.find<Fun>(name);
       if (p->num_args() > 3)
         f->parse_forward_i(p, env, collect);
     } else {
@@ -3044,7 +3069,18 @@ namespace ast {
       const UserType * ut = dynamic_cast<const UserType *>(parms->parms[0].type->effective->unqualified);
       ut->uniq_name(o);
     } else {
-      TopLevelVarDecl::uniq_name(o);
+      StringBuf buf;
+      TopLevelVarDecl::uniq_name(buf);
+      bool mangle = false;
+      for (unsigned i = 0; i != buf.size(); ++i) {
+        if (buf[i] == '$') mangle = true;
+      }
+      if (mangle) {
+        for (unsigned i = 0; i != parms->parms.size(); ++i) {
+          mangle_print_inst->to_string(*parms->parms[i].type, buf);
+        }
+      }
+      o << buf.freeze();
     }
   }
   
@@ -3191,13 +3227,54 @@ namespace ast {
     }
   };
 
+  static void resolve_fun_parms(const Vector<Exp *> & parms, Vector<Exp *> * res, const Tuple * fun_parms, 
+                                Environ & env, Syntax * syn = NULL) {
+    if (!fun_parms->vararg && parms.size() != fun_parms->parms.size()) 
+      throw error(syn, 
+                  "Wrong number of parameters, expected %u but got %u when calling %s",
+                  fun_parms->parms.size(), parms.size(), "??");
+    else if (fun_parms->vararg && parms.size() < fun_parms->parms.size())
+      throw error(syn,
+                  "Not enough parameters, expected at least %u but got %u when calling %s",
+                  fun_parms->parms.size(), parms.size(), "??");
+    const int typed_parms = fun_parms->parms.size();
+    const int num_parms = parms.size();
+    int i = 0;
+    for (;i != typed_parms; ++i) {
+      Exp * r = env.type_relation->resolve_to(parms[i], fun_parms->parms[i].type, env, 
+                                              TypeRelation::Implicit, 
+                                              res ? TypeRelation::CheckOnlyFalse : TypeRelation::CheckOnly);
+      if (res)
+        (*res)[i] = r;
+    }
+    if (res) 
+      for (;i != num_parms; ++i) {
+        (*res)[i] = parms[i]->def_arg_prom(env);
+      }
+  }
+
   struct Call : public Exp {
     Call() {} 
     const char * what() const {return "call";}
     //AST * part(unsigned i) {return i == 0 ? lhs : new Generic(syn->arg(1), parms);}
     Exp * lhs;
     Vector<Exp *> parms;
-    Call * parse_self(const Syntax * p, Environ & env) {
+    Call * construct(Exp * lhs0, Vector<Exp *> parms0 /* will steal */, Environ & env) {
+      lhs = lhs0;
+      parms.swap(parms0);
+      const Function * ftype = dynamic_cast<const Function *>(lhs->type);
+      if (!ftype) {
+        if (const Pointer * t = dynamic_cast<const Pointer *>(lhs->type))
+          ftype = dynamic_cast<const Function *>(t->subtype);
+      }
+      if (!ftype)
+        throw error (lhs->syn, "Expected function type");
+      type = ftype->ret;
+      lvalue = type->addressable ? LV_NORMAL : LV_FALSE;
+      resolve_fun_parms(parms, &parms, ftype->parms, env, syn->arg(1));
+      return this;
+    }
+    Call * parse_self_(const Syntax * p, Environ & env) {
       syn = p;
       //printf("CALL>>%s\n", ~syn->to_string());
       assert_num_args(2);
@@ -3255,7 +3332,71 @@ namespace ast {
       f << "))";
     }
   };
+  Exp * mk_call(Syntax * p, Exp * lhs0, Vector<Exp *> parms0 /* will steal */, Environ & env) {
+    Call * call = new Call;
+    call->syn = p;
+    call->construct(lhs0, parms0, env);
+    return call;
+  }
 
+  struct GatherExtraCmp {
+    SymbolNode::Scope scope;
+    Vector<const Symbol *> syms;
+    GatherExtraCmp() : scope() {}
+    bool operator() (const SymbolNode * n) {
+      //printf("?? %s %p\n", ~n->key.to_string(), n->scope);
+      if (!n->value->overloadable()) return true;
+      if (!scope) scope = n->scope;
+      if (n->scope == scope)
+        syms.push_back(n->value);
+      return false;
+    }
+  };
+
+  Exp * parse_call(const Syntax * p, Environ & env) {
+    //return (new Call)->parse_self_(p, env);
+    assert_num_args(p, 2);
+    Syntax * lhs = partly_expand(p->arg(0), ExpPos, env);
+    Vector<Exp *> parms;
+    if (lhs->is_a("id")) {
+      add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));
+      // find all candidates
+      //SymbolNode * first = find_symbol_node<Symbol>(
+      // break if only one
+      NoOpGather gather;
+      GatherExtraCmp cmp;
+      const VarSymbol * sym = NULL;
+      Error * saved_err = NULL;
+      try {sym = lookup_symbol<VarSymbol>(lhs->arg(0), DEFAULT_NS, env.symbols.front, NULL, NormalStrategy, gather, cmp);}
+      catch (Error * err) {saved_err = err;}
+      // if lookup_symbol still returned that means there is only one
+      // possibility so use it
+      if (!sym) {
+        if (cmp.syms.empty()) throw saved_err;
+        if (cmp.syms.size() > 1) printf("Found %d on %s\n", cmp.syms.size(), ~lhs->arg(0)->to_string());
+        Vector<const Symbol *> syms;
+        for (Vector<const Symbol *>::iterator i = cmp.syms.begin(), e = cmp.syms.end(); 
+             i != e; ++i) 
+        {
+          try {
+            if (std::find(syms.begin(), syms.end(), *i) != syms.end()) continue;
+            resolve_fun_parms(parms, NULL, (*i)->overloadable(), env, NULL);
+            syms.push_back(*i);
+          } catch (...) {}
+        }
+        assert(syms.size() == 1);
+        sym = dynamic_cast<const VarSymbol *>(syms.front());
+        assert(sym);
+        //const VarSymbol * sym = env.symbols.lookup<VarSymbol>(lhs->arg(0));
+      }
+      return mk_call(p, mk_id(sym, env), parms, env);
+    } else {
+      Exp * lhs_e = just_parse_exp(lhs, env, ExpContext()); // must be done here
+      add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));
+      return mk_call(p, lhs_e, parms, env);
+    }
+  }
+  
   //
   //
   //
@@ -3852,7 +3993,7 @@ namespace ast {
     if (what == "deref")   return parse_deref(p, env);
     if (what == "member")  return parse_member_access(p, env);
     if (what == "imember") return parse_imember_access(p, env);
-    if (what == "call")    return (new Call)->parse_self(p, env);
+    if (what == "call")    return parse_call(p, env);
     if (what == "anon")    return parse_anon(p, env, c);
     if (what == "seq")     return parse_seq(p, env, c);
     if (what == "eblock")  return parse_eblock(p, env, c);

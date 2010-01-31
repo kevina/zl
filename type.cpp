@@ -54,11 +54,54 @@ namespace ast {
     return s->inst(p);
   }
 
+  class GenericPrintInst : public PrintInst { 
+  public:
+    enum Mode {ZLS_MODE, ZL_MODE} mode;
+    GenericPrintInst(Mode m = ZL_MODE) : mode(m) {}
+    void to_string(const TypeInst &, StringBuf & buf) const;
+    void declaration(String var, const TypeInst &, StringBuf & buf) const;
+  private:
+    void to_string0(const TypeInst &, StringBuf & buf) const;
+  };
+
+  class CPrintInst : public PrintInst { 
+  public:
+    enum Mode {C_MODE, ZL_MODE} mode;
+    CPrintInst(Mode m = C_MODE) : mode(m) {}
+    void to_string(const TypeInst &, StringBuf & buf) const;
+    void declaration(String var, const TypeInst & t, StringBuf & buf, bool parentheses) const;
+    void declaration(String var, const TypeInst & t, StringBuf & buf) const {
+      declaration(var, t, buf, false);
+    }
+  };
+
+  class ZLPrintInst : public CPrintInst { 
+  public:
+    ZLPrintInst() : CPrintInst(ZL_MODE) {}
+  };
+
+  class ZLSPrintInst : public GenericPrintInst { 
+  public:
+    ZLSPrintInst() : GenericPrintInst(ZLS_MODE) {}
+  };
+
+  class ZLEPrintInst : public GenericPrintInst { 
+  public:
+    ZLEPrintInst() : GenericPrintInst(ZL_MODE) {}
+  };
+
+  class ManglePrintInst : public PrintInst { 
+  public:
+    void to_string(const TypeInst &, StringBuf & buf) const;
+    void declaration(String var, const TypeInst & t, StringBuf & buf) const;
+  };
+
   PrintInst const * const generic_print_inst = new GenericPrintInst();
   PrintInst const * const c_print_inst = new CPrintInst();
   PrintInst const * const zl_print_inst = new ZLPrintInst();
   PrintInst const * const zls_print_inst = new ZLSPrintInst();
   PrintInst const * const zle_print_inst = new ZLEPrintInst();
+  PrintInst const * const mangle_print_inst = new ManglePrintInst();
   
   void TypeParm::to_string(const PrintInst & pi, StringBuf & buf) const {
     switch (what) {
@@ -162,6 +205,61 @@ namespace ast {
     buf << "(var " << var << " ";
     to_string(type, buf);
     buf << ")";
+  }
+
+  void ManglePrintInst::to_string(const TypeInst & type0, StringBuf & buf) const {
+    // $s: "struct X"
+    // $e: "enum X"
+    // $c: "class X" (unused)
+    // $b: <built in type with spaces replaced with _> (
+    // $_: <type>
+    // $C: "const X"
+    // $v: "volatile X"
+    // $r: "restrict R"
+    // $P: "* x" 
+    // $R: "& x"
+    const TypeInst * type = type0.root;
+    for (;;) { // loop while something changed
+      if (const ZeroT * t = dynamic_cast<const ZeroT *>(type)) {
+        type = t->of;
+      } else if (const WrapperTypeInst * t = dynamic_cast<const WrapperTypeInst *>(type)) {
+        type = t->of;
+      } else {
+        break;
+      }
+    }
+    unsigned sz = type->num_parms();
+    if (sz == 0) {
+      if (const char * tag = type->tag()) {
+        buf << "$" << tag[0]; // $s, $e, or $c
+        buf << type->type_symbol->uniq_name();
+      } else {
+        StringBuf tmp;
+        tmp << type->type_symbol->uniq_name();
+        bool dash = false;
+        for (unsigned i = 0; i != tmp.size(); ++i) {
+          if (tmp[i] == '-') {tmp[i] = '_'; dash = true;}
+        }
+        buf << (dash ? "$b" : "$_") << tmp.freeze();
+      }
+    } else if (const QualifiedType * t = dynamic_cast<const QualifiedType *>(type)) {
+      if (t->qualifiers & QualifiedType::CONST)    buf += "$C";
+      if (t->qualifiers & QualifiedType::VOLATILE) buf += "$v";
+      if (t->qualifiers & QualifiedType::RESTRICT) buf += "$r";
+      to_string(*t->subtype, buf);
+    } else if (const PointerLike * t = dynamic_cast<const PointerLike *>(type)) {
+      buf += "$P";
+      to_string(*t->subtype, buf);
+    } else if (const Reference * t = dynamic_cast<const Reference *>(type)) {
+      buf += "$R";
+      to_string(*t->subtype, buf);
+    } else {
+      abort();
+    }
+  }
+
+  void ManglePrintInst::declaration(String var, const TypeInst & type, StringBuf & buf) const {
+    abort();
   }
 
   void CPrintInst::to_string(const TypeInst & type, StringBuf & buf) const {
@@ -439,14 +537,14 @@ namespace ast {
 
   class C_TypeRelation : public TypeRelation {
   public:
-    Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule) const;
+    Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule, CheckOnlyType) const;
     Exp * to_effective(Exp * exp, Environ & env) const;
     Exp * def_arg_prom(Exp * exp, Environ & env) const;
     void resolve_assign(Exp * & lhs, Exp * & rhs, Environ & env) const;
     const Type * unify(int rule, const Type *, const Type *) const;
   };
 
-  Exp * C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule) const {
+  Exp * C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule, CheckOnlyType check_only) const {
     static int i = -1;
     ++i;
     Exp * exp = orig_exp;
@@ -545,9 +643,9 @@ namespace ast {
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
         else if (h_subtype->is(n_subtype->category))
-          return cast_up(exp, n_subtype, env);
+          return check_only ? NULL : cast_up(exp, n_subtype, env);
         else if (n_subtype->is(h_subtype->category) && rule == Explicit || rule == Static)
-          return cast_down(exp, nu, env);
+          return check_only ? NULL : cast_down(exp, nu, env);
         else
           goto fail;
       } else {

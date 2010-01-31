@@ -539,6 +539,7 @@ namespace ast {
     mutable SymbolNode * env_ss;
     mutable bool is_macro;
     const Tuple * parms;
+    const Tuple * overloadable() const {return parms;}
     const Type * ret_type;
     Block * body;
     bool inline_;
@@ -748,11 +749,11 @@ namespace ast {
     } else if (p->is_a("fluid")) {
       assert_num_args(p, 1);
       const FluidBinding * b = lookup_symbol<FluidBinding>(p->arg(0), ns, start, stop, strategy, gather);
-      return lookup_symbol<T>(SymbolKey(b->rebind, ns), p->arg(0)->str(), start, stop, strategy);
+      return lookup_symbol<T>(SymbolKey(b->rebind, ns), p->arg(0)->str(), start, stop, strategy, gather, cmp); // fixme: should I use NoOpGather here?
     } else if (p->is_a("`")) {
       assert_num_args(p, 2);
       const InnerNS * ns = lookup_symbol<InnerNS>(p->arg(1), INNER_NS, start);
-      return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy);
+      return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy, gather, cmp);
     } else if (p->is_a("::")) {
       //printf("w/outer %s %s\n", ~p->to_string(), ~p->sample_w_loc());
       const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, start, stop, strategy);
@@ -761,7 +762,7 @@ namespace ast {
       //for (unsigned i = 1; i < last; ++i) {
       //  m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);
       //}
-      return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather);
+      return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather, cmp);
     } else {
       //p->print(); printf("?\n");
       return NULL;

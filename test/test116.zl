@@ -1,0 +1,17 @@
+
+module M {
+
+int fo(int x) {
+  return x;
+}
+
+int fo(int x, int y) {
+  return x;
+}
+
+}
+
+
+int main() {
+  return M::fo(10);
+}

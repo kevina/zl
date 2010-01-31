@@ -183,6 +183,7 @@ namespace ast {
       return uniq_name_;
     }
     virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
+    virtual const class Tuple * overloadable() const {return NULL;}
     virtual void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
@@ -264,6 +265,9 @@ namespace ast {
 
   struct SymbolNode : public gc {
     SymbolKey key;
+    typedef TopLevelSymbol * Scope;
+    Scope scope;   // Effective scope, NULL if global.  Used primary
+                   // for overload resolution.
     Symbol * value;
     SymbolNode * next;
     enum {ALIAS = 1, IMPORTED = 2, DIFF_SCOPE = 4, INTERNAL = 8, TOP_LEVEL = 16};
@@ -275,12 +279,16 @@ namespace ast {
     bool should_skip() const {return flags & (IMPORTED | DIFF_SCOPE | INTERNAL);}
     void set_flags(unsigned f) {flags |= f;}
     void unset_flags(unsigned f) {flags &= ~f;}
+    void set_scope_from_symbol() {
+      TopLevelSymbol * tl = dynamic_cast<TopLevelSymbol *>(value);
+      if (tl) scope = tl->where;
+    }
     SymbolNode(const SymbolKey & k, Symbol * v, SymbolNode * n = NULL) 
-      : key(k), value(v), next(n), flags() {}
+      : key(k), scope(), value(v), next(n), flags() {set_scope_from_symbol();}
     SymbolNode(const SymbolKey & k, Symbol * v, unsigned f, SymbolNode * n = NULL) 
-      : key(k), value(v), next(n), flags(f) {}
+      : key(k), scope(), value(v), next(n), flags(f) {set_scope_from_symbol();}
     SymbolNode(const SymbolNode & n, SymbolNode * nx) 
-      : key(n.key), value(n.value), next(nx), flags(n.flags) {}
+      : key(n.key), scope(n.scope), value(n.value), next(nx), flags(n.flags) {}
   };
 
   struct PropNode {
@@ -312,7 +320,7 @@ namespace ast {
   };
 
   struct AlwaysTrueExtraCmp {
-    bool operator() (SymbolKey, const Symbol *) {return true;}
+    bool operator() (const SymbolNode *) {return true;}
   };
 
   template <typename Gather, typename ExtraCmp>
@@ -346,7 +354,7 @@ namespace ast {
       //printf ("--- %s\n", ~cur->key.to_string());
       //if (cur->value)
       //  printf("?? %s %d %d\n", ~cur->key.to_string(), k == cur->key, cmp(cur->key, cur->value));
-      if (k == cur->key && cmp(cur->key, cur->value) && (strategy != ThisScope || !cur->diff_scope())) break;
+      if (k == cur->key && cmp(cur) && (strategy != ThisScope || !cur->diff_scope())) break;
     }
     //printf("^^^ %d\n", cur == stop);
     if (cur == stop) {
