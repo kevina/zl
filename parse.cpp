@@ -37,32 +37,6 @@ void SyntaxBase::dump_type_info() {
   printf("\n");
 }
 
-void SynEntity::desc(OStream & o) const {
-  switch (d.type_id) {
-  case 0x1FF: 
-    o << "<error>"; 
-    break;
-  case 0x2FF: 
-    o << "<symbol: ";
-    o << entity<ast::Symbol>()->uniq_name();
-    o << ">";
-    break;
-  case 0x3FF: 
-    o << "<key>";
-    break;
-  case 0x401: 
-    o << "<exp>";
-    break;
-  case 0x402: 
-    o << "<stmt>";
-    break;
-  case 0x5FF: 
-    o << "<type>";
-    break;
-  default: o << WHAT;
-  }
-}
-
 //
 // SourceStr
 // 
@@ -358,6 +332,31 @@ String SyntaxBase::to_string() const {
   return buf.freeze();
 }
 
+void SynEntity::desc(OStream & o) const {
+  switch (d.type_id) {
+  case 0x1FF: 
+    o << "<error>"; 
+    break;
+  case 0x2FF: 
+    o << "<symbol:";
+    o << entity<ast::Symbol>()->uniq_name();
+    o << ">";
+    break;
+  case 0x3FF: 
+    o << "<key>";
+    break;
+  case 0x401: 
+    o << "<exp>";
+    break;
+  case 0x402: 
+    o << "<stmt>";
+    break;
+  case 0x5FF: 
+    o << "<type>";
+    break;
+  default: o << WHAT;
+  }
+}
 
 static const char * s_id(SourceStr str, String & res) {
   bool have_quotes = false;
