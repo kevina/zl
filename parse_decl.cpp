@@ -190,6 +190,7 @@ struct DeclWorking {
   
   const Syntax * make_declaration(const Syntax * id, const Syntax * t, const Syntax * init = NULL);
   const Syntax * make_function(const Syntax * id, const Syntax * t, const Syntax * body);
+  const Syntax * parse_fun_parms(const Syntax * parms, Environ &);
   const Syntax * make_function_type(const Syntax *, const Syntax *, Environ & env);
 };
 
@@ -199,7 +200,7 @@ public:
   const Syntax * parse_decl(const Syntax * p, Environ &);
   const Syntax * parse_type(parts_iterator & i, parts_iterator e, Environ &);
   const Syntax * parse_type(const Syntax * p, Environ &);
-  
+  const Syntax * parse_fun_parms(const Syntax*, Environ &);
   void init() {}
   ~ParseDeclImpl() {}
 };
@@ -319,12 +320,19 @@ const Syntax * ParseDeclImpl::parse_type(parts_iterator & i,
   return t;
 }
 
-
 const Syntax * ParseDeclImpl::parse_type(const Syntax * p, Environ & env) {
   parts_iterator i = p->args_begin();
   parts_iterator end = p->args_end();
   const Syntax * t = parse_type(i, end, env);
   if (i != end) return NULL;
+  return t;
+}
+
+const Syntax * ParseDeclImpl::parse_fun_parms(const Syntax * p, Environ & env) {
+  SyntaxBuilder dummy;
+  DeclWorking w(dummy);
+  const Syntax * t = w.parse_fun_parms(p, env);
+  assert(dummy.empty()); // FIXME: Error Message
   return t;
 }
 
@@ -650,9 +658,8 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   }
 }
 
-const Syntax * DeclWorking::make_function_type(const Syntax * ret,
-                                              const Syntax * parms,
-                                              Environ & env)
+const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
+                                            Environ & env)
 {
   SyntaxBuilder ps(SYN("."));
   //printf("MAKE FUNCTION TYPE: %s %s\n", ~ret->to_string(), ~parms->to_string());
@@ -681,7 +688,14 @@ const Syntax * DeclWorking::make_function_type(const Syntax * ret,
     if (!(*i)->eq(",")) throw error(*i, "Expected \",\" got \"%s\".", ~(*i)->to_string());
     ++i;
   }
-  return SYN(SYN(".fun"), ps.build(), ret);
+  return ps.build();
+}
+
+const Syntax * DeclWorking::make_function_type(const Syntax * ret,
+                                               const Syntax * parms,
+                                               Environ & env)
+{
+  return SYN(SYN(".fun"), parse_fun_parms(parms, env), ret);
 }
 
 const Syntax * DeclWorking::parse_init_exp(parts_iterator & i, 

@@ -51,7 +51,9 @@ CASE_LABEL =
 CASE_EXP = <exp> (!":" {TOKEN})+;
 
 MACRO =
-  <macro> "macro" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE}
+  <macro> "macro" {ID} "(" {MATCH_LIST} ")" 
+          (:<typed-parms> ":" "typed_parms" "(" {TOKENS} ")")?
+          (:<free> ":" "(" {ID_LIST} ")" /) {BRACE}
   / <smacro> "smacro" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE} ;
 
 MAKE_MACRO  =
