@@ -286,7 +286,7 @@ namespace ast {
   //
 
   void Symbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
-    SymbolNode * n = env.symbols.add(k, this);
+    SymbolNode * n = env.symbols.add(env.where, k, this);
     assert(!key);
     key = &n->key;
     if (env.special()) return;
@@ -299,7 +299,7 @@ namespace ast {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
       //abort();
     }
-    SymbolNode * local = env.symbols.add(k, this);
+    SymbolNode * local = env.symbols.add(env.where, k, this);
     assert(!key);
     key = &local->key;
     if (env.special()) return;
@@ -324,7 +324,7 @@ namespace ast {
       //goto finish;
       //return;
     }
-    tl = env.top_level_symbols->add(uniq_key, this);
+    tl = env.top_level_symbols->add(env.where, uniq_key, this);
   finish:
     tl->unset_flags(SymbolNode::ALIAS);
     //printf("2> %s %s %s %d\n", ~name, ~uniq_name(), typeid(*this).name(), order_num);
@@ -438,7 +438,7 @@ namespace ast {
   };
 
   void NormalLabel::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
-    SymbolNode * n = env.fun_labels.add(k, this);
+    SymbolNode * n = env.fun_labels.add(env.where, k, this);
     key = &n->key;
     make_unique(*env.fun_labels.front);
   }
@@ -2470,7 +2470,7 @@ namespace ast {
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
         k.marks = mark(k.marks, *i);
-      SymbolNode * r = l.push_back(k, cur->value);
+      SymbolNode * r = l.push_back(cur->scope, k, cur->value);
       r->flags = cur->flags;
       if (same_scope) 
         r->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED);
@@ -2665,7 +2665,7 @@ namespace ast {
     user_cast->to = to;
     user_cast->cast_macro = env.symbols.lookup<Symbol>(cast);
     env.add(SymbolKey(what, CAST_NS), user_cast);
-    m->syms = new SymbolNode(SymbolKey(what, CAST_NS), user_cast, m->syms);
+    m->syms = new SymbolNode(m, SymbolKey(what, CAST_NS), user_cast, m->syms);
   }
 
   Stmt * parse_make_subtype(const Syntax * p, Environ & env) {
@@ -2709,11 +2709,14 @@ namespace ast {
         const Syntax * n = expand_id(arg1->arg(0));
         const Syntax * a = SYN(*arg1->arg(1), PARTS(), FLAGS(SYN(THIS, ptr_exp)));
         const Symbol * sym;
-        if (n->is_a("::")) // FIXME: This is hack, and not quite right
-          sym = lookup_symbol<Symbol>(n, DEFAULT_NS, env.symbols.front, NULL, StripMarks);
-        else
-          sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
-        call = SYN(p->str(), arg1->part(0), SYN(ID, SYN(n->str(), sym)), a);
+        //if (n->is_a("::")) // FIXME: This is hack, and not quite right
+        //  sym = lookup_symbol<Symbol>(n, DEFAULT_NS, env.symbols.front, NULL, StripMarks);
+        //else
+        //  sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
+        if (!n->is_a("::"))
+          n = SYN(SYN("::"), SYN<Symbol>(t->module), n);
+        //call = SYN(p->str(), arg1->part(0), SYN(ID, SYN(n->str(), sym)), a);
+        call = SYN(p->str(), arg1->part(0), n, a);
       } else {
         const Syntax * n = expand_id(arg1);
         const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
@@ -3360,14 +3363,11 @@ namespace ast {
     Vector<Exp *> parms;
     if (lhs->is_a("id")) {
       add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));
-      // find all candidates
-      //SymbolNode * first = find_symbol_node<Symbol>(
-      // break if only one
       NoOpGather gather;
       GatherExtraCmp cmp;
       const Symbol * sym = NULL;
       Error * saved_err = NULL;
-      try {sym = lookup_symbol<VarSymbol>(lhs->arg(0), DEFAULT_NS, env.symbols.front, NULL, NormalStrategy, gather, cmp);}
+      try {sym = lookup_symbol<Symbol>(lhs->arg(0), DEFAULT_NS, env.symbols.front, NULL, NormalStrategy, gather, cmp);}
       catch (Error * err) {saved_err = err;}
       // if lookup_symbol still returned that means there is only one
       // possibility so use it

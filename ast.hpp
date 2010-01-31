@@ -737,13 +737,16 @@ namespace ast {
     if (p->simple()) {
       return lookup_symbol<T>(SymbolKey(*p, ns), p->str(), start, stop, strategy, gather, cmp);
     } else if (p->entity<Symbol>()) {
-      //printf(">%s\n", typeid(*p->entity()).name());
+      //printf(">%s\n", typeid(*p->entity<Symbol>()).name());
       if (T * s = dynamic_cast<T *>(p->entity<Symbol>())) {
         return s;
       } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
         return lookup_symbol<T>(s->name, p->str(), start, stop, strategy, gather, cmp);
       } else {
-        throw error(p, "Wrong type of symbol found...");
+        //fprintf(stderr, "Got %s expected %s. (%p)\n", 
+        //        typeid(*p->entity<Symbol>()).name(), typeid(T).name(), p);
+        throw error(p, "Wrong type of symbol found.  Got %s expected %s. (%p)",
+                    typeid(*p->entity<Symbol>()).name(), typeid(T).name(), p);
         //abort(); // FIXME Error Message
       }
     } else if (p->is_a("fluid")) {

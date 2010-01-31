@@ -279,14 +279,10 @@ namespace ast {
     bool should_skip() const {return flags & (IMPORTED | DIFF_SCOPE | INTERNAL);}
     void set_flags(unsigned f) {flags |= f;}
     void unset_flags(unsigned f) {flags &= ~f;}
-    void set_scope_from_symbol() {
-      TopLevelSymbol * tl = dynamic_cast<TopLevelSymbol *>(value);
-      if (tl) scope = tl->where;
-    }
-    SymbolNode(const SymbolKey & k, Symbol * v, SymbolNode * n = NULL) 
-      : key(k), scope(), value(v), next(n), flags() {set_scope_from_symbol();}
-    SymbolNode(const SymbolKey & k, Symbol * v, unsigned f, SymbolNode * n = NULL) 
-      : key(k), scope(), value(v), next(n), flags(f) {set_scope_from_symbol();}
+    SymbolNode(Scope s, const SymbolKey & k, Symbol * v, SymbolNode * n = NULL) 
+      : key(k), scope(s), value(v), next(n), flags() {}
+    SymbolNode(Scope s, const SymbolKey & k, Symbol * v, unsigned f, SymbolNode * n = NULL) 
+      : key(k), scope(s), value(v), next(n), flags(f) {}
     SymbolNode(const SymbolNode & n, SymbolNode * nx) 
       : key(n.key), scope(n.scope), value(n.value), next(nx), flags(n.flags) {}
   };
@@ -486,8 +482,8 @@ namespace ast {
       }
       return n;
     }
-    SymbolNode * push_back(const SymbolKey & k, Symbol * sym) {
-      return push_back_i(new SymbolNode(k, sym));
+    SymbolNode * push_back(SymbolNode::Scope s, const SymbolKey & k, Symbol * sym) {
+      return push_back_i(new SymbolNode(s, k, sym));
     }
     SymbolNode * push_back(const SymbolNode & n) {
       return push_back_i(new SymbolNode(n, NULL));
@@ -504,9 +500,9 @@ namespace ast {
     SymbolInsrPoint(SymbolNode * * f)
       : front(f) {}
     template <typename T>
-    SymbolNode * add(const SymbolKey & k, T * sym, unsigned flags = 0, SymbolNode * back = NULL) {
+    SymbolNode * add(SymbolNode::Scope s, const SymbolKey & k, T * sym, unsigned flags = 0, SymbolNode * back = NULL) {
       //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
-      *front = new SymbolNode(k, sym, flags, *front);
+      *front = new SymbolNode(s, k, sym, flags, *front);
       return *front;
     }
     void splice(SymbolNode * first, SymbolNode * last) {
@@ -543,11 +539,11 @@ namespace ast {
       return SymbolTable(front, front);
     }
     SymbolTable new_open_scope() {
-      SymbolNode * placeholder = new SymbolNode(SymbolKey(), NULL, front);
+      SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
       return SymbolTable(placeholder, front, &placeholder->next);
     }
     SymbolTable new_scope(SymbolInsrPoint & o) {
-      SymbolNode * placeholder = new SymbolNode(SymbolKey(), NULL, front);
+      SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
       o.front = &placeholder->next;
       return SymbolTable(placeholder, front);
     }
@@ -575,11 +571,11 @@ namespace ast {
     }
     inline bool exists(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     inline bool exists_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
-    SymbolNode * add(const SymbolKey & k, Symbol * sym, unsigned flags = 0) {
-      return ip.add(k, sym, flags, back);
+    SymbolNode * add(SymbolNode::Scope s, const SymbolKey & k, Symbol * sym, unsigned flags = 0) {
+      return ip.add(s, k, sym, flags, back);
     }
     SymbolNode * add_internal(const SymbolKey & k, Symbol * sym) {
-      return add(k, sym, SymbolNode::INTERNAL);
+      return add(NULL, k, sym, SymbolNode::INTERNAL);
     }
     void splice(SymbolNode * first, SymbolNode * last) {
       return ip.splice(first, last);

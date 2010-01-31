@@ -628,6 +628,7 @@ namespace syntax_ns {
     template <typename T> SynEntity(const T * e) : NoParts(SYN_ENTITY_TI, e->source_str()), d(e) {}
     template <typename T> SynEntity(const SourceStr & s, const T * e) : NoParts(SYN_ENTITY_TI, s), d(e) {}
 
+    void desc(OStream & o) const;
     SynEntity * clone() const {return new SynEntity(*this);}
   };
 

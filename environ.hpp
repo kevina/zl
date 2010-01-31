@@ -152,7 +152,7 @@ namespace ast {
     }
 
     void add_internal(const SymbolKey & k, Symbol * sym) {
-      SymbolNode * n = symbols.add(k, sym, SymbolNode::INTERNAL);
+      SymbolNode * n = symbols.add(NULL, k, sym, SymbolNode::INTERNAL);
       sym->key = &n->key;
     }
 
@@ -160,7 +160,7 @@ namespace ast {
       //if (true_top_level)
       //  top_level_symbols->add_top_level(k, sym, SymbolNode::ALIAS);
       //else
-        symbols.add(k, sym, SymbolNode::ALIAS);
+      symbols.add(where, k, sym, SymbolNode::ALIAS);
     }
 
     Environ new_frame() {

@@ -38,7 +38,6 @@ template <> struct TypeInfo<ast::Stmt> {
 template <> struct TypeInfo<ast::TypeInst> {
   typedef ast::TypeInst type; 
   static const unsigned id = 0x5FF;};
-template <typename T> struct TypeInfo;
 template <> struct TypeInfo<syntax_ns::SyntaxBuilderBase> {
   typedef syntax_ns::SyntaxBuilderBase type; 
   static const unsigned id = 0x6FF;};

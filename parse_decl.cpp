@@ -670,7 +670,7 @@ const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
     DeclWorking w(type_scope);
     const Syntax * id = NULL;
     bool r = w.parse_first_part(i, end, env, false);
-    if (!r) throw error(*i, "Expected type or \"...\".");
+    if (!r) abort(); //throw error(*i, "Expected type or \"...\".");
     if (w.dots) {
       ps.add_part(w.inner_type); // FIXME: Preserve source info..
     } else {

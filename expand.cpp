@@ -1486,7 +1486,6 @@ void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res) {
 }
 
 Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
-  if (!parse) return NULL;
   //printf("FUN_PARMS: %s\n", ~parse->to_string());
   if (parse->is_a("(...)")) 
     parse = parse_decl_->parse_fun_parms(parse, env);

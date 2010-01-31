@@ -1,0 +1,17 @@
+
+class X {
+  int x;
+  int foo(int x) {return x;}
+  int foo(int x, int y) {return x + y;}
+};
+
+class Y : public X{
+  int foo(int x) {return x;}
+  int foo(int x, int y) {return x + y;}
+};
+
+int main() {
+  Y y;
+  y.foo(10);
+  y.foo(10,20);
+}

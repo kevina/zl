@@ -37,6 +37,32 @@ void SyntaxBase::dump_type_info() {
   printf("\n");
 }
 
+void SynEntity::desc(OStream & o) const {
+  switch (d.type_id) {
+  case 0x1FF: 
+    o << "<error>"; 
+    break;
+  case 0x2FF: 
+    o << "<symbol: ";
+    o << entity<ast::Symbol>()->uniq_name();
+    o << ">";
+    break;
+  case 0x3FF: 
+    o << "<key>";
+    break;
+  case 0x401: 
+    o << "<exp>";
+    break;
+  case 0x402: 
+    o << "<stmt>";
+    break;
+  case 0x5FF: 
+    o << "<type>";
+    break;
+  default: o << WHAT;
+  }
+}
+
 //
 // SourceStr
 // 
@@ -276,7 +302,9 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
     else
       o.printf("%s", ~escape(what().to_string(g)));
   } else if (have_entity()) {
-    o.printf("(%s)", ~escape(what().to_string(g)));
+    o << "(";
+    as_syn_entity()->desc(o);
+    o << ")";
   } else if (is_reparse()) {
     o.printf("(%s ...)", ~escape(what().to_string(g)));
   } else if (have_parts()) {

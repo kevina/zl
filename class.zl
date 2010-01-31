@@ -519,8 +519,8 @@ public:
     Syntax * call_nv = mk_call(replace(syntax n`internal, m, mark),
                                !is_static ? replace(syntax ths, m, mark) : NULL, 
                                call_parms);
-    module_b->append(replace(syntax {macro n`non_virtual ($1) {$2;}},
-                             match_local(m, macro_parms, call_nv, 0), mark));
+    module_b->append(replace(syntax {macro n`non_virtual ($1) :typed_parms($2) {$3;}},
+                             match_local(m, macro_parms, m->var(syntax parms), call_nv, 0), mark));
 
     if (is_virtual) {
       //m = match(m, syntax fpn, m->var(syntax n));
@@ -529,9 +529,9 @@ public:
                                   replace(syntax this, m, mark),
                                   call_parms);
         module_b->append(replace(
-                           syntax {macro n ($1) {({__shadow name * fluid this = ths; $2;});}},
+                           syntax {macro n ($1) :typed_parms($2) {({__shadow name * fluid this = ths; $3;});}},
                            //syntax {macro n ($1) {(ths->_vptr->fpn)($2);}},
-                           match_local(m, macro_parms, call_v, 0),
+                           match_local(m, macro_parms, m->var(syntax parms), call_v, 0),
                            mark));
         m = match(m, syntax pfun, 
                   replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
@@ -542,8 +542,8 @@ public:
       vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid fpn))) 
                                            (id (` (mid n) internal))), m, mark));
     } else {
-      module_b->append(replace(syntax {macro n ($1) {$2;}},
-                               match_local(m, macro_parms, call_nv, 0), mark));
+      module_b->append(replace(syntax {macro n ($1) :typed_parms($2) {$3;}},
+                               match_local(m, macro_parms, m->var(syntax parms), call_nv, 0), mark));
     }
 
     return NULL;

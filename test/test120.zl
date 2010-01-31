@@ -1,0 +1,12 @@
+
+class X {
+  int x;
+  int foo(int x) {return x;}
+  int foo(int x, int y) {return x + y;}
+};
+
+int main() {
+  X x;
+  x.foo(10);
+  x.foo(10,20);
+}
