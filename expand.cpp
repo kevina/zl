@@ -397,7 +397,7 @@ const Syntax * flatten(const Syntax * p) {
     flatten("@", *i, res);
   res.merge_flags(p);
   return res.build(p->str());
-}
+} 
 
 static const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs, 
                               bool allow_plain_mids, bool * splice);
@@ -406,6 +406,9 @@ struct Macro : public Declaration, public Symbol {
   SymbolKey real_name;
   static const Syntax * macro_call;
   static const Syntax * macro_def;
+  const Tuple * typed_parms;
+  Macro() : typed_parms() {}
+  const class Tuple * overloadable() const {return typed_parms;}
   struct MacroInfo {
     const Syntax * orig_call;
     const Syntax * orig_def;
@@ -477,6 +480,10 @@ struct SimpleMacro : public Macro {
     free = p->flag("free");
     if (free)
       free = free->arg(0);
+    const Syntax * typed_parms_syn = p->flag("typed-parms");
+    if (typed_parms_syn) {
+      typed_parms = expand_fun_parms(typed_parms_syn->arg(0), e); 
+    }
     ChangeSrc<SyntaxSourceInfo> cs(p->arg(2));
     repl = new_syntax(cs,*p->arg(2));
     return this;
@@ -545,6 +552,19 @@ struct ProcMacro : public Macro {
     f << indent << "(make_macro " << key << " " << fun->uniq_name() << ")\n";
   }
 };
+
+const Syntax * expand_macro(const Syntax * p, const ast::Symbol * sym, 
+                            const Vector<ast::Exp *> & parms, Environ & env) 
+{
+  const Macro * macro = dynamic_cast<const Macro *>(sym);
+  if (!macro) return NULL;
+  SyntaxBuilder synb;
+  synb.add_part(SYN("."));
+  for (Vector<ast::Exp *>::const_iterator i = parms.begin(), e = parms.end();
+       i != e; ++i)
+    synb.add_part(SYN(*i));
+  return macro->expand(p, synb.build(), env);
+}
 
 //
 //
@@ -1260,12 +1280,12 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     assert_num_args(p, 1);
     const Syntax * n = p;
     const Macro * m = env.symbols.find<Macro>(n->arg(0));
-    if (m) { // id macro
+    if (m && !m->overloadable()) { // id macro
       Syntax * a = SYN(PARTS(SYN(".")), FLAGS(p->flags_begin(), p->flags_end()));
       p = m->expand(p, a, env);
       return partly_expand(p, pos, env, flags);
     }
-  } else if (what == "call") { 
+  } else if (what == "call") {
     assert_num_args(p, 2);
     const Syntax * n = partly_expand(p->arg(0), OtherPos, env, flags | EXPAND_NO_ID_MACRO_CALL);
     const Syntax * a = p->arg(1);
@@ -1273,7 +1293,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     if (n && n->is_a("id")) {
       if (!(flags & EXPAND_NO_FUN_MACRO_CALL)) {
         const Macro * m = env.symbols.find<Macro>(n->arg(0));
-        if (m) { // function macros
+        if (m && !m->overloadable()) { // function macros
           //  (call (id fun) (list parm1 parm2 ...))?
           p = m->expand(p, a, env);
           return partly_expand(p, pos, env, flags);
@@ -1465,6 +1485,7 @@ void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res) {
 }
 
 Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
+  if (!parse) return NULL;
   //printf("FUN_PARMS: %s\n", ~parse->to_string());
   SyntaxBuilder res(parse->part(0));
   expand_fun_parms(parse, env, res);

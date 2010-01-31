@@ -3332,7 +3332,7 @@ namespace ast {
       f << "))";
     }
   };
-  Exp * mk_call(Syntax * p, Exp * lhs0, Vector<Exp *> parms0 /* will steal */, Environ & env) {
+  Exp * mk_call(Syntax * p, Exp * lhs0, Vector<Exp *> & parms0 /* will steal */, Environ & env) {
     Call * call = new Call;
     call->syn = p;
     call->construct(lhs0, parms0, env);
@@ -3365,7 +3365,7 @@ namespace ast {
       // break if only one
       NoOpGather gather;
       GatherExtraCmp cmp;
-      const VarSymbol * sym = NULL;
+      const Symbol * sym = NULL;
       Error * saved_err = NULL;
       try {sym = lookup_symbol<VarSymbol>(lhs->arg(0), DEFAULT_NS, env.symbols.front, NULL, NormalStrategy, gather, cmp);}
       catch (Error * err) {saved_err = err;}
@@ -3385,11 +3385,15 @@ namespace ast {
           } catch (...) {}
         }
         assert(syms.size() == 1);
-        sym = dynamic_cast<const VarSymbol *>(syms.front());
-        assert(sym);
-        //const VarSymbol * sym = env.symbols.lookup<VarSymbol>(lhs->arg(0));
+        sym = syms.front();
       }
-      return mk_call(p, mk_id(sym, env), parms, env);
+      if (const Fun * fun = dynamic_cast<const Fun *>(sym)) {
+        return mk_call(p, mk_id(fun, env), parms, env);
+      } else if (const Syntax * res = expand_macro(p, sym, parms, env)) {
+        return parse_exp(res, env);
+      } else {
+        abort();
+      }
     } else {
       Exp * lhs_e = just_parse_exp(lhs, env, ExpContext()); // must be done here
       add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));

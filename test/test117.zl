@@ -1,0 +1,22 @@
+
+module M {
+
+int fo(int x) {
+  return x;
+}
+
+int fo(int x, int y) {
+  return x;
+}
+
+__raw(@
+  (macro mo (x) :(typed-parms (. (int))) (call fo (. x)))
+  (macro mo (x y) :(typed-parms (. (int) (int))) (call fo (. x y)))
+  );
+}
+
+
+
+int main() {
+  return M::mo(10) + M::mo(20, 30);
+}
