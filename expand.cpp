@@ -563,6 +563,7 @@ const Syntax * expand_macro(const Syntax * p, const ast::Symbol * sym,
   for (Vector<ast::Exp *>::const_iterator i = parms.begin(), e = parms.end();
        i != e; ++i)
     synb.add_part(SYN(*i));
+  synb.set_flags(p->arg(1)->flags_begin(), p->arg(1)->flags_end());
   return macro->expand(p, synb.build(), env);
 }
 

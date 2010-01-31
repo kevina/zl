@@ -3259,7 +3259,7 @@ namespace ast {
     //AST * part(unsigned i) {return i == 0 ? lhs : new Generic(syn->arg(1), parms);}
     Exp * lhs;
     Vector<Exp *> parms;
-    Call * construct(Exp * lhs0, Vector<Exp *> parms0 /* will steal */, Environ & env) {
+    Call * construct(Exp * lhs0, Vector<Exp *> & parms0 /* will steal */, Environ & env) {
       lhs = lhs0;
       parms.swap(parms0);
       const Function * ftype = dynamic_cast<const Function *>(lhs->type);

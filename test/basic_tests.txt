@@ -103,6 +103,7 @@ test113.zl
 test115.zl
 test116.zl
 test117.zl
+test118.zl
 
 fix_size-0-t.zl # was 67
 fix_size-1-t.zl # was 95
