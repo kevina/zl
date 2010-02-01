@@ -241,7 +241,7 @@ TOKENS = <(...)> {TOKEN}*;
 STMTS = <@> {STMT}*;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
-SPLIT = <list> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;
+SPLIT = <.> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;
 SPLIT_ITEM = {SPLIT_FLAG} / {SPLIT_PARM};
 SPLIT_FLAG = :<> ':'{ID} "="? {SPLIT_PARM};
 SPLIT_PARM = <<reparse parm>> {SPLIT_TOKEN*};
