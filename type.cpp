@@ -211,6 +211,7 @@ namespace ast {
     // $s: "struct X"
     // $e: "enum X"
     // $c: "class X" (unused)
+    // $u: "union X"
     // $b: <built in type with spaces replaced with _> (
     // $_: <type>
     // $C: "const X"
@@ -231,7 +232,7 @@ namespace ast {
     unsigned sz = type->num_parms();
     if (sz == 0) {
       if (const char * tag = type->tag()) {
-        buf << "$" << tag[0]; // $s, $e, or $c
+        buf << "$" << tag[0]; // $s, $e, $c, or $u
         buf << type->type_symbol->uniq_name();
       } else {
         StringBuf tmp;
