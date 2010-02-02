@@ -163,6 +163,11 @@ __ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * pr
 
 __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, Environ *);
 
+__ct_callback int have_default_constructor(Syntax * where, Environ *);
+__ct_callback int have_copy_constructor(Syntax * where, Environ *);
+__ct_callback int have_assign(Syntax * where, Environ *);
+__ct_callback int have_destructor(Syntax * where, Environ *);
+
 //
 //
 //

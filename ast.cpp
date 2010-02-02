@@ -775,10 +775,28 @@ namespace ast {
     Stmt * constructor;
     Cleanup * cleanup;
     Stmt * finish_parse(Environ & env) {
+      bool force_init = false;
       if (syn->num_args() > 2) {
+        bool constructor = false;
+        const Syntax * init_syn = syn->arg(2);
+        if (init_syn->eq(".")) {
+          init_syn = syn->arg(3);
+          if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner());
+          printf("CON: %s\n", ~init_syn->to_string());
+          if (init_syn->num_args() == 0) {
+            force_init = true;
+            goto cont;
+          } else if (init_syn->num_args() == 1) {
+            init_syn = init_syn->arg(1);
+          } else {
+            constructor = true;
+          }
+        } else if (init_syn->eq("=")) {
+          init_syn = syn->arg(3);
+        }
         //env.add(name, sym, SecondPass);
         ExpInsrPointWrapper wrap(env);
-        init = parse_exp(syn->arg(2), wrap.env, ExpContext(this));
+        init = parse_exp(init_syn, wrap.env, ExpContext(this));
         if (init == noop()) init = NULL;
         RefInsrPointWrapper wrap2(env, top_level() ? ExpInsrPoint::TopLevelVar : ExpInsrPoint::Var);
         if (init) init = init->resolve_to(type, wrap2.env);
@@ -794,6 +812,7 @@ namespace ast {
           ct_value = init->ct_value_;
         }
       }
+    cont:
       const UserType * ut;
       if (!cleanup && (ut = dynamic_cast<const UserType *>(type))) {
         if (!init && !constructor) constructor = try_constructor(ut, env);
@@ -1033,7 +1052,7 @@ namespace ast {
   }
   
   static Stmt * parse_var(const Syntax * p, Environ & env, Collect * collect) {
-    assert_num_args(p, 2,3);
+    assert_num_args(p,2,4);
     const Syntax * name_p = p->arg(0);
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
@@ -2340,7 +2359,88 @@ namespace ast {
     }
   }
 
-  Stmt * parse_module(const Syntax * p, Environ & env0, bool pre_parse = false) {
+  struct Trivial : public Symbol {
+    Trivial(const Type * t) : parms(dynamic_cast<const Tuple *>(t)) {}
+    const Tuple * parms;
+    const Tuple * overloadable() const {return parms;}
+  };
+
+  struct DummyExp : public ExpLeaf {
+    DummyExp(const Type * t) {type = t;}
+    const char * what() const {return "<dummy>";}
+    void compile(CompileWriter&) {abort();}
+  };
+
+  const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env);
+
+  void add_symbol(const SymbolKey & key, Symbol * sym, Module * module, Environ * module_env) {
+    if (module_env)
+      module_env->add(key, sym);
+    module->syms = new SymbolNode(module, key, sym, module->syms);
+  }
+
+  bool have_default_constructor(const UserType * user_type) {
+    //Environ dummy_env;
+    //Vector<Exp *> parms;
+    //try {
+    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
+    //  return true;
+    //} catch (...) {
+    //  return false;
+    //}
+    return false;
+  }
+
+  bool have_copy_constructor(const UserType * user_type) {
+    //Environ dummy_env;
+    //Vector<Exp *> parms;
+    //parms.push_back(new DummyExp(ref_type));
+    //try {
+    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
+    //  return true;
+    //} catch (...) {
+    //  return false;
+    //}
+    return false;
+  }
+
+  bool have_assign(const UserType * user_type) {
+    return false;
+  }
+
+  bool have_destructor(const UserType * user_type) {
+    return false;
+  }
+
+  void handle_special_methods(Module * module, UserType * user_type, Environ & env, Environ * module_env) {
+    printf("HANDLE SPECIAL METHODS\n");
+    Vector<Exp *> parms;
+    Environ dummy_env;
+    try {
+      resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_constructor")), parms, dummy_env);
+      printf("FOUND DEFAULT CONSTRUCTOR\n");
+    } catch (...) {
+      printf("DIDN'T FIND DEFAULT CONSTRUCTOR\n");
+      //add_symbol("_constructor", new Trivial(env.types.inst(".")), module, module_env);
+    }
+    const Type * ref_type = 
+      env.types.inst(".ref", env.types.inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(user_type)));
+    parms.push_back(new DummyExp(ref_type));
+    try {
+      resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_copy_constructor")), parms, dummy_env);
+      printf("FOUND COPY CONSTRUCTOR\n");
+    } catch (...) {
+      printf("DIDN'T FIND COPY CONSTRUCTOR\n");
+      //add_symbol("_copy_constructor", new Trivial(env.types.inst(".", ref_type)), module, module_env);
+
+      //Trivial * sym = new Trivial(env.types.inst(".", ref_type));
+      //if (module_env)
+      //module_env->add(SymbolKey("_copy_constructor"), sym);
+      //module->syms = new SymbolNode(module, SymbolKey("_copy_constructor"), sym, module->syms);
+    }
+  }
+
+  Stmt * parse_module(const Syntax * p, Environ & env0, bool pre_parse = false, UserType * user_type = NULL) {
     assert_num_args(p, 1, 2);
     SymbolName n = *p->arg(0);
     Module * m = NULL;
@@ -2364,7 +2464,6 @@ namespace ast {
       } else {
         parse_stmts_first_pass(p->arg(1), env, collect);
       }
-
 
       //printf("%s EXPORTS:\n", ~n.to_string());
 
@@ -2414,6 +2513,9 @@ namespace ast {
       //         c->value,
       //        c->value ? ~c->value->name : "", 
       //         c->value ? ~c->value->uniq_name() : "");
+
+      if (user_type)
+        handle_special_methods(m, user_type, env0, &env);
       
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
         (*i)->finish_parse(env);
@@ -2611,7 +2713,7 @@ namespace ast {
       //  //abort();
       //}
     }
-    return parse_module(p, env);
+    return parse_module(p, env, false, env.symbols.find<UserType>(SymbolKey(name)));
   }
 
   Stmt * parse_finalize_user_type(const Syntax * p, Environ & env) {
@@ -3356,37 +3458,43 @@ namespace ast {
     }
   };
 
+  const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env) {
+    NoOpGather gather;
+    GatherExtraCmp cmp;
+    const Symbol * sym = NULL;
+    Error * saved_err = NULL;
+    try {sym = lookup_symbol<Symbol>(name, DEFAULT_NS, env.symbols.front, NULL, NormalStrategy, gather, cmp);}
+    catch (Error * err) {saved_err = err;}
+    // if lookup_symbol still returned that means there is only one
+    // possibility so use it
+    if (!sym) {
+      if (cmp.syms.empty()) throw saved_err;
+      if (cmp.syms.size() > 1) printf("Found %d on %s\n", cmp.syms.size(), ~name->to_string());
+      Vector<const Symbol *> syms;
+      for (Vector<const Symbol *>::iterator i = cmp.syms.begin(), e = cmp.syms.end(); 
+             i != e; ++i) 
+      {
+        try {
+          if (std::find(syms.begin(), syms.end(), *i) != syms.end()) continue;
+          resolve_fun_parms(parms, NULL, (*i)->overloadable(), env, NULL);
+          syms.push_back(*i);
+        } catch (...) {}
+      }
+      assert(syms.size() == 1); // FIXME: Error Message
+      sym = syms.front();
+    }
+    return sym;
+  }
+
   Exp * parse_call(const Syntax * p, Environ & env) {
     //return (new Call)->parse_self_(p, env);
+    printf("CALL %s\n", ~p->to_string());
     assert_num_args(p, 2);
     Syntax * lhs = partly_expand(p->arg(0), ExpPos, env);
     Vector<Exp *> parms;
     if (lhs->is_a("id")) {
       add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));
-      NoOpGather gather;
-      GatherExtraCmp cmp;
-      const Symbol * sym = NULL;
-      Error * saved_err = NULL;
-      try {sym = lookup_symbol<Symbol>(lhs->arg(0), DEFAULT_NS, env.symbols.front, NULL, NormalStrategy, gather, cmp);}
-      catch (Error * err) {saved_err = err;}
-      // if lookup_symbol still returned that means there is only one
-      // possibility so use it
-      if (!sym) {
-        if (cmp.syms.empty()) throw saved_err;
-        if (cmp.syms.size() > 1) printf("Found %d on %s\n", cmp.syms.size(), ~lhs->arg(0)->to_string());
-        Vector<const Symbol *> syms;
-        for (Vector<const Symbol *>::iterator i = cmp.syms.begin(), e = cmp.syms.end(); 
-             i != e; ++i) 
-        {
-          try {
-            if (std::find(syms.begin(), syms.end(), *i) != syms.end()) continue;
-            resolve_fun_parms(parms, NULL, (*i)->overloadable(), env, NULL);
-            syms.push_back(*i);
-          } catch (...) {}
-        }
-        assert(syms.size() == 1);
-        sym = syms.front();
-      }
+      const Symbol * sym = resolve_call(lhs->arg(0), parms, env);
       if (const Fun * fun = dynamic_cast<const Fun *>(sym)) {
         return mk_call(p, mk_id(fun, env), parms, env);
       } else if (const Syntax * res = expand_macro(p, sym, parms, env)) {
@@ -4381,4 +4489,41 @@ extern "C" namespace macro_abi {
       return env->symbols.exists(sym);
     }
   }
+
+  bool have_special(bool (*lookup)(const UserType *), Syntax * where, Environ & env) {
+    //printf("symbol_exists %s in %s\n", ~sym->to_string(), ~where->to_string());
+    const Type * type = NULL;
+    try {
+      type = parse_type(where, env);
+    } catch (...) {}
+    if (!type) {
+      try {
+        Exp * exp = parse_exp(where, env);
+        type = exp->type;
+      } catch (...) {
+        return false;
+      }
+    }
+    if (const UserType * t = dynamic_cast<const UserType *>(type->unqualified))
+      return lookup(t);
+    else
+      return false;
+  }
+  
+  int have_default_constructor(Syntax * where, Environ * env) {
+    return have_special(ast::have_default_constructor, where, *env);
+  }
+
+  int have_copy_constructor(Syntax * where, Environ * env) {
+    return have_special(ast::have_copy_constructor, where, *env);
+  }
+
+  int have_assign(Syntax * where, Environ * env) {
+    return have_special(ast::have_assign, where, *env); 
+ }
+  
+  int have_destructor(Syntax * where, Environ * env) {
+    return have_special(ast::have_destructor, where, *env);
+  }
+
 }

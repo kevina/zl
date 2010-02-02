@@ -300,16 +300,23 @@ namespace ast {
   }
 
   static inline SimpleType *  
-  add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
+  declare_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
                   TopLevelSymbol * where = NULL)
   {
-    t->finalize();
     if (where) {
       t->where = where;
       t->num = NPOS;
     }
     sym.add(name, t);
     return t;
+  }
+
+  static inline SimpleType *  
+  add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
+                  TopLevelSymbol * where = NULL)
+  {
+    t->finalize();
+    return declare_simple_type(sym, name, t, where);
   }
 
   //

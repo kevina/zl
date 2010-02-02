@@ -188,7 +188,8 @@ struct DeclWorking {
                             parts_iterator end,
                            const Syntax * t);
   
-  const Syntax * make_declaration(const Syntax * id, const Syntax * t, const Syntax * init = NULL);
+  const Syntax * make_declaration(const Syntax * id, const Syntax * t, 
+                                  const Syntax * init1 = NULL, const Syntax * init2 = NULL);
   const Syntax * make_function(const Syntax * id, const Syntax * t, const Syntax * body);
   const Syntax * parse_fun_parms(const Syntax * parms, Environ &);
   const Syntax * make_function_type(const Syntax *, const Syntax *, Environ & env);
@@ -261,6 +262,11 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
       ++i;
       const Syntax * init = w.parse_init_exp(i, end);
       decl = w.make_declaration(id, t, init);
+    } else if (i != end && (*i)->is_a("()")) {
+      // we are calling a constructor
+      const Syntax * init = *i;
+      ++i;
+      decl = w.make_declaration(id, t, SYN("."), init);
     } else if (i != end && (*i)->is_a("{}")) {
       const Syntax * body = *i;
       ++i;
@@ -641,8 +647,10 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   if (i == end) {
     // do nothing
   } else if ((*i)->is_a("()")) {
-    t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
-    ++i;
+    try {
+      t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
+      ++i;
+    } catch (Error *) {}
   } else {
     // we are an array of type t
     t = try_arrays(i, end, t);
@@ -670,7 +678,7 @@ const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
     DeclWorking w(type_scope);
     const Syntax * id = NULL;
     bool r = w.parse_first_part(i, end, env, false);
-    if (!r) abort(); //throw error(*i, "Expected type or \"...\".");
+    if (!r) throw error(*i, "Expected type or \"...\".");
     if (w.dots) {
       ps.add_part(w.inner_type); // FIXME: Preserve source info..
     } else {
@@ -752,7 +760,8 @@ const Syntax * DeclWorking::try_arrays(parts_iterator & i,
   return t;
 }
 
-const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * t, const Syntax * init)
+const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * t, 
+                                              const Syntax * init1, const Syntax * init2)
 {
   if (what == VAR) {
     if (t->is_a(".fun")) {
@@ -762,8 +771,10 @@ const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * 
       res.add_part(id);
       assert(t);
       res.add_part(t);
-      if (init)
-        res.add_part(init);
+      if (init1)
+        res.add_part(init1);
+      if (init2)
+        res.add_part(init2);
       if (storage_class)
         res.add_flag(storage_class);
       for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();
