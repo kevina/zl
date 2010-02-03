@@ -511,27 +511,41 @@ namespace ast {
     }
   };
 
-  class SymbolTable : public gc
-  {
-  public:
-    bool is_root() {return back == 0;}
+  class SymbolTableBase : public gc {
   public: // but don't use
     //friend class Environ;
     SymbolNode * front;
     SymbolNode * back;
+  public:
+    SymbolTableBase() 
+      : front(), back() {}
+    SymbolTableBase(SymbolNode * f, SymbolNode * b)
+      : front(f), back(b) {}
+    SymbolTableBase(const SymbolTableBase & o)
+      : front(o.front), back(o.back) {}
+    SymbolTableBase & operator=(const SymbolTableBase & o) {
+      front = o.front;
+      back = o.back;
+      return *this;
+    }
+  };
+
+  class SymbolTable : public SymbolTableBase
+  {
+  public:
+    bool is_root() {return back == 0;}
     SymbolInsrPoint ip;
   public:
     SymbolTable() 
-      : front(), back(), ip(&front) {}
+      : SymbolTableBase(), ip(&front) {}
     SymbolTable(SymbolNode * f, SymbolNode * b)
-      : front(f), back(b), ip(&front) {}
+      : SymbolTableBase(f,b), ip(&front) {}
     SymbolTable(SymbolNode * f, SymbolNode * b, SymbolNode * * i)
-      : front(f), back(b), ip(i) {}
+      : SymbolTableBase(f,b), ip(i) {}
     SymbolTable(const SymbolTable & o)
-      : front(o.front), back(o.back), ip(o.ip.front == &o.front ? &front : o.ip) {}
+      : SymbolTableBase(o), ip(o.ip.front == &o.front ? &front : o.ip) {}
     SymbolTable & operator=(const SymbolTable & o) {
-      front = o.front;
-      back = o.back;
+      SymbolTableBase::operator=(o);
       ip = o.ip.front == &o.front ? &front : o.ip;
       return *this;
     }
