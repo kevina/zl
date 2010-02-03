@@ -36,7 +36,7 @@ void parse_maps(ast::Environ & env) {
 
 int main(int argc, const char *argv[])
 {
-  //GC_disable();
+  GC_disable();
   //GC_free_space_divisor = 32;
 
   assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 

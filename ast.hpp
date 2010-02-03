@@ -640,12 +640,16 @@ namespace ast {
   //
 
   struct Module : public Declaration, public TopLevelSymbol {
-    Module() : syms() {}
-    SymbolNode * syms;
+    Module() {}
+    SymbolTableBase syms;
     //Vector<const Syntax *> exports; // \...
     const char * what() const {return "module";}
     void compile(CompileWriter &, Phase) const;
     const InnerNS * tl_namespace() const {return OUTER_NS;}
+    template <typename T> 
+    inline T * find_symbol(const SymbolKey & k) const {
+      return ast::find_symbol<T>(k, syms.front, syms.back);
+    }
   };
 
   //
@@ -765,7 +769,7 @@ namespace ast {
       //for (unsigned i = 1; i < last; ++i) {
       //  m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);
       //}
-      return lookup_symbol<T>(p->arg(last), ns, m->syms, NULL, StripMarks, gather, cmp);
+      return lookup_symbol<T>(p->arg(last), ns, m->syms.front, m->syms.back, StripMarks, gather, cmp);
     } else {
       //p->print(); printf("?\n");
       return NULL;

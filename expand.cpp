@@ -1640,21 +1640,22 @@ extern "C" namespace macro_abi {
 
   struct ModuleSymbolsEnum : public SyntaxEnum {
     SymbolNode * cur;
+    SymbolNode * stop;
     Syntax * next() {
       if (!cur) return NULL;
       Syntax * res = SYN(new SymbolKeyEntity(cur->key));
       cur = cur->next;
       return res;
     }
-    ModuleSymbolsEnum(SymbolNode * c) : cur(c) {}
+    ModuleSymbolsEnum(SymbolNode * c, SymbolNode * s) : cur(c), stop(s) {}
   };
   
   SyntaxEnum * module_symbols(const ModuleInfo * m) {
-    return new ModuleSymbolsEnum(m->syms);
+    return new ModuleSymbolsEnum(m->syms.front, m->syms.back);
   }
   
   bool module_have_symbol(const ModuleInfo * m, const Syntax * s) {
-    return find_symbol<Symbol>(s, DEFAULT_NS, m->syms);
+    return find_symbol<Symbol>(s, DEFAULT_NS, m->syms.front, m->syms.back);
   }
 }
 

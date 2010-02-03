@@ -821,7 +821,7 @@ namespace ast {
       return this;
     }
     Stmt * try_constructor(const UserType * ut, Environ & env) {
-      if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
+      if (ut && ut->module->find_symbol<Symbol>("_constructor")) {
         return mk_constructor(mk_id(this, env), env);
       } else {
         return NULL;
@@ -829,7 +829,7 @@ namespace ast {
     }
     Stmt * try_copy_constructor(Exp * rhs, Environ & env) {
       const UserType * ut = dynamic_cast<const UserType *>(type->unqualified);
-      if (ut && find_symbol<Symbol>("_copy_constructor", ut->module->syms)) {
+      if (ut && ut->module->find_symbol<Symbol>("_copy_constructor")) {
         return mk_copy_constructor(mk_id(this, env), rhs, env);
       } else {
         return NULL;
@@ -837,7 +837,7 @@ namespace ast {
     }
 
     void add_cleanup(const UserType * ut, Environ & env) {
-      if (ut && find_symbol<Symbol>("_destructor", ut->module->syms)) {
+      if (ut && ut->module->find_symbol<Symbol>("_destructor")) {
         cleanup = new Cleanup;
         ExpInsrPointWrapper wrap(env, true);
         Exp * call = mk_destructor(mk_id(this, wrap.env), wrap.env);
@@ -1692,7 +1692,7 @@ namespace ast {
 
   static Exp * try_user_assign(Exp * lhs, Exp * rhs, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
-    if (ut && find_symbol<Symbol>("_assign", ut->module->syms)) {
+    if (ut && ut->module->find_symbol<Symbol>("_assign")) {
       return parse_exp(SYN(SYN("member"), 
                            SYN(lhs),
                            SYN(SYN("call"), SYN(ID, SYN("_assign")), 
@@ -1732,7 +1732,7 @@ namespace ast {
 
   Stmt * try_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
-    if (ut && find_symbol<Symbol>("_copy_constructor", ut->module->syms)) {
+    if (ut && ut->module->find_symbol<Symbol>("_copy_constructor")) {
       return mk_copy_constructor(lhs, rhs, env);
     } else {
       return NULL;
@@ -1773,7 +1773,7 @@ namespace ast {
 
   Stmt * try_constructor(Exp * exp, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(exp->type->unqualified);
-    if (ut && find_symbol<Symbol>("_constructor", ut->module->syms)) {
+    if (ut && ut->module->find_symbol<Symbol>("_constructor")) {
       return mk_constructor(exp, env);
     } else {
       return NULL;
@@ -1782,7 +1782,7 @@ namespace ast {
 
   Exp * try_destructor(Exp * exp, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(exp->type->unqualified);
-    if (ut && find_symbol<Symbol>("_destructor", ut->module->syms)) {
+    if (ut && ut->module->find_symbol<Symbol>("_destructor")) {
       return mk_destructor(exp, env);
     } else {
       return NULL;
@@ -2338,7 +2338,7 @@ namespace ast {
     } else {
       f << "(module " << uniq_name() << "\n";
       Vector<SymbolNode *> syms2;
-      for (SymbolNode * cur = syms; cur; cur = cur->next) {
+      for (SymbolNode * cur = syms.front; cur != syms.back; cur = cur->next) {
         if (!(cur->key.marks || cur->should_skip()))
           syms2.push_back(cur);
       }
@@ -2374,9 +2374,10 @@ namespace ast {
   const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env);
 
   void add_symbol(const SymbolKey & key, Symbol * sym, Module * module, Environ * module_env) {
-    if (module_env)
-      module_env->add(key, sym);
-    module->syms = new SymbolNode(module, key, sym, module->syms);
+    // FIXME: Remove fun.
+    //if (module_env)
+    //  module_env->add(key, sym);
+    //module->syms = new SymbolNode(module, key, sym, module->syms);
   }
 
   bool have_default_constructor(const UserType * user_type) {
@@ -2457,6 +2458,7 @@ namespace ast {
       Environ env = env0.new_open_scope();
       env.scope = TOPLEVEL;
       env.where = m;
+      m->syms = env.symbols;
 
       Collect collect;
       if (pre_parse) {
@@ -2480,12 +2482,13 @@ namespace ast {
       
       //printf("%s SYMBOLS:\n", ~n.to_string());
 
-      SymbolList l;
-      for (SymbolNode * s = env.symbols.front; s != env.symbols.back; s = s->next) {
-        //printf("  %s\n", ~s->key.to_string());
-        l.push_back(*s);
-      }
-      m->syms = l.first;
+      // FIXME: Remove this, as it is unnecessary now
+      //SymbolList l;
+      //for (SymbolNode * s = env.symbols.front; s != env.symbols.back; s = s->next) {
+      //  //printf("  %s\n", ~s->key.to_string());
+      //  l.push_back(*s);
+      //}
+      //m->syms = l.first;
 
       //if (env.symbols.front != env.symbols.back) {
       //  SymbolNode * s = env.symbols.front;
@@ -2514,8 +2517,8 @@ namespace ast {
       //        c->value ? ~c->value->name : "", 
       //         c->value ? ~c->value->uniq_name() : "");
 
-      if (user_type)
-        handle_special_methods(m, user_type, env0, &env);
+      //if (user_type)
+      //  handle_special_methods(m, user_type, env0, &env);
       
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
         (*i)->finish_parse(env);
@@ -2565,7 +2568,7 @@ namespace ast {
 
   void import_module(const Module * m, Environ & env, const GatherMarks & gather, bool same_scope = false) {
     SymbolList l;
-    for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
+    for (SymbolNode * cur = m->syms.front; cur != m->syms.back; cur = cur->next) {
       // now add marks back in reverse order
       SymbolKey k = cur->key;
       for (Vector<const Mark *>::const_reverse_iterator 
@@ -2599,7 +2602,7 @@ namespace ast {
     GatherMarks gather;
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env->symbols.front, NULL, 
                                              NormalStrategy, gather);
-    for (SymbolNode * cur = m->syms; cur; cur = cur->next) {
+    for (SymbolNode * cur = m->syms.front; cur != m->syms.back; cur = cur->next) {
       // now add marks back in reverse order;
       SymbolKey k = cur->key;
       for (Vector<const Mark *>::reverse_iterator 
@@ -2713,7 +2716,8 @@ namespace ast {
       //  //abort();
       //}
     }
-    return parse_module(p, env, false, env.symbols.find<UserType>(SymbolKey(name)));
+    Stmt * res = parse_module(p, env, false, env.symbols.find<UserType>(SymbolKey(name)));
+    return res;
   }
 
   Stmt * parse_finalize_user_type(const Syntax * p, Environ & env) {
@@ -2767,7 +2771,7 @@ namespace ast {
     user_cast->to = to;
     user_cast->cast_macro = env.symbols.lookup<Symbol>(cast);
     env.add(SymbolKey(what, CAST_NS), user_cast);
-    m->syms = new SymbolNode(m, SymbolKey(what, CAST_NS), user_cast, m->syms);
+    m->syms.front->next = new SymbolNode(m, SymbolKey(what, CAST_NS), user_cast, m->syms.front->next); // FIMXE: What is this doing?
   }
 
   Stmt * parse_make_subtype(const Syntax * p, Environ & env) {
@@ -2821,7 +2825,7 @@ namespace ast {
         call = SYN(p->str(), arg1->part(0), n, a);
       } else {
         const Syntax * n = expand_id(arg1);
-        const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
+        const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms.front, t->module->syms.back, StripMarks);
         Syntax * c = new_syntax(p->str(), PARTS(ID, SYN(n->str(), sym)), FLAGS(SYN(THIS, ptr_exp)));
         //SYN(p->str(), ID, SYN(n, sym));
         //c->add_flag(SYN(THIS, ptr_exp));
@@ -2865,10 +2869,10 @@ namespace ast {
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env0.symbols.front, NULL, 
                                              NormalStrategy, gather);
     const Syntax * d = p->arg(1);
-    const Symbol * s = lookup_symbol<Symbol>(d->arg(0), DEFAULT_NS, m->syms, NULL, StripMarks);
+    const Symbol * s = lookup_symbol<Symbol>(d->arg(0), DEFAULT_NS, m->syms.front, m->syms.back, StripMarks);
     Environ env = env0.new_scope();
     import_module(m, env, gather, true);
-    const Symbol * pm = find_symbol<Symbol>("_parse_memberdecl", m->syms);
+    const Symbol * pm = m->find_symbol<Symbol>("_parse_memberdecl");
     
     parse_top_level(d, env);
     return empty_stmt();
@@ -2990,7 +2994,8 @@ namespace ast {
     NoOpGather gather;
     //UserCastCompare cmp(from_base, from_base->parent);
     const UserCast * cast = lookup_symbol<UserCast>(SymbolKey("up_cast", CAST_NS), exp->source_str(), 
-                                                    from_base->module->syms);//, NULL, NormalStrategy, gather, cmp);
+                                                    from_base->module->syms.front, 
+                                                    from_base->module->syms.back);//, NULL, NormalStrategy, gather, cmp);
     const Syntax * p = SYN(SYN("call"), 
                                   SYN(SYN("id"), SYN(cast->cast_macro)),
                                   SYN(SYN("."), SYN(exp)));
@@ -3012,7 +3017,7 @@ namespace ast {
     const Type * to_ptr = env.types.inst(".ptr", to_qualified);
     NoOpGather gather;
     const UserCast * cast = lookup_symbol<UserCast>(SymbolKey("down_cast", CAST_NS), exp->source_str(), 
-                                                    type->module->syms);
+                                                    type->module->syms.front, type->module->syms.back);
     Exp * subexp = exp;
     if (parent != from_base) {
       const UserType * t = dynamic_cast<const UserType *>(parent);
@@ -4474,14 +4479,14 @@ extern "C" namespace macro_abi {
           return false;
         }
       }
-      SymbolNode * syms = NULL;
+      SymbolNode * front = NULL, * back = NULL;
       if (const StructUnion * t = dynamic_cast<const StructUnion *>(type->unqualified))
-        syms = t->env.symbols.front;
+        front = t->env.symbols.front, back = NULL;
       else if (const UserType * t = dynamic_cast<const UserType *>(type->unqualified))
-        syms = t->module->syms;
+        front = t->module->syms.front, back = t->module->syms.back;
       else
         return false;
-      if (find_symbol<Symbol>(sym, DEFAULT_NS, syms, NULL, StripMarks))
+      if (find_symbol<Symbol>(sym, DEFAULT_NS, front, back, StripMarks))
         return true;
       else
         return false;
