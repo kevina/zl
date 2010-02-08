@@ -60,6 +60,9 @@ namespace ast {
     Where where;
   };
 
+  struct Declaration;
+  typedef Vector<Declaration *> Collect;
+
   struct Environ : public gc {
     TypeRelation * type_relation;
     bool special() const {return !top_level_symbols;}
@@ -83,6 +86,7 @@ namespace ast {
     InsrPoint * stmt_ip;
     ExpInsrPoint * temp_ip;
     InsrPoint * exp_ip;
+    Collect * collect; // if set only perform first pass parse when applicable
     bool true_top_level;
     bool interface;
     Type * void_type() {return types.inst("<void>");}
@@ -93,7 +97,8 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct(), temp_ip(), exp_ip(), true_top_level(false), interface(false)
+        deps(), for_ct(), temp_ip(), exp_ip(), collect(),
+        true_top_level(false), interface(false)
       {
         if (s == TOPLEVEL) {
           true_top_level = true;
@@ -112,11 +117,15 @@ namespace ast {
         scope(other.scope), frame(other.frame), 
         where(other.where),
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
-        deps(other.deps), for_ct(other.for_ct), stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), true_top_level(other.true_top_level), interface(other.interface) {}
+        deps(other.deps), for_ct(other.for_ct), 
+        stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), 
+        collect(other.collect),
+        true_top_level(other.true_top_level), interface(other.interface) {}
     Environ new_scope() {
       Environ env = *this;
       env.true_top_level = false;
       env.stmt_ip = NULL;
+      env.collect = NULL;
       env.symbols = symbols.new_scope();
       return env;
     }
@@ -124,6 +133,7 @@ namespace ast {
       Environ env = *this;
       env.true_top_level = false;
       env.stmt_ip = NULL;
+      env.collect = NULL;
       env.symbols = symbols.new_open_scope();
       return env;
     }
@@ -167,6 +177,7 @@ namespace ast {
       Environ env = *this;
       env.true_top_level = false;
       env.stmt_ip = NULL;
+      env.collect = NULL;
       env.scope = LEXICAL;
       env.symbols = symbols.new_scope(env.fun_labels);
       env.frame = new Frame();

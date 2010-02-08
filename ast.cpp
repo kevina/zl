@@ -173,11 +173,8 @@ namespace ast {
   template <> struct PositionTypeInfo<ExpPos> {typedef Exp t;};
   template <> struct PositionTypeInfo<FieldPos> {typedef BasicVar t;};
 
-  template <Position pos, Pass pass = AllPasses>
-  struct Parse;
-
   template <Position pos>
-  struct Parse<pos,AllPasses> {
+  struct Parse {
     Environ & env;
     Parse(Environ & e) : env(e) {}
     const Syntax * partly_expand(const Syntax * p) const {
@@ -191,26 +188,9 @@ namespace ast {
     }
   };
 
-  template <Position pos>
-  struct Parse<pos,FirstPass> {
-    Environ & env;
-    Collect & collect;
-    Parse(Environ & e, Collect & c) : env(e), collect(c) {}
-    const Syntax * partly_expand(const Syntax * p) const {
-      return ::partly_expand(p, pos, env);
-    }
-    Stmt * finish_parse(const Syntax * p) const;
-    Stmt * operator() (const Syntax * p) const {
-      p = partly_expand(p);
-      return finish_parse(p);
-    }
-  };
-
   // needed here otherwise gcc gets confuses
   template <>
   Stmt * Parse<TopLevel>::finish_parse(const Syntax * p) const;
-  template <>
-  Stmt * Parse<TopLevel,FirstPass>::finish_parse(const Syntax * p) const;
   template <>
   Stmt * Parse<StmtDeclPos>::finish_parse(const Syntax * p) const;
 
@@ -1051,8 +1031,9 @@ namespace ast {
       storage_class = SC_STATIC;
   }
   
-  static Stmt * parse_var(const Syntax * p, Environ & env, Collect * collect) {
+  static Stmt * parse_var(const Syntax * p, Environ & env) {
     assert_num_args(p,2,4);
+    Collect * collect = env.collect;
     const Syntax * name_p = p->arg(0);
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
@@ -1100,14 +1081,6 @@ namespace ast {
         env.add(name, var);
     }
     return res;
-  }
-
-  static Stmt * parse_var_forward(const Syntax * p, Environ & env, Collect & collect) {
-    return parse_var(p, env, &collect);
-  }
-
-  static Stmt * parse_var(const Syntax * p, Environ & env) {
-    return parse_var(p, env, NULL);
   }
 
   static BasicVar * parse_field_var(const Syntax * p, Environ & env) {
@@ -2301,26 +2274,6 @@ namespace ast {
     }
   }
 
-  static void parse_stmts_first_pass(const Syntax * parse, Environ & env, Collect & collect) {
-    Parse<TopLevel,FirstPass> prs(env, collect);
-    for (unsigned i = 0; i < parse->num_args(); ++i) {
-      const Syntax * p = prs.partly_expand(parse->arg(i));
-      if (p->is_a("@")) {
-        parse_stmts_first_pass(p, env, collect);
-      } else {
-        prs.finish_parse(p);
-      }
-    }
-  }
-
-  static void parse_stmts_two_pass(const Syntax * parse, Environ & env) {
-    Collect collect;
-    parse_stmts_first_pass(parse, env, collect);
-    for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-      (*i)->finish_parse(env);
-    }
-  }
-
   AST * parse_top(const Syntax * p, Environ & env) {
     assert(p->is_a("top")); // FIXME Error
     parse_stmts(p, env);
@@ -2458,13 +2411,14 @@ namespace ast {
       Environ env = env0.new_open_scope();
       env.scope = TOPLEVEL;
       env.where = m;
+      Collect collect;
+      env.collect = &collect;
       m->syms = env.symbols;
 
-      Collect collect;
       if (pre_parse) {
         pre_parse_stmts(p->arg(1), env);
       } else {
-        parse_stmts_first_pass(p->arg(1), env, collect);
+        parse_stmts(p->arg(1), env);
       }
 
       //printf("%s EXPORTS:\n", ~n.to_string());
@@ -3164,11 +3118,15 @@ namespace ast {
   }
 
   Stmt * parse_fun(const Syntax * p, Environ & env) {
-    Collect collect;
-    Stmt * f = parse_fun_forward(p, env, collect);
-    if (!collect.empty())
-      collect[0]->finish_parse(env);
-    return f;
+    if (env.collect) {
+      return parse_fun_forward(p, env, *env.collect);
+    } else {
+      Collect collect;
+      Stmt * f = parse_fun_forward(p, env, collect);
+      if (!collect.empty())
+        collect[0]->finish_parse(env);
+      return f;
+    }
   }
 
   void Fun::uniq_name(OStream & o) const {
@@ -3894,22 +3852,6 @@ namespace ast {
   }
 
   template <>
-  Stmt * Parse<TopLevel,FirstPass>::finish_parse(const Syntax * p) const {
-    Stmt * res;
-    //printf("Parsing top level fp:\n  %s\n", ~p->to_string());
-    res = try_ast<Stmt>(p, env);
-    if (res) return res;
-    res = try_decl_first_pass(p, env, collect);
-    if (res) return res;
-    throw error (p, "Unsupported primative at top level: %s", ~p->what());
-    //throw error (p, "Expected top level expression.");
-  }
-    
-  Stmt * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect) {
-    return Parse<TopLevel,FirstPass>(env,collect)(p);
-  }
-
-  template <>
   BasicVar * Parse<FieldPos>::finish_parse(const Syntax * p) const {
     Stmt * res;
     // FIXME
@@ -4015,8 +3957,10 @@ namespace ast {
     return just_parse_exp(p, env, ExpContext());
   }
 
-  Stmt * try_decl_common(const Syntax * p, Environ & env) {
+  Stmt * try_just_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
+    if (what == "var")     return parse_var(p, env);
+    if (what == "fun" )    return parse_fun(p, env), empty_stmt();
     if (what == "struct")  return parse_struct(p, env);    
     if (what == ".struct")  return parse_struct(p, env);
     if (what == "union")   return parse_union(p, env);
@@ -4044,20 +3988,6 @@ namespace ast {
     if (what == "include_file") return parse_include_file(p, env);
     if (what == "import_file") return parse_import_file(p, env);
     return 0;
-  }
-
-  Stmt * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect) {
-    String what = p->what().name;
-    if (what == "var")     return parse_var_forward(p, env, collect);
-    if (what == "fun" )    return parse_fun_forward(p, env, collect), empty_stmt();
-    return try_decl_common(p, env);
-  }
-
-  Stmt * try_just_decl(const Syntax * p, Environ & env) {
-    String what = p->what().name;
-    if (what == "var")     return parse_var(p, env);
-    if (what == "fun" )    return parse_fun(p, env), empty_stmt();
-    return try_decl_common(p, env);
   }
 
   Stmt * try_just_stmt(const Syntax * p, Environ & env) {

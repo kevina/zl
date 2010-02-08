@@ -529,8 +529,6 @@ namespace ast {
     TopLevelVarDecl() : deps_closed(false), for_ct_(false), ct_ptr() {}
   };
 
-  typedef Vector<Declaration *> Collect;
-
   struct Fun : public TopLevelVarDecl {
     Fun() : env_ss(), is_macro() {}
     const char * what() const {return "fun";}
