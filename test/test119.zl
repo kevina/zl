@@ -1,0 +1,25 @@
+
+module M {
+
+  int fo(int x, int z) {
+    return x + z;
+  }
+
+  int fo(int x, int y, int z) {
+    return z + z;
+  }
+
+  macro mo (x, :z z) :typed_parms(int) {
+    fo(x, z);
+  }
+
+  macro mo (x, y, :z z) :typed_parms(int x, int y) {
+    fo(x, y, z);
+  }
+}
+
+
+
+int main() {
+  return M::mo(10, :z = 1) + M::mo(20, 30, :z = 1);
+}
