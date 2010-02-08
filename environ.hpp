@@ -61,7 +61,26 @@ namespace ast {
   };
 
   struct Declaration;
-  typedef Vector<Declaration *> Collect;
+  struct CollectBase {
+    struct DeclEnv {
+      Declaration * decl;
+      Environ * env;
+      DeclEnv(Declaration * d, Environ & e) : decl(d), env(&e) {}
+    };
+    typedef Vector<DeclEnv> Data;
+    Data * data;
+    CollectBase(Data * d) : data(d) {}
+    void add(Declaration * d, Environ & e) {
+      if (data) 
+        data->push_back(DeclEnv(d, e));
+    }
+  };
+  struct Collect : public CollectBase::Data, public CollectBase {
+    Collect() : CollectBase(this) {}
+  };
+  struct DummyCollect : public CollectBase {
+    DummyCollect() : CollectBase(NULL) {}
+  };
 
   struct Environ : public gc {
     TypeRelation * type_relation;
@@ -86,7 +105,8 @@ namespace ast {
     InsrPoint * stmt_ip;
     ExpInsrPoint * temp_ip;
     InsrPoint * exp_ip;
-    Collect * collect; // if set only perform first pass parse when applicable
+    CollectBase * collect; // if set don't parse declaration body,
+                           // instead store it here to be parsed latter
     bool true_top_level;
     bool interface;
     Type * void_type() {return types.inst("<void>");}

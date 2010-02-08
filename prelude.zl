@@ -17,8 +17,15 @@ Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
   SyntaxList * new_body = new_syntax_list();
   SyntaxEnum * itr = partly_expand_list(body->args(), FieldPos, lenv);
   Syntax * member;
-  while ((member = itr->next))
-    new_body->append(pre_parse(member, lenv));
+  while ((member = itr->next)) {
+    Match * m0 = match(m, raw_syntax (what n @ type @_), member);
+    const char * what = syntax_to_string(m0->var(syntax what));
+    if (strcmp(what, "var") == 0 || strcmp(what, "alias") == 0 
+        || strcmp(what, "fun") == 0 || strcmp(what, "add_prop") == 0)
+      new_body->append(member);
+    else // some sort of type definition
+      new_body->append(pre_parse(member, lenv));
+  }
   return replace(raw_syntax(what name ({...} @$1) @rest), 
                  match_local(m, new_body, NULL), mark);
 }

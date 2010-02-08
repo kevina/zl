@@ -1033,7 +1033,7 @@ namespace ast {
   
   static Stmt * parse_var(const Syntax * p, Environ & env) {
     assert_num_args(p,2,4);
-    Collect * collect = env.collect;
+    CollectBase * collect = env.collect;
     const Syntax * name_p = p->arg(0);
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
@@ -1073,7 +1073,7 @@ namespace ast {
     if (fresh && !shadow)
       env.add(name, var);
     if (!env.interface && collect) {
-      collect->push_back(var); 
+      collect->add(var, env); 
     } else {
       if (!env.interface)
         res = var->finish_parse(env);
@@ -2394,7 +2394,7 @@ namespace ast {
     }
   }
 
-  Stmt * parse_module(const Syntax * p, Environ & env0, bool pre_parse = false, UserType * user_type = NULL) {
+  Stmt * parse_module(const Syntax * p, Environ & env0, UserType * user_type = NULL) {
     assert_num_args(p, 1, 2);
     SymbolName n = *p->arg(0);
     Module * m = NULL;
@@ -2408,18 +2408,14 @@ namespace ast {
     }
     if (p->num_args() > 1) {
       assert_num_args(p, 2);
-      Environ env = env0.new_open_scope();
+      Environ & env = *new Environ(env0.new_open_scope());
       env.scope = TOPLEVEL;
       env.where = m;
       Collect collect;
-      env.collect = &collect;
+      env.collect = env0.collect ? env0.collect : &collect;
       m->syms = env.symbols;
-
-      if (pre_parse) {
-        pre_parse_stmts(p->arg(1), env);
-      } else {
-        parse_stmts(p->arg(1), env);
-      }
+      
+      parse_stmts(p->arg(1), env);
 
       //printf("%s EXPORTS:\n", ~n.to_string());
 
@@ -2475,15 +2471,11 @@ namespace ast {
       //  handle_special_methods(m, user_type, env0, &env);
       
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-        (*i)->finish_parse(env);
+        i->decl->finish_parse(*i->env);
       }
       env.add_defn(m);
     }
     return empty_stmt();
-  }
-
-  Stmt * pre_parse_module(const Syntax * p, Environ & env) {
-    return parse_module(p, env, true);
   }
 
   struct GatherMarks {
@@ -2670,7 +2662,7 @@ namespace ast {
       //  //abort();
       //}
     }
-    Stmt * res = parse_module(p, env, false, env.symbols.find<UserType>(SymbolKey(name)));
+    Stmt * res = parse_module(p, env, env.symbols.find<UserType>(SymbolKey(name)));
     return res;
   }
 
@@ -3063,7 +3055,7 @@ namespace ast {
     }
   };
 
-  Stmt * parse_fun_forward(const Syntax * p, Environ & env, Collect & collect) {
+  Stmt * parse_fun_forward(const Syntax * p, Environ & env, CollectBase & collect) {
     assert_num_args(p,3,4);
 
     //printf("FUN:: %s\n", ~p->to_string());
@@ -3124,7 +3116,7 @@ namespace ast {
       Collect collect;
       Stmt * f = parse_fun_forward(p, env, collect);
       if (!collect.empty())
-        collect[0]->finish_parse(env);
+        collect[0].decl->finish_parse(*collect[0].env);
       return f;
     }
   }
@@ -3152,7 +3144,7 @@ namespace ast {
     }
   }
   
-  AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect & collect) {
+  AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, CollectBase & collect) {
     syn = p;
 
     //printf("PARSING FLAGS OF %s\n", ~p->to_string());
@@ -3185,7 +3177,7 @@ namespace ast {
 
     body = 0;
     if (!env.interface && p->num_args() > 3) {
-      collect.push_back(this);
+      collect.add(this, env0);
     } else {
       symbols = env.symbols;
     }
@@ -3866,22 +3858,9 @@ namespace ast {
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
-    //printf("PRE PARSING %s\n", ~p->to_string());
-    if (what == "struct")  parse_struct(p, env);
-    if (what == ".struct") parse_struct(p, env);
-    if (what == "union")   parse_union(p, env);
-    if (what == ".union")  parse_union(p, env);
-    if (what == "enum")    parse_enum(p, env);
-    if (what == ".enum")   parse_enum(p, env);
-    if (what == "talias")  parse_type_alias(p, env);
-    if (what == "module")         pre_parse_module(p, env);
-    if (what == "make_user_type") parse_make_user_type(p, env);
-    if (what == "user_type")          parse_user_type(p, env);
-    if (what == "finalize_user_type") parse_finalize_user_type(p, env);
-    if (what == "make_subtype") parse_make_subtype(p, env);
-    if (what == "declare_user_type") parse_declare_user_type(p, env);
-    if (what == "import")  parse_import(p, env);
-    if (what == "macro")   parse_map(p, env);
+    //fprintf(stderr, "PRE PARSING %s\n", ~p->to_string());
+    assert(env.collect && !env.collect->data);
+    try_just_decl(p, env);
     return p;
   }
 

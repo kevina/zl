@@ -1702,11 +1702,14 @@ namespace syntax_ns {
 //
 //
 
+DummyCollect DUMMY_COLLECT;
+
 extern "C" namespace macro_abi {
 
   Environ * temp_environ(Environ * env) {
     env = new Environ(env->new_scope());
     env->top_level_symbols = NULL;
+    env->collect = &DUMMY_COLLECT;
     return env;
   }
   

@@ -1,0 +1,9 @@
+
+class X {
+  class Y {
+    void foo() {
+      INT x;
+    }
+  };
+  typedef int INT;
+};
