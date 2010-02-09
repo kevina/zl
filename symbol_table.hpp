@@ -577,6 +577,8 @@ namespace ast {
     inline T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     template <typename T> 
     inline T * find(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
+    template <typename T> 
+    inline T * find_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) const {
       return find_symbol<Symbol>(k, front, NULL, ms);
     }

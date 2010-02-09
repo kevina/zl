@@ -57,14 +57,14 @@ public:
   Syntax * body;
   Syntax * parent_s;
 
-  UserTypeInfo * parent;
+  UserType * parent;
 
   Context * context;
 
   Environ * lenv;
   
-  ModuleInfo * parent_m;
-  UserTypeInfo * parent_vtable;
+  Module * parent_m;
+  UserType * parent_vtable;
   Syntax * parent_vtable_n;
   Syntax * vtable;
   SyntaxList * struct_p;

@@ -1623,18 +1623,18 @@ Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
 
 extern "C" namespace macro_abi {
 
-  typedef const UserType UserTypeInfo;
-  typedef const Module ModuleInfo;
+  typedef ast::UserType UserType;
+  typedef ast::Module Module;
   
-  const UserTypeInfo * user_type_info(const Syntax * s, Environ * env) {
+  const UserType * user_type_info(const Syntax * s, Environ * env) {
     return dynamic_cast<const UserType *>(env->types.inst(s));
   }
   
-  const ModuleInfo * user_type_module(const UserTypeInfo * t) {
+  const Module * user_type_module(const UserType * t) {
     return t->module;
   }
   
-  const ModuleInfo * module_info(const Syntax *, Environ * env) {
+  const Module * module_info(const Syntax *, Environ * env) {
     abort();
   }
 
@@ -1650,11 +1650,11 @@ extern "C" namespace macro_abi {
     ModuleSymbolsEnum(SymbolNode * c, SymbolNode * s) : cur(c), stop(s) {}
   };
   
-  SyntaxEnum * module_symbols(const ModuleInfo * m) {
+  SyntaxEnum * module_symbols(const Module * m) {
     return new ModuleSymbolsEnum(m->syms.front, m->syms.back);
   }
   
-  bool module_have_symbol(const ModuleInfo * m, const Syntax * s) {
+  bool module_have_symbol(const Module * m, const Syntax * s) {
     return find_symbol<Symbol>(s, DEFAULT_NS, m->syms.front, m->syms.back);
   }
 }

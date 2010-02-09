@@ -30,11 +30,14 @@
   string_to_syntax;
   syntax_to_string;
   dump_syntax;
+  new_user_type;
   user_type_info;
   user_type_module;
   module_info;
   module_symbols;
   module_have_symbol;
+  module_add_syntax;
+  module_finalize;
   ct_value;
   temp_environ;
   error;

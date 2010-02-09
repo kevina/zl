@@ -659,7 +659,7 @@ namespace ast {
     UserType() : SimpleType(USER_C), parent(), type(), module(), lt_sizeof_(NULL), defined() {}
     const Type * parent;
     const Type * type;
-    const Module * module;
+    Module * module;
     Exp * lt_sizeof_;
     Exp * lt_sizeof() const {return lt_sizeof_;}
     bool defined;
@@ -796,6 +796,11 @@ namespace ast {
   template <typename T> 
   inline T * SymbolTable::find(const Syntax * p, const InnerNS * ns) const {
     return find_symbol<T>(p, ns, front);
+  }
+
+  template <typename T> 
+  inline T * SymbolTable::find_this_scope(const Syntax * p, const InnerNS * ns) const {
+    return find_symbol<Symbol>(p, ns, front, back, ThisScope);
   }
 
   inline bool SymbolTable::exists(const Syntax * p, const InnerNS * ns) const {

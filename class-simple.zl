@@ -43,7 +43,7 @@ static void parse_class_var(Syntax * p, Match * m, Mark * mark,
                             SyntaxList * struct_b, SyntaxList * module_b);
 static Syntax * parse_class_fun(Syntax * p, Match * m, Mark * mark,
                                 SyntaxList *  module_b,
-                                UserTypeInfo * parent_vtable,
+                                UserType * parent_vtable,
                                 SyntaxList *  vtable_b, SyntaxList * vtable_i,
                                 Context * context, Environ * env);
 static Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
@@ -63,7 +63,7 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
     return replace(syntax {declare_user_type name;}, m, mark);
   }
 
-  UserTypeInfo * parent = parent_s ? user_type_info(parent_s, env) : NULL;
+  UserType * parent = parent_s ? user_type_info(parent_s, env) : NULL;
 
   Context * context = empty_context();
 
@@ -73,8 +73,8 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
 
   //printf("parse_class %s %s\n", syntax_to_string(name));
   
-  ModuleInfo * parent_m = NULL;
-  UserTypeInfo * parent_vtable = NULL;
+  Module * parent_m = NULL;
+  UserType * parent_vtable = NULL;
   Syntax * parent_vtable_n = NULL;
   Syntax * vtable = NULL;
   SyntaxList * struct_p = new_syntax_list();
@@ -264,7 +264,7 @@ static void parse_class_var(Syntax * p, Match * m, Mark * mark,
 
 static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                                  SyntaxList *  module_b,
-                                 UserTypeInfo * parent_vtable,
+                                 UserType * parent_vtable,
                                  SyntaxList *  vtable_b, SyntaxList * vtable_i,
                                  Context * context, Environ * env)
 {

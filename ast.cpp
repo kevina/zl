@@ -2394,87 +2394,72 @@ namespace ast {
     }
   }
 
-  Stmt * parse_module(const Syntax * p, Environ & env0, UserType * user_type = NULL) {
-    assert_num_args(p, 1, 2);
-    SymbolName n = *p->arg(0);
-    Module * m = NULL;
-    if (env0.symbols.exists_this_scope(SymbolKey(n, OUTER_NS))) {
-      m = env0.symbols.lookup<Module>(p->arg(0), OUTER_NS);
-    } else {
+  // "new" is for lack of a better name as it doesn't necessary create
+  // a new instance
+  Module * new_module(const Syntax * p, Environ & env) {
+    SymbolKey n = SymbolKey(*p, OUTER_NS);
+    Module * m = env.symbols.find_this_scope<Module>(n);
+    if (!m) {
       m = new Module();
-      m->where = env0.where;
-      m->num = env0.where ? NPOS : 0;
-      env0.add(SymbolKey(n, OUTER_NS), m);
+      m->where = env.where;
+      m->num = env.where ? NPOS : 0;
+      env.add(n, m);
     }
-    if (p->num_args() > 1) {
-      assert_num_args(p, 2);
-      Environ & env = *new Environ(env0.new_open_scope());
-      env.scope = TOPLEVEL;
-      env.where = m;
-      Collect collect;
-      env.collect = env0.collect ? env0.collect : &collect;
-      m->syms = env.symbols;
-      
-      parse_stmts(p->arg(1), env);
+    return m;
+  }
 
-      //printf("%s EXPORTS:\n", ~n.to_string());
-
-      //for (unsigned i = 0; i != m->exports.size(); ++i) {
-      //  const Syntax * p = m->exports[i];
-      //  for (unsigned i = 0, sz = p->num_args(); i != sz; ++i) {
-      //    //SymbolName n = *to_export->part(i);
-      //    SymbolKey k = expand_binding(p->arg(i), env);
-      //    printf("  %s\n", ~k.to_string());
-      //    //m->syms = new SymbolNode(expand_binding(p->arg(i), env), 
-      //    //                         env.symbols.lookup<Symbol>(p->arg(i)), m->syms);
-      //  }
-      //}
-      
-      //printf("%s SYMBOLS:\n", ~n.to_string());
-
-      // FIXME: Remove this, as it is unnecessary now
-      //SymbolList l;
-      //for (SymbolNode * s = env.symbols.front; s != env.symbols.back; s = s->next) {
-      //  //printf("  %s\n", ~s->key.to_string());
-      //  l.push_back(*s);
-      //}
-      //m->syms = l.first;
-
-      //if (env.symbols.front != env.symbols.back) {
-      //  SymbolNode * s = env.symbols.front;
-      //  SymbolNode * back = new SymbolNode(s->key, s->value);
-      //  m->syms = back;
-      //  s = s->next;
-      //  for (; s != env.symbols.back; s = s->next) {
-      //    back->next = new SymbolNode(s->key, s->value);
-      //    back = back->next;
-      //  }
-      //}
-
-      //printf("MODULE %s\n", ~n);
-      
-      //printf("INTERNAL\n");
-      //for (SymbolNode * c = env.symbols.front; c != env.symbols.back; c = c->next)
-      //  printf("  %s %p %s %s\n", ~c->key.to_string(), 
-      //         c->value,
-      //         c->value ? ~c->value->name : "", 
-      //         c->value ? ~c->value->uniq_name() : "");
-      
-      //printf("EXPORTED\n");
-      //for (SymbolNode * c = m->syms; c; c = c->next)
-      //  printf("  %s %p %s %s\n", ~c->key.to_string(), 
-      //         c->value,
-      //        c->value ? ~c->value->name : "", 
-      //         c->value ? ~c->value->uniq_name() : "");
-
-      //if (user_type)
-      //  handle_special_methods(m, user_type, env0, &env);
-      
+  struct ModuleBuilder {
+    ModuleBuilder(const Syntax * p, Environ & e, UserType * ut = NULL) 
+      : module(ut ? ut->module : new_module(p, e)), 
+        user_type(ut),
+        env(*new Environ(e.new_open_scope())),
+        prs(env)
+      {
+        assert(module);
+        env.scope = TOPLEVEL;
+        env.where = module;
+        env.collect = e.collect ? e.collect : &collect;
+        module->syms = env.symbols;
+      }
+    Module * module;
+    UserType * user_type;
+    Environ & env;
+    Collect collect;
+    Parse<TopLevel> prs;
+    bool pre_parse;
+    void add_syntax(const Syntax * p) {
+      p = prs.partly_expand(p);
+      if (p->is_a("@")) {
+        add_syntax(p->args_begin(), p->args_end());
+      } else {
+        Stmt * cur = prs.finish_parse(p);
+        env.add_stmt(cur);
+      }
+    }
+    void add_syntax(parts_iterator i, parts_iterator end) {
+      for (; i != end; ++i)
+        add_syntax(*i);
+    }
+    void finalize() {
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
         i->decl->finish_parse(*i->env);
       }
-      env.add_defn(m);
+      env.add_defn(module);
     }
+    void parse_body(const Syntax * p) {
+      add_syntax(p->args_begin(), p->args_end());
+      //if (user_type)
+      //  handle_special_methods(m, user_type, env0, &env);
+      finalize();
+    }
+  };
+
+
+  Stmt * parse_module(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1, 2);
+    ModuleBuilder m(p->arg(0), env);
+    if (p->num_args() > 1)
+      m.parse_body(p->arg(1));
     return empty_stmt();
   }
 
@@ -2662,7 +2647,7 @@ namespace ast {
       //  //abort();
       //}
     }
-    Stmt * res = parse_module(p, env, env.symbols.find<UserType>(SymbolKey(name)));
+    Stmt * res = parse_module(p, env);//, env.symbols.find<UserType>(SymbolKey(name)));
     return res;
   }
 

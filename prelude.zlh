@@ -130,27 +130,41 @@ __ct_callback UnmarkedSyntax * string_to_syntax(const char * str);
 __ct_callback const char * syntax_to_string(UnmarkedSyntax *);
 __ct_callback void dump_syntax(UnmarkedSyntax *);
 
-user_type UserTypeInfo;
-user_type ModuleInfo;
-__ct_callback UserTypeInfo * user_type_info(Syntax *, Environ *);
-__ct_callback ModuleInfo * user_type_module(UserTypeInfo *);
-__ct_callback ModuleInfo * module_info(Syntax *, Environ *);
-__ct_callback SyntaxEnum * module_symbols(ModuleInfo *);
-__ct_callback bool module_have_symbol(ModuleInfo *, Syntax *);
+user_type Symbol;
+user_type UserType;
+user_type Module;
 
-struct UserTypeInfo;
-user_type UserTypeInfo {
-  finalize_user_type struct UserTypeInfo;
+__ct_callback UserType * new_user_type(Syntax *, Environ *);
+__ct_callback UserType * user_type_info(Syntax *, Environ *);
+__ct_callback Module * user_type_module(const UserType *);
+__ct_callback Module * module_info(Syntax *, Environ *);
+__ct_callback SyntaxEnum * module_symbols(const Module *);
+__ct_callback bool module_have_symbol(const Module *, const Syntax *);
+__ct_callback void module_add_syntax(Module *, const Syntax *);
+__ct_callback void module_finalize(Module *);
+
+//struct Symbol;
+//user_type Symbol {
+//  finalize_user_type struct UserType;
+//  macro name;
+//  macro uniq_name;
+//}
+
+struct UserType;
+user_type UserType {
+  finalize_user_type struct UserType;
   export module;
   macro module(:this this) {user_type_module(this);}
 }
 
-struct ModuleInfo;
-user_type ModuleInfo {
-  finalize_user_type struct ModuleInfo; 
+struct Module;
+user_type Module {
+  finalize_user_type struct Module; 
   export symbols, have_symbol;
   macro symbols(:this this) {module_symbols(this);}
   macro have_symbol(sym, :this this) {module_have_symbol(this, sym);}
+  macro add_syntax(syn) {module_add(this, syn);}
+  macro finalize() {module_finalize(this);}
 }
 
 __ct_callback Environ * temp_environ(Environ *);
