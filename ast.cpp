@@ -2587,68 +2587,65 @@ namespace ast {
     }
   }
 
-  Stmt * parse_declare_user_type(const Syntax * p, Environ & env) {
-    SymbolName name = *p->arg(0);
-    UserType * t = dynamic_cast<UserType *>(env.types.inst(SymbolKey(name)));
-    if (!(env.symbols.exists_this_scope(SymbolKey(name)) && (t && !t->defined /* FIXME: hack */))) {
-      //printf("DECLARE: ADDING SYM %s\n", ~name.to_string());
-      UserType * s = new UserType;
+  // "new" is for lack of a better name as it doesn't necessary create
+  // a new instance
+  UserType * new_user_type(const Syntax * p, Environ & env) {
+    SymbolName name = *p;
+    //printf("PARSING USER TYPE %s\n", ~name);
+    UserType * s = env.symbols.find_this_scope<UserType>(SymbolKey(name));
+    if (!s) {
+      //printf("ADDING SYM %s\n", ~name);
+      s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
+      s->module = new_module(p, env);
       add_simple_type(env.types, SymbolKey(name), s, env.where);
-    } else {
-      //printf("DECLARE: SYM ALREADY EXISTS: %s\n", ~name);
-      if (name == "_VTable") {
-        const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
-        //abort();
-      }
     }
+    return s;
+  }
+
+  void finalize_user_type(UserType * s, Environ & env) {
+    assert(s->num == s->module->num);
+    s->defined = true;
+    s->finalize();
+    Symbol * vs = env.symbols.find_this_scope<Symbol>("_sizeof");
+    Var * v = dynamic_cast<Var *>(vs);
+    if (v) {
+      v->init = parse_exp(SYN(SYN("sizeof"), SYN(SYN(".type"), SYN(static_cast<Type *>(s)))), env);
+      s->lt_sizeof_ = mk_id(v, env);
+    }
+  }
+
+  Stmt * parse_declare_user_type(const Syntax * p, Environ & env) {
+    new_user_type(p->arg(0), env);
     return empty_stmt();
   }
 
   Stmt * parse_make_user_type(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, 2);
     SymbolName name = *p->arg(0);
-    UserType * s;
-    if (env.symbols.exists_this_scope(SymbolKey(name))) {
-      Type * t0 = env.types.inst(SymbolKey(name));
-      s = dynamic_cast<UserType *>(t0);
-      //sym = s->type_symbol;
-    } else {
-      s = new UserType;
-      s->category = new TypeCategory(name.name, USER_C);
-      add_simple_type(env.types, SymbolKey(name), s, env.where);
-    }
+    UserType * s = new_user_type(p->arg(0), env);
     if (p->num_args() > 1) {
       s->type = parse_type(p->arg(1), env);
     } else {
       s->type = env.types.inst(SymbolKey(name, TAG_NS));
       //parse_stmt_decl(SYN(SYN("talias"), p->arg(0), SYN(s->type)), env);
     }
-    s->module = env.symbols.lookup<Module>(p->arg(0), OUTER_NS);
-    assert(s->num == s->module->num);
-    s->defined = true;
-    s->finalize();
+    finalize_user_type(s, env);
     return empty_stmt();
   }
 
+  struct UserTypeBuilder : public ModuleBuilder {
+    UserTypeBuilder(const Syntax * p, Environ & e)
+      : ModuleBuilder(p, e, new_user_type(p, e)) {}
+  };
+
   Stmt * parse_user_type(const Syntax * p, Environ & env) {
-    assert_num_args(p, 1, 3);
-    SymbolName name = *p->arg(0);
-    //printf("PARSING USER TYPE %s\n", ~name);
-    if (!env.symbols.exists_this_scope(SymbolKey(name))) {
-      //printf("ADDING SYM %s\n", ~name);
-      UserType * s = new UserType;
-      s->category = new TypeCategory(name.name, USER_C);
-      add_simple_type(env.types, SymbolKey(name), s, env.where);
-    } else {
-      //printf("SYM ALREADY EXISTS: %s\n", ~name);
-      //if (name == "_VTable") {
-      //  const Symbol * s = env.symbols.find<Symbol>(SymbolKey(name));
-      //  //abort();
-      //}
-    }
-    Stmt * res = parse_module(p, env);//, env.symbols.find<UserType>(SymbolKey(name)));
-    return res;
+    //assert_num_args(p, 1, 3);
+    assert_num_args(p, 1, 2);
+    UserTypeBuilder m(p->arg(0), env);
+    if (p->num_args() > 1)
+      m.parse_body(p->arg(1));
+    return empty_stmt();
   }
 
   Stmt * parse_finalize_user_type(const Syntax * p, Environ & env) {
@@ -2658,17 +2655,8 @@ namespace ast {
     Type * t0 = env.types.inst(SymbolName(*m->key)); 
     //                        ^^ need to kill namespace but preserve marks
     UserType * s = dynamic_cast<UserType *>(t0);
-    s->module = m;
     s->type = parse_type(p->arg(0), env);
-    s->defined = true;
-    s->finalize();
-    Symbol * vs = env.symbols.find_this_scope<Symbol>("_sizeof");
-    Var * v = dynamic_cast<Var *>(vs);
-    if (v) {
-      v->init = parse_exp(SYN(SYN("sizeof"), SYN(SYN(".type"), SYN(static_cast<Type *>(s)))), env);
-      s->lt_sizeof_ = mk_id(v, env);
-    }
-    assert(s->num == s->module->num);
+    finalize_user_type(s, env);
     return empty_stmt();
   }
 
