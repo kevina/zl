@@ -1065,7 +1065,7 @@ namespace ast {
   
   static Stmt * parse_var(const Syntax * p, Environ & env) {
     assert_num_args(p,2,4);
-    CollectBase * collect = env.collect;
+    Collect * collect = env.collect;
     const Syntax * name_p = p->arg(0);
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
@@ -1104,14 +1104,12 @@ namespace ast {
       throw error(name_p, "Size not known");
     if (fresh && !shadow)
       env.add(name, var);
-    if (!env.interface && collect) {
+    if (env.parse_def() && !collect)
+      res = var->finish_parse(env);
+    else if (collect)
       collect->add(new CollectParseDef(var, env));
-    } else {
-      if (!env.interface)
-        res = var->finish_parse(env);
-      if (shadow)
-        env.add(name, var);
-    }
+    if (shadow)
+      env.add(name, var);
     return res;
   }
 
@@ -2451,9 +2449,10 @@ namespace ast {
   };
   
   void finalize_module(Module * m, Environ & env) {
-    for (Collect::iterator i = m->collect->begin(), e = m->collect->end(); i != e; ++i) {
-      (*i)->doit(env);
-    }
+    if (env.parse_def())
+      for (Collect::iterator i = m->collect->begin(), e = m->collect->end(); i != e; ++i) {
+        (*i)->doit(env);
+      }
     m->collect = NULL;
     env.add_defn(m);
   }
@@ -2909,6 +2908,7 @@ namespace ast {
     bool env_interface_orig = env.interface;
     try {
       env.interface = true;
+      assert(!env.collect);
       parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env);
     } catch (...) {
       env.interface = env_interface_orig;
@@ -3078,7 +3078,7 @@ namespace ast {
     }
   };
 
-  Stmt * parse_fun_forward(const Syntax * p, Environ & env, CollectBase & collect) {
+  Stmt * parse_fun_forward(const Syntax * p, Environ & env, Collect * collect) {
     assert_num_args(p,3,4);
 
     //printf("FUN:: %s\n", ~p->to_string());
@@ -3133,17 +3133,17 @@ namespace ast {
   }
 
   Stmt * parse_fun(const Syntax * p, Environ & env) {
-    if (env.collect) {
-      return parse_fun_forward(p, env, *env.collect);
-    } else {
+    if (env.parse_def() && !env.collect) {
       Collect collect;
-      Stmt * f = parse_fun_forward(p, env, collect);
+      Stmt * f = parse_fun_forward(p, env, &collect);
       if (!collect.empty()) {
         assert(collect.size() == 1);
         // FIXME: Make sure it is a CollectParseDef
         collect[0]->doit(env);
       }
       return f;
+    } else {
+      return parse_fun_forward(p, env, env.collect);
     }
   }
 
@@ -3170,7 +3170,7 @@ namespace ast {
     }
   }
   
-  AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, CollectBase & collect) {
+  AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect * collect) {
     syn = p;
 
     //printf("PARSING FLAGS OF %s\n", ~p->to_string());
@@ -3203,7 +3203,8 @@ namespace ast {
 
     body = 0;
     if (!env.interface && p->num_args() > 3) {
-      collect.add(new CollectParseDef(this, env0));
+      if (collect)
+        collect->add(new CollectParseDef(this, env0));
     } else {
       symbols = env.symbols;
     }
@@ -3889,7 +3890,7 @@ namespace ast {
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
     String what = p->what().name;
     //fprintf(stderr, "PRE PARSING %s\n", ~p->to_string());
-    assert(env.collect && !env.collect->data);
+    assert(env.special());
     try_just_decl(p, env);
     return p;
   }

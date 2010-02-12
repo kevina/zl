@@ -67,26 +67,16 @@ namespace ast {
     virtual ~CollectAction() {}
   };
 
-  struct Declaration;
-  struct CollectBase {
-    typedef Vector<CollectAction * > Data;
-    Data * data;
-    CollectBase(Data * d) : data(d) {}
+  struct Collect : public Vector<CollectAction * > {
     void add(CollectAction * action) {
-      if (data) 
-        data->push_back(action);
+      push_back(action);
     }
-  };
-  struct Collect : public CollectBase::Data, public CollectBase {
-    Collect() : CollectBase(this) {}
-  };
-  struct DummyCollect : public CollectBase {
-    DummyCollect() : CollectBase(NULL) {}
   };
 
   struct Environ : public gc {
     TypeRelation * type_relation;
     bool special() const {return !top_level_symbols;}
+    bool parse_def() const {return top_level_symbols && !interface;}
     const Symbol * find_tls(const char * to_find) const {
       if (!top_level_symbols)
         return NULL;
@@ -107,8 +97,8 @@ namespace ast {
     InsrPoint * stmt_ip;
     ExpInsrPoint * temp_ip;
     InsrPoint * exp_ip;
-    CollectBase * collect; // if set don't parse declaration body,
-                           // instead store it here to be parsed latter
+    Collect * collect; // if set don't parse declaration body,
+                       // instead store it here to be parsed latter
     bool true_top_level;
     bool interface;
     Type * void_type() {return types.inst("<void>");}

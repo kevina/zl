@@ -549,7 +549,7 @@ namespace ast {
     void compile(CompileWriter & f, Phase) const;
     void finalize(FinalizeEnviron &);
     // internal method, should only be called by parse_fun_forward
-    AST * parse_forward_i(const Syntax * p, Environ &, CollectBase &);
+    AST * parse_forward_i(const Syntax * p, Environ &, Collect *);
     using TopLevelVarDecl::uniq_name;
     void uniq_name(OStream & o) const;
   };
