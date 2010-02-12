@@ -2408,32 +2408,38 @@ namespace ast {
     return m;
   }
 
-  struct ModuleBuilder {
-    ModuleBuilder(const Syntax * p, Environ & e, UserType * ut = NULL) 
-      : module(ut ? ut->module : new_module(p, e)), 
-        user_type(ut),
-        env(*new Environ(e.new_open_scope())),
-        prs(env)
-      {
-        assert(module);
-        env.scope = TOPLEVEL;
-        env.where = module;
-        env.collect = e.collect ? e.collect : &collect;
-        module->syms = env.symbols;
-      }
+  struct ModuleBuilderBase { // shared with zl abi
     Module * module;
     UserType * user_type;
-    Environ & env;
+    Environ * env;
+    ModuleBuilderBase(const Syntax * p, Environ & e, UserType * ut = NULL)
+      : module(ut ? ut->module : new_module(p, e)),
+        user_type(ut),
+        env(new Environ(e.new_open_scope())) {}
+  };
+
+  struct ModuleBuilder : public ModuleBuilderBase {
+    ModuleBuilder(const Syntax * p, Environ & e, UserType * ut = NULL) 
+      : ModuleBuilderBase(p, e, ut),
+        prs(*env)
+      {
+        assert(module);
+        assert(env);
+        assert(env == &prs.env);
+        env->scope = TOPLEVEL;
+        env->where = module;
+        env->collect = e.collect ? e.collect : &collect;
+        module->syms = env->symbols;
+      }
     Collect collect;
     Parse<TopLevel> prs;
-    bool pre_parse;
     void add_syntax(const Syntax * p) {
       p = prs.partly_expand(p);
       if (p->is_a("@")) {
         add_syntax(p->args_begin(), p->args_end());
       } else {
         Stmt * cur = prs.finish_parse(p);
-        env.add_stmt(cur);
+        env->add_stmt(cur);
       }
     }
     void add_syntax(parts_iterator i, parts_iterator end) {
@@ -2444,7 +2450,7 @@ namespace ast {
       for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
         i->decl->finish_parse(*i->env);
       }
-      env.add_defn(module);
+      env->add_defn(module);
     }
     void parse_body(const Syntax * p) {
       add_syntax(p->args_begin(), p->args_end());
@@ -2452,6 +2458,10 @@ namespace ast {
       //  handle_special_methods(m, user_type, env0, &env);
       finalize();
     }
+  private:
+    ModuleBuilder();
+    ModuleBuilder(const ModuleBuilder &);
+    void operator=(const ModuleBuilder &);
   };
 
 
@@ -3408,7 +3418,11 @@ namespace ast {
           syms.push_back(*i);
         } catch (...) {}
       }
-      assert(syms.size() == 1); // FIXME: Error Message
+      if (syms.size() == 0)
+        throw error(name, "No match for call to %s", ~name->to_string());
+      if (syms.size() > 1)
+        throw error(name, "Multiple matches for call to %s", ~name->to_string());
+      //assert(syms.size() == 1); // FIXME: Error Message
       sym = syms.front();
     }
     return sym;
@@ -4411,6 +4425,22 @@ extern "C" namespace macro_abi {
   
   int have_destructor(Syntax * where, Environ * env) {
     return have_special(ast::have_destructor, where, *env);
+  }
+
+  ModuleBuilder * new_module_builder(const Syntax * name, Environ * env) {
+    return new ModuleBuilder(name, *env);
+  }
+
+  void module_builder_add(ModuleBuilder * b, const Syntax * p) {
+    b->add_syntax(p);
+  }
+
+  void module_builder_finalize(ModuleBuilder * b) {
+    b->finalize();
+  }
+
+  UserTypeBuilder * new_user_type_builder(Syntax * name, Environ * env) {
+    return new UserTypeBuilder(name, *env);
   }
 
 }

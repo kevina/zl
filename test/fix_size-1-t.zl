@@ -21,7 +21,7 @@ class Z : fix_size(8) {
   int z;
 };
 
-class Z2 : fix_size(8) {
+class Z2  : fix_size(8) {
   class I {
     int x;
   };

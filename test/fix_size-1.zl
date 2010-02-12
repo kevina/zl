@@ -3,6 +3,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   
   // to avoid duplicate work
   p = partly_expand_class(p, mark, env);
+  return parse_class(p, env);
 
   Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) @rest), p);
 
@@ -20,7 +21,9 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
                                    m, mark);
   
   Environ * lenv = temp_environ(env);
+  printf("PREPARSE MAN\n");
   pre_parse(r, lenv);
+  printf("---\n");
 
   size_t size = ct_value(replace(syntax (offsetof(name, dummy)), m, mark), lenv);
 

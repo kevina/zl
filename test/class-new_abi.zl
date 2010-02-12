@@ -10,7 +10,7 @@ import_file "../class.zl";
 
   void add_parent_info() {
     parse_class_var(partly_expand(replace(syntax {parent_n * _parent_ptr;}, m, mark), FieldPos, lenv),
-                    struct_p, module_p);
+                    struct_p);
 
     Syntax * p_init = replace(syntax {_parent_ptr = malloc(sizeof(parent_n));}, m, mark);
     need_constructor = true;
@@ -21,7 +21,7 @@ import_file "../class.zl";
     need_destructor = true;
     destructor_code->append(p_cleanup);
 
-    module_b->append(replace(syntax {macro _parent (:this ths = this) {*ths->_parent_ptr;}}, m, mark));
+    builder->add(replace(syntax {macro _parent (:this ths = this) {*ths->_parent_ptr;}}, m, mark));
 
     register_field(m->var(syntax _parent), 
                    replace(raw_syntax (parent_n), m, mark), 
@@ -33,15 +33,15 @@ import_file "../class.zl";
     constructor_code[0]->append(p_init_2);
     copy_constructor_code[0]->append(p_init_2);
     
-    module_p->append(replace(syntax {macro cast_up(p) {(*p).._parent_ptr;}}, m, mark));
-    module_p->append(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>((*p).._child_ptr);}}, m, mark));
-    module_p->append(replace(syntax {make_subtype parent_n cast_up cast_down;}, m, mark));
+    builder->add(replace(syntax {macro cast_up(p) {(*p).._parent_ptr;}}, m, mark));
+    builder->add(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>((*p).._child_ptr);}}, m, mark));
+    builder->add(replace(syntax {make_subtype parent_n cast_up cast_down;}, m, mark));
   }
 
   void add_other_info() {
     ParseClass::add_other_info`non_virtual();
     parse_class_var(partly_expand(replace(syntax {void * _child_ptr;}, m, mark), FieldPos, lenv),
-                    struct_p, module_p);
+                    struct_p);
     Syntax * c_init = replace(syntax{_child_ptr = 0;}, m, mark);
     need_constructor = true;
     constructor_code[0]->append(replace(syntax{_child_ptr = 0;}, m, mark));

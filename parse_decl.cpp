@@ -222,7 +222,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 {
   SyntaxBuilder res;
 
-  //printf(">IN>%s\n", ~p->to_string());
+  printf(">IN>%s\n", ~p->to_string());
 
   parts_iterator i = p->args_begin();
   parts_iterator end = p->args_end();
@@ -254,8 +254,13 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
   while (i != end) {
 
+    printf(">1>%s\n", ~(*i)->to_string());
+
     const Syntax * id;
     const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
+
+    if (i != end)
+      printf(">2>%s\n", ~(*i)->to_string());
 
     const Syntax * decl;
     if (i != end && (*i)->eq("=")) {
@@ -278,9 +283,12 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     res.add_part(decl);
 
     if (i == end) break;
+    printf(">3>%s\n", ~(*i)->to_string());
 
-    if (!(*i)->eq(","))
-      throw error(*i, "Expected \",\".<1>");
+    if (!(*i)->eq(",")) {
+      printf("Expected \",\".<1>");
+      throw error(*i, "Expected \",\" got \"%s\".<1>", ~(*i)->to_string());
+    }
     ++i;
     
   }

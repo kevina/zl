@@ -36,8 +36,10 @@
   module_info;
   module_symbols;
   module_have_symbol;
-  module_add_syntax;
-  module_finalize;
+  new_module_builder;
+  module_builder_add;
+  module_builder_finalize;
+  new_user_type_builder;
   ct_value;
   temp_environ;
   error;
