@@ -38,7 +38,7 @@ namespace ast {
   private:
     Var * var_; // where to put the result, may be NULL
   };
-
+  
   ExpContext VOID_CONTEXT(ExpContext::VOID_CONTEXT_MARKER);
   
   static Exp * parse_exp(const Syntax * p, Environ & env, ExpContext c);
@@ -273,6 +273,17 @@ namespace ast {
     make_unique(env.symbols.front);
   }
 
+  struct CollectFinishAddEnv {
+    TopLevelSymbol * sym;
+    SymbolNode * local;
+    Environ * env;
+    CollectFinishAddEnv(TopLevelSymbol * s, SymbolNode * l, Environ & e) 
+      : sym(s), local(l), env(&e) {}
+    void doit() {
+      sym->finish_add_to_env(local, *env);
+    }
+  };
+
   void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     //assert(!env.symbols.exists_this_scope(k));
     if (!shadow_ok && env.symbols.exists_this_scope(k)) {
@@ -282,7 +293,14 @@ namespace ast {
     SymbolNode * local = env.symbols.add(env.where, k, this);
     assert(!key);
     key = &local->key;
-    if (env.special()) return;
+    if (env.special()) {
+      //env.collect->add(CollectAction::FinishEnvAdd, this, env);
+    } else {
+      finish_add_to_env(local, env);
+    }
+  }
+
+  void TopLevelSymbol::finish_add_to_env(SymbolNode * local, Environ & env) {
     local->set_flags(SymbolNode::ALIAS);
     if (num == NPOS)
       assign_uniq_num<TopLevelSymbol>(this, *env.top_level_symbols->front);
@@ -660,6 +678,20 @@ namespace ast {
       for (Stmt * cur = stmts; cur; cur = cur->next)
         f << adj_indent(2) << cur;
       f << indent << ")\n";
+    }
+  };
+  
+  //
+  //
+  // 
+
+  struct CollectParseDef : public CollectAction {
+    Declaration * decl;
+    Environ * env;
+    CollectParseDef(Declaration * d, Environ & e) 
+      : decl(d), env(&e) {}
+    void doit(Environ &) {
+      decl->finish_parse(*env);
     }
   };
 
@@ -1073,7 +1105,7 @@ namespace ast {
     if (fresh && !shadow)
       env.add(name, var);
     if (!env.interface && collect) {
-      collect->add(var, env); 
+      collect->add(new CollectParseDef(var, env));
     } else {
       if (!env.interface)
         res = var->finish_parse(env);
@@ -2417,8 +2449,18 @@ namespace ast {
         user_type(ut),
         env(new Environ(e.new_open_scope())) {}
   };
+  
+  void finalize_module(Module * m, Environ & env) {
+    for (Collect::iterator i = m->collect->begin(), e = m->collect->end(); i != e; ++i) {
+      (*i)->doit(env);
+    }
+    m->collect = NULL;
+    env.add_defn(m);
+  }
 
   struct ModuleBuilder : public ModuleBuilderBase {
+    // this should be head allocated unless the module will be
+    // finalized in the same scope
     ModuleBuilder(const Syntax * p, Environ & e, UserType * ut = NULL) 
       : ModuleBuilderBase(p, e, ut),
         prs(*env)
@@ -2430,6 +2472,7 @@ namespace ast {
         env->where = module;
         env->collect = e.collect ? e.collect : &collect;
         module->syms = env->symbols;
+        module->collect = &collect;
       }
     Collect collect;
     Parse<TopLevel> prs;
@@ -2447,10 +2490,7 @@ namespace ast {
         add_syntax(*i);
     }
     void finalize() {
-      for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-        i->decl->finish_parse(*i->env);
-      }
-      env->add_defn(module);
+      finalize_module(module, *env);
     }
     void parse_body(const Syntax * p) {
       add_syntax(p->args_begin(), p->args_end());
@@ -3098,8 +3138,11 @@ namespace ast {
     } else {
       Collect collect;
       Stmt * f = parse_fun_forward(p, env, collect);
-      if (!collect.empty())
-        collect[0].decl->finish_parse(*collect[0].env);
+      if (!collect.empty()) {
+        assert(collect.size() == 1);
+        // FIXME: Make sure it is a CollectParseDef
+        collect[0]->doit(env);
+      }
       return f;
     }
   }
@@ -3160,7 +3203,7 @@ namespace ast {
 
     body = 0;
     if (!env.interface && p->num_args() > 3) {
-      collect.add(this, env0);
+      collect.add(new CollectParseDef(this, env0));
     } else {
       symbols = env.symbols;
     }

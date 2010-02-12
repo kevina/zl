@@ -1698,6 +1698,7 @@ namespace syntax_ns {
     return syn;
   }
 }
+
 //
 //
 //

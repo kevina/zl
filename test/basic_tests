@@ -95,7 +95,7 @@ $SIG{INT} = sub {$sigint = 1; die "INTERRUPTED\n";};
 eval {
   foreach (@tests) {
     chomp;
-    s/(.+?)\#.+$/$1/;
+    s/(.*?)\#.+$/$1/;
     s/^\s+//; 
     s/\s+$//;
     next unless /\S/;

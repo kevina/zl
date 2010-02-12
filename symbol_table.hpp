@@ -235,6 +235,7 @@ namespace ast {
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
     void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
+    void finish_add_to_env(SymbolNode * local, Environ &);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s) {props.add_prop(n, s);}
     virtual const Syntax * get_prop(SymbolName n) const {return props.get_prop(n);}

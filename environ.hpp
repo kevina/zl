@@ -60,19 +60,21 @@ namespace ast {
     Where where;
   };
 
+  struct CollectAction {
+    virtual void doit(Environ & env) = 0; 
+    // perform action, env passed in should be the current env, not
+    // the one stored in the action
+    virtual ~CollectAction() {}
+  };
+
   struct Declaration;
   struct CollectBase {
-    struct DeclEnv {
-      Declaration * decl;
-      Environ * env;
-      DeclEnv(Declaration * d, Environ & e) : decl(d), env(&e) {}
-    };
-    typedef Vector<DeclEnv> Data;
+    typedef Vector<CollectAction * > Data;
     Data * data;
     CollectBase(Data * d) : data(d) {}
-    void add(Declaration * d, Environ & e) {
+    void add(CollectAction * action) {
       if (data) 
-        data->push_back(DeclEnv(d, e));
+        data->push_back(action);
     }
   };
   struct Collect : public CollectBase::Data, public CollectBase {

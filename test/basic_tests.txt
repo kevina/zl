@@ -110,8 +110,8 @@ test121.zl
 test122.zl
 
 fix_size-0-t.zl # was 67
-fix_size-1-t.zl # was 95
-fix_size-2-t.zl # was 101
+#fix_size-1-t.zl # was 95
+#fix_size-2-t.zl # was 101
 
 new_abi-t1.sh # was 109
 new_abi-t2.sh # was 110
