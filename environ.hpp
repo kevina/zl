@@ -85,8 +85,8 @@ namespace ast {
     bool special() const {return !top_level_symbols;}
     bool parse_def() const {return top_level_symbols && !interface;}
     const Symbol * find_tls(const char * to_find) const {
-      if (!top_level_symbols)
-        return NULL;
+      //if (!top_level_symbols)
+      //  return NULL;
       return top_level_symbols->find<Symbol>(to_find);
     }
     inline void add_defn(Stmt * defn);
