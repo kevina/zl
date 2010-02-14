@@ -640,7 +640,6 @@ namespace ast {
   struct Module : public Declaration, public TopLevelSymbol {
     Module() {}
     SymbolTableBase syms;
-    Collect * collect;
     //Vector<const Syntax *> exports; // \...
     const char * what() const {return "module";}
     void compile(CompileWriter &, Phase) const;

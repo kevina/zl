@@ -2460,21 +2460,19 @@ namespace ast {
         env(new Environ(e.new_open_scope())) {}
   };
   
-  void finalize_module(Module * m, Environ & env) {
-    if (env.parse_def()) {
-      for (Collect::iterator i = m->collect->begin(), e = m->collect->end(); i != e; ++i) {
-        (*i)->doit(env);
-      }
-      env.add_defn(m);
-    }
-    m->collect = NULL;
-  }
+  struct IncompleteDecl {
+    typedef ::TypeInfo<IncompleteDecl> TypeInfo;
+    virtual Stmt * complete(Environ & env) = 0;
+    virtual ~IncompleteDecl() {}
+  };
 
-  struct ModuleBuilder : public ModuleBuilderBase {
+  struct ModuleBuilder : public ModuleBuilderBase, public IncompleteDecl {
     // this should be head allocated unless the module will be
     // finalized in the same scope
     ModuleBuilder(const Syntax * p, Environ & e, UserType * ut = NULL) 
       : ModuleBuilderBase(p, e, ut),
+        outer_env(&e),
+        name(p),
         prs(*env)
       {
         assert(module);
@@ -2482,10 +2480,12 @@ namespace ast {
         assert(env == &prs.env);
         env->scope = TOPLEVEL;
         env->where = module;
-        env->collect = e.collect ? e.collect : &collect;
+        env->collect = &collect;
         module->syms = env->symbols;
-        module->collect = &collect;
+        //module->collect = &collect;
       }
+    Environ * outer_env;
+    Syntax * name;
     Collect collect;
     Parse<TopLevel> prs;
     void add_syntax(const Syntax * p) {
@@ -2501,14 +2501,42 @@ namespace ast {
       for (; i != end; ++i)
         add_syntax(*i);
     }
+    struct Finalize : public CollectAction {
+      ModuleBuilder * builder;
+      Finalize(ModuleBuilder * b, Environ & e)
+        : CollectAction(e), builder(b) {}
+      void doit_hook() {
+        builder->finalize(*env, true);
+      }
+    };
+    void finalize(Environ & env, bool no_collect = false) {
+      Collect * env_collect = no_collect ? NULL : env.collect;
+      if (env.parse_def() && !env_collect) {
+        collect.frozen = true;
+        for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
+          (*i)->doit(env);
+        }
+        env.add_defn(module);
+      } else if (env_collect) {
+        env_collect->add(new Finalize(this, env));
+      }
+    }
     void finalize() {
-      finalize_module(module, *env);
+      finalize(*outer_env);
     }
     void parse_body(const Syntax * p) {
       add_syntax(p->args_begin(), p->args_end());
       //if (user_type)
       //  handle_special_methods(m, user_type, env0, &env);
       finalize();
+    }
+    Stmt * complete(Environ & env) {
+      env.add(SymbolKey(*name, OUTER_NS), module);
+      if (user_type) {
+        add_simple_type(env.types, SymbolKey(*name), user_type, env.where);
+      }
+      finalize(env);
+      return empty_stmt();
     }
   private:
     ModuleBuilder();
@@ -2518,9 +2546,9 @@ namespace ast {
 
   Stmt * parse_module(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, 2);
-    ModuleBuilder m(p->arg(0), env);
+    ModuleBuilder * m = new ModuleBuilder(p->arg(0), env);
     if (p->num_args() > 1)
-      m.parse_body(p->arg(1));
+      m->parse_body(p->arg(1));
     return empty_stmt();
   }
 
@@ -2703,9 +2731,9 @@ namespace ast {
   Stmt * parse_user_type(const Syntax * p, Environ & env) {
     //assert_num_args(p, 1, 3);
     assert_num_args(p, 1, 2);
-    UserTypeBuilder m(p->arg(0), env);
+    UserTypeBuilder * m = new UserTypeBuilder(p->arg(0), env);
     if (p->num_args() > 1)
-      m.parse_body(p->arg(1));
+      m->parse_body(p->arg(1));
     return empty_stmt();
   }
 
@@ -3830,64 +3858,20 @@ namespace ast {
   }
 
   Stmt * try_just_decl(const Syntax * p, Environ & env);
-  Stmt * try_decl_first_pass(const Syntax * p, Environ & env, Collect & collect);
   Stmt * try_just_stmt(const Syntax * p, Environ & env);
   Exp * try_just_exp(const Syntax * p, Environ & env, ExpContext c);
   Stmt * try_exp_stmt(const Syntax * p, Environ & env);
 
-  //template <typename T>
-  //T * try_ast(const Syntax * p, Environ & env) {
-  //  if (p->have_entity()) {
-  //    if (T * ast = p->entity<T>()) {
-  //      return ast;
-  //    } else if (Error * err = p->entity<Error>()) {
-  //      throw err;
-  //    } else {
-  //     abort(); // FIXME Error message
-  //    }
-  //  }
-  //  return 0;
-  //}
-
-  template <typename T>
-  T * try_ast(const Syntax * p, Environ & env);
-
-  template <>
-  Exp * try_ast<Exp>(const Syntax * p, Environ & env) {
-    if (p->have_entity()) {
-      if (Exp * ast = p->entity<Exp>()) {
-        return ast;
-      } else if (Error * err = p->entity<Error>()) {
-        throw err;
-      } else {
-        abort(); // FIXME Error message
-      }
-    }
-    return 0;
-  }
-
-  template <>
-  Stmt * try_ast<Stmt>(const Syntax * p, Environ & env) {
-    if (p->have_entity()) {
-      if (Stmt * ast = p->entity<Stmt>()) {
-        return ast;
-      } else if (Exp * ast = p->entity<Exp>()) {
-        return ast->as_stmt();
-      } else if (Error * err = p->entity<Error>()) {
-        throw err;
-      } else {
-        abort(); // FIXME Error message
-      }
-    }
-    return 0;
+  void try_error(const Syntax * p, Environ & env) {
+    if (Error * err = p->entity<Error>())
+      throw err;
   }
 
   template <>
   Stmt * Parse<TopLevel>::finish_parse(const Syntax * p) const {
     Stmt * res;
     //printf("Parsing top level:\n  %s\n", ~p->to_string());
-    res = try_ast<Stmt>(p, env);
-    if (res) return res;
+    try_error(p, env);
     res = try_just_decl(p, env);
     if (res) return res;
     throw error (p, "Unsupported primative at top level:: %s", ~p->what());
@@ -3922,8 +3906,7 @@ namespace ast {
   template <>
   Stmt * Parse<StmtPos>::finish_parse(const Syntax * p) const {
     Stmt * res;
-    res = try_ast<Stmt>(p, env);
-    if (res) return res;
+    try_error(p, env);
     res = try_just_stmt(p, env);
     if (res) return res;
     res = try_exp_stmt(p, env);
@@ -3939,8 +3922,7 @@ namespace ast {
   template <>
   Stmt * Parse<StmtDeclPos>::finish_parse(const Syntax * p) const {
     Stmt * res;
-    res = try_ast<Stmt>(p, env);
-    if (res) return res;
+    try_error(p, env);
     res = try_just_decl(p, env);
     if (res) return res;
     res = try_just_stmt(p, env);
@@ -3962,8 +3944,7 @@ namespace ast {
 
   static Exp * just_parse_exp(const Syntax * p, Environ & env, ExpContext c) {
     Exp * res;
-    res = try_ast<Exp>(p, env);
-    if (res) return res;
+    try_error(p, env);
     res = try_just_exp(p, env, c); 
     if (res) return res;
     //abort();
@@ -3992,6 +3973,8 @@ namespace ast {
   }
 
   Stmt * try_just_decl(const Syntax * p, Environ & env) {
+    if (IncompleteDecl * decl = p->entity<IncompleteDecl>())
+      return decl->complete(env);
     String what = p->what().name;
     if (what == "var")     return parse_var(p, env);
     if (what == "fun" )    return parse_fun(p, env), empty_stmt();
@@ -4025,6 +4008,7 @@ namespace ast {
   }
 
   Stmt * try_just_stmt(const Syntax * p, Environ & env) {
+    if (Stmt * stmt = p->entity<Stmt>()) return stmt;
     String what = p->what().name;
     if (what == "goto")    return (new Goto)->parse_self(p, env);
     if (what == "label")   return parse_label(p, env);
@@ -4038,6 +4022,7 @@ namespace ast {
   }
 
   Exp * try_just_exp(const Syntax * p, Environ & env, ExpContext c) {
+    if (Exp * exp = p->entity<Exp>()) return exp;
     String what = p->what().name;
     if (what == "id")      return (new Id)->parse_self(p, env);
     if (what == "n")       return (new Literal)->parse_self(p, env);
@@ -4495,19 +4480,19 @@ extern "C" namespace macro_abi {
     return have_special(ast::have_destructor, where, *env);
   }
 
-  ModuleBuilder * new_module_builder(const Syntax * name, Environ * env) {
+  ModuleBuilderBase * new_module_builder(const Syntax * name, Environ * env) {
     return new ModuleBuilder(name, *env);
   }
 
-  void module_builder_add(ModuleBuilder * b, const Syntax * p) {
-    b->add_syntax(p);
+  void module_builder_add(ModuleBuilderBase * b, const Syntax * p) {
+    static_cast<ModuleBuilder *>(b)->add_syntax(p);
   }
 
-  void module_builder_finalize(ModuleBuilder * b) {
-    b->finalize();
+  void module_builder_finalize(ModuleBuilderBase * b) {
+    static_cast<ModuleBuilder *>(b)->finalize();
   }
 
-  UserTypeBuilder * new_user_type_builder(Syntax * name, Environ * env) {
+  ModuleBuilderBase * new_user_type_builder(Syntax * name, Environ * env) {
     return new UserTypeBuilder(name, *env);
   }
 

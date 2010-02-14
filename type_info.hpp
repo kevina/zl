@@ -14,6 +14,7 @@ namespace ast {
   struct Exp;
   struct Stmt;
   struct TypeInst;
+  struct IncompleteDecl;
 }
 
 template <typename T> struct TypeInfo;
@@ -41,5 +42,9 @@ template <> struct TypeInfo<ast::TypeInst> {
 template <> struct TypeInfo<syntax_ns::SyntaxBuilderBase> {
   typedef syntax_ns::SyntaxBuilderBase type; 
   static const unsigned id = 0x6FF;};
+template <> struct TypeInfo<ast::IncompleteDecl> {
+  typedef ast::IncompleteDecl type; 
+  static const unsigned id = 0x7FF;};
+
 
 #endif

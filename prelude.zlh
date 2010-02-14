@@ -192,20 +192,20 @@ user_type UserTypeBuilder {
   make_subtype ModuleBuilder _up_cast _down_cast;
 }
 
-__ct_callback Environ * temp_environ(Environ *);
+__ct_callback Environ * temp_environ(const Environ *);
 
-__ct_callback size_t ct_value(Syntax *, Environ *);
+__ct_callback size_t ct_value(Syntax *, const Environ *);
 
 __ct_callback Syntax * error(Syntax *, const char *, ...);
 
-__ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * prop, Environ * env);
+__ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * prop, const Environ * env);
 
-__ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, Environ *);
+__ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
 
-__ct_callback int have_default_constructor(Syntax * where, Environ *);
-__ct_callback int have_copy_constructor(Syntax * where, Environ *);
-__ct_callback int have_assign(Syntax * where, Environ *);
-__ct_callback int have_destructor(Syntax * where, Environ *);
+__ct_callback int have_default_constructor(Syntax * where, const Environ *);
+__ct_callback int have_copy_constructor(Syntax * where, const Environ *);
+__ct_callback int have_assign(Syntax * where, const Environ *);
+__ct_callback int have_destructor(Syntax * where, const Environ *);
 
 //
 //

@@ -74,7 +74,11 @@ namespace ast {
 #define ON_STACK(ptr) ((void *)ptr >= STACK_PTR)
 
   struct Collect : public Vector<CollectAction * > {
+    bool frozen;
+    Collect() : frozen(false) {}
     void add(CollectAction * action) {
+      assert(!frozen);
+      assert(action);
       assert(ON_STACK(this) || !ON_STACK(action->env));
       push_back(action);
     }
