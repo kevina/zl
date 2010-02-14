@@ -265,21 +265,33 @@ namespace ast {
   //
   //
 
+  struct CollectFinishAddEnvSymbol : public CollectAction {
+    Symbol * sym;
+    CollectFinishAddEnvSymbol(Symbol * s, Environ & e) 
+      : CollectAction(e), sym(s)  {}
+    void doit_hook() {
+      sym->make_unique(env->symbols.front);
+    }
+  };
+
   void Symbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     SymbolNode * n = env.symbols.add(env.where, k, this);
     assert(!key);
     key = &n->key;
-    if (env.special()) return;
+    if (env.special()) {
+      if (env.collect) 
+        env.collect->add(new CollectFinishAddEnvSymbol(this, env));
+      return;
+    }
     make_unique(env.symbols.front);
   }
 
-  struct CollectFinishAddEnv {
+  struct CollectFinishAddEnvTopLevel : public CollectAction {
     TopLevelSymbol * sym;
     SymbolNode * local;
-    Environ * env;
-    CollectFinishAddEnv(TopLevelSymbol * s, SymbolNode * l, Environ & e) 
-      : sym(s), local(l), env(&e) {}
-    void doit() {
+    CollectFinishAddEnvTopLevel(TopLevelSymbol * s, SymbolNode * l, Environ & e) 
+      : CollectAction(e), sym(s), local(l) {}
+    void doit_hook() {
       sym->finish_add_to_env(local, *env);
     }
   };
@@ -294,7 +306,8 @@ namespace ast {
     assert(!key);
     key = &local->key;
     if (env.special()) {
-      //env.collect->add(CollectAction::FinishEnvAdd, this, env);
+      if (env.collect)
+        env.collect->add(new CollectFinishAddEnvTopLevel(this, local, env));
     } else {
       finish_add_to_env(local, env);
     }
@@ -687,10 +700,9 @@ namespace ast {
 
   struct CollectParseDef : public CollectAction {
     Declaration * decl;
-    Environ * env;
     CollectParseDef(Declaration * d, Environ & e) 
-      : decl(d), env(&e) {}
-    void doit(Environ &) {
+      : CollectAction(e), decl(d) {}
+    void doit_hook() {
       decl->finish_parse(*env);
     }
   };
@@ -2449,12 +2461,13 @@ namespace ast {
   };
   
   void finalize_module(Module * m, Environ & env) {
-    if (env.parse_def())
+    if (env.parse_def()) {
       for (Collect::iterator i = m->collect->begin(), e = m->collect->end(); i != e; ++i) {
         (*i)->doit(env);
       }
+      env.add_defn(m);
+    }
     m->collect = NULL;
-    env.add_defn(m);
   }
 
   struct ModuleBuilder : public ModuleBuilderBase {
@@ -2502,7 +2515,6 @@ namespace ast {
     ModuleBuilder(const ModuleBuilder &);
     void operator=(const ModuleBuilder &);
   };
-
 
   Stmt * parse_module(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, 2);
@@ -3514,6 +3526,15 @@ namespace ast {
     f << indent << "(talias " << uniq_name() << " " << of << ")\n";
   }
 
+  struct CollectAddDefn : public CollectAction {
+    Declaration * decl;
+    CollectAddDefn(Declaration * d, Environ & e)
+      : CollectAction(e), decl(d) {}
+    void doit_hook() {
+      env->add_defn(decl);
+    }
+  };
+
   Stmt * parse_struct_union(StructUnion::Which which, const Syntax * p, Environ & env0) {
     //assert(p->is_a(what()));
     const Syntax * name = p->arg(0);
@@ -3551,7 +3572,10 @@ namespace ast {
         const Syntax * q = p->arg(1);
         add_ast_nodes(q->parts_begin(), q->parts_end(), decl->members, Parse<FieldPos>(decl->env));
       }
-      env0.add_defn(decl);
+      if (!env0.special())
+        env0.add_defn(decl);
+      else if (env0.collect)
+        env0.collect->add(new CollectAddDefn(decl, env0));
     } else {
       decl->have_body = false;
     }

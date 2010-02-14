@@ -835,11 +835,13 @@ namespace ast {
   }
   
   inline void Environ::add_defn(Stmt * defn) {
-    if (top_level_symbols) top_level_symbols->add_defn(defn);
+    assert(top_level_symbols);
+    top_level_symbols->add_defn(defn);
   }
   
   inline void Environ::move_defn(Stmt * defn) {
-    if (top_level_symbols) top_level_symbols->move_defn(defn);
+    assert(top_level_symbols);
+    top_level_symbols->move_defn(defn);
   }
 
   Exp * to_ref(Exp *, Environ &);

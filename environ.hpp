@@ -61,14 +61,21 @@ namespace ast {
   };
 
   struct CollectAction {
-    virtual void doit(Environ & env) = 0; 
-    // perform action, env passed in should be the current env, not
-    // the one stored in the action
+    Environ * env;
+    CollectAction(Environ & e) : env(&e) {}
+    // perform action, but first fix up the cached env.
+    inline void doit(Environ & e);
+    // perform object specific action
+    virtual void doit_hook() = 0;
     virtual ~CollectAction() {}
   };
 
+  register void * STACK_PTR asm ("esp");
+#define ON_STACK(ptr) ((void *)ptr >= STACK_PTR)
+
   struct Collect : public Vector<CollectAction * > {
     void add(CollectAction * action) {
+      assert(ON_STACK(this) || !ON_STACK(action->env));
       push_back(action);
     }
   };
@@ -199,6 +206,13 @@ namespace ast {
     }
   private:
   };
+
+  inline void CollectAction::doit(Environ & e) {
+    // fix up local env so it is no longer temp.
+    env->top_level_symbols = e.top_level_symbols;
+
+    doit_hook();
+  }
   
   inline TypeSymbol * TypeSymbolTable::find(const SymbolKey & k) {
     return env->symbols.find<TypeSymbol>(k);
