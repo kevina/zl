@@ -19,7 +19,7 @@ Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
   Syntax * member;
   while ((member = itr->next)) {
     Match * m0 = match(m, raw_syntax (what n @ type @_), member);
-    const char * what = syntax_to_string(m0->var(syntax what));
+    const char * what = m0 ? syntax_to_string(m0->var(syntax what)) : " ";
     if (strcmp(what, "var") == 0 || strcmp(what, "alias") == 0 
         || strcmp(what, "fun") == 0 || strcmp(what, "add_prop") == 0)
       new_body->append(member);

@@ -51,7 +51,7 @@ public:
   Match * m;
 
   Syntax * class_s;
-  Environ * env;
+  const Environ * env;
 
   Syntax * name;
   Syntax * body;
@@ -94,7 +94,7 @@ public:
   Syntax * destructor;
   Collect destructor_collect;
 
-  virtual Syntax * parse(Syntax * p_, Environ * e_, Mark * mark_) {
+  virtual Syntax * parse(Syntax * p_, const Environ * e_, Mark * mark_) {
 
     class_s = p_;
     env = e_;
@@ -145,11 +145,11 @@ public:
 
     create_special();
 
-    builder->finalize();
+    Syntax * res = builder->to_syntax();
     //printf("DONE %s\n", syntax_to_string(name));
     //dump_syntax(module_);
     //printf("---\n");
-    return replace(raw_syntax(@), NULL, mark);
+    return replace(res, NULL, mark);
   }
 
   virtual void init_match() {
@@ -236,6 +236,11 @@ public:
     Syntax * member;
     while ((member = itr->next)) {
       Match * m0 = match(m, raw_syntax (what n @ type @_), member);
+      if (!m0) {
+        builder->add(member);
+        continue;
+      }
+
       const char * what = syntax_to_string(m0->var(syntax what));
 
       // ignore access control labels for now
@@ -296,7 +301,8 @@ public:
     // create static vtable obj
     // create init function
     //   and add init code
-    builder->add(replace(raw_syntax (vtable_class _VTable), m, mark));
+    builder->add(vtable);
+    //builder->add(replace(raw_syntax (vtable_class _VTable), m, mark));
     builder->add(replace(
                        syntax {void _vtable_init(_VTable * _vt) {$1;} },
                        match_local(m, vtable_i, 0),
@@ -337,7 +343,6 @@ public:
     exports->append(replace(syntax _VTable, m, mark));
     exports->append(replace(syntax _VTable`outer, m, mark));
     
-    builder->add(vtable);
     builder->add(replace(syntax {_VTable _vtable;}, m, mark));
   }
 

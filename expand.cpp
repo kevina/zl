@@ -958,7 +958,9 @@ static const Syntax * replace(const Syntax * p,
   //r->to_string(COUT, PrintFlags());
   //printf("\n");
   SymbolName mid;
-  if (p->simple()) {
+  if (p->have_entity()) {
+    return p;
+  } else if (p->simple()) {
     //mid = *p;
     //goto try_mid;
     //return p;
@@ -1704,12 +1706,6 @@ namespace syntax_ns {
 
 extern "C" namespace macro_abi {
 
-  Environ * temp_environ(Environ * env) {
-    env = new Environ(env->new_scope());
-    env->top_level_symbols = NULL;
-    return env;
-  }
-  
   size_t ct_value(const Syntax * p, Environ * env) {
     Exp * ast = parse_exp(p, *env);
     return ast->ct_value<size_t>();

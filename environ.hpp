@@ -73,15 +73,18 @@ namespace ast {
   register void * STACK_PTR asm ("esp");
 #define ON_STACK(ptr) ((void *)ptr >= STACK_PTR)
 
-  struct Collect : public Vector<CollectAction * > {
-    bool frozen;
-    Collect() : frozen(false) {}
+  struct CollectPart : public Vector<CollectAction * > {
+    CollectPart() {}
     void add(CollectAction * action) {
-      assert(!frozen);
       assert(action);
       assert(ON_STACK(this) || !ON_STACK(action->env));
       push_back(action);
     }
+  };
+
+  struct Collect {
+    CollectPart first_pass;
+    CollectPart second_pass;
   };
 
   struct Environ : public gc {

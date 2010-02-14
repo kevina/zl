@@ -280,7 +280,7 @@ namespace ast {
     key = &n->key;
     if (env.special()) {
       if (env.collect) 
-        env.collect->add(new CollectFinishAddEnvSymbol(this, env));
+        env.collect->first_pass.add(new CollectFinishAddEnvSymbol(this, env));
       return;
     }
     make_unique(env.symbols.front);
@@ -307,7 +307,7 @@ namespace ast {
     key = &local->key;
     if (env.special()) {
       if (env.collect)
-        env.collect->add(new CollectFinishAddEnvTopLevel(this, local, env));
+        env.collect->first_pass.add(new CollectFinishAddEnvTopLevel(this, local, env));
     } else {
       finish_add_to_env(local, env);
     }
@@ -1118,8 +1118,8 @@ namespace ast {
       env.add(name, var);
     if (env.parse_def() && !collect)
       res = var->finish_parse(env);
-    else if (collect)
-      collect->add(new CollectParseDef(var, env));
+    else if (collect) 
+      collect->second_pass.add(new CollectParseDef(var, env));
     if (shadow)
       env.add(name, var);
     return res;
@@ -2453,11 +2453,11 @@ namespace ast {
   struct ModuleBuilderBase { // shared with zl abi
     Module * module;
     UserType * user_type;
-    Environ * env;
+    Environ * lenv;
     ModuleBuilderBase(const Syntax * p, Environ & e, UserType * ut = NULL)
       : module(ut ? ut->module : new_module(p, e)),
         user_type(ut),
-        env(new Environ(e.new_open_scope())) {}
+        lenv(new Environ(e.new_open_scope())) {}
   };
   
   struct IncompleteDecl {
@@ -2473,28 +2473,29 @@ namespace ast {
       : ModuleBuilderBase(p, e, ut),
         outer_env(&e),
         name(p),
-        prs(*env)
+        prs(*lenv)
       {
         assert(module);
-        assert(env);
-        assert(env == &prs.env);
-        env->scope = TOPLEVEL;
-        env->where = module;
-        env->collect = &collect;
-        module->syms = env->symbols;
+        assert(lenv);
+        assert(lenv == &prs.env);
+        lenv->scope = TOPLEVEL;
+        lenv->where = module;
+        lenv->collect = &collect;
+        module->syms = lenv->symbols;
         //module->collect = &collect;
       }
     Environ * outer_env;
     Syntax * name;
     Collect collect;
     Parse<TopLevel> prs;
+    const SourceStr & source_str() const {return name->str();} // FIXME: This isn't quite right
     void add_syntax(const Syntax * p) {
       p = prs.partly_expand(p);
       if (p->is_a("@")) {
         add_syntax(p->args_begin(), p->args_end());
       } else {
         Stmt * cur = prs.finish_parse(p);
-        env->add_stmt(cur);
+        lenv->add_stmt(cur);
       }
     }
     void add_syntax(parts_iterator i, parts_iterator end) {
@@ -2506,33 +2507,58 @@ namespace ast {
       Finalize(ModuleBuilder * b, Environ & e)
         : CollectAction(e), builder(b) {}
       void doit_hook() {
-        builder->finalize(*env, true);
+        builder->finalize(*env);
       }
     };
-    void finalize(Environ & env, bool no_collect = false) {
-      Collect * env_collect = no_collect ? NULL : env.collect;
-      if (env.parse_def() && !env_collect) {
-        collect.frozen = true;
-        for (Collect::iterator i = collect.begin(), e = collect.end(); i != e; ++i) {
-          (*i)->doit(env);
-        }
-        env.add_defn(module);
-      } else if (env_collect) {
-        env_collect->add(new Finalize(this, env));
+    void finalize(Environ & env) {
+      if (env.special()) {
+        printf("QQ: ENV SPECIAL ON %p (%s)\n", this, ~name->to_string());
+        if (env.collect)
+          env.collect->first_pass.add(new Finalize(this, env));
+        return; // FIXME: I don't think this is quite right
+      } else {
+        printf("QQ: ALL GOOD ON %p (%s)\n", this, ~name->to_string());
+      }
+      for (CollectPart::iterator 
+             i = collect.first_pass.begin(), 
+             e = collect.first_pass.end(); 
+           i != e; ++i)
+        (*i)->doit(env);
+      env.add_defn(module);
+      if (env.parse_def() && !env.collect) 
+        finalize_second_pass(env);
+      else if (env.collect) {
+        env.collect->second_pass.add(new FinalizeSecondPass(this, env));
       }
     }
-    void finalize() {
-      finalize(*outer_env);
+    struct FinalizeSecondPass : public CollectAction {
+      ModuleBuilder * builder;
+      FinalizeSecondPass(ModuleBuilder * b, Environ & e)
+        : CollectAction(e), builder(b) {}
+      void doit_hook() {
+        builder->finalize_second_pass(*env);
+      }
+    };
+    void finalize_second_pass(Environ & env) {
+      for (CollectPart::iterator 
+             i = collect.second_pass.begin(), 
+             e = collect.second_pass.end(); 
+           i != e; ++i)
+        (*i)->doit(env);
     }
     void parse_body(const Syntax * p) {
       add_syntax(p->args_begin(), p->args_end());
       //if (user_type)
       //  handle_special_methods(m, user_type, env0, &env);
-      finalize();
+      finalize(*outer_env);
     }
     Stmt * complete(Environ & env) {
+      printf("QQ: COMPLETE ON %p (%s)\n", this, ~name->to_string());
+      module->key = NULL;
+      module->where = env.where;
       env.add(SymbolKey(*name, OUTER_NS), module);
       if (user_type) {
+        user_type->key = NULL;
         add_simple_type(env.types, SymbolKey(*name), user_type, env.where);
       }
       finalize(env);
@@ -3176,10 +3202,9 @@ namespace ast {
     if (env.parse_def() && !env.collect) {
       Collect collect;
       Stmt * f = parse_fun_forward(p, env, &collect);
-      if (!collect.empty()) {
-        assert(collect.size() == 1);
+      if (!collect.second_pass.empty()) {
         // FIXME: Make sure it is a CollectParseDef
-        collect[0]->doit(env);
+        collect.second_pass[0]->doit(env);
       }
       return f;
     } else {
@@ -3244,7 +3269,7 @@ namespace ast {
     body = 0;
     if (!env.interface && p->num_args() > 3) {
       if (collect)
-        collect->add(new CollectParseDef(this, env0));
+        collect->second_pass.add(new CollectParseDef(this, env0));
     } else {
       symbols = env.symbols;
     }
@@ -3554,6 +3579,15 @@ namespace ast {
     f << indent << "(talias " << uniq_name() << " " << of << ")\n";
   }
 
+  void ForwardTypeDecl::compile(CompileWriter & f, Phase phase) const {
+    if (phase == Body) return;
+    if (strcmp(what_, "user_type")) {
+      f << "(declare_user_type " << uniq_name() << ")\n";
+    } else {
+      abort();
+    }
+  }
+
   struct CollectAddDefn : public CollectAction {
     Declaration * decl;
     CollectAddDefn(Declaration * d, Environ & e)
@@ -3603,7 +3637,7 @@ namespace ast {
       if (!env0.special())
         env0.add_defn(decl);
       else if (env0.collect)
-        env0.collect->add(new CollectAddDefn(decl, env0));
+        env0.collect->first_pass.add(new CollectAddDefn(decl, env0));
     } else {
       decl->have_body = false;
     }
@@ -4407,6 +4441,12 @@ extern "C" namespace macro_abi {
 
   using namespace ast;
 
+  Environ * temp_environ(Environ * env) {
+    env = new Environ(env->new_scope());
+    env->top_level_symbols = NULL;
+    return env;
+  }
+
   typedef const ::Syntax Syntax;
   typedef Syntax UnmarkedSyntax;
   Syntax * replace(const UnmarkedSyntax * p, void * match, Mark * mark);
@@ -4481,19 +4521,19 @@ extern "C" namespace macro_abi {
   }
 
   ModuleBuilderBase * new_module_builder(const Syntax * name, Environ * env) {
-    return new ModuleBuilder(name, *env);
+    return new ModuleBuilder(name, *temp_environ(env));
   }
 
   void module_builder_add(ModuleBuilderBase * b, const Syntax * p) {
     static_cast<ModuleBuilder *>(b)->add_syntax(p);
   }
 
-  void module_builder_finalize(ModuleBuilderBase * b) {
-    static_cast<ModuleBuilder *>(b)->finalize();
+  const Syntax * module_builder_to_syntax(ModuleBuilderBase * b) {
+    return SYN(static_cast<ModuleBuilder *>(b));
   }
 
   ModuleBuilderBase * new_user_type_builder(Syntax * name, Environ * env) {
-    return new UserTypeBuilder(name, *env);
+    return new UserTypeBuilder(name, *temp_environ(env));
   }
 
 }

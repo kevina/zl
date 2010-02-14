@@ -30,7 +30,6 @@
   string_to_syntax;
   syntax_to_string;
   dump_syntax;
-  new_user_type;
   user_type_info;
   user_type_module;
   module_info;
@@ -38,7 +37,7 @@
   module_have_symbol;
   new_module_builder;
   module_builder_add;
-  module_builder_finalize;
+  module_builder_to_syntax;
   new_user_type_builder;
   ct_value;
   temp_environ;

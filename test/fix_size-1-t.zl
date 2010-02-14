@@ -1,6 +1,6 @@
 include_file "fix_size-1.zl";
 
-class X;
+//class X;
 
 class X : fix_size(16) {
   int x;

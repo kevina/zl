@@ -134,10 +134,9 @@ user_type Symbol;
 user_type UserType;
 user_type Module;
 
-__ct_callback UserType * new_user_type(Syntax *, Environ *);
-__ct_callback UserType * user_type_info(Syntax *, Environ *);
+__ct_callback UserType * user_type_info(Syntax *, const Environ *);
 __ct_callback Module * user_type_module(const UserType *);
-__ct_callback Module * module_info(Syntax *, Environ *);
+__ct_callback Module * module_info(Syntax *, const Environ *);
 __ct_callback SyntaxEnum * module_symbols(const Module *);
 __ct_callback bool module_have_symbol(const Module *, const Syntax *);
 
@@ -165,10 +164,10 @@ user_type Module {
 
 user_type ModuleBuilder;
 user_type UserTypeBuilder;
-__ct_callback ModuleBuilder * new_module_builder(Syntax * name, Environ * env);
+__ct_callback ModuleBuilder * new_module_builder(Syntax * name, const Environ * env);
 __ct_callback void module_builder_add(ModuleBuilder *, Syntax *);
-__ct_callback void module_builder_finalize(ModuleBuilder *);
-__ct_callback UserTypeBuilder * new_user_type_builder(Syntax * name, Environ * env);
+__ct_callback Syntax * module_builder_to_syntax(ModuleBuilder *);
+__ct_callback UserTypeBuilder * new_user_type_builder(Syntax * name, const Environ * env);
 
 struct ModuleBuilder {
   Module * module;
@@ -181,7 +180,7 @@ user_type ModuleBuilder {
   macro user_type(:this this) {(*this)..user_type;}
   macro env(:this this) {(*this)..env;}
   macro add(syn, :this this) {module_builder_add(this, syn);}
-  macro finalize(:this this) {module_builder_finalize(this);}
+  macro to_syntax(:this this) {module_builder_to_syntax(this);}
 }
 
 user_type UserTypeBuilder {

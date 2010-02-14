@@ -573,6 +573,18 @@ namespace ast {
     const Type * find_root() {return of->root;}
   };
 
+  struct ForwardTypeDecl : public TypeDeclaration, public SimpleType {
+    ForwardTypeDecl(const char * w) : of(), what_(w) {}
+    const Type * of;
+    const char * what_;
+    const char * what() const {return what_;}
+    void compile(CompileWriter & f, Phase phase) const;
+    unsigned size() const {return of->size();}
+    unsigned align() const {return of->align();}
+  protected:
+    const Type * find_root() {return of->root;}
+  };
+
   struct Member {
     VarSymbol * sym;
     unsigned offset;

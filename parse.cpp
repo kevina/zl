@@ -354,7 +354,11 @@ void SynEntity::desc(OStream & o) const {
   case 0x5FF: 
     o << "<type>";
     break;
-  default: o << WHAT;
+  case 0x7FF:
+    o << "<incomplete decl>";
+    break;
+  default: 
+    o << WHAT;
   }
 }
 
