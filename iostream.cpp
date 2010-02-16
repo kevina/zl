@@ -5,9 +5,12 @@
 // it at http://www.gnu.org/.
 
 #include "iostream.hpp"
+#include "indent_ostream.hpp"
 
 //namespace acommon {
   FStream CIN(stdin, false);
   FStream COUT(stdout, false);
   FStream CERR(stderr, false);
+  IndentOStream IOUT(&COUT);
+
 //}
