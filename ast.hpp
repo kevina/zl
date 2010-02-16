@@ -11,6 +11,8 @@
 #include "type.hpp"
 #include "expand.hpp"
 
+#include "indent_ostream.hpp"
+
 #include <typeinfo>
 
 #undef NPOS
@@ -115,6 +117,14 @@ namespace ast {
     //  d.data = this;
     //}
     virtual const char * what() const = 0;
+    virtual void desc(OStream & o) const {
+      o << what();
+    }
+    String desc() const  {
+      StringBuf buf;
+      desc(buf);
+      return buf.freeze();
+    }
     virtual AST * part(unsigned i) {return 0;}
     const Syntax * syn;
     SourceStr source_str() const {return syn ? syn->str() : SourceStr();}
@@ -506,6 +516,10 @@ namespace ast {
     void write_storage_class(CompileWriter & f) const;
     //void forward_decl(CompileWriter & w) {compile(w, true);}
     Stmt * finish_parse(Environ & env) {abort();}
+    virtual void desc(OStream & o) const {
+      o << what() << " ";
+      key->to_string(o);
+    }
   };
 
   typedef VarDeclaration VarDecl;
@@ -527,6 +541,10 @@ namespace ast {
                            // compiled symbol, used for proc. macros.
     const TopLevelVarDecl * top_level() const {return this;}
     TopLevelVarDecl() : deps_closed(false), for_ct_(false), ct_ptr() {}
+    virtual void desc(OStream & o) const {
+      o << what() << " ";
+      full_name(o);
+    }
   };
 
   struct Fun : public TopLevelVarDecl {
@@ -559,6 +577,11 @@ namespace ast {
   //
 
   struct TypeDeclaration : public Declaration, virtual public TopLevelSymbol {
+    using Declaration::desc;
+    virtual void desc(OStream & o) const {
+      o << what() << " ";
+      full_name(o);
+    }
     TypeDeclaration() {}
   };
 
@@ -824,15 +847,22 @@ namespace ast {
   }
 
   inline void TopLevelSymbolTable::add_defn(Stmt * stmt) {
+    //IOUT.printf("ADD DEFN %s: %p %p\n", ~stmt->desc(), this, stmt);
+    //IOUT.printf("add defn in %p %p\n", first, last);
+    for (Stmt * cur = first; cur; cur = cur->next) {
+      assert(cur != stmt);
+    }
     if (last) {
       last->next = stmt;
       last = stmt;
     } else {
       first = last = stmt;
     }
+    //IOUT.printf("add defn res %p %p\n", first, last);
   }
 
   inline void TopLevelSymbolTable::move_defn(Stmt * stmt) {
+    //IOUT.printf("MOVE DEFN %s: %p %p\n", ~stmt->desc(), this, stmt);
     Stmt * prev = NULL;
     Stmt * cur = first;
     while (cur && cur != stmt)

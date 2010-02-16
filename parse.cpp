@@ -338,7 +338,7 @@ void SynEntity::desc(OStream & o) const {
     o << "<error>"; 
     break;
   case 0x2FF: 
-    o << "<symbol:";
+    o << "<symbol: ";
     o << entity<ast::Symbol>()->uniq_name();
     o << ">";
     break;
@@ -355,7 +355,9 @@ void SynEntity::desc(OStream & o) const {
     o << "<type>";
     break;
   case 0x7FF:
-    o << "<incomplete decl>";
+    o << "<decl handle: ";
+    entity<ast::DeclHandle>()->desc(o);
+    o << ">";
     break;
   default: 
     o << WHAT;

@@ -2309,13 +2309,6 @@ namespace ast {
     }
   }
 
-  static void pre_parse_stmts(const Syntax * parse, Environ & env) {
-    SyntaxEnum * els = partly_expand_list(parse, TopLevel, env);
-    while (const Syntax * p = els->next()) {
-      pre_parse_decl(p, env);
-    }
-  }
-
   AST * parse_top(const Syntax * p, Environ & env) {
     assert(p->is_a("top")); // FIXME Error
     parse_stmts(p, env);
@@ -2460,20 +2453,15 @@ namespace ast {
         lenv(new Environ(e.new_open_scope())) {}
   };
   
-  struct IncompleteDecl {
-    typedef ::TypeInfo<IncompleteDecl> TypeInfo;
-    virtual Stmt * complete(Environ & env) = 0;
-    virtual ~IncompleteDecl() {}
-  };
-
-  struct ModuleBuilder : public ModuleBuilderBase, public IncompleteDecl {
+  struct ModuleBuilder : public ModuleBuilderBase, public DeclHandle {
     // this should be head allocated unless the module will be
     // finalized in the same scope
     ModuleBuilder(const Syntax * p, Environ & e, UserType * ut = NULL) 
       : ModuleBuilderBase(p, e, ut),
         outer_env(&e),
         name(p),
-        prs(*lenv)
+        prs(*lenv),
+        do_finalize(true)
       {
         assert(module);
         assert(lenv);
@@ -2488,8 +2476,10 @@ namespace ast {
     Syntax * name;
     Collect collect;
     Parse<TopLevel> prs;
+    bool do_finalize;
     const SourceStr & source_str() const {return name->str();} // FIXME: This isn't quite right
     void add_syntax(const Syntax * p) {
+      //printf("QQ: ADD SYNTAX %p (%s): %s\n", this, ~name->to_string(), ~p->to_string());
       p = prs.partly_expand(p);
       if (p->is_a("@")) {
         add_syntax(p->args_begin(), p->args_end());
@@ -2511,19 +2501,25 @@ namespace ast {
       }
     };
     void finalize(Environ & env) {
+      //IOUT.printf("QQ: FINALIZE ON %p (%s)\n", this, ~name->to_string());
       if (env.special()) {
-        printf("QQ: ENV SPECIAL ON %p (%s)\n", this, ~name->to_string());
+        //IOUT.printf("QQ: ENV SPECIAL ON %p (%s)\n", this, ~name->to_string());
         if (env.collect)
           env.collect->first_pass.add(new Finalize(this, env));
         return; // FIXME: I don't think this is quite right
       } else {
-        printf("QQ: ALL GOOD ON %p (%s)\n", this, ~name->to_string());
+        //IOUT.printf("QQ: ALL GOOD ON %p (%s)\n", this, ~name->to_string());
       }
       for (CollectPart::iterator 
              i = collect.first_pass.begin(), 
              e = collect.first_pass.end(); 
-           i != e; ++i)
+           i != e; ++i) 
+      {
+        //IOUT.printf("QQ: FIRST PASS %p (%s) %p\n", this, ~name->to_string(), *i);
+        //INCREASE_INDENT(IOUT);
         (*i)->doit(env);
+      }
+      //IOUT.printf("QQ: ADDING DEFN %p (%s)\n", this, ~name->to_string());
       env.add_defn(module);
       if (env.parse_def() && !env.collect) 
         finalize_second_pass(env);
@@ -2544,7 +2540,11 @@ namespace ast {
              i = collect.second_pass.begin(), 
              e = collect.second_pass.end(); 
            i != e; ++i)
+      {
+        //IOUT.printf("QQ: SECOND PASS %p (%s) %p\n", this, ~name->to_string(), *i);
+        //INCREASE_INDENT(IOUT);
         (*i)->doit(env);
+      }
     }
     void parse_body(const Syntax * p) {
       add_syntax(p->args_begin(), p->args_end());
@@ -2552,16 +2552,37 @@ namespace ast {
       //  handle_special_methods(m, user_type, env0, &env);
       finalize(*outer_env);
     }
+    void desc(OStream & o) {
+      if (user_type)
+        user_type->desc(o);
+      else
+        module->desc(o);
+      if (!do_finalize)
+        o << " (forward)";
+    }
     Stmt * complete(Environ & env) {
-      printf("QQ: COMPLETE ON %p (%s)\n", this, ~name->to_string());
-      module->key = NULL;
+      SymbolName n = *name;
+      //IOUT.printf("QQ: COMPLETE ON %p (%s)\n", this, ~name->to_string());
       module->where = env.where;
-      env.add(SymbolKey(*name, OUTER_NS), module);
-      if (user_type) {
-        user_type->key = NULL;
-        add_simple_type(env.types, SymbolKey(*name), user_type, env.where);
+      Module * module_in_env = env.symbols.find_this_scope<Module>(SymbolKey(n, OUTER_NS));
+      if (module_in_env) {
+        assert(module == module_in_env); // FIXME: Error message
+      } else {
+        module->key = NULL;
+        env.add(SymbolKey(n, OUTER_NS), module);
       }
-      finalize(env);
+      if (user_type) {
+        UserType * ut_in_env = env.symbols.find_this_scope<UserType>(SymbolKey(n));
+        if (ut_in_env) {
+          assert(user_type == ut_in_env);
+        } else {
+          user_type->key = NULL;
+          add_simple_type(env.types, SymbolKey(n), user_type, env.where);
+        }
+      }
+      if (do_finalize)
+        finalize(env);
+      //IOUT.printf("QQ: COMPLETE DONE %p (%s)\n", this, ~name->to_string());
       return empty_stmt();
     }
   private:
@@ -2730,8 +2751,20 @@ namespace ast {
     }
   }
 
-  Stmt * parse_declare_user_type(const Syntax * p, Environ & env) {
-    new_user_type(p->arg(0), env);
+  struct UserTypeBuilder : public ModuleBuilder {
+    UserTypeBuilder(const Syntax * p, Environ & e)
+      : ModuleBuilder(p, e, new_user_type(p, e)) {}
+    UserTypeBuilder(const Syntax * p, Environ & e, UserType * u)
+      : ModuleBuilder(p, e, u) {}
+  };
+
+  Stmt * parse_declare_user_type(const Syntax * p, Environ & env, DeclHandle ** handle) {
+    UserType * ut = new_user_type(p->arg(0), env);
+    if (handle) {
+      UserTypeBuilder * utb = new UserTypeBuilder(p->arg(0), env, ut);
+      utb->do_finalize = false;
+      *handle = utb;
+    }
     return empty_stmt();
   }
 
@@ -2748,11 +2781,6 @@ namespace ast {
     finalize_user_type(s, env);
     return empty_stmt();
   }
-
-  struct UserTypeBuilder : public ModuleBuilder {
-    UserTypeBuilder(const Syntax * p, Environ & e)
-      : ModuleBuilder(p, e, new_user_type(p, e)) {}
-  };
 
   Stmt * parse_user_type(const Syntax * p, Environ & env) {
     //assert_num_args(p, 1, 3);
@@ -3539,7 +3567,7 @@ namespace ast {
 
   Exp * parse_call(const Syntax * p, Environ & env) {
     //return (new Call)->parse_self_(p, env);
-    printf("CALL %s\n", ~p->to_string());
+    //printf("CALL %s\n", ~p->to_string());
     assert_num_args(p, 2);
     Syntax * lhs = partly_expand(p->arg(0), ExpPos, env);
     Vector<Exp *> parms;
@@ -3593,6 +3621,7 @@ namespace ast {
     CollectAddDefn(Declaration * d, Environ & e)
       : CollectAction(e), decl(d) {}
     void doit_hook() {
+      //IOUT.printf("qq: collect add defn: %p %s \n", static_cast<Stmt *>(decl), ~decl->desc());
       env->add_defn(decl);
     }
   };
@@ -3659,7 +3688,7 @@ namespace ast {
 
   void StructUnion::compile(CompileWriter & f, Phase phase) const {
     if (!have_body && phase == Declaration::Body) return;
-    //f << indent << "# " << full_name() << "\n";
+    f << indent << "# " << full_name() << "\n";
     f << indent << "(." << what() << " " << uniq_name();
     if (have_body && phase != Forward) {
       f << "\n";
@@ -3678,6 +3707,7 @@ namespace ast {
     for (unsigned i = 0; i != members.size(); ++i) {
       const Type * t = members[i].sym->type;
       if (t->storage_align() > align_) align_ = t->storage_align();
+      //printf("?? %s: %u %u\n", ~desc(), size_, t->storage_align());
       unsigned align_offset = size_ % t->storage_align();
       if (align_offset != 0) size_ += t->storage_align() - align_offset;
       members[i].offset = size_;
@@ -3891,7 +3921,7 @@ namespace ast {
     return parse_top(p, env);
   }
 
-  Stmt * try_just_decl(const Syntax * p, Environ & env);
+  Stmt * try_just_decl(const Syntax * p, Environ & env, DeclHandle ** = NULL);
   Stmt * try_just_stmt(const Syntax * p, Environ & env);
   Exp * try_just_exp(const Syntax * p, Environ & env, ExpContext c);
   Stmt * try_exp_stmt(const Syntax * p, Environ & env);
@@ -3933,8 +3963,12 @@ namespace ast {
     String what = p->what().name;
     //fprintf(stderr, "PRE PARSING %s\n", ~p->to_string());
     assert(env.special());
-    try_just_decl(p, env);
-    return p;
+    DeclHandle * handle = NULL;
+    try_just_decl(p, env, &handle);
+    if (handle)
+      return SYN(p->str(), handle);
+    else
+      return p;
   }
 
   template <>
@@ -4006,9 +4040,17 @@ namespace ast {
     return just_parse_exp(p, env, ExpContext());
   }
 
-  Stmt * try_just_decl(const Syntax * p, Environ & env) {
-    if (IncompleteDecl * decl = p->entity<IncompleteDecl>())
-      return decl->complete(env);
+  Stmt * try_just_decl(const Syntax * p, Environ & env, DeclHandle ** handle) {
+    if (DeclHandle * decl = p->entity<DeclHandle>()) {
+      if (handle) {
+        assert(env.special() && !env.collect);
+        *handle = decl;
+        // still need to call complete to add the object to the env.
+        return decl->complete(env);
+      } else {
+        return decl->complete(env);
+      }
+    }
     String what = p->what().name;
     if (what == "var")     return parse_var(p, env);
     if (what == "fun" )    return parse_fun(p, env), empty_stmt();
@@ -4032,7 +4074,7 @@ namespace ast {
     if (what == "user_type")          return parse_user_type(p, env);
     if (what == "finalize_user_type") return parse_finalize_user_type(p, env);
     if (what == "make_subtype") return parse_make_subtype(p, env);
-    if (what == "declare_user_type") return parse_declare_user_type(p, env);
+    if (what == "declare_user_type") return parse_declare_user_type(p, env, handle);
     if (what == "export")  return parse_export(p, env);
     if (what == "add_prop")  return parse_add_prop(p, env);
     if (what == "memberdecl") return parse_memberdecl(p, env);
@@ -4238,7 +4280,7 @@ namespace ast {
     Vars vars;
     Vars var_defns;
     Types types;
-    Types type_defns;;
+    Types type_defns;
     Modules modules;
     Others others;
     //Others other_defns;
@@ -4286,6 +4328,7 @@ namespace ast {
     std::reverse(others.begin(), others.end());
 
     for (Stmt * cur = defns; cur; cur = cur->next) {
+      //printf("DEFN %p\n", cur);
       VarP var = dynamic_cast<VarP>(cur);
       if (var) {
         if (cw.for_compile_time()) {
@@ -4521,7 +4564,7 @@ extern "C" namespace macro_abi {
   }
 
   ModuleBuilderBase * new_module_builder(const Syntax * name, Environ * env) {
-    return new ModuleBuilder(name, *temp_environ(env));
+    return new ModuleBuilder(name, *env);
   }
 
   void module_builder_add(ModuleBuilderBase * b, const Syntax * p) {
@@ -4533,7 +4576,8 @@ extern "C" namespace macro_abi {
   }
 
   ModuleBuilderBase * new_user_type_builder(Syntax * name, Environ * env) {
-    return new UserTypeBuilder(name, *temp_environ(env));
+    //printf("CREATING NEW USER TYPE BUILDER for \"%s\" in %s env\n", ~name->to_string(), env->special() ? "SPECIAL" : "NORMAL");
+    return new UserTypeBuilder(name, *env);
   }
 
 }

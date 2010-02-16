@@ -47,11 +47,21 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
     // now go throgh and get offset of each member until it is under
     // the size
 
+    // The order the parts are laid out is important.  First comes the
+    // main members (except of course the ones moved in the the
+    // overflow class).  Then comes the overflow class, it is
+    // important it comes after the main members sine some of the
+    // types the members might depend are defined in the class.
+    // Finally comes the pseudo members pointing to the real data
+    // inside the overflow class.  These must come after the overflow
+    // class since the overflow class must be initialized before any of
+    // the pseudo members can be.
+
     SyntaxList * main = new_syntax_list();
     SyntaxList * overflow = new_syntax_list();
+    SyntaxList * pseudo = new_syntax_list();
 
     SyntaxList * ip = main;
-    unsigned overflow_pos = -1;
 
     SyntaxEnum * itr = m->varl(syntax body);
     Syntax * member;
@@ -62,12 +72,11 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
         size_t offset = ct_value(replace(syntax (offsetof(name, n)), m0, mark), lenv);
         size_t size_of = ct_value(replace(raw_syntax (sizeof (.type type)), m0, mark), lenv);
         if (ip != overflow && offset + size_of > fix_size - ptr_size) {
-          overflow_pos = main->append(NULL);
           ip = overflow;
         }
         ip->append(member);
         if (ip == overflow)
-          main->append(replace(raw_syntax(pseudo_member n type (-> (member overflow ptr) n)), m0, mark));
+          pseudo->append(replace(raw_syntax(pseudo_member n type (-> (member overflow ptr) n)), m0, mark));
       } else {
         main->append(member);
       }
@@ -85,10 +94,9 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
         };
         Overflow overflow;
       }, match_local(m, overflow, NULL), mark);
-    main->replace(overflow_pos, of);
     
-    Syntax * res =  replace(raw_syntax (class name ({...} $1) @rest), 
-                            match_local(m, main, NULL), mark);
+    Syntax * res =  replace(raw_syntax (class name ({...} $1 $2 $3) @rest), 
+                            match_local(m, main, of, pseudo, NULL), mark);
     //printf("===\n");
     //dump_syntax(res);
     //printf("^^^\n");

@@ -164,10 +164,10 @@ user_type Module {
 
 user_type ModuleBuilder;
 user_type UserTypeBuilder;
-__ct_callback ModuleBuilder * new_module_builder(Syntax * name, const Environ * env);
+__ct_callback ModuleBuilder * new_module_builder(Syntax * name, Environ * env);
 __ct_callback void module_builder_add(ModuleBuilder *, Syntax *);
 __ct_callback Syntax * module_builder_to_syntax(ModuleBuilder *);
-__ct_callback UserTypeBuilder * new_user_type_builder(Syntax * name, const Environ * env);
+__ct_callback UserTypeBuilder * new_user_type_builder(Syntax * name, Environ * env);
 
 struct ModuleBuilder {
   Module * module;

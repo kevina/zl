@@ -1,7 +1,5 @@
 include_file "fix_size-1.zl";
 
-//class X;
-
 class X : fix_size(16) {
   int x;
   char c;
@@ -32,6 +30,31 @@ class Z2  : fix_size(8) {
 };
 
 
+class Z3 : fix_size(8) {
+  class I;
+  I * i;
+  int x;
+  int y;
+  int z;
+  class I {
+    int x;
+  };
+};
+
+class Z4 : fix_size(8) {
+  class I;
+  I * ip;
+  int x;
+  int y;
+  int z;
+  class I : fix_size(8) {
+    int x;
+    int y;
+    int z;
+  };
+  I i;
+};
+
 int main() {
   printf("%d\n", sizeof(X));
   Y y;
@@ -42,8 +65,12 @@ int main() {
   z.y = 20;
   z.z = 30;
   printf("%d %d %d %d\n", sizeof(Z), z.x, z.y, z.z);
-  Z z2;
+  Z2 z2;
   printf("%d\n", sizeof(Z2));
+  Z3 z3;
+  printf("%d\n", sizeof(Z3));
+  Z4 z4;
+  printf("%d %d\n", sizeof(z4), sizeof(z4.i));
   return 0;
 }
 

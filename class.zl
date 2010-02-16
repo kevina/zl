@@ -51,7 +51,7 @@ public:
   Match * m;
 
   Syntax * class_s;
-  const Environ * env;
+  Environ * env;
 
   Syntax * name;
   Syntax * body;
@@ -94,7 +94,7 @@ public:
   Syntax * destructor;
   Collect destructor_collect;
 
-  virtual Syntax * parse(Syntax * p_, const Environ * e_, Mark * mark_) {
+  virtual Syntax * parse(Syntax * p_, Environ * e_, Mark * mark_) {
 
     class_s = p_;
     env = e_;
@@ -175,7 +175,7 @@ public:
     //module_p = new_syntax_list();
     //module_b = new_syntax_list();
     builder = new_user_type_builder(name, env);
-    printf("USER TYPE BUILDER = %p\n", builder);
+    //printf("USER TYPE BUILDER for %s = %p (%d)\n", syntax_to_string(name), builder);
     lenv = builder->env;
     vtable_b = new_syntax_list();
     vtable_i = new_syntax_list();

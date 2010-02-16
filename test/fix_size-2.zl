@@ -34,7 +34,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
     }
   }
 
-  printf("FIX SIZE PARSE on %s\n", syntax_to_string(m->var(syntax name)));
+  //printf("FIX SIZE PARSE on %s\n", syntax_to_string(m->var(syntax name)));
   
   size_t fix_size = ct_value(fix_size_s, env);
 

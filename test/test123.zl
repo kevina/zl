@@ -1,0 +1,29 @@
+Syntax * parse_myclass(Syntax * p, Environ * env) {
+  //printf ("*** PARSE MYCLASS\n");
+  Mark * mark = new_mark();
+  
+  //printf ("*** partly expanding class\n");
+  p = partly_expand_class(p, mark, env);
+  //printf ("*** partly expanding class done, res:\n");
+  //dump_syntax(p);
+
+  return parse_class(p, env);
+}
+
+make_syntax_macro class parse_myclass;
+
+class Z3 {
+  class I;
+  I * i;
+  int x;
+  int y;
+  int z;
+  class I {
+    int x;
+  };
+};
+
+int main() {
+  Z3 z;
+  z.i->x;
+}

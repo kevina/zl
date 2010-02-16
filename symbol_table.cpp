@@ -65,9 +65,9 @@ namespace ast {
       marks->to_string(o, g);
   }
 
-  void SymbolKey::to_string(OStream & o) const {
+  void SymbolKey::to_string(OStream & o, const InnerNS * def_ns) const {
     SymbolName::to_string(o);
-    if (ns)
+    if (ns != def_ns)
       o << "`" << ns->name();
   }
 

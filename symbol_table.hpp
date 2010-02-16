@@ -146,10 +146,10 @@ namespace ast {
       : SymbolName(n), ns(ns0 ? ns0 : DEFAULT_NS) {}
     inline SymbolKey(const Syntax & p, const InnerNS * ns0 = 0);
 
-    void to_string(OStream & o) const;
-    String to_string() const {
+    void to_string(OStream & o, const InnerNS * = DEFAULT_NS) const;
+    String to_string(const InnerNS * def_ns = DEFAULT_NS) const {
       StringBuf buf;
-      to_string(buf);
+      to_string(buf, def_ns);
       return buf.freeze();
     }
   };
@@ -239,12 +239,12 @@ namespace ast {
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s) {props.add_prop(n, s);}
     virtual const Syntax * get_prop(SymbolName n) const {return props.get_prop(n);}
-    void full_name(OStream & o) const {
+    void full_name(OStream & o, const InnerNS * def_ns = DEFAULT_NS) const {
       if (where) {
-        where->full_name(o);
+        where->full_name(o, OUTER_NS);
         o << "::";
       }
-      key->to_string(o);
+      key->to_string(o, def_ns);
     }
     String full_name() const {
       StringBuf buf;
@@ -661,6 +661,13 @@ namespace ast {
 
   template <>
   void assign_uniq_num<TopLevelSymbol>(const TopLevelSymbol * sym, SymbolNode * cur, SymbolNode * stop);
+
+  struct DeclHandle {
+    typedef ::TypeInfo<DeclHandle> TypeInfo;
+    virtual Stmt * complete(Environ & env) = 0;
+    virtual void desc(OStream &) = 0;
+    virtual ~DeclHandle() {}
+  };
 
 }
 
