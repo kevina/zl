@@ -139,6 +139,10 @@ __ct_callback Module * user_type_module(const UserType *);
 __ct_callback Module * module_info(Syntax *, const Environ *);
 __ct_callback SyntaxEnum * module_symbols(const Module *);
 __ct_callback bool module_have_symbol(const Module *, const Syntax *);
+__ct_callback bool user_type_have_default_constructor(const UserType *);
+__ct_callback bool user_type_have_copy_constructor(const UserType *);
+__ct_callback bool user_type_have_assign(const UserType *);
+__ct_callback bool user_type_have_destructor(const UserType *);
 
 //struct Symbol;
 //user_type Symbol {
@@ -152,6 +156,10 @@ user_type UserType {
   finalize_user_type struct UserType;
   export module;
   macro module(:this this) {user_type_module(this);}
+  macro have_default_constructor(:this this) {user_type_have_default_constructor(this);}
+  macro have_copy_constructor(:this this) {user_type_have_copy_constructor(this);}
+  macro have_assign(:this this) {user_type_have_assign(this);}
+  macro have_destructor(:this this) {user_type_have_destructor(this);}
 }
 
 struct Module;
@@ -189,6 +197,10 @@ user_type UserTypeBuilder {
   macro _up_cast (x) {reinterpret_cast<ModuleBuilder *>(x);}
   macro _down_cast (x) {reinterpret_cast<UserTypeBuilder *>(x);}
   make_subtype ModuleBuilder _up_cast _down_cast;
+  macro have_default_constructor(:this this) {this->module->have_default_constructor();}
+  macro have_copy_constructor(:this this) {this->module->have_copy_constructor();}
+  macro have_assign(:this this) {this->module->have_assign();}
+  macro have_destructor(:this this) {this->module->have_destructor();}
 }
 
 __ct_callback Environ * temp_environ(const Environ *);
@@ -200,11 +212,6 @@ __ct_callback Syntax * error(Syntax *, const char *, ...);
 __ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * prop, const Environ * env);
 
 __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
-
-__ct_callback int have_default_constructor(Syntax * where, const Environ *);
-__ct_callback int have_copy_constructor(Syntax * where, const Environ *);
-__ct_callback int have_assign(Syntax * where, const Environ *);
-__ct_callback int have_destructor(Syntax * where, const Environ *);
 
 //
 //

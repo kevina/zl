@@ -298,7 +298,8 @@ namespace ast {
 
   void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     //assert(!env.symbols.exists_this_scope(k));
-    if (!shadow_ok && env.symbols.exists_this_scope(k)) {
+    // FIXME: Have more precise check
+    if (!shadow_ok && !overloadable() && env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
       //abort();
     }
@@ -764,6 +765,76 @@ namespace ast {
   //  void compile(CompileWriter & cw);
   //};
 
+  struct NoParmsExtraCmp {
+    NoParmsExtraCmp() {}
+    bool operator() (const SymbolNode * n) {
+      const Tuple * parms = n->value->overloadable();
+      // if we have the symbol but its not overloadable assume it
+      // takes no parameters
+      if (!parms) return true;
+      if (parms->num_parms() == 0) return true;
+      return false;
+    }
+  };
+
+  bool have_default_constructor(const UserType * ut) {
+    NoOpGather gather;
+    NoParmsExtraCmp cmp;
+    return find_symbol<Symbol>("_constructor", 
+                               ut->module->syms.front, ut->module->syms.back,
+                               NormalStrategy, gather, cmp);
+    //return ut->module->find_symbol<Symbol>("_constructor");
+    //Environ dummy_env;
+    //Vector<Exp *> parms;
+    //try {
+    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
+    //  return true;
+    //} catch (...) {
+    //  return false;
+    //}
+  }
+
+  struct RefExtraCmp {
+    const Type * t;
+    RefExtraCmp(const Type * t0) : t(t0) {}
+    bool operator() (const SymbolNode * n) {
+      const Tuple * parms = n->value->overloadable();
+      if (parms->num_parms() != 1) return false;
+      TypeParm parm = parms->parm(0);
+      if (!parm.is_type()) return false;
+      const Reference * ref = dynamic_cast<const Reference *>(parm.as_type->root);
+      if (!ref) return false;
+      if (ref->subtype->unqualified != t) return false;
+      return true;
+    }
+  };
+
+  bool have_copy_constructor(const UserType * ut) {
+    NoOpGather gather;
+    RefExtraCmp cmp(ut);
+    return find_symbol<Symbol>("_constructor", 
+                               ut->module->syms.front, ut->module->syms.back,
+                               NormalStrategy, gather, cmp);
+    //return ut->module->find_symbol<Symbol>("_constructor");
+    //Environ dummy_env;
+    //Vector<Exp *> parms;
+    //parms.push_back(new DummyExp(ref_type));
+    //try {
+    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
+    //  return true;
+    //} catch (...) {
+    //  return false;
+    //}
+  }
+
+  bool have_assign(const UserType * ut) {
+    return ut->module->find_symbol<Symbol>("_assign");
+  }
+
+  bool have_destructor(const UserType * ut) {
+    return ut->module->find_symbol<Symbol>("_destructor");
+  }
+
   Stmt * mk_constructor(Exp * exp, Environ & env) {
     ExpInsrPointWrapper wrap(env);
     Exp * call = parse_exp(SYN(SYN("member"), 
@@ -778,7 +849,7 @@ namespace ast {
     ExpInsrPointWrapper wrap(env);
     Exp * call =  parse_exp(SYN(SYN("member"), 
                                 SYN(lhs),
-                                SYN(SYN("call"), SYN(ID, SYN("_copy_constructor")), 
+                                SYN(SYN("call"), SYN(ID, SYN("_constructor")), 
                                     SYN(SYN("."), SYN(rhs)))),
                             wrap.env);
     return wrap.finish(call);
@@ -845,7 +916,7 @@ namespace ast {
       return this;
     }
     Stmt * try_constructor(const UserType * ut, Environ & env) {
-      if (ut && ut->module->find_symbol<Symbol>("_constructor")) {
+      if (ut && have_default_constructor(ut)) {
         return mk_constructor(mk_id(this, env), env);
       } else {
         return NULL;
@@ -853,7 +924,7 @@ namespace ast {
     }
     Stmt * try_copy_constructor(Exp * rhs, Environ & env) {
       const UserType * ut = dynamic_cast<const UserType *>(type->unqualified);
-      if (ut && ut->module->find_symbol<Symbol>("_copy_constructor")) {
+      if (ut && have_copy_constructor(ut)) {
         return mk_copy_constructor(mk_id(this, env), rhs, env);
       } else {
         return NULL;
@@ -1747,7 +1818,7 @@ namespace ast {
 
   Stmt * try_copy_constructor(Exp * lhs, Exp * rhs, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
-    if (ut && ut->module->find_symbol<Symbol>("_copy_constructor")) {
+    if (ut && have_copy_constructor(ut)) {
       return mk_copy_constructor(lhs, rhs, env);
     } else {
       return NULL;
@@ -1788,7 +1859,7 @@ namespace ast {
 
   Stmt * try_constructor(Exp * exp, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(exp->type->unqualified);
-    if (ut && ut->module->find_symbol<Symbol>("_constructor")) {
+    if (ut && have_default_constructor(ut)) {
       return mk_constructor(exp, env);
     } else {
       return NULL;
@@ -2361,73 +2432,34 @@ namespace ast {
 
   const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env);
 
-  void add_symbol(const SymbolKey & key, Symbol * sym, Module * module, Environ * module_env) {
-    // FIXME: Remove fun.
-    //if (module_env)
-    //  module_env->add(key, sym);
-    //module->syms = new SymbolNode(module, key, sym, module->syms);
-  }
+// FIXME: Remove
+//   void handle_special_methods(Module * module, UserType * user_type, Environ & env, Environ * module_env) {
+//     printf("HANDLE SPECIAL METHODS\n");
+//     Vector<Exp *> parms;
+//     Environ dummy_env;
+//     try {
+//       resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_constructor")), parms, dummy_env);
+//       printf("FOUND DEFAULT CONSTRUCTOR\n");
+//     } catch (...) {
+//       printf("DIDN'T FIND DEFAULT CONSTRUCTOR\n");
+//       //add_symbol("_constructor", new Trivial(env.types.inst(".")), module, module_env);
+//     }
+//     const Type * ref_type = 
+//       env.types.inst(".ref", env.types.inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(user_type)));
+//     parms.push_back(new DummyExp(ref_type));
+//     try {
+//       resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_copy_constructor")), parms, dummy_env);
+//       printf("FOUND COPY CONSTRUCTOR\n");
+//     } catch (...) {
+//       printf("DIDN'T FIND COPY CONSTRUCTOR\n");
+//       //add_symbol("_copy_constructor", new Trivial(env.types.inst(".", ref_type)), module, module_env);
 
-  bool have_default_constructor(const UserType * user_type) {
-    //Environ dummy_env;
-    //Vector<Exp *> parms;
-    //try {
-    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
-    //  return true;
-    //} catch (...) {
-    //  return false;
-    //}
-    return false;
-  }
-
-  bool have_copy_constructor(const UserType * user_type) {
-    //Environ dummy_env;
-    //Vector<Exp *> parms;
-    //parms.push_back(new DummyExp(ref_type));
-    //try {
-    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
-    //  return true;
-    //} catch (...) {
-    //  return false;
-    //}
-    return false;
-  }
-
-  bool have_assign(const UserType * user_type) {
-    return false;
-  }
-
-  bool have_destructor(const UserType * user_type) {
-    return false;
-  }
-
-  void handle_special_methods(Module * module, UserType * user_type, Environ & env, Environ * module_env) {
-    printf("HANDLE SPECIAL METHODS\n");
-    Vector<Exp *> parms;
-    Environ dummy_env;
-    try {
-      resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_constructor")), parms, dummy_env);
-      printf("FOUND DEFAULT CONSTRUCTOR\n");
-    } catch (...) {
-      printf("DIDN'T FIND DEFAULT CONSTRUCTOR\n");
-      //add_symbol("_constructor", new Trivial(env.types.inst(".")), module, module_env);
-    }
-    const Type * ref_type = 
-      env.types.inst(".ref", env.types.inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(user_type)));
-    parms.push_back(new DummyExp(ref_type));
-    try {
-      resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_copy_constructor")), parms, dummy_env);
-      printf("FOUND COPY CONSTRUCTOR\n");
-    } catch (...) {
-      printf("DIDN'T FIND COPY CONSTRUCTOR\n");
-      //add_symbol("_copy_constructor", new Trivial(env.types.inst(".", ref_type)), module, module_env);
-
-      //Trivial * sym = new Trivial(env.types.inst(".", ref_type));
-      //if (module_env)
-      //module_env->add(SymbolKey("_copy_constructor"), sym);
-      //module->syms = new SymbolNode(module, SymbolKey("_copy_constructor"), sym, module->syms);
-    }
-  }
+//       //Trivial * sym = new Trivial(env.types.inst(".", ref_type));
+//       //if (module_env)
+//       //module_env->add(SymbolKey("_copy_constructor"), sym);
+//       //module->syms = new SymbolNode(module, SymbolKey("_copy_constructor"), sym, module->syms);
+//     }
+//   }
 
   // "new" is for lack of a better name as it doesn't necessary create
   // a new instance
@@ -4527,40 +4559,22 @@ extern "C" namespace macro_abi {
     }
   }
 
-  bool have_special(bool (*lookup)(const UserType *), Syntax * where, Environ & env) {
-    //printf("symbol_exists %s in %s\n", ~sym->to_string(), ~where->to_string());
-    const Type * type = NULL;
-    try {
-      type = parse_type(where, env);
-    } catch (...) {}
-    if (!type) {
-      try {
-        Exp * exp = parse_exp(where, env);
-        type = exp->type;
-      } catch (...) {
-        return false;
-      }
-    }
-    if (const UserType * t = dynamic_cast<const UserType *>(type->unqualified))
-      return lookup(t);
-    else
-      return false;
-  }
-  
-  int have_default_constructor(Syntax * where, Environ * env) {
-    return have_special(ast::have_default_constructor, where, *env);
+  int user_type_have_default_constructor(const UserType * ut) {
+    bool res = ast::have_default_constructor(ut);
+    printf("HAVE DEFAULT CONSTRUCTOR FOR %s = %d\n", ~ut->full_name(), res);
+    return res;
   }
 
-  int have_copy_constructor(Syntax * where, Environ * env) {
-    return have_special(ast::have_copy_constructor, where, *env);
+  int user_type_have_copy_constructor(const UserType * ut) {
+    return ast::have_copy_constructor(ut);
   }
 
-  int have_assign(Syntax * where, Environ * env) {
-    return have_special(ast::have_assign, where, *env); 
- }
+  int user_type_have_assign(const UserType * ut) {
+    return ast::have_assign(ut);
+  }
   
-  int have_destructor(Syntax * where, Environ * env) {
-    return have_special(ast::have_destructor, where, *env);
+  int user_type_have_destructor(const UserType * ut) {
+    return ast::have_destructor(ut);
   }
 
   ModuleBuilderBase * new_module_builder(const Syntax * name, Environ * env) {

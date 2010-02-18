@@ -160,6 +160,8 @@ public:
 
   virtual void init() {
     parent_s = m->var(syntax parent_n);
+    if (parent_s)
+      printf("PARENT_S = %s\n", syntax_to_string(parent_s));
     parent = parent_s ? user_type_info(parent_s, env) : NULL;
 
     context = empty_context();
@@ -191,7 +193,6 @@ public:
     m = match(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
     m = match(m, syntax _constructor, replace_context(syntax _constructor, context));
     m = match(m, syntax _destructor, replace_context(syntax _destructor, context));
-    m = match(m, syntax _copy_constructor, replace_context(syntax _copy_constructor, context));
     m = match(m, syntax _assign, replace_context(syntax _assign, context));
     m = match(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
     m = match(m, syntax fields, replace_context(syntax fields, context));
@@ -375,7 +376,7 @@ public:
     } else if (need_copy_constructor) {
       copy_constructor =
         partly_expand(
-          replace(syntax{void _copy_constructor(const name & other) {$1; $2; }}, 
+          replace(syntax{void _constructor(const name & other) {$1; $2; }}, 
                   match_local(m, copy_constructor_code[0], copy_constructor_code[1], 0), mark), 
           FieldPos, lenv);
     }
@@ -441,7 +442,7 @@ public:
         return NULL;
       } else if (parms->num_args() == 1) {
         //printf("COPY CONSTRUCTOR\n");
-        copy_constructor = replace(raw_syntax(fun _copy_constructor (. @parms) ret body @rest), m, mark);
+        copy_constructor = replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark);
         return NULL;
       } else {
         return error(p, "Only default and copy constructor supported at this time.");
@@ -622,28 +623,29 @@ public:
   // FIXME: Rename
   virtual void register_field(Syntax * name, Syntax * type, unsigned which) {
     Match * m0 = match(m, syntax n, name);
+    const UserType * ut = user_type_info(type, lenv);
 
     fields[which]->append(name);
     
-    if (symbol_exists(syntax _constructor, type, mark, lenv)) {
+    if (ut && ut->have_default_constructor()) {
       need_constructor = true;
       constructor_code[which]->append(
         replace(raw_syntax(member (mid n) (call _constructor (.))), m0, mark));
     }
     
-    if (symbol_exists(syntax _copy_constructor, type, mark, lenv))
+    if (ut && ut->have_copy_constructor())
       need_copy_constructor = true;
     copy_constructor_code[which]->append(
       replace(raw_syntax(init-assign (mid n) (member other (mid n))), 
               m0, mark));
     
-    if (symbol_exists(syntax _assign, type, mark, lenv))
+    if (ut && ut->have_assign())
       need_assign = true;
     assign_code->append(
       replace(raw_syntax(assign (mid n) (member other (mid n))), 
               m0, mark));
     
-    if (symbol_exists(syntax _destructor, type, mark, lenv)) {
+    if (ut && ut->have_destructor()) {
       need_destructor = true;
       destructor_code->append(
         replace(raw_syntax(member (mid n) (call (` _destructor non_virtual) (.))), m0, mark));

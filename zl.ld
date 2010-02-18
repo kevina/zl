@@ -44,4 +44,8 @@
   error;
   get_symbol_prop;
   symbol_exists;
+  user_type_have_default_constructor;
+  user_type_have_copy_constructor;
+  user_type_have_assign;
+  user_type_have_destructor;
 };

@@ -1629,7 +1629,16 @@ extern "C" namespace macro_abi {
   typedef ast::Module Module;
   
   const UserType * user_type_info(const Syntax * s, Environ * env) {
-    return dynamic_cast<const UserType *>(env->types.inst(s));
+    // first see if we have a symbol name
+    const UserType * ut = dynamic_cast<const UserType *>(env->types.inst(s));
+    // otherwise we have a type, so try to parse it
+    if (ut) return ut;
+    try {
+      Type * type = parse_type(s, *env);
+      return dynamic_cast<const UserType *>(type->unqualified->root);
+    } catch (...) {
+      return NULL;
+    }
   }
   
   const Module * user_type_module(const UserType * t) {
