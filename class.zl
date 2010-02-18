@@ -77,13 +77,13 @@ public:
   SyntaxList * exports;
   SyntaxList * fields[2];
 
+  SyntaxList * constructors;
+
   bool need_constructor;
   SyntaxList * constructor_code[2];
-  Syntax * constructor;
 
   bool need_copy_constructor;
   SyntaxList * copy_constructor_code[2];
-  Syntax * copy_constructor;
 
   bool need_assign;
   SyntaxList * assign_code;
@@ -350,38 +350,34 @@ public:
   virtual void create_special() {
     destructor_code->reverse();
 
-    if (constructor) {
-      Match * m0 = match(m, raw_syntax (_ _ _ _ $body @_), constructor);
+    SyntaxEnum * itr = constructors->elements();
+    Syntax * constructor;
+    while ((constructor = itr->next())) {
+      Match * m0 = match(m, raw_syntax (w n parms ret body @_), constructor);
       constructor =
-        partly_expand(
-          replace(syntax{void _constructor() {$1; $2; $body;}}, 
-                  match_local(m0, constructor_code[0], constructor_code[1], 0), mark), 
-          FieldPos, lenv);
-    } else if (need_constructor) {
-      constructor =
+        replace(raw_syntax(w n parms ret (block $1 $2 body)),
+                match_local(m0, constructor_code[0], constructor_code[1], 0), mark);
+      parse_class_fun(constructor, NULL);
+    }
+    constructors = NULL;
+
+    if (!builder->have_default_constructor() && need_constructor) {
+      constructor = 
         partly_expand(
           replace(syntax{void _constructor() {$1; $2;}}, 
                   match_local(m, constructor_code[0], constructor_code[1], 0), mark), 
           FieldPos, lenv);
-    }
-    if (constructor)
       parse_class_fun(constructor, NULL);
+    }
 
-    if (copy_constructor) {
-      Match * m0 = match(m, raw_syntax (w n parms ret body @_), copy_constructor);
-      copy_constructor =
-        replace(raw_syntax(w n parms ret (block $1 $2 body)),
-                match_local(m0, constructor_code[0], constructor_code[1], 0), mark);
-      // yes constructor_code, not copy_constructor_code
-    } else if (need_copy_constructor) {
-      copy_constructor =
+    if (!builder->have_copy_constructor() && need_copy_constructor) {
+      constructor = 
         partly_expand(
           replace(syntax{void _constructor(const name & other) {$1; $2; }}, 
                   match_local(m, copy_constructor_code[0], copy_constructor_code[1], 0), mark), 
           FieldPos, lenv);
+      parse_class_fun(constructor, NULL);
     }
-    if (copy_constructor)
-      parse_class_fun(copy_constructor, NULL);
 
     if (need_assign && !assign) {
       assign =
@@ -435,18 +431,9 @@ public:
     Syntax * class_name = m->var(syntax name);
     Syntax * name = m->var(syntax n);
     if (name->eq(class_name)) {
-      Syntax * parms = m->var(syntax parms);
-      if (parms->num_args() == 0) {
-        //printf("DEFAULT CONSTRUCTOR\n");
-        constructor = replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark);
-        return NULL;
-      } else if (parms->num_args() == 1) {
-        //printf("COPY CONSTRUCTOR\n");
-        copy_constructor = replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark);
-        return NULL;
-      } else {
-        return error(p, "Only default and copy constructor supported at this time.");
-      }
+      constructors->append
+        (replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark));
+      return NULL;
     } else if (name->eq(raw_syntax (operator =))) {
       //printf("ASSIGN\n");
       assign = replace(raw_syntax(fun _assign (. @parms) ret body @rest), m, mark);
@@ -599,15 +586,15 @@ public:
   }
 
   virtual void init_special_funs() {
+    constructors = new_syntax_list();
+
     need_constructor = false;
     constructor_code[0] = new_syntax_list();
     constructor_code[1] = new_syntax_list();
-    constructor = NULL;
     
     need_copy_constructor = false;
     copy_constructor_code[0] = new_syntax_list();
     copy_constructor_code[1] = new_syntax_list();
-    copy_constructor = NULL;
     
     need_assign = false;
     assign_code = new_syntax_list();

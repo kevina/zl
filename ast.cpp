@@ -782,16 +782,7 @@ namespace ast {
     NoParmsExtraCmp cmp;
     return find_symbol<Symbol>("_constructor", 
                                ut->module->syms.front, ut->module->syms.back,
-                               NormalStrategy, gather, cmp);
-    //return ut->module->find_symbol<Symbol>("_constructor");
-    //Environ dummy_env;
-    //Vector<Exp *> parms;
-    //try {
-    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
-    //  return true;
-    //} catch (...) {
-    //  return false;
-    //}
+                               ThisScope, gather, cmp);
   }
 
   struct RefExtraCmp {
@@ -814,21 +805,15 @@ namespace ast {
     RefExtraCmp cmp(ut);
     return find_symbol<Symbol>("_constructor", 
                                ut->module->syms.front, ut->module->syms.back,
-                               NormalStrategy, gather, cmp);
-    //return ut->module->find_symbol<Symbol>("_constructor");
-    //Environ dummy_env;
-    //Vector<Exp *> parms;
-    //parms.push_back(new DummyExp(ref_type));
-    //try {
-    //  resolve_call(SYN(SYN("::"), SYN<Symbol>(user_type->module), SYN("_constructor")), parms, dummy_env);
-    //  return true;
-    //} catch (...) {
-    //  return false;
-    //}
+                               ThisScope, gather, cmp);
   }
 
   bool have_assign(const UserType * ut) {
-    return ut->module->find_symbol<Symbol>("_assign");
+    NoOpGather gather;
+    RefExtraCmp cmp(ut);
+    return find_symbol<Symbol>("_assign", 
+                               ut->module->syms.front, ut->module->syms.back,
+                               ThisScope, gather, cmp);
   }
 
   bool have_destructor(const UserType * ut) {

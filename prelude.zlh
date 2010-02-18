@@ -197,10 +197,10 @@ user_type UserTypeBuilder {
   macro _up_cast (x) {reinterpret_cast<ModuleBuilder *>(x);}
   macro _down_cast (x) {reinterpret_cast<UserTypeBuilder *>(x);}
   make_subtype ModuleBuilder _up_cast _down_cast;
-  macro have_default_constructor(:this this) {this->module->have_default_constructor();}
-  macro have_copy_constructor(:this this) {this->module->have_copy_constructor();}
-  macro have_assign(:this this) {this->module->have_assign();}
-  macro have_destructor(:this this) {this->module->have_destructor();}
+  macro have_default_constructor(:this this) {this->user_type->have_default_constructor();}
+  macro have_copy_constructor(:this this) {this->user_type->have_copy_constructor();}
+  macro have_assign(:this this) {this->user_type->have_assign();}
+  macro have_destructor(:this this) {this->user_type->have_destructor();}
 }
 
 __ct_callback Environ * temp_environ(const Environ *);
