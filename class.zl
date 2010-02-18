@@ -87,7 +87,7 @@ public:
 
   bool need_assign;
   SyntaxList * assign_code;
-  Syntax * assign;
+  //Syntax * assign;
 
   bool need_destructor;
   SyntaxList * destructor_code;
@@ -379,15 +379,15 @@ public:
       parse_class_fun(constructor, NULL);
     }
 
-    if (need_assign && !assign) {
-      assign =
+    if (!builder->have_assign() && need_assign) {
+      Syntax * assign = 
         partly_expand(
           replace(syntax{void _assign(const name & other) {$1;}}, 
                   match_local(m, assign_code, 0), mark), 
           FieldPos, lenv);
-    }
-    if (assign) // don't allow virtual assign for now
+      // don't allow virtual assign for now
       parse_class_fun(assign, NULL);
+    }
 
     if (destructor) {
       Match * m0 = match(m, raw_syntax ($w $n $parms $ret $body @rest), destructor);    
@@ -422,7 +422,7 @@ public:
   }
   
   virtual Syntax * parse_class_fun(Syntax * p, struct Collect * collect) {
-    //printf("parse_class_fun: %s\n", syntax_to_string(p));
+    printf("parse_class_fun: %s\n", syntax_to_string(p));
     __shadow Match * m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
     m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
     //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
@@ -436,8 +436,8 @@ public:
       return NULL;
     } else if (name->eq(raw_syntax (operator =))) {
       //printf("ASSIGN\n");
-      assign = replace(raw_syntax(fun _assign (. @parms) ret body @rest), m, mark);
-      return NULL;
+      // just change the name, nothing special needs to be done
+      m = match(m, syntax n, replace(syntax _assign, m, mark));
     } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) {
       //printf("DESTRUCTOR\n");
       // change the return type to "void *", the body will get fixed up later
@@ -598,7 +598,7 @@ public:
     
     need_assign = false;
     assign_code = new_syntax_list();
-    assign = NULL;
+    //assign = NULL;
     
     need_destructor = false;
     destructor_code = new_syntax_list();

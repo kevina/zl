@@ -184,7 +184,7 @@ namespace ast {
     Ret * finish_parse(const Syntax * p) const;
     Ret * operator() (const Syntax * p) const {
       p = partly_expand(p);
-      return finish_parse(p);
+     return finish_parse(p);
     }
   };
 
@@ -1763,7 +1763,7 @@ namespace ast {
 
   static Exp * try_user_assign(Exp * lhs, Exp * rhs, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
-    if (ut && ut->module->find_symbol<Symbol>("_assign")) {
+    if (ut && have_assign(ut)) {
       return parse_exp(SYN(SYN("member"), 
                            SYN(lhs),
                            SYN(SYN("call"), SYN(ID, SYN("_assign")), 
@@ -4567,6 +4567,7 @@ extern "C" namespace macro_abi {
   }
 
   void module_builder_add(ModuleBuilderBase * b, const Syntax * p) {
+    //printf("ADDING %s\n", ~p->to_string());
     static_cast<ModuleBuilder *>(b)->add_syntax(p);
   }
 
