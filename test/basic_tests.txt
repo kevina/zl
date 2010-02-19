@@ -82,8 +82,8 @@ test89.c
 test90.c
 test91.c
 test92.c
-test93.c
-test94.c
+test93.cpp
+test94.cpp
 test96.c
 test97.c
 test98.c
