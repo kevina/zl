@@ -630,12 +630,13 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     t = try_pointers(i, end, t);
     t = try_reference(i, end, t);
   } while (i != prev);
-  if (i == end) return t;
 
   const Syntax * outer = NULL;
 
+  bool stop = false;
   const Syntax * p;
-  if ((*i)->eq(",", "=")) {
+  if (i == end || (*i)->eq(",", "=")) {
+    stop = true;
     goto def;
   } else if ((p = handle_w_tilda(i, end, env))) {
     id = p;
@@ -652,7 +653,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     if (id_required)
       throw error(*i, "Expected identifier or \"(\".");
 
-  if (i == end) {
+  if (stop || i == end) {
     // do nothing
   } else if ((*i)->is_a("()")) {
     try {
