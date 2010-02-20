@@ -573,6 +573,10 @@ namespace syntax_ns {
     explicit Leaf(String n) : NoParts(LEAF_TI), what_(n) {}
     explicit Leaf(SymbolName n) : NoParts(LEAF_TI), what_(n) {}
     explicit Leaf(SourceStr & str) : NoParts(LEAF_TI, str) {}
+    Leaf(const char * n, const SourceStr & s) 
+      : NoParts(LEAF_TI, s), what_(n){}
+    Leaf(String n, const SourceStr & s) 
+      : NoParts(LEAF_TI, s), what_(n) {}
     Leaf(SymbolName n, const SourceStr & s) 
       : NoParts(LEAF_TI, s), what_(n) {}
     Leaf(SymbolName n, const SourceStr & s, const char * e)
@@ -926,6 +930,9 @@ namespace syntax_ns {
   static inline Leaf * new_syntax(const char * n) {return new Leaf(n);}
   static inline Leaf * new_syntax(String n) {return new Leaf(n);}
   static inline Leaf * new_syntax(SymbolName n) {return new Leaf(n);}
+
+  static inline Leaf * new_syntax(const char * n, const SourceStr & str) {return new Leaf(n, str);}
+  static inline Leaf * new_syntax(String n, const SourceStr & str) {return new Leaf(n, str);}
 
   static inline Leaf * new_syntax(SymbolName n, const SourceStr & str) {return new Leaf(n, str);}
   static inline Leaf * new_syntax(SymbolName n, const SourceStr & s, const char * e) {return new Leaf(n,s,e);}

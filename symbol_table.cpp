@@ -77,9 +77,9 @@ namespace ast {
     //  assign_uniq_num<TopLevelSymbol>(self, stop);
   }
 
-  void SymbolTable::dump() const {
+  void SymbolTableBase::dump() const {
     printf("=== BEGIN SYMBOL TABLE ===\n");
-    printf("%p %p <> %p %p\n", front, back, &front, ip.front);
+    //printf("%p %p <> %p %p\n", front, back, &front, ip.front);
     for (SymbolNode * c = front; c; c = c->next) {
       if (c == back)
         printf("--- end current scope ---\n");
@@ -91,12 +91,21 @@ namespace ast {
     printf("^^^ END SYMBOL TABLE ^^^\n");
   }
 
-  void SymbolTable::dump_this_scope() const {
-    for (SymbolNode * c = front; c != back; c = c->next)
-      printf("  %s %p %s %s\n", ~c->key.to_string(), 
+  void SymbolTableBase::dump_this_scope() const {
+    for (SymbolNode * c = front; c != back; c = c->next) {
+      printf("  %s %p %s %s", ~c->key.to_string(), 
              c->value,
              c->value ? ~c->value->name() : "", 
              c->value ? ~c->value->uniq_name() : "");
+      unsigned flags = c->flags;
+      if (flags == 0) printf(" NO_FLAGS");
+      if (flags & SymbolNode::ALIAS) printf(" ALIAS");
+      if (flags & SymbolNode::IMPORTED) printf(" IMPORTED");
+      if (flags & SymbolNode::DIFF_SCOPE) printf(" DIFF_SCOPE");
+      if (flags & SymbolNode::INTERNAL) printf(" INTERVAL");
+      if (flags & SymbolNode::TOP_LEVEL) printf(" TOP_LEVEL");
+      printf("\n");
+    }
   }
 
   void Props::add_prop(SymbolName n, const Syntax * s) {

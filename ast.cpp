@@ -115,18 +115,8 @@ namespace ast {
   Stmt * const EMPTY_STMT = &EMPTY_STMT_OBJ;
 
   static const Syntax * ID = new_syntax("id");
+  static const Syntax * expand_id(const Syntax * p);
 
-
-  //
-  //
-  //
-
-  static const Syntax * expand_id(const Syntax * p) {
-    const Syntax * res = try_id(p);
-    if (!res) throw error(p, "Expected identifier");
-    return res;
-  }
-  
   //
   //
   //
@@ -648,6 +638,17 @@ namespace ast {
     }
   };
 
+  static const Syntax * expand_id(const Syntax * p) {
+    if (p->have_entity()) {
+      if (p->entity<Symbol>()) return p;
+      Id * id = dynamic_cast<Id *>(p->entity<Exp>());
+      if (id) return SYN(id->sym);
+    }
+    const Syntax * res = try_id(p);
+    if (!res) abort(); //throw error(p, "Expected identifier");
+    return res;
+  }
+
   static Exp * mk_id(const VarSymbol * s, Environ & env) {
     Id * id = new Id(s);
     return id->construct(env);
@@ -765,6 +766,12 @@ namespace ast {
   //  void compile(CompileWriter & cw);
   //};
 
+  struct Trivial : public Symbol {
+    Trivial(const Type * t) : parms(dynamic_cast<const Tuple *>(t)) {}
+    const Tuple * parms;
+    const Tuple * overloadable() const {return parms;}
+  };
+
   struct NoParmsExtraCmp {
     NoParmsExtraCmp() {}
     bool operator() (const SymbolNode * n) {
@@ -777,12 +784,20 @@ namespace ast {
     }
   };
 
-  bool have_default_constructor(const UserType * ut) {
+  template <typename ExtraCmp>
+  bool have_special(const UserType * ut, const char * what, ExtraCmp & cmp) {
     NoOpGather gather;
+    const Symbol * res = find_symbol<Symbol>(what, 
+                                             ut->module->syms.front, ut->module->syms.back,
+                                             ThisScope, gather, cmp);
+    if (!res) return false;
+    if (dynamic_cast<const Trivial *>(res)) return false;
+    return true;
+  }
+
+  bool have_default_constructor(const UserType * ut) {
     NoParmsExtraCmp cmp;
-    return find_symbol<Symbol>("_constructor", 
-                               ut->module->syms.front, ut->module->syms.back,
-                               ThisScope, gather, cmp);
+    return have_special(ut, "_constructor", cmp);
   }
 
   struct RefExtraCmp {
@@ -790,6 +805,7 @@ namespace ast {
     RefExtraCmp(const Type * t0) : t(t0) {}
     bool operator() (const SymbolNode * n) {
       const Tuple * parms = n->value->overloadable();
+      if (!parms) return false;
       if (parms->num_parms() != 1) return false;
       TypeParm parm = parms->parm(0);
       if (!parm.is_type()) return false;
@@ -801,23 +817,18 @@ namespace ast {
   };
 
   bool have_copy_constructor(const UserType * ut) {
-    NoOpGather gather;
     RefExtraCmp cmp(ut);
-    return find_symbol<Symbol>("_constructor", 
-                               ut->module->syms.front, ut->module->syms.back,
-                               ThisScope, gather, cmp);
+    return have_special(ut, "_constructor", cmp);
   }
 
   bool have_assign(const UserType * ut) {
-    NoOpGather gather;
     RefExtraCmp cmp(ut);
-    return find_symbol<Symbol>("_assign", 
-                               ut->module->syms.front, ut->module->syms.back,
-                               ThisScope, gather, cmp);
+    return have_special(ut, "_assign", cmp);
   }
 
   bool have_destructor(const UserType * ut) {
-    return ut->module->find_symbol<Symbol>("_destructor");
+    AlwaysTrueExtraCmp cmp;
+    return have_special(ut, "_destructor", cmp);
   }
 
   Stmt * mk_constructor(Exp * exp, Environ & env) {
@@ -847,6 +858,8 @@ namespace ast {
                      env);
   }
 
+  const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env);
+
   struct Var : virtual public VarDecl {
     Var() : init(), constructor(), cleanup() {}
     const char * what() const {return "var";}
@@ -855,27 +868,61 @@ namespace ast {
     Stmt * constructor;
     Cleanup * cleanup;
     Stmt * finish_parse(Environ & env) {
+      printf("FINISH PARSE %s\n", ~syn->to_string());
       bool force_init = false;
       if (syn->num_args() > 2) {
-        bool constructor = false;
+        ExpInsrPointWrapper wrap(env);
         const Syntax * init_syn = syn->arg(2);
         if (init_syn->eq(".")) {
           init_syn = syn->arg(3);
           if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner());
+          const UserType * user_type = dynamic_cast<const UserType *>(type->unqualified->root);
           printf("CON: %s\n", ~init_syn->to_string());
-          if (init_syn->num_args() == 0) {
-            force_init = true;
-            goto cont;
-          } else if (init_syn->num_args() == 1) {
-            init_syn = init_syn->arg(1);
+          if (user_type) {
+            // find constructor to use
+            Vector<Exp *> parms;
+            add_ast_nodes(init_syn->args_begin(), init_syn->args_end(), parms, Parse<ExpPos>(wrap.env));
+            const Symbol * sym = resolve_call(SYN(syn->arg(0)->str(),
+                                                  SYN("::"), 
+                                                  SYN<Symbol>(user_type->module), 
+                                                  SYN("_constructor", syn->arg(0)->str())), 
+                                              parms, wrap.env); 
+            if (const Trivial * trivial = dynamic_cast<const Trivial *>(sym)) {
+              assert(parms.size() <= 1);
+              if (parms.size() == 0) {
+                abort(); // FIXME
+              } else if (parms.size() == 1) {
+                init_syn = SYN(parms[0]);
+              }
+            } else {
+              SyntaxBuilder synb;
+              synb.add_part(SYN("."));
+              for (Vector<ast::Exp *>::const_iterator i = parms.begin(), e = parms.end();
+                   i != e; ++i)
+                synb.add_part(SYN(*i));
+              synb.set_flags(init_syn->flags_begin(), init_syn->flags_end());
+              Syntax * parms_s = synb.build();
+              printf("NOW PARSING CONSTRUCTOR %s\n", ~parms_s->to_string());
+              Exp * call = parse_exp(SYN(SYN("member"), 
+                                         SYN(mk_id(this, env)),
+                                         SYN(SYN("call"), SYN(sym), parms_s)),
+                                     env);
+              constructor = wrap.finish(call);
+              goto cont;
+            }
           } else {
-            constructor = true;
+            if (init_syn->num_args() == 0) {
+              init_syn = SYN("0");
+            } else if (init_syn->num_args() == 1) {
+              init_syn = init_syn->arg(0);
+            } else {
+              abort(); //FIXME: Error message
+            }
           }
         } else if (init_syn->eq("=")) {
           init_syn = syn->arg(3);
         }
         //env.add(name, sym, SecondPass);
-        ExpInsrPointWrapper wrap(env);
         init = parse_exp(init_syn, wrap.env, ExpContext(this));
         if (init == noop()) init = NULL;
         RefInsrPointWrapper wrap2(env, top_level() ? ExpInsrPoint::TopLevelVar : ExpInsrPoint::Var);
@@ -917,7 +964,7 @@ namespace ast {
     }
 
     void add_cleanup(const UserType * ut, Environ & env) {
-      if (ut && ut->module->find_symbol<Symbol>("_destructor")) {
+      if (ut && have_destructor(ut)) {
         cleanup = new Cleanup;
         ExpInsrPointWrapper wrap(env, true);
         Exp * call = mk_destructor(mk_id(this, wrap.env), wrap.env);
@@ -1652,14 +1699,14 @@ namespace ast {
       exp = parse_exp(p->arg(0), env);
       exp = exp->to_effective(env);
       //printf("::"); p->arg(1)->print(); printf("\n");
-      SymbolName id = *expand_id(p->arg(1));
       const StructUnion * t = dynamic_cast<const StructUnion *>(exp->type->unqualified);
       if (!t) throw error(p->arg(0), "Expected struct or union type"); 
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
-      sym = t->env.symbols.find<VarSymbol>(id, StripMarks);
+      const Syntax * id = expand_id(p->arg(1));
+      sym = t->env.symbols.find<VarSymbol>(id, DEFAULT_NS, StripMarks);
       if (!sym)
         throw error(p->arg(1), "\"%s\" is not a member of \"%s\"", 
-                    ~id.to_string(), ~t->to_string());
+                    ~id->to_string(), ~t->to_string());
       type = sym->type;
       lvalue = exp->lvalue;
       if (exp->ct_value_) {
@@ -1853,7 +1900,7 @@ namespace ast {
 
   Exp * try_destructor(Exp * exp, Environ & env) {
     const UserType * ut = dynamic_cast<const UserType *>(exp->type->unqualified);
-    if (ut && ut->module->find_symbol<Symbol>("_destructor")) {
+    if (ut && have_destructor(ut)) {
       return mk_destructor(exp, env);
     } else {
       return NULL;
@@ -2403,48 +2450,34 @@ namespace ast {
     }
   }
 
-  struct Trivial : public Symbol {
-    Trivial(const Type * t) : parms(dynamic_cast<const Tuple *>(t)) {}
-    const Tuple * parms;
-    const Tuple * overloadable() const {return parms;}
-  };
-
   struct DummyExp : public ExpLeaf {
     DummyExp(const Type * t) {type = t;}
     const char * what() const {return "<dummy>";}
     void compile(CompileWriter&) {abort();}
   };
 
-  const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env);
+  void handle_special_methods(UserType * user_type, Environ & env) {
+    printf("HANDLE SPECIAL METHODS\n");
 
-// FIXME: Remove
-//   void handle_special_methods(Module * module, UserType * user_type, Environ & env, Environ * module_env) {
-//     printf("HANDLE SPECIAL METHODS\n");
-//     Vector<Exp *> parms;
-//     Environ dummy_env;
-//     try {
-//       resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_constructor")), parms, dummy_env);
-//       printf("FOUND DEFAULT CONSTRUCTOR\n");
-//     } catch (...) {
-//       printf("DIDN'T FIND DEFAULT CONSTRUCTOR\n");
-//       //add_symbol("_constructor", new Trivial(env.types.inst(".")), module, module_env);
-//     }
-//     const Type * ref_type = 
-//       env.types.inst(".ref", env.types.inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(user_type)));
-//     parms.push_back(new DummyExp(ref_type));
-//     try {
-//       resolve_call(SYN(SYN("::"), SYN<Symbol>(module), SYN("_copy_constructor")), parms, dummy_env);
-//       printf("FOUND COPY CONSTRUCTOR\n");
-//     } catch (...) {
-//       printf("DIDN'T FIND COPY CONSTRUCTOR\n");
-//       //add_symbol("_copy_constructor", new Trivial(env.types.inst(".", ref_type)), module, module_env);
+    const Type * parms_empty = 
+      env.types.inst(".");
+    const Type * ref_type = 
+      env.types.inst(".ref", env.types.inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(user_type)));
+    const Type * parms_self = 
+      env.types.inst(".", TypeParm(ref_type));
 
-//       //Trivial * sym = new Trivial(env.types.inst(".", ref_type));
-//       //if (module_env)
-//       //module_env->add(SymbolKey("_copy_constructor"), sym);
-//       //module->syms = new SymbolNode(module, SymbolKey("_copy_constructor"), sym, module->syms);
-//     }
-//   }
+    if (!have_default_constructor(user_type))
+      env.add("_constructor", new Trivial(parms_empty));
+
+    if (!have_copy_constructor(user_type))
+      env.add("_constructor", new Trivial(parms_self));
+
+    if (!have_assign(user_type))
+      env.add("_assign", new Trivial(parms_self));
+
+    if (!have_destructor(user_type))
+      env.add("_destructor", new Trivial(parms_empty));
+  }
 
   // "new" is for lack of a better name as it doesn't necessary create
   // a new instance
@@ -2553,6 +2586,10 @@ namespace ast {
       }
     };
     void finalize_second_pass(Environ & env) {
+      if (user_type)
+        handle_special_methods(user_type, *lenv);
+      printf("DUMPING %s\n", ~name->to_string());
+      module->syms.dump_this_scope();
       for (CollectPart::iterator 
              i = collect.second_pass.begin(), 
              e = collect.second_pass.end(); 
@@ -2565,8 +2602,6 @@ namespace ast {
     }
     void parse_body(const Syntax * p) {
       add_syntax(p->args_begin(), p->args_end());
-      //if (user_type)
-      //  handle_special_methods(m, user_type, env0, &env);
       finalize(*outer_env);
     }
     void desc(OStream & o) {
@@ -2650,32 +2685,73 @@ namespace ast {
     const InnerNS * tl_namespace() const {return SPECIAL_NS;}
   };
 
-  void import_module(const Module * m, Environ & env, const GatherMarks & gather, bool same_scope = false) {
+  struct AlwaysTrueFilter {
+    bool operator() (SymbolNode *) const {return true;}
+  };
+
+  struct OnlyThisFilter {
+    SymbolKey key;
+    OnlyThisFilter(const SymbolKey & k) : key(k) {}
+    bool operator() (SymbolNode * n) const {
+      return n->key == key;
+    }
+  };
+
+  template <typename Filter>
+  void import_module(const Module * m, Environ & env, const GatherMarks & gather, 
+                     Filter & filter, bool same_scope) 
+  {
     SymbolList l;
     for (SymbolNode * cur = m->syms.front; cur != m->syms.back; cur = cur->next) {
-      // now add marks back in reverse order
+      if (!filter(cur)) continue;
       SymbolKey k = cur->key;
+      // now add marks back in reverse order
       for (Vector<const Mark *>::const_reverse_iterator 
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
         k.marks = mark(k.marks, *i);
-      SymbolNode * r = l.push_back(cur->scope, k, cur->value);
-      r->flags = cur->flags;
-      if (same_scope) 
-        r->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED);
-      else
-        r->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED | SymbolNode::DIFF_SCOPE);
+      SymbolNode * res = l.push_back(cur->scope, k, cur->value);
+      res->flags = cur->flags;
+      if (same_scope) {
+        res->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED);
+        if (!res->diff_scope())
+          res->scope = env.where;
+      } else {
+        res->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED | SymbolNode::DIFF_SCOPE);
+      }
     }
     env.symbols.splice(l.first, l.last);
     env.add(SymbolKey("", SPECIAL_NS), new Import(m));
   }
 
-  Stmt * parse_import(const Syntax * p, Environ & env) {
+  Stmt * parse_bring_to_this_scope(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
+    Symbol * sym = lookup_symbol<Symbol>(p->arg(0), DEFAULT_NS, env.symbols.front);
+    env.symbols.add(env.where, *sym->key, sym, SymbolNode::ALIAS);
+    return empty_stmt();
+  }
+
+  void import_module(const Module * m, Environ & env, const GatherMarks & gather, bool same_scope = false) 
+  {
+    AlwaysTrueFilter filter;
+    import_module(m, env, gather, filter, same_scope);
+  }
+
+
+  Stmt * parse_import(const Syntax * p, Environ & env) {
+    //assert_num_args(p, 1);
     GatherMarks gather;
+    bool same_scope = p->flag("same_scope");
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env.symbols.front, NULL, 
                                              NormalStrategy, gather);
-    import_module(m, env, gather);
+    if (p->num_args() == 1) {
+      //printf("IMPORTING EVERTHING FROM %s\n", ~m->name());
+      import_module(m, env, gather, same_scope);
+    } else {
+      //printf("IMPORTING SOMETHINGS FROM %s (same_scope = %d)\n", ~m->name(), same_scope);
+      OnlyThisFilter filter(*p->arg(1));
+      import_module(m, env, gather, filter, same_scope);
+    }
     return empty_stmt();
   }
 
@@ -2927,7 +3003,6 @@ namespace ast {
     Exp * exp = parse_exp(p->arg(0), env);
     exp = exp->to_effective(env);
     //printf("::"); p->arg(1)->print(); printf("\n");
-    SymbolName id = *expand_id(p->arg(1));
     const UserType * t = dynamic_cast<const UserType *>(exp->type->unqualified);
     assert(t);
     if (!t) throw error(p->arg(0), "Expected user type but got ??");
@@ -4032,8 +4107,8 @@ namespace ast {
     try_error(p, env);
     res = try_just_exp(p, env, c); 
     if (res) return res;
-    //abort();
-    throw error (p, "Unsupported primative at expression position: %s", ~p->what().name);
+    abort();
+    //throw error (p, "Unsupported primative at expression position: %s", ~p->what().name);
     //throw error (p, "Expected expression.");
   }
 
@@ -4086,6 +4161,7 @@ namespace ast {
     if (what == "fluid_binding") return parse_fluid_binding(p, env);
     if (what == "module")        return parse_module(p, env);
     if (what == "import")        return parse_import(p, env);
+    if (what == "bring_to_this_scope") return parse_bring_to_this_scope(p, env);
     if (what == "make_inner_ns") return parse_make_inner_ns(p, env);
     if (what == "make_user_type") return parse_make_user_type(p, env);
     if (what == "user_type")          return parse_user_type(p, env);

@@ -810,8 +810,8 @@ namespace ast {
   }
 
   template <typename T> 
-  inline T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns) const {
-    return lookup_symbol<T>(p, ns, front);
+  inline T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns, Strategy ms) const {
+    return lookup_symbol<T>(p, ns, front, NULL, ms);
   }
 
   template <typename T>
@@ -829,8 +829,8 @@ namespace ast {
   }
 
   template <typename T> 
-  inline T * SymbolTable::find(const Syntax * p, const InnerNS * ns) const {
-    return find_symbol<T>(p, ns, front);
+  inline T * SymbolTable::find(const Syntax * p, const InnerNS * ns, Strategy ms) const {
+    return find_symbol<T>(p, ns, front, NULL, ms);
   }
 
   template <typename T> 

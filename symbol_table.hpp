@@ -529,6 +529,8 @@ namespace ast {
       back = o.back;
       return *this;
     }
+    void dump() const;
+    void dump_this_scope() const;
   };
 
   class SymbolTable : public SymbolTableBase
@@ -575,9 +577,9 @@ namespace ast {
       return lookup_symbol<T>(k, str, front, NULL, ms);
     }
     template <typename T> 
-    inline T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
+    inline T * lookup(const Syntax * p, const InnerNS * = DEFAULT_NS, Strategy ms = NormalStrategy) const;
     template <typename T> 
-    inline T * find(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
+    inline T * find(const Syntax * p, const InnerNS * = DEFAULT_NS, Strategy ms = NormalStrategy) const;
     template <typename T> 
     inline T * find_this_scope(const Syntax * p, const InnerNS * = DEFAULT_NS) const;
     bool exists(const SymbolKey & k, Strategy ms = NormalStrategy) const {
@@ -597,8 +599,6 @@ namespace ast {
     void splice(SymbolNode * first, SymbolNode * last) {
       return ip.splice(first, last);
     }
-    void dump() const;
-    void dump_this_scope() const;
   };
 
   class TopLevelSymbolTable : public SymbolInsrPoint {

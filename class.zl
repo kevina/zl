@@ -513,7 +513,13 @@ public:
     
     if (is_virtual) {
       //m = match(m, syntax fpn, m->var(syntax n));
-      if (!virtual_override) {
+      if (virtual_override) {
+        // don't define a new method but bring the parent method into
+        // the same scope
+        builder->add(replace(
+                       raw_syntax (bring_to_this_scope (:: parent_n n)),
+                       m, mark));
+      } else {
         Syntax * call_v = mk_call(replace(raw_syntax (-> (-> this _vptr) fpn), m, mark),
                                   replace(syntax this, m, mark),
                                   call_parms);
