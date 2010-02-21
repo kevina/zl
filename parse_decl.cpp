@@ -31,6 +31,8 @@ void ignore() {}
 
 static unsigned uniq_num = 0;
 
+enum Mode {IdRequired, IdNotRequired, StopAtParen};
+
 struct DeclWorking {
   DeclWorking(SyntaxBuilder &); // FIXME
 
@@ -53,7 +55,7 @@ struct DeclWorking {
                                       parts_iterator end,
                                       const Syntax * t,
                                       Environ & env,
-                                      bool id_required = true);
+                                      Mode = IdRequired);
   const Syntax * parse_init_exp(parts_iterator & i, 
                                parts_iterator end);
 
@@ -199,7 +201,7 @@ class ParseDeclImpl : public ParseDecl {
 public:
   ParseDeclImpl() {}
   const Syntax * parse_decl(const Syntax * p, Environ &);
-  const Syntax * parse_type(parts_iterator & i, parts_iterator e, Environ &);
+  const Syntax * parse_type(parts_iterator & i, parts_iterator e, Environ &, bool for_new = false);
   const Syntax * parse_type(const Syntax * p, Environ &);
   const Syntax * parse_fun_parms(const Syntax*, Environ &);
   void init() {}
@@ -318,7 +320,8 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
 const Syntax * ParseDeclImpl::parse_type(parts_iterator & i, 
                                          parts_iterator end, 
-                                         Environ & env) 
+                                         Environ & env,
+                                         bool for_new) 
 {
   if (i == end) return NULL;
   const Syntax * p = *i;
@@ -328,7 +331,8 @@ const Syntax * ParseDeclImpl::parse_type(parts_iterator & i,
   bool r = w.parse_first_part(i, end, env);
   if (!r) return NULL;
   w.make_inner_type(p);
-  const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
+  const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, 
+                                             for_new ? StopAtParen : IdNotRequired);
   if (id) return NULL;
   assert(dummy.empty()); // FIXME: Error Message
   return t;
@@ -621,7 +625,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
                                                  parts_iterator end,
                                                  const Syntax * t,
                                                  Environ & env,
-                                                 bool id_required) 
+                                                 Mode mode) 
 {
   assert(t);
   parts_iterator prev;
@@ -645,17 +649,17 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   } else if ((p = try_id(*i))) {
     id = p;
     ++i;
-  } else if ((*i)->is_a("()")) {
+  } else if (mode != StopAtParen && (*i)->is_a("()")) {
     outer = reparse("TOKENS", (*i)->inner());
     ++i;
   } else
   def: 
-    if (id_required)
+    if (mode == IdRequired)
       throw error(*i, "Expected identifier or \"(\".");
 
   if (stop || i == end) {
     // do nothing
-  } else if ((*i)->is_a("()")) {
+  } else if (mode != StopAtParen && (*i)->is_a("()")) {
     try {
       t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
       ++i;
@@ -667,7 +671,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   
   if (outer) {
     parts_iterator j = outer->args_begin();
-    t = parse_outer_type_info(id, j, outer->args_end(), t, env, id_required);
+    t = parse_outer_type_info(id, j, outer->args_end(), t, env, mode);
     if (j != outer->args_end()) throw error(*j, "Expected \")\".");
     return t;
   } else {
@@ -692,7 +696,7 @@ const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
       ps.add_part(w.inner_type); // FIXME: Preserve source info..
     } else {
       w.make_inner_type(parms);
-      const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, false);
+      const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, IdNotRequired);
       SyntaxBuilder p;
       assert(t);
       p.add_part(t);

@@ -649,9 +649,13 @@ namespace ast {
     return res;
   }
 
-  static Exp * mk_id(const VarSymbol * s, Environ & env) {
-    Id * id = new Id(s);
+  Exp * BasicVar::as_lvalue(Environ & env) const {
+    Id * id = new Id(this);
     return id->construct(env);
+  }
+
+  static Exp * mk_id(const VarSymbol * s, Environ & env) {
+    return s->as_lvalue(env);
   }
 
   //
@@ -867,83 +871,82 @@ namespace ast {
     Exp * init;
     Stmt * constructor;
     Cleanup * cleanup;
-    Stmt * finish_parse(Environ & env) {
-      printf("FINISH PARSE %s\n", ~syn->to_string());
-      bool force_init = false;
-      if (syn->num_args() > 2) {
-        ExpInsrPointWrapper wrap(env);
-        const Syntax * init_syn = syn->arg(2);
-        if (init_syn->eq(".")) {
-          init_syn = syn->arg(3);
-          if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner());
-          const UserType * user_type = dynamic_cast<const UserType *>(type->unqualified->root);
-          printf("CON: %s\n", ~init_syn->to_string());
-          if (user_type) {
-            // find constructor to use
-            Vector<Exp *> parms;
-            add_ast_nodes(init_syn->args_begin(), init_syn->args_end(), parms, Parse<ExpPos>(wrap.env));
-            const Symbol * sym = resolve_call(SYN(syn->arg(0)->str(),
-                                                  SYN("::"), 
-                                                  SYN<Symbol>(user_type->module), 
-                                                  SYN("_constructor", syn->arg(0)->str())), 
-                                              parms, wrap.env); 
-            if (const Trivial * trivial = dynamic_cast<const Trivial *>(sym)) {
-              assert(parms.size() <= 1);
-              if (parms.size() == 0) {
-                abort(); // FIXME
-              } else if (parms.size() == 1) {
-                init_syn = SYN(parms[0]);
-              }
-            } else {
-              SyntaxBuilder synb;
-              synb.add_part(SYN("."));
-              for (Vector<ast::Exp *>::const_iterator i = parms.begin(), e = parms.end();
-                   i != e; ++i)
-                synb.add_part(SYN(*i));
-              synb.set_flags(init_syn->flags_begin(), init_syn->flags_end());
-              Syntax * parms_s = synb.build();
-              printf("NOW PARSING CONSTRUCTOR %s\n", ~parms_s->to_string());
-              Exp * call = parse_exp(SYN(SYN("member"), 
-                                         SYN(mk_id(this, env)),
-                                         SYN(SYN("call"), SYN(sym), parms_s)),
-                                     env);
-              constructor = wrap.finish(call);
-              goto cont;
+    virtual SourceStr id_str() const {return syn ? syn->arg(0)->str() : SourceStr();}
+    void parse_init(parts_iterator i, parts_iterator e, Environ & env) {
+      ExpInsrPointWrapper wrap(env);
+      const Syntax * init_syn = *i++;
+      if (init_syn->eq(".")) {
+        assert(i != e); // FIXME: Error Messagex
+        init_syn = *i++;
+        if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner());
+        const UserType * user_type = dynamic_cast<const UserType *>(type->unqualified->root);
+        printf("CON: %s\n", ~init_syn->to_string());
+        if (user_type) {
+          // find constructor to use
+          Vector<Exp *> parms;
+          add_ast_nodes(init_syn->args_begin(), init_syn->args_end(), parms, Parse<ExpPos>(wrap.env));
+          const Symbol * sym = resolve_call(SYN(id_str(),
+                                                SYN("::"), 
+                                                SYN<Symbol>(user_type->module), 
+                                                SYN("_constructor", id_str())), 
+                                            parms, wrap.env); 
+          if (const Trivial * trivial = dynamic_cast<const Trivial *>(sym)) {
+            assert(parms.size() <= 1);
+            if (parms.size() == 0) {
+              abort(); // FIXME
+            } else if (parms.size() == 1) {
+              init_syn = SYN(parms[0]);
             }
           } else {
-            if (init_syn->num_args() == 0) {
-              init_syn = SYN("0");
-            } else if (init_syn->num_args() == 1) {
-              init_syn = init_syn->arg(0);
-            } else {
-              abort(); //FIXME: Error message
-            }
+            SyntaxBuilder synb;
+            synb.add_part(SYN("."));
+            for (Vector<ast::Exp *>::const_iterator i = parms.begin(), e = parms.end();
+                 i != e; ++i)
+              synb.add_part(SYN(*i));
+            synb.set_flags(init_syn->flags_begin(), init_syn->flags_end());
+            Syntax * parms_s = synb.build();
+            printf("NOW PARSING CONSTRUCTOR %s\n", ~parms_s->to_string());
+            Exp * call = parse_exp(SYN(SYN("member"), 
+                                       SYN(mk_id(this, env)),
+                                       SYN(SYN("call"), SYN(sym), parms_s)),
+                                   env);
+            constructor = wrap.finish(call);
+            return;
           }
-        } else if (init_syn->eq("=")) {
-          init_syn = syn->arg(3);
+        } else {
+          if (init_syn->num_args() == 0) {
+            init_syn = SYN("0");
+          } else if (init_syn->num_args() == 1) {
+            init_syn = init_syn->arg(0);
+          } else {
+            abort(); //FIXME: Error message
+          }
         }
-        //env.add(name, sym, SecondPass);
-        init = parse_exp(init_syn, wrap.env, ExpContext(this));
-        if (init == noop()) init = NULL;
-        RefInsrPointWrapper wrap2(env, top_level() ? ExpInsrPoint::TopLevelVar : ExpInsrPoint::Var);
-        if (init) init = init->resolve_to(type, wrap2.env);
-        finish(this, wrap, wrap2, env);
-        //if (sym->type->is_ref && !init->lvalue) {
-        //  temp_exp = init;
-        //  SymbolKey name = expand_binding(name_p, env);
-        //  
-        //  temp_sym = new_var_symbol(...);
-        //  init = addrof(temp_sym);
-        //}
-        if (storage_class == SC_STATIC && type->read_only && init->ct_value_) {
-          ct_value = init->ct_value_;
-        }
+      } else if (init_syn->eq("=")) {
+        assert(i != e); // FIXME: Error Messagex
+        init_syn = *i++;
       }
-    cont:
+      //env.add(name, sym, SecondPass);
+      init = parse_exp(init_syn, wrap.env, ExpContext(this));
+      if (init == noop()) init = NULL;
+      RefInsrPointWrapper wrap2(env, top_level() ? ExpInsrPoint::TopLevelVar : ExpInsrPoint::Var);
+      if (init) init = init->resolve_to(type, wrap2.env);
+      finish(this, wrap, wrap2, env);
+    }
+    void construct(parts_iterator i, parts_iterator e, Environ & env) {
+      if (i < e) parse_init(i,e,env);
       const UserType * ut;
       if (!cleanup && (ut = dynamic_cast<const UserType *>(type))) {
         if (!init && !constructor) constructor = try_constructor(ut, env);
         add_cleanup(ut, env);
+      }
+    }
+    Stmt * finish_parse(Environ & env) {
+      //fprintf(stderr, "SIZE OF VAR = %u\n", sizeof(Var));
+      printf("FINISH PARSE %s\n", ~syn->to_string());
+      construct(syn->args_begin() + 2, syn->args_end(), env);
+      if (storage_class == SC_STATIC && type->read_only && init && init->ct_value_) {
+        ct_value = init->ct_value_;
       }
       return this;
     }
@@ -1163,6 +1166,12 @@ namespace ast {
   // Like AutoTemp, not really a temp
   struct TopLevelTemp : public TopLevelVar {
     TopLevelTemp(const Type * t) {type = t; num = NPOS;}
+  };
+
+  struct VarLike : public Var {
+    Exp * lvalue_exp;
+    VarLike(Exp * lv, const Type * t) : lvalue_exp(lv) {type = t;}
+    Exp * as_lvalue(Environ & env) const {return lvalue_exp;}
   };
 
   static StorageClass get_storage_class(const Syntax * p) {
@@ -1907,21 +1916,29 @@ namespace ast {
     }
   }
 
-  static Exp * parse_construct(const Syntax * p, Environ & env) {
-    assert_num_args(p, 1);
+  static Stmt * parse_construct(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2, 4);
     Exp * exp = parse_exp(p->arg(0), env);
-    Stmt * c = try_constructor(exp, env);
-    if (c)
-      env.exp_ip->add(c);
-    return noop();
+    Type * type = parse_type(p->arg(1), env);
+    //Stmt * c = try_constructor(exp, env);
+    VarLike var(exp, type);
+    var.construct(p->args_begin() + 2, p->args_end(), env);
+    if (var.init) {
+      printf("INIT ON %s\n", ~p->to_string());
+      return mk_init(exp, var.init, env)->as_stmt();
+    } else if (var.constructor) {
+      return var.constructor;
+    } else {
+      return empty_stmt();
+    }
   }
 
-  static Exp * parse_destroy(const Syntax * p, Environ & env) {
+  static Stmt * parse_destroy(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     Exp * exp = parse_exp(p->arg(0), env);
     Exp * d = try_destructor(exp, env);
-    if (d) return d;
-    else return (new AddrOf(exp))->construct(env);
+    if (d) return d->as_stmt();
+    else return (new AddrOf(exp))->construct(env)->as_stmt();
   }
 
   struct CompoundAssign : public BinOp {
@@ -2362,6 +2379,7 @@ namespace ast {
     if (!temp) temp = start_temp(type, env);
     Stmt * constructor = temp->try_constructor(dynamic_cast<const UserType *>(type), env);
     if (env.temp_ip->where == ExpInsrPoint::ExtendedExp) {
+      assert(!temp->cleanup || !use_res_loc);
       if (constructor)
         env.exp_ip->add(constructor);
       else if (type->is(SCALAR_C))
@@ -4107,8 +4125,8 @@ namespace ast {
     try_error(p, env);
     res = try_just_exp(p, env, c); 
     if (res) return res;
-    abort();
-    //throw error (p, "Unsupported primative at expression position: %s", ~p->what().name);
+    //abort();
+    throw error (p, "Unsupported primative at expression position: %s", ~p->what().name);
     //throw error (p, "Expected expression.");
   }
 
@@ -4187,6 +4205,8 @@ namespace ast {
     if (what == "block")   return (new Block)->parse_self(p, env);
     if (what == "return")  return (new Return)->parse_self(p, env);
     if (what == "cleanup") return (new Cleanup)->parse_self(p, env);
+    if (what == "construct") return parse_construct(p, env);
+    if (what == "destroy")   return parse_destroy(p, env);
     return 0;
   }
 
@@ -4201,8 +4221,6 @@ namespace ast {
     if (what == "eif")     return parse_eif(p, env);
     if (what == "assign")      return parse_assign(p, env);
     if (what == "init-assign") return parse_init_assign(p, env);
-    if (what == "construct")   return parse_construct(p, env);
-    if (what == "destroy")     return parse_destroy(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
     if (what == "lshift")  return (new LeftShift)->parse_self(p, env);

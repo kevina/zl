@@ -487,6 +487,9 @@ namespace ast {
     inline Id * id_for(); 
     virtual const TopLevelVarDecl * top_level() const {return NULL;}
     virtual bool is_temp() const {return false;}
+    // as_lvalue returnes the variable as an lvalue exp, normally this
+    // means wrapping in an Id, but if we are not a real variable...
+    virtual Exp * as_lvalue(Environ & env) const;
   protected:
     BasicVar() : name_p(), ct_value(), lvalue(LV_NORMAL), ids(NULL) {}
     BasicVar(const Type * t, LValue lv = LV_NORMAL) : name_p(), type(t), ct_value(), lvalue(lv) {}

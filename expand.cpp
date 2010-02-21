@@ -1201,10 +1201,16 @@ static const Syntax * handle_new(parts_iterator & i,
   ++i;
   if (!p->simple()) return p; // already handled
   assert(i != e); // FIXME: error message
-  const Syntax * type = parse_decl_->parse_type(i, e, env);
+  const Syntax * type = parse_decl_->parse_type_for_new(i, e, env);
   assert(type); // FIXME: error message
   //printf(">>%s<<\n", ~type->to_string());
-  return SYN(p, type);
+  const Syntax * parms = NULL;
+  if (i != e && ((*i)->is_a("()") || (*i)->is_a(".")))
+    parms = *i++;
+  if (parms)
+    return SYN(p, type, SYN("."), parms);
+  else
+    return SYN(p, type);
 }
 
 const Syntax * handle_operator_fun_id(parts_iterator & i, 
