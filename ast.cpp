@@ -886,6 +886,13 @@ namespace ast {
           // find constructor to use
           Vector<Exp *> parms;
           add_ast_nodes(init_syn->args_begin(), init_syn->args_end(), parms, Parse<ExpPos>(wrap.env));
+          if (parms.size() == 1 && parms[0]->type->effective == type) {
+            // We will be calling a copy constructor, but go via the
+            // path of an init value to give us an opportunity to
+            // elide the copy constructor if possible
+            init_syn = SYN(parms[0]);
+            goto with_init;
+          } 
           const Symbol * sym = resolve_call(SYN(id_str(),
                                                 SYN("::"), 
                                                 SYN<Symbol>(user_type->module), 
@@ -927,6 +934,7 @@ namespace ast {
         assert(i != e); // FIXME: Error Messagex
         init_syn = *i++;
       }
+    with_init:
       //env.add(name, sym, SecondPass);
       init = parse_exp(init_syn, wrap.env, ExpContext(this));
       if (init == noop()) init = NULL;
@@ -2336,7 +2344,7 @@ namespace ast {
   {
     Var * t = wrap2.finish(oenv);
     if (t) v = t;
-    try_to_elide(v, &wrap.stmts, oenv);
+    bool elided = try_to_elide(v, &wrap.stmts, oenv);
     if (wrap.stmts) {
       if (v->init) { // if we elided a copy than this may have
                      // already been done
@@ -2346,6 +2354,13 @@ namespace ast {
         v->init = NULL;
       }
       v->constructor = wrap.finish();
+    } else if (elided) { 
+      // Prevent the default constructor from being called by marking
+      // the constructor as being there even though it is a noop.
+      // This can happen if "v" is already a temp and the init. code
+      // was added to the existing extended environment, hence
+      // wrap.stmts will be empty.
+      v->constructor = empty_stmt();
     } else {
       v->fix_up_init(oenv);
     }

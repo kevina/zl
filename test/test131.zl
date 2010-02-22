@@ -1,0 +1,19 @@
+class X {
+  int x;
+  int y;
+  X() {printf("DEFAULT\n");}
+  X(int x0, int y0) {printf("CONSTRUCT\n");}
+  X(const X &) {printf("COPY\n");}
+};
+
+
+int main() {
+  X x;
+  printf("---\n");
+  new X(x);
+  printf("---\n");
+  new X(1,3);
+  printf("---\n");
+  new X(({X x; x.x = 2; x.y = 4; x;}));
+  return 0;
+}
