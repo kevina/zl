@@ -3576,41 +3576,6 @@ namespace ast {
       resolve_fun_parms(parms, &parms, ftype->parms, env, syn->arg(1));
       return this;
     }
-    Call * parse_self_(const Syntax * p, Environ & env) {
-      syn = p;
-      //printf("CALL>>%s\n", ~syn->to_string());
-      assert_num_args(2);
-      lhs = parse_exp(p->arg(0), env);
-      p = p->arg(1);
-      add_ast_nodes(p->args_begin(), p->args_end(), parms, Parse<ExpPos>(env));
-      const Function * ftype = dynamic_cast<const Function *>(lhs->type);
-      if (!ftype) {
-        if (const Pointer * t = dynamic_cast<const Pointer *>(lhs->type))
-          ftype = dynamic_cast<const Function *>(t->subtype);
-      }
-      if (!ftype)
-        throw error (lhs->syn, "Expected function type");
-      type = ftype->ret;
-      lvalue = type->addressable ? LV_NORMAL : LV_FALSE;
-      if (!ftype->parms->vararg && parms.size() != ftype->parms->parms.size()) 
-        throw error(syn->arg(1), 
-                    "Wrong number of parameters, expected %u but got %u when calling %s",
-                    ftype->parms->parms.size(), parms.size(), "??");
-      else if (ftype->parms->vararg && parms.size() < ftype->parms->parms.size())
-        throw error(syn->arg(1),
-                    "Not enough parameters, expected at least %u but got %u when calling %s",
-                    ftype->parms->parms.size(), parms.size(), "??");
-      const int typed_parms = ftype->parms->parms.size();
-      const int num_parms = parms.size();
-      int i = 0;
-      for (;i != typed_parms; ++i) {
-        parms[i] = parms[i]->resolve_to(ftype->parms->parms[i].type, env);
-      }
-      for (;i != num_parms; ++i) {
-        parms[i] = parms[i]->def_arg_prom(env);
-      }
-      return this;
-    }
     void finalize(FinalizeEnviron & env) {
       lhs->finalize(env);
       const int num_parms = parms.size();
