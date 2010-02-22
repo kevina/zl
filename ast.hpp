@@ -490,6 +490,7 @@ namespace ast {
     // as_lvalue returnes the variable as an lvalue exp, normally this
     // means wrapping in an Id, but if we are not a real variable...
     virtual Exp * as_lvalue(Environ & env) const;
+    virtual void compile_lvalue(CompileWriter & o) const {o << uniq_name();}
   protected:
     BasicVar() : name_p(), ct_value(), lvalue(LV_NORMAL), ids(NULL) {}
     BasicVar(const Type * t, LValue lv = LV_NORMAL) : name_p(), type(t), ct_value(), lvalue(lv) {}
@@ -498,6 +499,12 @@ namespace ast {
   };
 
   typedef BasicVar VarSymbol;
+
+  static inline
+  CompileWriter & operator<< (CompileWriter & o, const VarSymbol * sym) {
+    sym->compile_lvalue(o);
+    return o;
+  }
 
   struct Declaration : public Stmt {
     virtual Stmt * finish_parse(Environ & env) {return empty_stmt();}

@@ -342,7 +342,7 @@ namespace ast {
     ExpInsrPointWrapperBase(Environ & e, ExpInsrPoint::Where w = ExpInsrPoint::ExtendedExp, bool force_new_scope = false) 
       : ip(&stmts, w), stmts(NULL), env(e.new_extended_exp(&ip, force_new_scope)) {}
     ExpInsrPoint ip;
-    Stmt * stmts;
+    Stmt * stmts; 
     Environ env;
     void reset() {ip = &stmts; stmts = NULL;}
   };
@@ -872,6 +872,7 @@ namespace ast {
     Stmt * constructor;
     Cleanup * cleanup;
     virtual SourceStr id_str() const {return syn ? syn->arg(0)->str() : SourceStr();}
+    virtual void add_to_sub_env(Environ & env) {assert (!env.temp_ip);}
     void parse_init(parts_iterator i, parts_iterator e, Environ & env) {
       ExpInsrPointWrapper wrap(env);
       const Syntax * init_syn = *i++;
@@ -1096,7 +1097,9 @@ namespace ast {
   };
 
   struct NamedTemp : public EExpTemp {
-    void add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok);
+    void add_to_sub_env(Environ & env) {
+      env.temp_ip->add(this);
+    }
     void fix_up_init(Environ & env) {
       Var::fix_up_init(env);
       if (init && !init->ct_value_) {
@@ -1106,11 +1109,6 @@ namespace ast {
     }
     Stmt * finish_parse(Environ & env);
   };
-
-  void NamedTemp::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
-    Symbol::add_to_env(k, env, shadow_ok);
-    env.temp_ip->add(this);
-  }
 
   Stmt * NamedTemp::finish_parse(Environ & env) {
     Var::finish_parse(env);
@@ -1172,6 +1170,13 @@ namespace ast {
     Exp * lvalue_exp;
     VarLike(Exp * lv, const Type * t) : lvalue_exp(lv) {type = t;}
     Exp * as_lvalue(Environ & env) const {return lvalue_exp;}
+    void compile_lvalue(CompileWriter & o) const {o << lvalue_exp;}
+    void add_to_sub_env(Environ & env) {
+      if (env.temp_ip) env.temp_ip->add(this);
+    }
+    void compile(CompileWriter & f, Phase phase) const {
+      assert(!cleanup && !init && !constructor);
+    }
   };
 
   static StorageClass get_storage_class(const Syntax * p) {
@@ -1194,6 +1199,7 @@ namespace ast {
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
     bool shadow = p->flag("__shadow");
+    //bool shadow = true;
     if (shadow && collect) abort(); // FIXME: Error message
     Var * var;
     Stmt * res;
@@ -1226,6 +1232,7 @@ namespace ast {
     var->storage_class = storage_class;
     if (storage_class != SC_EXTERN && var->type->size() == NPOS)
       throw error(name_p, "Size not known");
+    var->add_to_sub_env(env);
     if (fresh && !shadow)
       env.add(name, var);
     if (env.parse_def() && !collect)
@@ -1916,29 +1923,33 @@ namespace ast {
     }
   }
 
-  static Stmt * parse_construct(const Syntax * p, Environ & env) {
+  static Exp * parse_construct(const Syntax * p, Environ & env) {
     assert_num_args(p, 2, 4);
     Exp * exp = parse_exp(p->arg(0), env);
     Type * type = parse_type(p->arg(1), env);
-    //Stmt * c = try_constructor(exp, env);
-    VarLike var(exp, type);
-    var.construct(p->args_begin() + 2, p->args_end(), env);
-    if (var.init) {
-      printf("INIT ON %s\n", ~p->to_string());
-      return mk_init(exp, var.init, env)->as_stmt();
-    } else if (var.constructor) {
-      return var.constructor;
+    VarLike * var = new VarLike(exp, type);
+    var->add_to_sub_env(env);
+    var->construct(p->args_begin() + 2, p->args_end(), env);
+    var->cleanup = NULL;
+    if (var->init) {
+      Exp * res = mk_init(exp, var->init, env);
+      var->init = NULL;
+      return res;
+    } else if (var->constructor) {
+      Exp * res = var->constructor->as_exp(env);
+      var->constructor = NULL;
+      return res;
     } else {
-      return empty_stmt();
+      return noop();
     }
   }
 
-  static Stmt * parse_destroy(const Syntax * p, Environ & env) {
+  static Exp * parse_destroy(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     Exp * exp = parse_exp(p->arg(0), env);
     Exp * d = try_destructor(exp, env);
-    if (d) return d->as_stmt();
-    else return (new AddrOf(exp))->construct(env)->as_stmt();
+    if (d) return d;
+    else return (new AddrOf(exp))->construct(env);
   }
 
   struct CompoundAssign : public BinOp {
@@ -2275,7 +2286,8 @@ namespace ast {
       // we need to find the temp in the stmt list, if v is also a
       // temp start with it, otherwise use the passed in stmt list
       Stmt * * tmp_ip = stmts;
-      if (v->is_temp()) tmp_ip = &v->next;
+      //if (v->is_temp()) tmp_ip = &v->next;
+      if (oenv.temp_ip && !*tmp_ip) tmp_ip = &v->next;
       for (; *tmp_ip && *tmp_ip != tmp_s; tmp_ip = &(*tmp_ip)->next) {}
       // if we failed to find the temp this means that "v" is a temp
       // which was defined after the temp to eliminate, thus bail 
@@ -4205,8 +4217,6 @@ namespace ast {
     if (what == "block")   return (new Block)->parse_self(p, env);
     if (what == "return")  return (new Return)->parse_self(p, env);
     if (what == "cleanup") return (new Cleanup)->parse_self(p, env);
-    if (what == "construct") return parse_construct(p, env);
-    if (what == "destroy")   return parse_destroy(p, env);
     return 0;
   }
 
@@ -4221,6 +4231,8 @@ namespace ast {
     if (what == "eif")     return parse_eif(p, env);
     if (what == "assign")      return parse_assign(p, env);
     if (what == "init-assign") return parse_init_assign(p, env);
+    if (what == "construct")   return parse_construct(p, env);
+    if (what == "destroy")     return parse_destroy(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
     if (what == "lshift")  return (new LeftShift)->parse_self(p, env);
