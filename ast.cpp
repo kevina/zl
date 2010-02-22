@@ -886,7 +886,7 @@ namespace ast {
           // find constructor to use
           Vector<Exp *> parms;
           add_ast_nodes(init_syn->args_begin(), init_syn->args_end(), parms, Parse<ExpPos>(wrap.env));
-          if (parms.size() == 1 && parms[0]->type->effective == type) {
+          if (parms.size() == 1 && parms[0]->type->unqualified == type->unqualified) {
             // We will be calling a copy constructor, but go via the
             // path of an init value to give us an opportunity to
             // elide the copy constructor if possible

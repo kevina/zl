@@ -224,9 +224,16 @@ namespace ast {
     bool is(const TypeCategory * other) const {
       return category_in(category, other);
     }
-    const TypeInst * root; // for typedef, the root type, recursively resolved
-    const TypeInst * unqualified; // unqualified version of root, _not_ recursively resolved
+
+    const TypeInst * root; // for typedef, the root type, recursively
+                           // resolved, this means that if X2 is a
+                           // typedef of X than root of "const X2 &"
+                           // is "const X &", ie any subtypes are also
+                           // resolved to the root type
+    const TypeInst * unqualified; // unqualified version of root,
+                                  // _not_ recursively resolved
     const TypeInst * effective; // dereferenced version of root
+
     const TypeInst * exact_type;
     void finalize() // should be called just before it added to the
                     // type symbol cache (or whatever)
