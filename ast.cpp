@@ -309,7 +309,12 @@ namespace ast {
     if (num == NPOS)
       assign_uniq_num<TopLevelSymbol>(this, *env.top_level_symbols->front);
     //printf(">>%d %s %u %u %s\n", env.special(), ~k.to_string(), num, NPOS, typeid(*this).name());
+    String old_uniq_name_ = uniq_name_;
+    uniq_name_ = String();
     SymbolKey uniq_key = uniq_name();
+    if (old_uniq_name_.defined() && old_uniq_name_ != uniq_name_) 
+      fprintf(stderr, "Warning: uniq_name changed from %s to %s\n", ~old_uniq_name_, ~uniq_name_);
+    //printf("FINISH_ADD_TO_ENV %p: %s\n", env.where, ~uniq_key.name);
     uniq_key.ns = tl_namespace();
     SymbolNode * tl = find_symbol_node(uniq_key, *env.top_level_symbols->front);
     //printf("1> %s %s %s\n", ~k.to_string(), ~uniq_key.to_string(),  typeid(*this).name());
@@ -952,7 +957,7 @@ namespace ast {
     }
     Stmt * finish_parse(Environ & env) {
       //fprintf(stderr, "SIZE OF VAR = %u\n", sizeof(Var));
-      printf("FINISH PARSE %s\n", ~syn->to_string());
+      //printf("FINISH PARSE %s\n", ~syn->to_string());
       construct(syn->args_begin() + 2, syn->args_end(), env);
       if (storage_class == SC_STATIC && type->read_only && init && init->ct_value_) {
         ct_value = init->ct_value_;
@@ -2502,7 +2507,7 @@ namespace ast {
   };
 
   void handle_special_methods(UserType * user_type, Environ & env) {
-    printf("HANDLE SPECIAL METHODS\n");
+    //printf("HANDLE SPECIAL METHODS\n");
 
     const Type * parms_empty = 
       env.types.inst(".");
@@ -2633,8 +2638,8 @@ namespace ast {
     void finalize_second_pass(Environ & env) {
       if (user_type)
         handle_special_methods(user_type, *lenv);
-      printf("DUMPING %s\n", ~name->to_string());
-      module->syms.dump_this_scope();
+      //printf("DUMPING %s\n", ~name->to_string());
+      //module->syms.dump_this_scope();
       for (CollectPart::iterator 
              i = collect.second_pass.begin(), 
              e = collect.second_pass.end(); 
@@ -2868,7 +2873,7 @@ namespace ast {
     //printf("PARSING USER TYPE %s\n", ~name);
     UserType * s = env.symbols.find_this_scope<UserType>(SymbolKey(name));
     if (!s) {
-      //printf("ADDING SYM %s\n", ~name);
+      //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
       s = new UserType;
       s->category = new TypeCategory(name.name, USER_C);
       s->module = new_module(p, env);
@@ -4587,9 +4592,18 @@ extern "C" namespace macro_abi {
 
   using namespace ast;
 
-  Environ * temp_environ(Environ * env) {
-    env = new Environ(env->new_scope());
+  Environ * temp_environ(const Environ * env0) {
+    Environ * env = new Environ(env0->new_scope());
     env->top_level_symbols = NULL;
+    return env;
+  }
+
+  Environ * new_scope(const Environ * env0, const Syntax * where) {
+    Environ * env = new Environ(env0->new_scope());
+    if (where) {
+      TopLevelSymbol * sym = env->symbols.lookup<TopLevelSymbol>(where);
+      env->where = sym;
+    }
     return env;
   }
 
@@ -4632,7 +4646,7 @@ extern "C" namespace macro_abi {
 
   int user_type_have_default_constructor(const UserType * ut) {
     bool res = ast::have_default_constructor(ut);
-    printf("HAVE DEFAULT CONSTRUCTOR FOR %s = %d\n", ~ut->full_name(), res);
+    //printf("HAVE DEFAULT CONSTRUCTOR FOR %s = %d\n", ~ut->full_name(), res);
     return res;
   }
 
@@ -4652,9 +4666,10 @@ extern "C" namespace macro_abi {
     return new ModuleBuilder(name, *env);
   }
 
-  void module_builder_add(ModuleBuilderBase * b, const Syntax * p) {
-    //printf("ADDING %s\n", ~p->to_string());
-    static_cast<ModuleBuilder *>(b)->add_syntax(p);
+  void module_builder_add(ModuleBuilderBase * b0, const Syntax * p) {
+    ModuleBuilder * b = static_cast<ModuleBuilder *>(b0);
+    //printf("ADDING to %p: %s\n", static_cast<TopLevelSymbol *>(b->module), ~p->to_string());
+    b->add_syntax(p);
   }
 
   const Syntax * module_builder_to_syntax(ModuleBuilderBase * b) {

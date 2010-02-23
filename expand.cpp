@@ -1741,4 +1741,12 @@ extern "C" namespace macro_abi {
     return env->symbols.lookup<Symbol>(sym)->get_prop(*prop);
   }
 
+  const char * mangle_fun_parms(const Syntax * p, Environ * env) {
+    Tuple * parms = expand_fun_parms(p, *env);
+    StringBuf buf;
+    for (unsigned i = 0; i != parms->parms.size(); ++i) {
+      mangle_print_inst->to_string(*parms->parms[i].type, buf);
+    }
+    return ~buf.freeze();
+  }
 }

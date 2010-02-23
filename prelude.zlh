@@ -204,6 +204,7 @@ user_type UserTypeBuilder {
 }
 
 __ct_callback Environ * temp_environ(const Environ *);
+__ct_callback Environ * new_scope(const Environ *, Syntax * where);
 
 __ct_callback size_t ct_value(Syntax *, const Environ *);
 
@@ -212,6 +213,10 @@ __ct_callback Syntax * error(Syntax *, const char *, ...);
 __ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * prop, const Environ * env);
 
 __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
+
+//
+
+__ct_callback const char * mangle_fun_parms(Syntax *, const Environ *);
 
 //
 //

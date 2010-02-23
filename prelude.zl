@@ -14,6 +14,7 @@ Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
   if (!body) return p;
   Environ * lenv = temp_environ(env);
   pre_parse(replace(raw_syntax (declare_user_type name), m, mark), lenv);
+  lenv = new_scope(lenv, replace(syntax name`outer, m, mark));
   SyntaxList * new_body = new_syntax_list();
   SyntaxEnum * itr = partly_expand_list(body->args(), FieldPos, lenv);
   Syntax * member;

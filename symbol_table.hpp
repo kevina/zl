@@ -258,6 +258,7 @@ namespace ast {
     FluidBinding(SymbolName r) : rebind(r) {}
     SymbolName rebind;
   };
+
   
   struct InnerNS : public Symbol {
   };
@@ -552,14 +553,14 @@ namespace ast {
       ip = o.ip.front == &o.front ? &front : o.ip;
       return *this;
     }
-    SymbolTable new_scope() {
+    SymbolTable new_scope() const {
       return SymbolTable(front, front);
     }
-    SymbolTable new_open_scope() {
+    SymbolTable new_open_scope() const {
       SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
       return SymbolTable(placeholder, front, &placeholder->next);
     }
-    SymbolTable new_scope(SymbolInsrPoint & o) {
+    SymbolTable new_scope(SymbolInsrPoint & o) const {
       SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
       o.front = &placeholder->next;
       return SymbolTable(placeholder, front);

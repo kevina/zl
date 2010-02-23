@@ -147,7 +147,7 @@ namespace ast {
         stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), 
         collect(other.collect),
         true_top_level(other.true_top_level), interface(other.interface) {}
-    Environ new_scope() {
+    Environ new_scope() const {
       Environ env = *this;
       env.true_top_level = false;
       env.stmt_ip = NULL;
@@ -155,7 +155,7 @@ namespace ast {
       env.symbols = symbols.new_scope();
       return env;
     }
-    Environ new_open_scope() {
+    Environ new_open_scope() const {
       Environ env = *this;
       env.true_top_level = false;
       env.stmt_ip = NULL;
@@ -163,7 +163,7 @@ namespace ast {
       env.symbols = symbols.new_open_scope();
       return env;
     }
-    Environ new_extended_exp(ExpInsrPoint * ip, bool force_new_scope) {
+    Environ new_extended_exp(ExpInsrPoint * ip, bool force_new_scope) const {
       Environ env = *this;
       env.true_top_level = false;
       if (force_new_scope || !env.temp_ip) {
@@ -172,7 +172,7 @@ namespace ast {
       }
       return env;
     }
-    Environ new_exp_branch(InsrPoint * ip) { // used for "eif"
+    Environ new_exp_branch(InsrPoint * ip) const { // used for "eif"
       Environ env = *this;
       assert(!env.true_top_level);
       env.exp_ip = ip;
