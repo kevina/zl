@@ -58,7 +58,9 @@ namespace ast {
       assert(o.target_lang == CompileWriter::ZLE);
       o << "(` ";
       key.SymbolName::to_string(o);
-      o << ' ' << key.ns->name() << ")";
+      for (const InnerNS * cur = key.ns; cur; cur = cur->next)
+        o << ' ' << cur->tag->name();
+      o << ")";
     } else {
       o << key.name;
     }
@@ -2824,7 +2826,7 @@ namespace ast {
     return res.build();
   }
 
-  struct InnerNSDecl : public Declaration, public InnerNS {
+  struct InnerNSDecl : public Declaration, public InnerNS::Tag {
     const char * what() const {return "inner_ns";}
     InnerNSDecl() {}
     void finalize(FinalizeEnviron &) {};
@@ -2840,7 +2842,7 @@ namespace ast {
   Stmt * parse_make_inner_ns(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     SymbolName n = *p->arg(0);
-    InnerNS * ns = new InnerNSDecl;
+    InnerNS::Tag * ns = new InnerNSDecl;
     env.add(SymbolKey(n, INNER_NS), ns);
     return empty_stmt();
   }

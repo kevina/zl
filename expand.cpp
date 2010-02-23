@@ -1396,7 +1396,6 @@ extern "C" namespace macro_abi {
       return pre_parse_decl(p, *env);
     }
   }
-
 }
 
 SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
@@ -1408,8 +1407,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     const FluidBinding * b = env.symbols.lookup<FluidBinding>(p->arg(0), ns);
     return SymbolKey(b->rebind, ns);
   } else if (p->is_a("`")) {
-    assert_num_args(p, 2);
-    const InnerNS * ns = env.symbols.lookup<InnerNS>(p->arg(1), INNER_NS);
+    const InnerNS * ns = lookup_inner_ns(p, env.symbols.front);
     return expand_binding(p->arg(0), ns, env);
   } else if (p->is_a("::")) {
     throw error(p, "Can not use outer namespaces in binding form");

@@ -3,37 +3,39 @@
 #include "environ.hpp"
 
 namespace ast {
+  
+  unsigned InnerNS::Tag::last_order_num = 0;
 
-  InnerNS DEFAULT_NS_OBJ;
-  InnerNS TAG_NS_OBJ;
-  InnerNS LABEL_NS_OBJ;
-  InnerNS SYNTAX_NS_OBJ;
-  InnerNS OUTER_NS_OBJ;
-  InnerNS INNER_NS_OBJ;
-  InnerNS CAST_NS_OBJ;
-  InnerNS SPECIAL_NS_OBJ;
-  InnerNS OPERATOR_NS_OBJ;
+  InnerNS::Tag DEFAULT_NS_OBJ;
+  InnerNS::Tag TAG_NS_OBJ;
+  InnerNS::Tag LABEL_NS_OBJ;
+  InnerNS::Tag SYNTAX_NS_OBJ;
+  InnerNS::Tag OUTER_NS_OBJ;
+  InnerNS::Tag INNER_NS_OBJ;
+  InnerNS::Tag CAST_NS_OBJ;
+  InnerNS::Tag SPECIAL_NS_OBJ;
+  InnerNS::Tag OPERATOR_NS_OBJ;
 
-  InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
-  InnerNS * const TAG_NS = &TAG_NS_OBJ;
-  InnerNS * const LABEL_NS = &LABEL_NS_OBJ;
-  InnerNS * const SYNTAX_NS = &SYNTAX_NS_OBJ;
-  InnerNS * const OUTER_NS = &OUTER_NS_OBJ;
-  InnerNS * const INNER_NS = &INNER_NS_OBJ;
-  InnerNS * const CAST_NS = &CAST_NS_OBJ;
-  InnerNS * const SPECIAL_NS = &SPECIAL_NS_OBJ;
-  InnerNS * const OPERATOR_NS = &OPERATOR_NS_OBJ;
+  const InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
+  const InnerNS * const TAG_NS = &TAG_NS_OBJ;
+  const InnerNS * const LABEL_NS = &LABEL_NS_OBJ;
+  const InnerNS * const SYNTAX_NS = &SYNTAX_NS_OBJ;
+  const InnerNS * const OUTER_NS = &OUTER_NS_OBJ;
+  const InnerNS * const INNER_NS = &INNER_NS_OBJ;
+  const InnerNS * const CAST_NS = &CAST_NS_OBJ;
+  const InnerNS * const SPECIAL_NS = &SPECIAL_NS_OBJ;
+  const InnerNS * const OPERATOR_NS = &OPERATOR_NS_OBJ;
 
   void add_inner_nss(Environ & env) {
-    env.add_internal(SymbolKey("default", INNER_NS), DEFAULT_NS);
-    env.add_internal(SymbolKey("tag", INNER_NS), TAG_NS);
-    env.add_internal(SymbolKey("label", INNER_NS), LABEL_NS);
-    env.add_internal(SymbolKey("syntax", INNER_NS), SYNTAX_NS);
-    env.add_internal(SymbolKey("outer", INNER_NS), OUTER_NS);
-    env.add_internal(SymbolKey("inner", INNER_NS), INNER_NS);
-    env.add_internal(SymbolKey("cast", INNER_NS), CAST_NS);
-    env.add_internal(SymbolKey("special", INNER_NS), SPECIAL_NS);
-    env.add_internal(SymbolKey("operator", OPERATOR_NS), OPERATOR_NS);
+    env.add_internal(SymbolKey("default", INNER_NS), &DEFAULT_NS_OBJ);
+    env.add_internal(SymbolKey("tag", INNER_NS), &TAG_NS_OBJ);
+    env.add_internal(SymbolKey("label", INNER_NS), &LABEL_NS_OBJ);
+    env.add_internal(SymbolKey("syntax", INNER_NS), &SYNTAX_NS_OBJ);
+    env.add_internal(SymbolKey("outer", INNER_NS), &OUTER_NS_OBJ);
+    env.add_internal(SymbolKey("inner", INNER_NS), &INNER_NS_OBJ);
+    env.add_internal(SymbolKey("cast", INNER_NS), &CAST_NS_OBJ);
+    env.add_internal(SymbolKey("special", INNER_NS), &SPECIAL_NS_OBJ);
+    env.add_internal(SymbolKey("operator", INNER_NS), &OPERATOR_NS_OBJ);
   }
 
   void marks_ignored(String name) {
@@ -67,8 +69,10 @@ namespace ast {
 
   void SymbolKey::to_string(OStream & o, const InnerNS * def_ns) const {
     SymbolName::to_string(o);
-    if (ns != def_ns)
-      o << "`" << ns->name();
+    for (const InnerNS * cur = ns; cur && cur != def_ns; cur = cur->next) {
+      if (cur->tag != def_ns)
+        o << "`" << cur->tag->name();
+    }
   }
 
   void TopLevelSymbol::make_unique(SymbolNode * self, SymbolNode * stop) const {

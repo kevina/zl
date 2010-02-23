@@ -759,6 +759,7 @@ namespace ast {
   T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                     const SymbolNode * start, const SymbolNode * stop,
                     Strategy strategy, Gather & gather, ExtraCmp & cmp);
+
   template <typename T, typename Gather>
   T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                     const SymbolNode * start, const SymbolNode * stop,
@@ -767,6 +768,7 @@ namespace ast {
     AlwaysTrueExtraCmp cmp;
     return lookup_symbol<T>(p, ns, start, stop, strategy, gather, cmp);
   }
+
   template <typename T>
   static inline
   T * lookup_symbol(const Syntax * p, const InnerNS * ns,
@@ -776,6 +778,15 @@ namespace ast {
     NoOpGather gather;
     return lookup_symbol<T>(p, ns, start, stop, strategy, gather);
   }
+
+  inline const InnerNS * lookup_inner_ns(const Syntax * p, const SymbolNode * start) {
+    InnerNSBuilder builder;
+    for (unsigned i = 1; i < p->num_args(); ++i) {
+      builder.add(lookup_symbol<InnerNS::Tag>(p->arg(i), INNER_NS, start));
+    }
+    return builder.build();
+  }
+
   template <typename T, typename Gather, typename ExtraCmp>
   T * lookup_symbol(const Syntax * p, const InnerNS * ns,
                     const SymbolNode * start, const SymbolNode * stop,
@@ -801,8 +812,7 @@ namespace ast {
       const FluidBinding * b = lookup_symbol<FluidBinding>(p->arg(0), ns, start, stop, strategy, gather);
       return lookup_symbol<T>(SymbolKey(b->rebind, ns), p->arg(0)->str(), start, stop, strategy, gather, cmp); // fixme: should I use NoOpGather here?
     } else if (p->is_a("`")) {
-      assert_num_args(p, 2);
-      const InnerNS * ns = lookup_symbol<InnerNS>(p->arg(1), INNER_NS, start);
+      const InnerNS * ns = lookup_inner_ns(p, start);
       return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy, gather, cmp);
     } else if (p->is_a("::")) {
       //printf("w/outer %s %s\n", ~p->to_string(), ~p->sample_w_loc());
@@ -884,7 +894,7 @@ namespace ast {
     }
     add_defn(stmt);
   }
-  
+
   inline void Environ::add_defn(Stmt * defn) {
     assert(top_level_symbols);
     top_level_symbols->add_defn(defn);

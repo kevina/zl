@@ -47,9 +47,10 @@ namespace ast {
     // to:   the new mark set with the mark added
     typedef Vector<CacheNode> Cache;
     mutable Cache cache;
-    Mark(const SymbolNode * e) : id(last_id++), env(e) {
+    Marks self;
+    Mark(const SymbolNode * e) : id(last_id++), env(e), self(this, NULL) {
       cache.reserve(1);
-      cache.push_back(CacheNode(NULL, new Marks(this, NULL)));
+      cache.push_back(CacheNode(NULL, &self));
     }
     void to_string(OStream & o, SyntaxGather * g) const;
   };
@@ -126,15 +127,15 @@ namespace ast {
   }
 
   struct InnerNS;
-  extern InnerNS * const DEFAULT_NS;
-  extern InnerNS * const TAG_NS;
-  extern InnerNS * const LABEL_NS;
-  extern InnerNS * const SYNTAX_NS;
-  extern InnerNS * const OUTER_NS;
-  extern InnerNS * const INNER_NS;
-  extern InnerNS * const CAST_NS;
-  extern InnerNS * const SPECIAL_NS;
-  extern InnerNS * const OPERATOR_NS;
+  extern const InnerNS * const DEFAULT_NS;
+  extern const InnerNS * const TAG_NS;
+  extern const InnerNS * const LABEL_NS;
+  extern const InnerNS * const SYNTAX_NS;
+  extern const InnerNS * const OUTER_NS;
+  extern const InnerNS * const INNER_NS;
+  extern const InnerNS * const CAST_NS;
+  extern const InnerNS * const SPECIAL_NS;
+  extern const InnerNS * const OPERATOR_NS;
 
   struct SymbolKey : public SymbolName {
     const InnerNS * ns;
@@ -259,8 +260,69 @@ namespace ast {
     SymbolName rebind;
   };
 
+  struct InnerNS {
+    struct Tag;
+    const Tag * tag;
+    const InnerNS * next;
+    InnerNS(const Tag * t, const InnerNS * nx)
+      : tag(t), next(nx) {}
+  private:
+    InnerNS(const InnerNS &);
+    void operator=(const InnerNS &);
+  };
   
-  struct InnerNS : public Symbol {
+  struct InnerNS::Tag : public Symbol, public InnerNS {
+    static unsigned last_order_num;
+    unsigned order_num;
+    typedef std::pair<const InnerNS *, const InnerNS *> CacheNode;
+    // Cache is a mapping
+    // from: the mark set we are adding this mark to
+    // to:   the new mark set with the mark added
+    typedef Vector<CacheNode> Cache;
+    mutable Cache cache;
+    Tag() : InnerNS(this, NULL), order_num(last_order_num++) {
+      cache.reserve(1);
+      //cache.push_back(CacheNode(NULL, this));
+      cache.push_back(CacheNode(NULL, this));
+    }
+  };
+
+  struct InnerNSBuilder {
+    Vector<const InnerNS::Tag *> data;
+    // don't use, use "add" instead (InnerNS::Tag is also a InnerNS)
+    void add_tag(const InnerNS::Tag * tag) {
+      Vector<const InnerNS::Tag *>::iterator
+        i = data.begin(), e = data.end();
+      while (i != e) {
+        if (*i == tag) return;
+        if ((*i)->order_num >= tag->order_num) break;
+        ++i;
+      }
+      data.insert(i, tag);
+    }
+    void add(const InnerNS * ns) {
+      add_tag(ns->tag);
+      if (ns->next)
+        add(ns->next);
+    }
+    static const InnerNS * add_tag(const InnerNS * ns, const InnerNS::Tag * tag) {
+      for (InnerNS::Tag::Cache::iterator 
+             i = tag->cache.begin(), e = tag->cache.end(); 
+           i != e; ++i) 
+        if (i->first == ns) return i->second;
+      InnerNS * nns = new InnerNS(tag, ns);
+      tag->cache.push_back(InnerNS::Tag::CacheNode(ns, nns));
+      return nns;
+    }
+    const InnerNS * build() {
+      const InnerNS * ns = NULL;
+      for (Vector<const InnerNS::Tag *>::iterator
+             i = data.begin(), e = data.end();
+           i != e; ++i)
+        ns = add_tag(ns, *i);
+      if (ns == NULL) ns = DEFAULT_NS;
+      return ns;
+    }
   };
 
   void add_inner_nss(Environ &);

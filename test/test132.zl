@@ -1,0 +1,13 @@
+
+make_inner_ns foo;
+make_inner_ns bar;
+
+int main() {
+  int x`foo = 100;
+  int y`bar = 200;
+  int x`foo`bar;
+  x`foo`bar = x`foo + y`bar;
+  x`bar`foo += 1;
+  printf("%d\n", x`foo`bar);
+  return 0;
+}

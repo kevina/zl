@@ -177,10 +177,10 @@ ID_W_NS : "identifer" =
   <<>> {BASIC_ID} ("::" {ID_W_NS} = <::>)?;
 
 #ID_W_INNER =
-#  <`> {ID_W_NS} "`" {ID_W_NS} / {ID_W_NS};
+#  <`> {ID_W_NS} ("`" {ID_W_NS})+ / {ID_W_NS};
 
 ID_W_INNER = 
-  <<>> {ID_W_NS} ("`" {ID_W_NS} = <`>)?;
+  <<>> {ID_W_NS} (("`" {ID_W_NS})+ = <`>)?;
 
 ID =
   <fluid> "fluid" {ID} / {ID_W_INNER};
