@@ -73,9 +73,6 @@ test79.c
 test80.c
 test81.c
 test82.c
-test83.c
-test84.c
-test85.c
 test87.c
 test88.c
 test89.c
@@ -117,6 +114,7 @@ test129.zl
 test130.zl
 test131.zl
 test132.zl
+test133.cpp
 
 fix_size-0-t.zl # was 67
 fix_size-1-t.zl # was 95

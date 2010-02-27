@@ -461,6 +461,17 @@ namespace ast {
   };
 
   //
+  // 
+  //
+  
+  struct OverloadedSymbol : virtual public Symbol {
+    Symbol * sym;
+    const OverloadedSymbol * next;
+    OverloadedSymbol(Symbol * s, const OverloadedSymbol * n)
+      : sym(s), next(n) {}
+  };
+
+  //
   //
   //
 
@@ -492,13 +503,18 @@ namespace ast {
     virtual Exp * as_lvalue(Environ & env) const;
     virtual void compile_lvalue(CompileWriter & o) const {o << uniq_name();}
   protected:
-    BasicVar() : name_p(), ct_value(), lvalue(LV_NORMAL), ids(NULL) {}
+    BasicVar() : name_p(), type(), ct_value(), lvalue(LV_NORMAL), ids(NULL) {}
     BasicVar(const Type * t, LValue lv = LV_NORMAL) : name_p(), type(t), ct_value(), lvalue(lv) {}
     //protected:
     //friend VarSymbol * new_var_symbol(SymbolName n, Scope s);
   };
 
   typedef BasicVar VarSymbol;
+
+  struct OverloadedVar : public VarSymbol, public OverloadedSymbol {
+    OverloadedVar(Symbol * s, const OverloadedSymbol * n)
+      : OverloadedSymbol(s, n) {}
+  };
 
   static inline
   CompileWriter & operator<< (CompileWriter & o, const VarSymbol * sym) {
@@ -558,14 +574,15 @@ namespace ast {
   };
 
   struct Fun : public TopLevelVarDecl {
-    Fun() : env_ss(), is_macro() {}
+    Fun() : env_ss(), is_macro(), overload(true) {}
     const char * what() const {return "fun";}
     //AST * part(unsigned i);
     SymbolTable symbols;
     mutable SymbolNode * env_ss;
     mutable bool is_macro;
     const Tuple * parms;
-    const Tuple * overloadable() const {return parms;}
+    bool overload;
+    const Tuple * overloadable() const {return overload ? parms : NULL;}
     const Type * ret_type;
     Block * body;
     bool inline_;
@@ -581,6 +598,27 @@ namespace ast {
     using TopLevelVarDecl::uniq_name;
     void uniq_name(OStream & o) const;
   };
+
+  //
+  //
+  //
+
+  struct Id : public ExpLeaf {
+    Id() {}
+    Id(const VarSymbol * s) : sym(s) {}
+    const char * what() const {return "id";}
+    //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
+    const VarSymbol * sym;
+    Id * next;
+    Id * construct(Environ & env);
+    Id * parse_self(const Syntax * p, Environ & env);
+    void compile(CompileWriter & f);
+  };
+
+  static inline Exp * mk_id(const VarSymbol * s, Environ & env) {
+    return s->as_lvalue(env);
+  }
+
 
   //
   //
@@ -829,6 +867,57 @@ namespace ast {
     }
   }
 
+  //
+  //
+  //
+  template <typename T>
+  const T * find_overloaded_symbol(const Tuple * to_find, const Syntax * id,
+                                   const Symbol * sym, Environ & env) 
+  {
+    if (!sym)
+      sym = env.symbols.find<Symbol>(id);
+    if (const T * s = dynamic_cast<const T *>(sym))
+      return s;
+    const OverloadedSymbol * cur = dynamic_cast<const OverloadedSymbol *>(sym);
+    assert(cur); // FIXME: Error Message
+    Vector<const Symbol *> syms;
+    for (; cur; cur = cur->next) {
+      //IOUT.printf("FOS: %s %p\n", ~cur->name(), cur->sym);
+      if (to_find) {
+        const Tuple * have = cur->sym->overloadable();
+        assert(have);
+        if (to_find->parms.size() != have->parms.size()) continue;
+        for (unsigned i = 0; i != to_find->parms.size(); ++i)
+          if (to_find->parms[i].type->root != have->parms[i].type->root) continue;
+      }
+      syms.push_back(cur->sym);
+    }
+    if (syms.size() == 0)
+      return NULL;
+    if (syms.size() > 1)
+      throw error(id, "Multiple matches for type with parms %s", ~to_find->to_string());
+    const T * s = dynamic_cast<const T *>(syms.front());
+    assert(s); // FIXME: Error Message
+    return s;
+  }
+
+
+  template <typename T>
+  const T * lookup_overloaded_symbol(const Tuple * parms, const Syntax * id,
+                                     const Symbol * sym, Environ & env) 
+  {
+    if (!sym)
+      sym = env.symbols.lookup<Symbol>(id);
+    const T * s = find_overloaded_symbol<T>(parms, id, sym, env);
+    if (!s) 
+      throw error(id, "Cannot find a match for type with parms %s", ~parms->to_string());
+    return s;
+  }
+
+  //
+  //
+  //
+
   template <typename T> 
   inline T * SymbolTable::lookup(const Syntax * p, const InnerNS * ns, Strategy ms) const {
     return lookup_symbol<T>(p, ns, front, NULL, ms);
@@ -896,6 +985,7 @@ namespace ast {
   }
 
   inline void Environ::add_defn(Stmt * defn) {
+    //IOUT.printf("E:ADD DEFN %s: %p %p\n", ~defn->desc(), this, defn);
     assert(top_level_symbols);
     top_level_symbols->add_defn(defn);
   }

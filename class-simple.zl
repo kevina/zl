@@ -176,7 +176,7 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
     }
 
     vtable_b->append(replace(
-                       syntax {macro _constructor(:this ths = this) {_vtable_init(ths);}},
+                       syntax {macro _constructor(:this ths = this) :typed_parms() {_vtable_init(ths);}},
                        m, mark));
     
     // create new vtable class, 
@@ -199,7 +199,7 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
                          m, mark));
     }
     exports->append(replace(syntax _vptr, m, mark));
-    module_b->append(replace(syntax {macro _constructor(:this ths = this) 
+    module_b->append(replace(syntax {macro _constructor(:this ths = this) :typed_parms()
           {({__shadow typeof(ths) fluid this = ths; _set_vptr(&_vtable);});}}, m, mark));
   }
 

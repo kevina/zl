@@ -266,16 +266,42 @@ namespace ast {
     }
   };
 
-  void Symbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
-    SymbolNode * n = env.symbols.add(env.where, k, this);
+  static SymbolNode * handle_overloaded_symbol(Symbol * sym, const SymbolKey & k, Environ & env, bool shadow_ok) {
+    if (sym->overloadable()) {
+      //IOUT.printf("FOUND ONE %s (%s) %p\n", ~k.to_string(), env.where ? ~env.where->name() : "", sym);
+      const Symbol * prev0 = env.symbols.find_this_scope<Symbol>(k);
+      const OverloadedSymbol * prev = dynamic_cast<const OverloadedSymbol *>(prev0);
+      if (prev0 && !prev) {
+        abort(); // FIXME: If shadow_ok than we need to keep looking...
+      }
+      //if (prev)
+      //  IOUT.printf("... AND A PREV %p %p\n", prev, prev0);
+      OverloadedSymbol * over = dynamic_cast<VarSymbol *>(sym) 
+        ? new OverloadedVar(sym, prev)
+        : new OverloadedSymbol(sym, prev);
+      return env.add(k, over, shadow_ok);
+    } else {
+      //IOUT.printf("not one %s (%s) %p\n", ~k.to_string(), env.where ? ~env.where->name() : "", sym);
+      return NULL;
+    }
+  }
+
+  SymbolNode * Symbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
+    SymbolNode * overloaded = handle_overloaded_symbol(this, k, env, shadow_ok);
+    SymbolNode * n = overloaded 
+      ? overloaded 
+      : env.symbols.add(env.where, k, this);
     assert(!key);
     key = &n->key;
-    if (env.special()) {
+    if (overloaded) {
+      // nothing to do
+    } else if (env.special()) {
       if (env.collect) 
-        env.collect->first_pass.add(new CollectFinishAddEnvSymbol(this, env));
-      return;
+          env.collect->first_pass.add(new CollectFinishAddEnvSymbol(this, env));
+    } else {
+      make_unique(env.symbols.front);
     }
-    make_unique(env.symbols.front);
+    return n;
   }
 
   struct CollectFinishAddEnvTopLevel : public CollectAction {
@@ -288,22 +314,27 @@ namespace ast {
     }
   };
 
-  void TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
+  SymbolNode * TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     //assert(!env.symbols.exists_this_scope(k));
     // FIXME: Have more precise check
     if (!shadow_ok && !overloadable() && env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
       //abort();
     }
-    SymbolNode * local = env.symbols.add(env.where, k, this);
+    SymbolNode * overloaded = handle_overloaded_symbol(this, k, env, shadow_ok);
+    SymbolNode * local = overloaded 
+      ? overloaded 
+      : env.symbols.add(env.where, k, this);
     assert(!key);
     key = &local->key;
+    //printf("ADDED %s %s %s %p %p\n", ~name(), ~k.to_string(), ~key->to_string(), local, local->value);
     if (env.special()) {
       if (env.collect)
         env.collect->first_pass.add(new CollectFinishAddEnvTopLevel(this, local, env));
     } else {
       finish_add_to_env(local, env);
     }
+    return local;
   }
 
   void TopLevelSymbol::finish_add_to_env(SymbolNode * local, Environ & env) {
@@ -323,6 +354,10 @@ namespace ast {
     if (tl) {
       if (tl == local) {
         //printf("TLS DUP %s\n", ~uniq_name());
+        if (dynamic_cast<const OverloadedSymbol *>(tl->value)) {
+          // insert it after the overloaded symbol
+          local->next = new SymbolNode(env.where, uniq_key, this, 0, local->next);
+        }
         goto finish;
       } else if (static_cast<const Symbol *>(this) == tl->value) {
         fprintf(stderr, "tls mismatch %s\n", ~uniq_key);
@@ -440,16 +475,17 @@ namespace ast {
     void uniq_name(OStream & o) const {
       o.printf("%s$$%u", ~name(), num);
     }
-    void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
+    SymbolNode * add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
       assign_uniq_num<NormalLabel>(this, self->next, stop);
     }
   };
 
-  void NormalLabel::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
+  SymbolNode * NormalLabel::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     SymbolNode * n = env.fun_labels.add(env.where, k, this);
     key = &n->key;
     make_unique(*env.fun_labels.front);
+    return n;
   }
 
   struct LocalLabel : public Label {
@@ -615,35 +651,29 @@ namespace ast {
     f << "(c \"" << orig << "\")"; // FIXME: Not right
   }
 
-  struct Id : public ExpLeaf {
-    Id() {}
-    Id(const VarSymbol * s) : sym(s) {}
-    const char * what() const {return "id";}
-    //AST * part(unsigned i) {return new Terminal(parse_->arg(0));}
-    const VarSymbol * sym;
-    Id * next;
-    Id * construct(Environ & env) {
-      next = sym->ids; 
-      sym->ids = this;
-      const TopLevelVarDecl * tl = sym->top_level();
-      if (tl && env.deps)
-        env.deps->insert(tl);
-      if (sym->ct_value)
-        ct_value_ = sym->ct_value;
-      type = sym->type;
-      lvalue = sym->lvalue;
+  Id * Id::construct(Environ & env) {
+    next = sym->ids; 
+    sym->ids = this;
+    const TopLevelVarDecl * tl = sym->top_level();
+    if (tl && env.deps)
+      env.deps->insert(tl);
+    if (sym->ct_value)
+      ct_value_ = sym->ct_value;
+    type = sym->type;
+    lvalue = sym->lvalue;
       return this;
-    }
-    Id * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      assert_num_args(1);
-      sym = env.symbols.lookup<VarSymbol>(p->arg(0));
-      return construct(env);
-    }
-    void compile(CompileWriter & f) {
-      f << sym;
-    }
-  };
+  }
+
+  Id * Id::parse_self(const Syntax * p, Environ & env) {
+    syn = p;
+    assert_num_args(1);
+    sym = env.symbols.lookup<VarSymbol>(p->arg(0));
+    return construct(env);
+  }
+
+  void Id::compile(CompileWriter & f) {
+    f << sym;
+  }
 
   static const Syntax * expand_id(const Syntax * p) {
     if (p->have_entity()) {
@@ -659,10 +689,6 @@ namespace ast {
   Exp * BasicVar::as_lvalue(Environ & env) const {
     Id * id = new Id(this);
     return id->construct(env);
-  }
-
-  static Exp * mk_id(const VarSymbol * s, Environ & env) {
-    return s->as_lvalue(env);
   }
 
   //
@@ -716,6 +742,7 @@ namespace ast {
     CollectParseDef(Declaration * d, Environ & e) 
       : CollectAction(e), decl(d) {}
     void doit_hook() {
+      //IOUT.printf(">>%p %p\n", this, decl);
       decl->finish_parse(*env);
     }
   };
@@ -783,10 +810,10 @@ namespace ast {
     const Tuple * overloadable() const {return parms;}
   };
 
-  struct NoParmsExtraCmp {
-    NoParmsExtraCmp() {}
-    bool operator() (const SymbolNode * n) {
-      const Tuple * parms = n->value->overloadable();
+  struct NoParmsCmp {
+    NoParmsCmp() {}
+    bool operator() (const Symbol * sym) {
+      const Tuple * parms = sym->overloadable();
       // if we have the symbol but its not overloadable assume it
       // takes no parameters
       if (!parms) return true;
@@ -795,27 +822,35 @@ namespace ast {
     }
   };
 
-  template <typename ExtraCmp>
-  bool have_special(const UserType * ut, const char * what, ExtraCmp & cmp) {
-    NoOpGather gather;
+  template <typename Cmp>
+  bool have_special(const UserType * ut, const char * what, Cmp & cmp) {
     const Symbol * res = find_symbol<Symbol>(what, 
                                              ut->module->syms.front, ut->module->syms.back,
-                                             ThisScope, gather, cmp);
+                                             ThisScope);
     if (!res) return false;
+    if (const OverloadedSymbol * cur = dynamic_cast<const OverloadedSymbol *>(res)) {
+      while (cur && !cmp(cur->sym))
+        cur = cur->next;
+      if (!cur) return false;
+      res = cur->sym;
+    } else {
+      if (!cmp(res))
+        return false;
+    }
     if (dynamic_cast<const Trivial *>(res)) return false;
     return true;
   }
 
   bool have_default_constructor(const UserType * ut) {
-    NoParmsExtraCmp cmp;
+    NoParmsCmp cmp;
     return have_special(ut, "_constructor", cmp);
   }
 
-  struct RefExtraCmp {
+  struct RefCmp {
     const Type * t;
-    RefExtraCmp(const Type * t0) : t(t0) {}
-    bool operator() (const SymbolNode * n) {
-      const Tuple * parms = n->value->overloadable();
+    RefCmp(const Type * t0) : t(t0) {}
+    bool operator() (const Symbol * sym) {
+      const Tuple * parms = sym->overloadable();
       if (!parms) return false;
       if (parms->num_parms() != 1) return false;
       TypeParm parm = parms->parm(0);
@@ -828,17 +863,21 @@ namespace ast {
   };
 
   bool have_copy_constructor(const UserType * ut) {
-    RefExtraCmp cmp(ut);
+    RefCmp cmp(ut);
     return have_special(ut, "_constructor", cmp);
   }
 
   bool have_assign(const UserType * ut) {
-    RefExtraCmp cmp(ut);
+    RefCmp cmp(ut);
     return have_special(ut, "_assign", cmp);
   }
 
+  struct AlwaysTrueCmp {
+    bool operator() (const Symbol *) {return true;}
+  };
+
   bool have_destructor(const UserType * ut) {
-    AlwaysTrueExtraCmp cmp;
+    AlwaysTrueCmp cmp;
     return have_special(ut, "_destructor", cmp);
   }
 
@@ -1200,6 +1239,14 @@ namespace ast {
     if (p->flag("extern")) return SC_EXTERN;
     if (p->flag("register")) return SC_REGISTER;
     return SC_NONE;
+  }
+
+  static bool get_c_linkage(const Syntax * p) {
+    const Syntax * val = p->flag("linkage");
+    if (!val) return false;
+    //printf("FOUND LINKAGE FLAG ON %s: %s\n", ~p->to_string(), ~val->to_string());
+    if (val->arg(0)->eq("C")) return true;
+    return false;
   }
 
   static void make_static_if_marked(StorageClass & storage_class, const SymbolKey & name) {
@@ -2642,6 +2689,7 @@ namespace ast {
         handle_special_methods(user_type, *lenv);
       //printf("DUMPING %s\n", ~name->to_string());
       //module->syms.dump_this_scope();
+      //IOUT.printf("START\n");
       for (CollectPart::iterator 
              i = collect.second_pass.begin(), 
              e = collect.second_pass.end(); 
@@ -2651,6 +2699,7 @@ namespace ast {
         //INCREASE_INDENT(IOUT);
         (*i)->doit(env);
       }
+      //IOUT.printf("DONE\n");
     }
     void parse_body(const Syntax * p) {
       add_syntax(p->args_begin(), p->args_end());
@@ -3302,20 +3351,6 @@ namespace ast {
   }
 #endif
 
-  struct SigMatchExtraCmp {
-    const Tuple * to_find;
-    SigMatchExtraCmp(const Tuple * to_find_0) : to_find(to_find_0) {}
-    bool operator() (const SymbolNode * n) {
-      if (!to_find) return true;
-      const Tuple * have = n->value->overloadable();
-      if (!have) return false;
-      if (to_find->parms.size() != have->parms.size()) return false;
-      for (unsigned i = 0; i != to_find->parms.size(); ++i)
-        if (to_find->parms[i].type->root != have->parms[i].type->root) return false;
-      return true;
-    }
-  };
-
   Stmt * parse_fun_forward(const Syntax * p, Environ & env, Collect * collect) {
     assert_num_args(p,3,4);
 
@@ -3339,10 +3374,19 @@ namespace ast {
     
     Fun * f = NULL;
     if (!is_op) {
-      const Tuple * parms = expand_fun_parms(p->arg(1), env);
-      NoOpGather gather;
-      SigMatchExtraCmp cmp(parms);
-      f = find_symbol<Fun>(name, env.symbols.front, env.symbols.back, ThisScope, gather, cmp);
+      Symbol * s = find_symbol<Symbol>(name, env.symbols.front, env.symbols.back, ThisScope);
+      //if (s)
+      //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
+      //if (s)
+      //  assert(name.name == s->name());
+      if (s) {
+        const Tuple * parms = expand_fun_parms(p->arg(1), env);
+        f = const_cast<Fun *>(find_overloaded_symbol<Fun>(parms, p->arg(0), s, env));
+      }
+      //if (s)
+      //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
+      //if (s)
+      //  assert(name.name == s->name());
     }
     bool previous_declared = f;
     if (previous_declared) {
@@ -3350,6 +3394,7 @@ namespace ast {
         f->parse_forward_i(p, env, collect);
     } else {
       f = new Fun;
+      if (is_op) f->overload = false; // FIXME: Hack
       f->storage_class = get_storage_class(p);
       make_static_if_marked(f->storage_class, name);
       if (env.interface && f->storage_class == SC_STATIC)
@@ -3394,11 +3439,7 @@ namespace ast {
     } else {
       StringBuf buf;
       TopLevelVarDecl::uniq_name(buf);
-      bool mangle = false;
-      for (unsigned i = 0; i != buf.size(); ++i) {
-        if (buf[i] == '$') mangle = true;
-      }
-      if (mangle) {
+      if (overload && mangle) {
         for (unsigned i = 0; i != parms->parms.size(); ++i) {
           mangle_print_inst->to_string(*parms->parms[i].type, buf);
         }
@@ -3422,6 +3463,8 @@ namespace ast {
     if (p->flag("__static_constructor")) static_constructor = true;
     if (p->flag("__constructor__")) static_constructor = true;
 
+    mangle = !(ct_callback || env0.zls_mode || get_c_linkage(p));
+
     if (p->flag("__need_snapshot"))
       env_ss = *env0.top_level_environ;
 
@@ -3440,8 +3483,10 @@ namespace ast {
 
     body = 0;
     if (!env.interface && p->num_args() > 3) {
-      if (collect)
+      if (collect) {
+        //IOUT.printf("Adding to collect for %p %s\n", this, ~p->to_string());
         collect->second_pass.add(new CollectParseDef(this, env0));
+      }
     } else {
       symbols = env.symbols;
     }
@@ -3643,25 +3688,15 @@ namespace ast {
   };
 
   const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env) {
-    NoOpGather gather;
-    GatherExtraCmp cmp;
-    const Symbol * sym = NULL;
-    Error * saved_err = NULL;
-    try {sym = lookup_symbol<Symbol>(name, DEFAULT_NS, env.symbols.front, NULL, NormalStrategy, gather, cmp);}
-    catch (Error * err) {saved_err = err;}
-    // if lookup_symbol still returned that means there is only one
-    // possibility so use it
-    if (!sym) {
-      if (cmp.syms.empty()) throw saved_err;
-      if (cmp.syms.size() > 1) printf("Found %d on %s\n", cmp.syms.size(), ~name->to_string());
+    const Symbol * sym = env.symbols.lookup<Symbol>(name);
+    if (const OverloadedSymbol * cur = dynamic_cast<const OverloadedSymbol *>(sym)) {
       Vector<const Symbol *> syms;
-      for (Vector<const Symbol *>::iterator i = cmp.syms.begin(), e = cmp.syms.end(); 
-             i != e; ++i) 
+      for (; cur; cur = cur->next)
       {
         try {
-          if (std::find(syms.begin(), syms.end(), *i) != syms.end()) continue;
-          resolve_fun_parms(parms, NULL, (*i)->overloadable(), env, NULL);
-          syms.push_back(*i);
+          if (std::find(syms.begin(), syms.end(), cur->sym) != syms.end()) continue;
+          resolve_fun_parms(parms, NULL, cur->sym->overloadable(), env, NULL);
+          syms.push_back(cur->sym);
         } catch (...) {}
       }
       if (syms.size() == 0)

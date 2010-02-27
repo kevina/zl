@@ -1,4 +1,4 @@
-double fabs(double x);
+extern "C" double fabs(double x);
 
 double r = 1.61803399;
 

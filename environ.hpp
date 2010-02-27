@@ -115,6 +115,7 @@ namespace ast {
                        // instead store it here to be parsed latter
     bool true_top_level;
     bool interface;
+    bool zls_mode;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
     Type * bool_type() {return types.inst("int");}
@@ -124,7 +125,7 @@ namespace ast {
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
         deps(), for_ct(), temp_ip(), exp_ip(), collect(),
-        true_top_level(false), interface(false)
+        true_top_level(false), interface(false), zls_mode(false)
       {
         if (s == TOPLEVEL) {
           true_top_level = true;
@@ -146,7 +147,7 @@ namespace ast {
         deps(other.deps), for_ct(other.for_ct), 
         stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), 
         collect(other.collect),
-        true_top_level(other.true_top_level), interface(other.interface) {}
+        true_top_level(other.true_top_level), interface(other.interface), zls_mode(other.zls_mode) {}
     Environ new_scope() const {
       Environ env = *this;
       env.true_top_level = false;
@@ -183,20 +184,21 @@ namespace ast {
       stmt_ip->add(stmt);
     }
 
-    void add(const SymbolKey & k, Symbol * sym, bool shadow_ok = false) {
-      sym->add_to_env(k, *this, shadow_ok);
+    SymbolNode * add(const SymbolKey & k, Symbol * sym, bool shadow_ok = false) {
+      return sym->add_to_env(k, *this, shadow_ok);
     }
 
-    void add_internal(const SymbolKey & k, Symbol * sym) {
+    SymbolNode * add_internal(const SymbolKey & k, Symbol * sym) {
       SymbolNode * n = symbols.add(NULL, k, sym, SymbolNode::INTERNAL);
       sym->key = &n->key;
+      return n;
     }
 
-    void add_alias(const SymbolKey & k, Symbol * sym) {
+    SymbolNode * add_alias(const SymbolKey & k, Symbol * sym) {
       //if (true_top_level)
       //  top_level_symbols->add_top_level(k, sym, SymbolNode::ALIAS);
       //else
-      symbols.add(where, k, sym, SymbolNode::ALIAS);
+      return symbols.add(where, k, sym, SymbolNode::ALIAS);
     }
 
     Environ new_frame() {

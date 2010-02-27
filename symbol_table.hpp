@@ -185,7 +185,7 @@ namespace ast {
     }
     virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
     virtual const class Tuple * overloadable() const {return NULL;}
-    virtual void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
+    virtual SymbolNode * add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}
     virtual SourceStr source_str() const {return SourceStr();}
@@ -209,20 +209,21 @@ namespace ast {
   };
 
   struct TopLevelSymbol : virtual public Symbol {
-    TopLevelSymbol() : num(), where(), props() {}
+    TopLevelSymbol() : num(), mangle(true), where(), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
+    bool mangle;
     TopLevelSymbol * where;   // NULL if global
     Props props;
     using Symbol::uniq_name;
     void uniq_name0(OStream & o) const {
-      if (where) {
+      if (mangle && where) {
         where->uniq_name0(o);
         o << "$";
       }
       o << name();
     }
     void uniq_name(OStream & o) const {
-      if (where) {
+      if (mangle && where) {
         where->uniq_name0(o);
         o << "$";
       }
@@ -235,7 +236,7 @@ namespace ast {
       }
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
-    void add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
+    SymbolNode * add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     void finish_add_to_env(SymbolNode * local, Environ &);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s) {props.add_prop(n, s);}
@@ -566,6 +567,7 @@ namespace ast {
     template <typename T>
     SymbolNode * add(SymbolNode::Scope s, const SymbolKey & k, T * sym, unsigned flags = 0, SymbolNode * back = NULL) {
       //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
+      //printf("ADDING %s (%p) to symbol table\n", ~k.name, dynamic_cast<Symbol *>(sym));
       *front = new SymbolNode(s, k, sym, flags, *front);
       return *front;
     }
@@ -632,7 +634,7 @@ namespace ast {
       return find_symbol<T>(k, front, NULL, ms);
     }
     template <typename T> 
-    T * find_this_scope(const SymbolKey & k, Strategy ms = NormalStrategy) const {
+    T * find_this_scope(const SymbolKey & k) const {
       return find_symbol<T>(k, front, back, ThisScope);
     }
     template <typename T> 

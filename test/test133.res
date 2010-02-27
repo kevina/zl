@@ -1,0 +1,16 @@
+X FOO
+X FOO 10
+---
+Y FOO
+Y FOO 10
+---
+X FOO
+X FOO 10
+---
+Y FOO
+Y FOO 10
+Y FOO
+Y FOO 10
+---
+Y FOO
+Y FOO 10

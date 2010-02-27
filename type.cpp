@@ -394,6 +394,10 @@ namespace ast {
         t = parse_type(tp->arg(0), env);
       } else {
         Exp * exp = parse_exp_for_type(tp, env);
+        // Exp may be a pointer to a overloaded symbol, so we need to
+        // resolve the type.  This will not work for a true overloaded
+        // symbol, though.
+        exp = exp->resolve_to(NULL, env); 
         t = exp->type->effective;
       }
       t = t->tprop(p->arg(1), env);
@@ -548,6 +552,27 @@ namespace ast {
   Exp * C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule, CheckOnlyType check_only) const {
     static int i = -1;
     ++i;
+
+    // NOTE: type may be NULL.  This is a bit of a hack, which should
+    // be removed once I implement the "auto" type.
+
+    if (!orig_exp->type) {
+      // OK so we have an overloaded symbol, type is expected to be a
+      // pointer to a fun or NULL, and orig_exp is an id
+      Id * id = dynamic_cast<Id *>(orig_exp);
+      const Fun * fun;
+      if (type) {
+        const Pointer * ptr = dynamic_cast<const Pointer *>(type);
+        const Function * fun_t = dynamic_cast<const Function *>(ptr->subtype);
+        fun = lookup_overloaded_symbol<Fun>(fun_t->parms, orig_exp->syn, id->sym, env);
+      } else {
+        fun = lookup_overloaded_symbol<Fun>(NULL, orig_exp->syn, id->sym, env);
+      }
+      return mk_id(fun, env);
+    }
+
+    if (!type) return orig_exp;
+
     Exp * exp = orig_exp;
     const Type * have = exp->type->unqualified;
     const Type * need = type->unqualified;

@@ -87,6 +87,22 @@ struct DeclWorking {
     return true;
   }
 
+  const Syntax * linkage;
+  bool try_linkage(parts_iterator & i,  parts_iterator end) {
+    if (i[0]->eq("extern")
+        && i + 1 < end
+        && i[1]->is_a("s"))
+    {
+      //printf("EXTERN LINKAGE\n");
+      linkage = i[1]->arg(0);
+      i += 2;
+      return true;
+    } else {
+      //printf("not extern linkage\n");
+      return false;
+    }
+  }
+
   SourceStr inner_type_str;
   enum Sign {NO_SIGN, UNSIGNED, SIGNED} sign;
   bool try_sign(const Syntax * p) {
@@ -211,7 +227,7 @@ public:
 ParseDecl * parse_decl_ = new ParseDeclImpl();
 
 DeclWorking::DeclWorking(SyntaxBuilder & p)
-  : type_scope(p), storage_class(NULL), what(VAR),
+  : type_scope(p), storage_class(NULL), what(VAR), linkage(NULL),
     sign(NO_SIGN), size(NO_SIZE), base_type(NO_BT),
     inline_(NULL), virtual_(NULL), pure_virtual(false), 
     type_symbol(NULL), dots(false), inner_type(NULL) {}
@@ -367,7 +383,9 @@ bool DeclWorking::parse_first_part(parts_iterator & i,
     ++i;
   } else while (i != end) {
     const Syntax * cur = *i;
-    if (const Syntax * p = try_id(cur)) {
+    if (try_linkage(i, end)) {
+      // nothing to do, try_linkage will advance i
+    } else if (const Syntax * p = try_id(cur)) {
       const Syntax * p = cur;
       bool any = 
         try_attributes(p) ||
@@ -812,6 +830,8 @@ const Syntax * DeclWorking::make_function(const Syntax * id, const Syntax * t, c
       res.add_flag(virtual_);
     if (storage_class)
       res.add_flag(storage_class);
+    if (linkage)
+      res.add_flag(SYN(SYN("linkage"), linkage));
     for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();
          i != e; ++i)
       res.add_flag(*i);

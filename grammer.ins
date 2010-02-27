@@ -114,8 +114,8 @@
 #(macro g (x_g) (plus (literal 2) (call (id f) (list (mid x_g)))))
 
 (talias size_t unsigned)
-(fun malloc (. ((size_t) )) (.ptr (void)))
-(fun free (. ((.ptr (void)) )) (void))
+(fun malloc (. ((size_t) )) (.ptr (void)) :(linkage C))
+(fun free (. ((.ptr (void)) )) (void) :(linkage C))
 
 (smacro new (type @rest)
   (eblock (var tmp (.ptr type) (call malloc (. (sizeof (.type type)))))

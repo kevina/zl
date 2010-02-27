@@ -530,7 +530,8 @@ struct ProcMacro : public Macro {
     syn = p;
     assert_num_args(1, 2);
     real_name = expand_binding(p->arg(0), e);
-    fun = e.symbols.lookup<Fun>(p->num_args() == 1 ? p->arg(0) : p->arg(1));
+    fun = lookup_overloaded_symbol<Fun>
+      (NULL, p->num_args() == 1 ? p->arg(0) : p->arg(1), NULL, e);
     fun->is_macro = true;
     def = fun->syn;
     return this;
@@ -1579,7 +1580,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
     //printf("---\n");
     for (; i != e; ++i) {
       //printf(">>%s\n", *i);
-      const Fun * fun = dynamic_cast<const Fun *>(env.find_tls(*i));
+      const Fun * fun = find_overloaded_symbol<Fun>(NULL, NULL, env.find_tls(*i), env);
       String uniq_name = fun->uniq_name();
       if (fun->is_macro) {
         fun->ct_ptr = dlsym(lh, ~uniq_name);

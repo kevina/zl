@@ -111,14 +111,17 @@ if ($@) {
   }
 }
 
+open F, ">basic_tests.res";
 
 if ($failed) {
   print "FAILED TESTS: $failed\n";
+  print F "FAILED TESTS: $failed\n";
   exit 1;
 } elsif ($sigint) {
   exit 2;
 } else {
   print "ALL TEST PASSED\n";
+  print F "ALL TEST PASSED\n";
   exit 0;
 }
 
