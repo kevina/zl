@@ -7,6 +7,7 @@ test6.c
 test7.c
 test9.c
 test11.c
+test-decl.c
 test12.c
 test13.c
 test14.c

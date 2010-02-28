@@ -1,11 +1,11 @@
 
 int x0;
-int * y1;
+int * y1_; // y1 is a gcc builtin function
 static const int * x2 = &x0, y2 = 4, * const z3 = &x0;
 int x3[30];
 int (*x4)[30], y4;
 extern int f5();
-static inline int f6(int x6, int);
+static /*inline*/ int f6(int x6, int); // inline not supports by zls yet
 int (*f7)(int x7, int);
 int (*f8)();
 int (*f9[30])();

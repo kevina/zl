@@ -33,6 +33,9 @@
     Vector(unsigned int s) : Base(s) {}
     Vector(unsigned int s, const T & val) : Base(s, val) {}
 
+    template <typename I>
+    Vector(I start, I stop) : Base(start, stop) {}
+
     void append(T t) {
       this->push_back(t);
     }

@@ -242,8 +242,12 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
   //printf(">IN>%s\n", ~p->to_string());
 
-  parts_iterator i = p->args_begin();
-  parts_iterator end = p->args_end();
+  // make a local (shallow) copy of the args since we might need to
+  // modify them
+  Vector<const Syntax *> args(p->args_begin(), p->args_end());
+
+  parts_iterator i = args.pbegin();
+  parts_iterator end = args.pend();
 
   DeclWorking w(res);
 
@@ -252,14 +256,22 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
   //if (i != end)
   //  printf("<>%d %s\n", i - p->args_begin(), ~(*i)->to_string());
 
-  if (i != end && ((r && (*i)->is_a("()")) || (*i)->eq("~"))) 
-  {
-    if (env.scope >= ast::LEXICAL) return NULL;
+  if (i != end && r && (*i)->is_a("()")) 
+    try {
+      const Syntax * paran = reparse("TOKENS", (*i)->inner());
+      const Syntax * parms = w.parse_fun_parms(paran, env);
+      if (env.scope >= ast::LEXICAL) return NULL;
+      const_cast<const Syntax * &>(*i) = parms;
+      w.inner_type = SYN(SYN("void"));
+      --i;
+    } catch (...) {}
 
-    if ((*i)->ne("~")) --i;
-    w.inner_type = SYN(SYN("void"));
+  if (i != end && (*i)->eq("~")) {
 
-  } else if (!r) {
+     if (env.scope >= ast::LEXICAL) return NULL;
+     w.inner_type = SYN(SYN("void"));
+
+   } else if (!r) {
 
     //printf("NO!\n");
     return NULL;
@@ -682,8 +694,11 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
       t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
       ++i;
     } catch (Error *) {}
+  } else if ((*i)->is_a(".") || (*i)->is_a("(...)")) {
+    t = make_function_type(t, *i, env);
+    ++i;
   } else {
-    // we are an array of type t
+    // we axre an array of type t
     t = try_arrays(i, end, t);
   }
   
@@ -700,6 +715,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
 const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
                                             Environ & env)
 {
+  if (parms->is_a(".")) return parms;
   SyntaxBuilder ps(SYN("."));
   //printf("MAKE FUNCTION TYPE: %s %s\n", ~ret->to_string(), ~parms->to_string());
   parts_iterator i = parms->args_begin();
