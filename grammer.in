@@ -40,6 +40,7 @@ STMT : "statement" =
     / <add_prop> "add_prop" {BASIC_ID} {SYNTAX_P} ";"
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
+    / <extern> "extern" {STRING} ("{" {STMT}* "}" / {STMT})
 #   / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
     / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
    ;

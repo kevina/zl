@@ -272,7 +272,7 @@ namespace ast {
       const Symbol * prev0 = env.symbols.find_this_scope<Symbol>(k);
       const OverloadedSymbol * prev = dynamic_cast<const OverloadedSymbol *>(prev0);
       if (prev0 && !prev) {
-        abort(); // FIXME: If shadow_ok than we need to keep looking...
+        throw unknown_error(0); // FIXME: If shadow_ok than we need to keep looking...
       }
       //if (prev)
       //  IOUT.printf("... AND A PREV %p %p\n", prev, prev0);
@@ -923,7 +923,7 @@ namespace ast {
       ExpInsrPointWrapper wrap(env);
       const Syntax * init_syn = *i++;
       if (init_syn->eq(".")) {
-        assert(i != e); // FIXME: Error Messagex
+        if (i == e) throw unknown_error(init_syn);
         init_syn = *i++;
         if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner());
         const UserType * user_type = dynamic_cast<const UserType *>(type->unqualified->root);
@@ -947,7 +947,7 @@ namespace ast {
           if (const Trivial * trivial = dynamic_cast<const Trivial *>(sym)) {
             assert(parms.size() <= 1);
             if (parms.size() == 0) {
-              abort(); // FIXME
+              throw unknown_error(init_syn);
             } else if (parms.size() == 1) {
               init_syn = SYN(parms[0]);
             }
@@ -973,11 +973,11 @@ namespace ast {
           } else if (init_syn->num_args() == 1) {
             init_syn = init_syn->arg(0);
           } else {
-            abort(); //FIXME: Error message
+            throw unknown_error(init_syn);
           }
         }
       } else if (init_syn->eq("=")) {
-        assert(i != e); // FIXME: Error Messagex
+        if (i == e) throw unknown_error(init_syn);
         init_syn = *i++;
       }
     with_init:
@@ -1241,14 +1241,6 @@ namespace ast {
     return SC_NONE;
   }
 
-  static bool get_c_linkage(const Syntax * p) {
-    const Syntax * val = p->flag("linkage");
-    if (!val) return false;
-    //printf("FOUND LINKAGE FLAG ON %s: %s\n", ~p->to_string(), ~val->to_string());
-    if (val->arg(0)->eq("C")) return true;
-    return false;
-  }
-
   static void make_static_if_marked(StorageClass & storage_class, const SymbolKey & name) {
     if ((storage_class == SC_NONE || storage_class == SC_EXTERN) && name.marks)
       storage_class = SC_STATIC;
@@ -1262,7 +1254,7 @@ namespace ast {
     StorageClass storage_class = get_storage_class(p);
     bool shadow = p->flag("__shadow");
     //bool shadow = true;
-    if (shadow && collect) abort(); // FIXME: Error message
+    if (shadow && collect) throw unknown_error(p);
     Var * var;
     Stmt * res;
     bool fresh = true;
@@ -1575,7 +1567,7 @@ namespace ast {
   };
 
   struct Compliment : public SimpleUnOp {
-    Compliment() : SimpleUnOp("compliment", "~", INT_C) {}
+    Compliment() : SimpleUnOp("bnot", "~", INT_C) {}
     template <typename T>
     struct F : public std::unary_function<T,T> {
       T operator()(T x) {return ~x;}
@@ -2499,10 +2491,16 @@ namespace ast {
     }
   }
 
-  void parse_stmts(const Syntax * parse, Environ & env) {
+  static void parse_stmts(parts_iterator i, parts_iterator end, Environ & env);
+
+  inline void parse_stmts(const Syntax * p, Environ & env) {
+    parse_stmts(p->args_begin(), p->args_end(), env);
+  }
+
+  static void parse_stmts(parts_iterator i, parts_iterator end, Environ & env) {
     Parse<TopLevel> prs(env);
-    for (unsigned i = 0; i < parse->num_args(); ++i) {
-      const Syntax * p = prs.partly_expand(parse->arg(i));
+    for (; i != end; ++i) {
+      const Syntax * p = prs.partly_expand(*i);
       if (p->is_a("@")) {
         parse_stmts(p, env);
       } else {
@@ -2719,7 +2717,7 @@ namespace ast {
       module->where = env.where;
       Module * module_in_env = env.symbols.find_this_scope<Module>(SymbolKey(n, OUTER_NS));
       if (module_in_env) {
-        assert(module == module_in_env); // FIXME: Error message
+        if(module != module_in_env) throw unknown_error(0);
       } else {
         module->key = NULL;
         env.add(SymbolKey(n, OUTER_NS), module);
@@ -2899,6 +2897,25 @@ namespace ast {
   //
   //
   //
+
+  Stmt * parse_extern(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1, NPOS);
+    const Syntax * val = p->arg(0);
+    if (!val->simple() && val->is_a("s")) val = val->arg(0);
+    bool mangle_save = false;
+    bool mangle = false;
+    if (val->eq("C")) mangle = true;
+    else throw error(p->arg(0), "Unknown extern type \"%s\"\n", ~val->to_string());
+    if (mangle) {
+      mangle_save = env.mangle;
+      env.mangle = true;
+    }
+    parse_stmts(p->args_begin() + 1, p->args_end(), env);
+    if (mangle) {
+      env.mangle = mangle_save;
+    }
+    return empty_stmt();
+  }
 
   //
   //
@@ -3463,7 +3480,7 @@ namespace ast {
     if (p->flag("__static_constructor")) static_constructor = true;
     if (p->flag("__constructor__")) static_constructor = true;
 
-    mangle = !(ct_callback || env0.zls_mode || get_c_linkage(p));
+    mangle = !(ct_callback || env0.mangle);
 
     if (p->flag("__need_snapshot"))
       env_ss = *env0.top_level_environ;
@@ -3561,8 +3578,8 @@ namespace ast {
     f << " " << parms;
     f << " " << ret_type;
     write_storage_class(f);
-    if (inline_)
-        f << " :inline";
+    //if (inline_) FIXME: Inline not support by zls yet
+    //    f << " :inline";
     if (static_constructor)
       f << " :__constructor__";
     if (body && phase != Forward) {
@@ -3740,9 +3757,15 @@ namespace ast {
     assert_num_args(p, 2);
     SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
     Type * of = parse_type(p->arg(1), env);
-    TypeAlias * decl = new TypeAlias(of);
-    decl->syn = p;
-    SimpleType * talias = add_simple_type(env.types, n, decl, env.where);
+    if (env.symbols.exists_this_scope(n)) {
+      Type * old = env.types.inst(n);
+      if (of->root != old->root)
+        throw error(p, "Conflicting typedefs.");
+    } else {
+      TypeAlias * decl = new TypeAlias(of);
+      decl->syn = p;
+      SimpleType * talias = add_simple_type(env.types, n, decl, env.where);
+    }
     return empty_stmt();
   }
 
@@ -4225,6 +4248,7 @@ namespace ast {
     if (what == "memberdecl") return parse_memberdecl(p, env);
     if (what == "include_file") return parse_include_file(p, env);
     if (what == "import_file") return parse_import_file(p, env);
+    if (what == "extern") return parse_extern(p, env);
     return 0;
   }
 

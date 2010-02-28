@@ -111,6 +111,15 @@ Error * verror(const SourceInfo * s, const char * pos,
   return error;
 }
 
+Error * error(int n, const char * pos, const char * fmt, ...) {
+  assert(n == 0);
+  va_list ap;
+  va_start(ap, fmt);
+  Error * res = verror(NULL, pos, fmt, ap);
+  va_end(ap);
+  return res;
+}
+
 Error * error(const SourceInfo * s, const char * pos, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -145,6 +154,15 @@ Error * error(const char * pos, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   Error * res = verror(NULL, pos, fmt, ap);
+  va_end(ap);
+  return res;
+}
+
+Error * error(int n, const char * fmt, ...) {
+  assert(n == 0);
+  va_list ap;
+  va_start(ap, fmt);
+  Error * res = verror(NULL, NULL, fmt, ap);
   va_end(ap);
   return res;
 }

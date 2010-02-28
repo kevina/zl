@@ -4,7 +4,7 @@
   (left (postfix ".[]" (category "[]"))
         (postfix postinc ++) (postfix postdec --)
         (bin member .) (bin imember ..) (bin -> ->))
-  (right (prefix not !) (prefix complmnt ~)
+  (right (prefix not !) (prefix bnot ~)
          (prefix neg -) (prefix uplus +)
          (prefix addrof &) (prefix deref *)
          (prefix preinc ++) (prefix predec --)

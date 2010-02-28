@@ -3,17 +3,36 @@
 // libc stuff
 //
 
+typedef unsigned size_t;
 typedef struct _IO_FILE FILE;
 extern "C" int printf (const char *, ...);
 extern "C" int snprintf(const char * str, size_t size, const char * format, ...);
 macro NULL() {0;}
-macro true() {1;}
-macro false() {0;}
 typedef int bool;
+extern "C" void * malloc(size_t);
+extern "C" void free(void *);
 extern "C" int strcmp(const char *s1, const char *s2);
 macro offsetof(TYPE, MEMBER) {(size_t) &(reinterpret_cast<TYPE *>(0))->MEMBER;}
 extern "C" void *memcpy(void *dest, const void *src, size_t n);
 extern "C" void *memmove(void *dest, const void *src, size_t n);
+
+//
+// language support
+//
+
+macro true() {1;}
+macro false() {0;}
+
+__raw(smacro new (type @rest)
+        (eblock 
+          (var tmp (.ptr type) (call malloc (. (sizeof (.type type)))))
+          (construct (deref tmp) type  @rest)
+          tmp));
+
+__raw(smacro delete (exp)
+        (eblock (var tmp (.ptr void))
+          (assign tmp (destroy (deref exp)))
+          (call free (. tmp))));
 
 //
 // Macro ABI

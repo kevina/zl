@@ -1017,7 +1017,7 @@ static const Syntax * replace(const Syntax * p,
       const Syntax * q = replace(p->part(i), r, rs, allow_plain_mids, &splice);
       if (splice) {
         //printf("??%d %s\n", x, ~q->to_string());
-        assert(q->is_a("@")); // FIXME: Error message
+        if (!q->is_a("@")) throw unknown_error(q);
         res.add_parts(q->args_begin(), q->args_end());
         res.merge_flags(q);
       } else {

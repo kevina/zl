@@ -255,7 +255,7 @@ namespace ast {
       buf += "$R";
       to_string(*t->subtype, buf);
     } else {
-      abort();
+      buf += "$U";
     }
   }
 

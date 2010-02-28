@@ -879,7 +879,8 @@ namespace ast {
     if (const T * s = dynamic_cast<const T *>(sym))
       return s;
     const OverloadedSymbol * cur = dynamic_cast<const OverloadedSymbol *>(sym);
-    assert(cur); // FIXME: Error Message
+    if (!cur)
+      throw unknown_error(id);
     Vector<const Symbol *> syms;
     for (; cur; cur = cur->next) {
       //IOUT.printf("FOS: %s %p\n", ~cur->name(), cur->sym);
@@ -897,7 +898,8 @@ namespace ast {
     if (syms.size() > 1)
       throw error(id, "Multiple matches for type with parms %s", ~to_find->to_string());
     const T * s = dynamic_cast<const T *>(syms.front());
-    assert(s); // FIXME: Error Message
+    if (!s) 
+      throw unknown_error(id);
     return s;
   }
 

@@ -103,7 +103,7 @@ int main(int argc, const char *argv[])
     //printf("%d\n%s", ast::MACRO_PRELUDE_END - ast::MACRO_PRELUDE, ast::MACRO_PRELUDE);
     if (zls_mode) {
       printf("ZLS MODE\n");
-      env.zls_mode = true;
+      env.mangle = true;
       parse_stmts_raw(SourceStr(code, code->begin(), code->end()), env);
     } else {
       parse_maps(env);
