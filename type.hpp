@@ -310,10 +310,6 @@ namespace ast {
   declare_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
                   TopLevelSymbol * where = NULL)
   {
-    if (where) {
-      t->where = where;
-      t->num = NPOS;
-    }
     sym.add(name, t);
     return t;
   }

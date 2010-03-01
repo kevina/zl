@@ -596,7 +596,7 @@ namespace ast {
     // internal method, should only be called by parse_fun_forward
     AST * parse_forward_i(const Syntax * p, Environ &, Collect *);
     using TopLevelVarDecl::uniq_name;
-    void uniq_name(OStream & o) const;
+    bool uniq_name(OStream & o) const;
   };
 
   //
@@ -731,6 +731,7 @@ namespace ast {
     inline T * find_symbol(const SymbolKey & k) const {
       return ast::find_symbol<T>(k, syms.front, syms.back);
     }
+    virtual bool named_outer() const {return true;}
   };
 
   //

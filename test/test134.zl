@@ -1,0 +1,10 @@
+make_inner_ns foo;
+make_inner_ns bar;
+
+int x;
+int x`foo;
+int x`bar;
+
+int main() {
+  x = x`foo + x`bar;
+}

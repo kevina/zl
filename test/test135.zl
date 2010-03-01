@@ -1,0 +1,13 @@
+make_inner_ns foo;
+make_inner_ns bar;
+
+struct X {int x;};
+struct X`foo {int x;};
+struct X`bar {int x;};
+
+int main() {
+  struct X x;
+  struct X`foo x`foo;
+  struct X`bar x`bar;
+  x.x = x`foo.x + x`bar.x;
+}

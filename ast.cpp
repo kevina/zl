@@ -327,6 +327,13 @@ namespace ast {
       : env.symbols.add(env.where, k, this);
     assert(!key);
     key = &local->key;
+    if (env.where) {
+      where = env.where;
+      if (!env.where->named_outer())
+        num = NPOS;
+    }
+    if (k.marks || k.ns != tl_namespace())
+      num = NPOS;
     //printf("ADDED %s %s %s %p %p\n", ~name(), ~k.to_string(), ~key->to_string(), local, local->value);
     if (env.special()) {
       if (env.collect)
@@ -472,8 +479,9 @@ namespace ast {
   struct NormalLabel : public Label {
     mutable unsigned num;
     NormalLabel() : num() {}
-    void uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o) const {
       o.printf("%s$$%u", ~name(), num);
+      return num != NPOS;
     }
     SymbolNode * add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {
@@ -492,8 +500,9 @@ namespace ast {
     mutable unsigned num;
     LocalLabel() : num() {}
     using Label::uniq_name;
-    void uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o) const {
       o.printf("%s$%u", ~name(), num);
+      return num != NPOS;
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
       assign_uniq_num<LocalLabel>(this, self->next, stop);
@@ -755,11 +764,12 @@ namespace ast {
     OtherVar() : num() {}
     OtherVar(const Type * t, bool mangle) : BasicVar(t), num(mangle ? NPOS : 0) {}
     mutable unsigned num; // 0 to avoid renaming, NPOS needs uniq num
-    void uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o) const {
       if (num == 0)
         o << name();
       else
         o.printf("%s$%u", ~name(), num);
+      return num != NPOS;
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
       if (num == NPOS)
@@ -1109,8 +1119,9 @@ namespace ast {
       if (cleanup)
         f << cleanup;
     }
-    void uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o) const {
       o.printf("%s$%u", ~name(), num);
+      return true;
     }
     void make_unique(SymbolNode * self, SymbolNode * stop) const {
       assign_uniq_num<AutoVar>(this, self->next, stop);
@@ -1125,8 +1136,9 @@ namespace ast {
   static unsigned last_temp_num = 0;
 
   struct TempBase : public AutoVar {
-    void uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o) const {
       o.printf("%s$t%u", ~name(), num);
+      return true;
     }
     void make_unique(SymbolNode *, SymbolNode *) const {
       num = last_temp_num++;
@@ -1269,8 +1281,8 @@ namespace ast {
       make_static_if_marked(storage_class, name);
       fresh = !env.symbols.exists_this_scope(name);
       TopLevelVar * v = fresh ? new TopLevelVar : env.symbols.find<TopLevelVar>(name);
-      v->num = env.scope >= LEXICAL || name.marks || storage_class == SC_STATIC ? NPOS : 0;
-      v->where = env.where;
+      //v->num = env.scope >= LEXICAL || storage_class == SC_STATIC ? NPOS : 0;
+      //v->num = storage_class == SC_STATIC ? NPOS : 0;
       v->deps_closed = false;
       var = v;
       res = empty_stmt();
@@ -2583,8 +2595,6 @@ namespace ast {
     Module * m = env.symbols.find_this_scope<Module>(n);
     if (!m) {
       m = new Module();
-      m->where = env.where;
-      m->num = env.where ? NPOS : 0;
       env.add(n, m);
     }
     return m;
@@ -3416,8 +3426,7 @@ namespace ast {
       make_static_if_marked(f->storage_class, name);
       if (env.interface && f->storage_class == SC_STATIC)
         return empty_stmt();
-      f->num = name.marks || f->storage_class == SC_STATIC ? NPOS : 0;
-      f->where = env.where;
+      //f->num = f->storage_class == SC_STATIC ? NPOS : 0;
       f->parse_forward_i(p, env, collect);
       env.add(name, f, is_op ? true : false);
       if (is_op) {
@@ -3446,7 +3455,7 @@ namespace ast {
     }
   }
 
-  void Fun::uniq_name(OStream & o) const {
+  bool Fun::uniq_name(OStream & o) const {
     if (key->ns == OPERATOR_NS) {
       o << "op$";
       TopLevelVarDecl::uniq_name(o);
@@ -3463,6 +3472,7 @@ namespace ast {
       }
       o << buf.freeze();
     }
+    return num != NPOS;
   }
   
   AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect * collect) {

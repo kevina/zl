@@ -179,9 +179,13 @@ namespace ast {
       if (uniq_name_.defined())
         return uniq_name_;
       StringBuf buf;
-      uniq_name(buf);
-      uniq_name_ = buf.freeze();
-      return uniq_name_;
+      bool cache = uniq_name(buf);
+      if (cache) {
+        uniq_name_ = buf.freeze();
+        return uniq_name_;
+      } else {
+        return buf.freeze();
+      }
     }
     virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
     virtual const class Tuple * overloadable() const {return NULL;}
@@ -192,8 +196,9 @@ namespace ast {
     virtual void add_prop(SymbolName n, const Syntax * s) {abort();}
     virtual const Syntax * get_prop(SymbolName n) const {abort();}
   protected:
-    virtual void uniq_name(OStream & o) const {
+    virtual bool uniq_name(OStream & o) const {
       o << name();
+      return true;
     }
   };
 
@@ -222,8 +227,8 @@ namespace ast {
       }
       o << name();
     }
-    void uniq_name(OStream & o) const {
-      if (mangle && where) {
+    bool uniq_name(OStream & o) const {
+      if (num == 0 && mangle && where) {
         where->uniq_name0(o);
         o << "$";
       }
@@ -234,6 +239,7 @@ namespace ast {
       } else {
         o.printf("%s$$%u", ~name(), num);
       }
+      return num != NPOS;
     }
     // if num is zero than leave alone, if NPOS assign uniq num.
     SymbolNode * add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
@@ -241,12 +247,12 @@ namespace ast {
     void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const;
     virtual void add_prop(SymbolName n, const Syntax * s) {props.add_prop(n, s);}
     virtual const Syntax * get_prop(SymbolName n) const {return props.get_prop(n);}
-    void full_name(OStream & o, const InnerNS * def_ns = DEFAULT_NS) const {
+    void full_name(OStream & o) const {
       if (where) {
-        where->full_name(o, OUTER_NS);
+        where->full_name(o);
         o << "::";
       }
-      key->to_string(o, def_ns);
+      key->to_string(o, tl_namespace());
     }
     String full_name() const {
       StringBuf buf;
@@ -254,6 +260,11 @@ namespace ast {
       return buf.freeze();
     }
     //virtual const Syntax * get_props(SymbolName n) const; // not implemented yet
+
+    // if named_outer is true and a symbol is defined within the env
+    // of this symbol, than there is probably no need to assign a uniq
+    // number...
+    virtual bool named_outer() const {return false;}
   };
 
   struct FluidBinding : public TopLevelSymbol {
