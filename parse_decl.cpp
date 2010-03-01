@@ -298,9 +298,8 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
 
     if (i == end) break;
     //printf(">3>%s\n", ~(*i)->to_string());
-  
+
     if (!(*i)->eq(",")) {
-      printf("Expected \",\".<1>");
       throw error(*i, "Expected \",\" got \"%s\".<1>", ~(*i)->to_string());
     }
     ++i;
@@ -675,7 +674,9 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     try {
       t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
       ++i;
-    } catch (Error *) {}
+    } catch (Error * err) {
+      printf("note: %s\n", ~err->message());
+    }
   } else if ((*i)->is_a(".") || (*i)->is_a("(...)")) {
     t = make_function_type(t, *i, env);
     ++i;
@@ -683,6 +684,14 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     // we axre an array of type t
     t = try_arrays(i, end, t);
   }
+
+  if (i != end && (*i)->eq("throw")) {
+    // ignore throw spec. for now
+    ++i;
+    if (i == end || !(*i)->is_a("()")) 
+      throw error(*i, "Expected \"(\"");
+    ++i;
+  } 
   
   if (outer) {
     parts_iterator j = outer->args_begin();
