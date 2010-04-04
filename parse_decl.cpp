@@ -762,7 +762,14 @@ const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
     if (!(*i)->eq(",")) throw error(*i, "Expected \",\" got \"%s\".", ~(*i)->to_string());
     ++i;
   }
-  return ps.build();
+  const Syntax * res = ps.build();
+  if (res->num_args() == 1
+      && res->arg(0)->num_parts() == 1
+      && res->arg(0)->part(0)->num_parts() == 1
+      && res->arg(0)->part(0)->part(0)->eq("void")) 
+    return SYN(SYN("."));
+  else
+    return res;
 }
 
 const Syntax * DeclWorking::make_function_type(const Syntax * ret,
