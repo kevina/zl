@@ -18,6 +18,8 @@
 
 #include "syntax_gather.hpp"
 
+#include "parse_common.hpp"
+
 #include "ct_value-impl.hpp"
 #include "hash-t.hpp"
 
@@ -653,7 +655,12 @@ namespace ast {
     orig = *p->arg(0);
     type = env.types.inst("char");
     type = env.types.ct_const(type);
-    ct_value_ = &ct_nval;
+    StringBuf res;
+    parse_common::unescape(orig, orig.end(), res, '\'');
+    if (res.size() == 1) 
+      ct_value_ = new CT_Value<CT_Type<char>::type>(res[0]);
+    else
+      ct_value_ = &ct_nval;
     return this;
   }
   void CharC::compile(CompileWriter & f) {
