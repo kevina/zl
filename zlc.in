@@ -1,0 +1,119 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+my $ZL = "@abs_top_srcdir@/zl";
+my $ZL_H = "@abs_top_srcdir@/zl_h.h";
+
+my $preprocess;
+my $lang;
+my $output;
+my @files;
+my @zl_ops;
+my @zls_ops;
+my @zls_files;
+my @temp_files;
+
+sub arg_w_parm ($) {
+    my ($arg) = @_;
+    my $parm;
+    if (/^-$arg(.*)/) {
+        if (length $1 > 0) {
+            $parm = $1;
+        } else {
+            shift @ARGV;
+            $parm = $ARGV[0];
+            die "Missing argument for -$arg\n" 
+                if (!defined $parm || $parm =~ /^-/) 
+        }
+        return $parm;
+    } else {
+        return undef;
+    }
+}
+
+while (@ARGV) {
+    local $_ = $ARGV[0];
+    my $p;
+    if ($_ eq '-no-pp') {
+        $preprocess = 0;
+        shift @ARGV;
+    } elsif ($_ eq '-pp') {
+        $preprocess = 1;
+        shift @ARGV;
+    } elsif ($p = arg_w_parm('x')) {
+        $lang = $p;
+        die "Unknown lang: $lang\n" unless $lang =~ /^(c|cpp|zl|zls)$/;
+        shift @ARGV;
+    } elsif ($p = arg_w_parm('o')) {
+        $output = $p;
+        push @zls_ops, '-o', $output;
+        shift @ARGV;
+    } elsif ($_ eq '-c') {
+        push @zls_ops, $_;
+        shift @ARGV;
+    } elsif ($_ eq '-S') {
+        push @zls_ops, $_;
+        shift @ARGV;
+    } elsif (/^-g(.*)/) {
+        push @zls_ops, $_;
+        shift @ARGV;
+    } elsif (/^-f(.*)/) {
+        # ignore for now
+        shift @ARGV;
+    } elsif (/^-m(.*)/) {
+        push @zls_ops, $_;
+        shift @ARGV;
+    } elsif (/^-O(.*)/) {
+        push @zls_ops, $_;
+        shift @ARGV;
+    } elsif (/^-W(.*)/) {
+        # ignore for now
+        shift @ARGV;
+    } elsif (/^-/) {
+        die "Unknown option: $_\n";
+    } else {
+        push @files, $_;
+        shift @ARGV;
+    }
+}
+
+my %ext_map = qw(c c i c ii cpp 
+                 cc cpp cp cpp cxx cpp cpp cpp CPP cpp c++ cpp C cpp
+                 zl zl zls zls);
+
+foreach (@files) {
+    my $file = $_;
+    my ($base, $ext) = $file =~ /^(.+?)(?:\.(.+))?$/;
+    my $l = $lang;
+    if (!defined $l) {
+        $l = $ext_map{$ext};
+        die "Unknown extension: $ext" unless defined $l;
+    }
+    my $pp = $preprocess;
+    $pp = ($l eq 'c' || $l eq 'cpp') && !($ext eq 'i' || $ext eq 'ii') if !defined $pp;
+    my $orig_file = $file;
+    if ($pp) {
+        $file = "$base.i";
+        system("cpp -include $ZL_H -x c $orig_file -o $file");
+        exit 1 unless $? == 0;
+    }
+    push @zl_ops, '-xc' if $l eq 'c';
+    if ($l ne 'zls') {
+        print("$ZL @zl_ops $file\n");
+        system("$ZL @zl_ops $file");
+        exit 1 unless $? == 0;
+        unlink $file unless $orig_file eq $file;
+        push @zls_files, "$base.zls";
+        push @temp_files, "$base.zls";
+    } else {
+        push @zls_files, $file;
+    }
+}
+
+system("zls @zls_ops @zls_files");
+exit 1 unless $? == 0;
+unlink @temp_files;
+
+exit 0;

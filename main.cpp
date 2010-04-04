@@ -55,6 +55,7 @@ int main(int argc, const char *argv[])
     unsigned offset = 1;
     bool debug_mode = false;
     bool zls_mode = false;
+    bool c_mode = false;
     bool for_ct = false;
     bool load_prelude = true;
     if (argc > offset && strcmp(argv[offset], "-d") == 0) {
@@ -63,11 +64,15 @@ int main(int argc, const char *argv[])
     } 
     if (argc > offset && strcmp(argv[offset], "-s") == 0) {
       zls_mode = true;
-        offset++;
+      offset++;
     }
     if (argc > offset && strcmp(argv[offset], "-C") == 0) {
       for_ct = true;
-        offset++;
+      offset++;
+    }
+    if (argc > offset && strcmp(argv[offset], "-xc") == 0) {
+      c_mode = true;
+      offset++;
     }
     if (argc > offset && strcmp(argv[offset], "-P") == 0) {
       load_prelude = false;
@@ -119,6 +124,8 @@ int main(int argc, const char *argv[])
       //if (load_prelude && !for_ct)
         //ast::import_file(SOURCE_PREFIX "test/class-new_abi.zl", env);
         //ast::include_file(SOURCE_PREFIX "test/class-this_reg.zlh", env);
+      if (c_mode)
+        env.mangle = false;
       parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
     }
     ast::CompileWriter out;

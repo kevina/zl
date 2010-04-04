@@ -7,6 +7,7 @@ AM_CXXFLAGS += -I/usr/include/gc
 #AM_CXXFLAGS += -DNO_GC
 
 bin_PROGRAMS=zl
+bin_SCRIPTS=zlc
 zl_SOURCES=ast.cpp  expand.cpp charset.cpp  main.cpp  parse.cpp  parse_op.cpp  peg.cpp util.cpp string_buf.cpp fstream.cpp type.cpp parse_decl.cpp symbol_table.cpp iostream.cpp ct_value.cpp
 zl_LDADD=
 #zl_LDADD+= /home/kevina/gc6.8/gc.a 
@@ -29,3 +30,7 @@ prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.i
 
 dist-hook:
 	cp -p $(srcdir)/distextra/* $(distdir)
+
+zlc: $(top_builddir)/config.status $(srcdir)/zlc.in
+	$(top_builddir)/config.status --file=$@
+	chmod +x $@
