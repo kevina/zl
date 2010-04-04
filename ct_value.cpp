@@ -282,7 +282,7 @@ namespace ast {
 
   template <typename T>
   struct LeftShift_F : public std::binary_function<T,T,T> {
-    T operator()(T x, T y) {return x | y;}
+    T operator()(T x, T y) {return x << y;}
   };
   const CT_Value_Base * leftshift_ct_value(const BinOp * exp) {
     return int_op_ct_value<BinOp_GetValue, LeftShift_F>(exp->type)(exp);
@@ -290,7 +290,7 @@ namespace ast {
 
   template <typename T>
   struct RightShift_F : public std::binary_function<T,T,T> {
-    T operator()(T x, T y) {return x | y;}
+    T operator()(T x, T y) {return x >> y;}
   };
   const CT_Value_Base * rightshift_ct_value(const BinOp * exp) {
     return int_op_ct_value<BinOp_GetValue, RightShift_F>(exp->type)(exp);
