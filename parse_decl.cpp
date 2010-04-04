@@ -176,7 +176,7 @@ struct DeclWorking {
   }
   bool try_struct_union(const Syntax * p, Environ &, bool by_itself = false);
   bool try_enum(const Syntax * p, Environ &, bool by_itself = false);
-  const Syntax * parse_struct_union_body(const Syntax * p, Environ &);
+  const Syntax * parse_struct_union_body(const Syntax * p, Environ &, bool & bit_field);
   bool dots;
   Syntax * inner_type;
   void make_inner_type(const Syntax * orig);
@@ -435,8 +435,14 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
       SyntaxBuilder struct_union(p->part(0));
       struct_union.add_part(n);
       struct_union.set_flags(p);
-      if (body)
-        struct_union.add_part(parse_struct_union_body(body, env));
+      if (body) {
+        bool bit_field = false;
+        const Syntax * b = parse_struct_union_body(body, env, bit_field);
+        struct_union.add_part(b);
+        if (bit_field) {
+          struct_union.add_flag(SYN("bit-field"));
+        }
+      }
       type_scope.add_part(struct_union.build());
     }
     return true;
@@ -445,9 +451,10 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
   }
 }
 
-const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ & env)
+const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ & env, bool & bit_field)
 {
   SyntaxBuilder res;
+  unsigned anon_num = 0;
   for (unsigned h = 0; h != p0->num_args(); ++h) {
 
     const Syntax * p = p0->arg(h);
@@ -467,13 +474,34 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
         w.make_inner_type(p);
         
         while (i != end) {
+
+          //printf(">?1>%s\n", ~(*i)->to_string());
           
-          const Syntax * id;
-          const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
+          const Syntax * id = NULL;
+          const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, IdNotRequired);
+
+          if (!id) {
+            char buf[8];
+            snprintf(buf, 8, "$anon%d", anon_num++);
+            id = SYN(buf);
+          }
+
+          //if (id)
+          //  printf(">id>%s\n", ~id->to_string());
           
+          //if (i != end)
+          //  printf(">?2>%s\n", ~(*i)->to_string());
+
           //const Syntax * decl = w.make_declaration(id, t);
           // FIXME: Duplicate code from parse_decl, also...
           const Syntax * decl;
+
+          if (i != end && (*i)->eq(":")) {
+            bit_field = true;
+            ++i;
+            if (i != end) {/*printf("123>%s\n", ~(*i)->to_string());*/ ++i;}
+          }
+            
           if (i != end && (*i)->eq("=")) {
             ++i;
             const Syntax * init = w.parse_init_exp(i, end);
@@ -491,7 +519,7 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
           if (i == end) break;
           
           if (!(*i)->eq(","))
-            throw error(*i, "Expected \",\"<2>.");
+            throw error(*i, "Expected \",\"<2> got %s.", ~(*i)->to_string());
           ++i;
         }
     } else {
@@ -650,7 +678,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
 
   bool stop = false;
   const Syntax * p;
-  if (i == end || (*i)->eq(",", "=")) {
+  if (i == end || (*i)->eq(",", "=", ":")) {
     stop = true;
     goto def;
   } else if ((p = handle_w_tilda(i, end, env))) {

@@ -667,14 +667,14 @@ namespace ast {
     Vector<Member> members;
     StructUnion(Which w) 
       : which(w), have_body(false), env(OTHER), 
-        defined(false), size_(NPOS), align_(NPOS) {}
+        defined(false), size_(NPOS), align_(NPOS), bit_field(false) {}
     bool have_body; // fixme: redundent, fixup "defined" and elinimate
     Environ env;
-    Stmt * parse_self(const Syntax * p, Environ & env0);
     void compile(CompileWriter & f, Phase phase) const;
     bool defined;
     unsigned size_;
     unsigned align_;
+    bool bit_field;
     unsigned size() const {return size_;}
     unsigned align() const {return align_;}
     const InnerNS * tl_namespace() const {return TAG_NS;}

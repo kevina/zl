@@ -3851,6 +3851,10 @@ namespace ast {
     //type_name << "struct " << what();
     //if (s->members.empty())
     //  fprintf(stderr, "Warning: %s\n", error(p, "Empty Struct Currently Unsupported")->message().c_str());
+    if (p->flag("bit-field")) {
+      printf("WARNING: Bit Fields not supported in %s\n", ~name->to_string());
+      decl->bit_field = true;
+    }
     decl->SimpleType::finalize();
     return empty_stmt();
   }
