@@ -780,6 +780,7 @@ namespace ast {
   Stmt * parse_stmt_decl(const Syntax * p, Environ & env);
   Exp * parse_exp(const Syntax * p, Environ & env);
   Exp * parse_exp_for_type(const Syntax * p, Environ & env);
+  target_int parse_ct_value(const Syntax * syn, Environ & env);
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env);
 

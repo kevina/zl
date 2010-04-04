@@ -447,9 +447,7 @@ namespace ast {
         break;
       }
       case TypeParm::INT: {
-        Exp * exp = parse_exp(p0, env);
-        exp = exp->resolve_to(types.inst("int"), env);
-        parms.push_back(TypeParm(exp->ct_value<int>()));
+        parms.push_back(TypeParm(parse_ct_value(p0, env)));
         break;
       }
       case TypeParm::TUPLE: {
@@ -507,9 +505,7 @@ namespace ast {
       return ret;
     } else if (p->is_a("parm")) {
       assert_num_args(p, 1);
-      Exp * exp = parse_exp(p->arg(0), env);
-      exp = exp->resolve_to(env.types.inst("int"), env);
-      unsigned i = exp->ct_value<int>();
+      target_int i = parse_ct_value(p->arg(0), env);
       return parms->parm(i).as_type;
     } else {
       throw error(p, "Unsupported type property \"%s\" for function type", ~p->what());

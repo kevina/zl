@@ -2141,7 +2141,6 @@ namespace ast {
 
   struct LeftShift : public BShift {
     LeftShift() : BShift("lshift", "<<") {}
-    template <typename T>
     void make_ct_value() {
       ct_value_ = leftshift_ct_value(this);
     }
@@ -3943,9 +3942,7 @@ namespace ast {
       for (; i != arg1->num_args(); ++i) {
         const Syntax * arg = arg1->arg(i);
         if (arg->num_parts() > 1) {
-          Exp * e = parse_exp(arg->part(1), env);
-          e = e->resolve_to(env.types.inst("int"), env);
-          val = e->ct_value<target_int>();
+          val = parse_ct_value(arg->part(1), env);
         }
         SymbolName n = *arg->part(0);
         Enum::Member mem(arg1, new_other_var(n, t), val);
@@ -4354,6 +4351,19 @@ namespace ast {
     }
   }
 
+  //
+  //
+  //
+
+  target_int parse_ct_value(const Syntax * syn, Environ & env) { 
+   ExpInsrPointWrapper wrap(env);
+    Exp * e = parse_exp(syn, wrap.env);
+    if (wrap.stmts)
+      throw error(syn, "Invalid Compile Time Expression");
+    e = e->resolve_to(env.types.inst("int"), env);
+    return e->ct_value<target_int>();
+  }
+  
   //
   // VarDeclaration methods
   //
