@@ -119,6 +119,8 @@ test133.cpp
 test134.zl
 test135.zl
 test136.c
+test137.c
+test138.c
 
 fix_size-0-t.zl # was 67
 fix_size-1-t.zl # was 95

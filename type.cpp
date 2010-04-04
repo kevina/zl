@@ -629,7 +629,8 @@ namespace ast {
     // deal with pointer types
     {
       const Pointer * n_p = dynamic_cast<const Pointer *>(need);
-      const Type * n_subtype = n_p ? n_p->subtype : 0;
+      const Array   * n_a = dynamic_cast<const Array *>(need); // FIXME: Hack
+      const Type * n_subtype = n_p ? n_p->subtype : n_a ? n_a->subtype : 0;
       if (!n_subtype) goto fail;
       if (exp->type->is_null) return exp;
       // FIXME: This probably isn't right
