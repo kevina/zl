@@ -722,11 +722,23 @@ namespace ast {
     }
   }
 
+  static const Int * INT;
+  static const Int * UINT;
+
+  const Int * int_promotion(const Int * x) {
+    // 6.3.1.1: Integer promotions
+    assert(x->min != x->max);
+    //printf("%lld <= %lld && %llu <= %llu %p %p\n", INT->min, x->min, x->max, INT->max, INT, x);
+    if (INT->min <= x->min && x->max <= INT->max) return INT;
+    //printf("%lld <= %lld && %llu <= %llu %p %p\n", UINT->min, x->min, x->max, UINT->max, UINT, x);
+    if (UINT->min <= x->min && x->max <= UINT->max) return UINT;
+    return x;
+  }
+
   const Type * C_TypeRelation::unify(int rule, const Type * x, const Type * y) const {
-    // 3.6.1.8: Usual arithmetic conversions
+    // 6.3.1.8: Usual arithmetic conversions
     x = x->effective->unqualified;
     y = y->effective->unqualified;
-    if (x == y) return x;
     {
       const Float * x0 = dynamic_cast<const Float *>(x);
       const Float * y0 = dynamic_cast<const Float *>(y); 
@@ -736,6 +748,8 @@ namespace ast {
     } {
       const Int * x0 = dynamic_cast<const Int *>(x);
       const Int * y0 = dynamic_cast<const Int *>(x);
+      x0 = int_promotion(x0);
+      y0 = int_promotion(y0);
       assert(x0 && y0);
       if (x0->signed_ == y0->signed_) return x0->rank > y0->rank ? x0 : y0;
       const Int * u = x0->signed_ == Int::UNSIGNED ? x0 : y0;
@@ -754,7 +768,7 @@ namespace ast {
     return new C_TypeRelation();
   }
 
-  void add_c_int(TypeSymbolTable types, String n);
+  const Int * add_c_int(TypeSymbolTable types, String n);
 
   void create_c_types(TypeSymbolTable types) {
     add_internal_type(types, ".int8", new_signed_int(1));
@@ -768,7 +782,7 @@ namespace ast {
 
     add_c_int(types, "signed-char");
     add_c_int(types, "short");
-    add_c_int(types, "int");
+    INT = add_c_int(types, "int");
     add_c_int(types, "long");
     add_c_int(types, "long-long");
 
@@ -779,7 +793,7 @@ namespace ast {
 
     add_c_int(types, "unsigned-char");
     add_c_int(types, "unsigned-short");
-    add_c_int(types, "unsigned-int");
+    UINT = add_c_int(types, "unsigned-int");
     add_c_int(types, "unsigned-long");
     add_c_int(types, "unsigned-long-long");
 
@@ -854,8 +868,10 @@ namespace ast {
     abort();
   }
   
-  void add_c_int(TypeSymbolTable types, String n) {
-    add_internal_type(types, n, new Int(static_cast<const Int *>(types.inst(c_type_to_exact(n)))));
+  const Int * add_c_int(TypeSymbolTable types, String n) {
+    Int * i = new Int(static_cast<const Int *>(types.inst(c_type_to_exact(n))));
+    add_internal_type(types, n, i);
+    return i;
   }
 
 }

@@ -522,12 +522,10 @@ namespace ast {
   };
   
   static Int signed_int(unsigned sz) {
-    uint64_t sz0 = sz;
-    return Int(-(1<<(sz0*8-1)), (1<<(sz0*8-1))-1, Int::UNDEFINED, sz);
+    return Int(-(1ll<<(sz*8-1)), (1ull<<(sz*8-1))-1, Int::UNDEFINED, sz);
   }
   static Int unsigned_int(unsigned sz) {
-    uint64_t sz0 = sz;
-    return Int(0, (1<<(sz0*8))-1, Int::MODULE, sz);
+    return Int(0, ((uint64_t)-1)>>(64-sz*8), Int::MODULE, sz);
   }
 
   static inline Int * new_signed_int(unsigned sz) {

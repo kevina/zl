@@ -2026,16 +2026,16 @@ namespace ast {
   }
 
   struct CompoundAssign : public BinOp {
-    CompoundAssign(String name, String op0, BinOp *bop, Environ & env) 
+    CompoundAssign(String name, String op0, Exp * lhs0, BinOp *bop, Environ & env) 
       : BinOp(name, op0), assign(new Assign), binop(bop) 
     {
       syn = binop->syn;
-      lhs = binop->lhs;
       rhs = binop->rhs;
       assign->syn = syn;
-      assign->lhs = lhs;
+      assign->lhs = lhs0;
       assign->rhs = binop;
       assign->resolve(env);
+      lhs = assign->lhs;
       type = assign->type;
     }
     Assign * assign;
@@ -4331,12 +4331,13 @@ namespace ast {
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
     if (what == "environ_snapshot") return (new EnvironSnapshot)->parse_self(p, env);
     if (what == "c-assign") {
-      AST * ast = try_just_exp(SYN(p->str(), p->arg(0), p->arg(1), p->arg(2)), env, c);
-      if (!ast) return 0;
-      BinOp * binop = dynamic_cast<BinOp *>(ast);
+      Exp * lhs = parse_exp(p->arg(1), env);
+      Exp * rhs = try_just_exp(SYN(p->str(), p->arg(0), SYN(p->arg(1)->str(), lhs), p->arg(2)), env, c);
+      if (!rhs) return 0;
+      BinOp * binop = dynamic_cast<BinOp *>(rhs);
       StringBuf op;
       op << binop->op << "=";
-      return new CompoundAssign(what, op.freeze(), binop, env);
+      return new CompoundAssign(what, op.freeze(), lhs, binop, env);
     }
     return 0;
   }
