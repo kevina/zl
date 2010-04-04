@@ -2918,18 +2918,11 @@ namespace ast {
     assert_num_args(p, 1, NPOS);
     const Syntax * val = p->arg(0);
     if (!val->simple() && val->is_a("s")) val = val->arg(0);
-    bool mangle_save = false;
-    bool mangle = false;
-    if (val->eq("C")) mangle = true;
+    bool mangle_save = env.mangle;
+    if (val->eq("C")) env.mangle = false;
     else throw error(p->arg(0), "Unknown extern type \"%s\"\n", ~val->to_string());
-    if (mangle) {
-      mangle_save = env.mangle;
-      env.mangle = true;
-    }
     parse_stmts(p->args_begin() + 1, p->args_end(), env);
-    if (mangle) {
-      env.mangle = mangle_save;
-    }
+    env.mangle = mangle_save;
     return empty_stmt();
   }
 
@@ -3496,7 +3489,7 @@ namespace ast {
     if (p->flag("__static_constructor")) static_constructor = true;
     if (p->flag("__constructor__")) static_constructor = true;
 
-    mangle = !(ct_callback || env0.mangle);
+    mangle = !ct_callback && env0.mangle;
 
     if (p->flag("__need_snapshot"))
       env_ss = *env0.top_level_environ;

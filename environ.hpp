@@ -125,7 +125,7 @@ namespace ast {
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
         deps(), for_ct(), temp_ip(), exp_ip(), collect(),
-        true_top_level(false), interface(false), mangle(false)
+        true_top_level(false), interface(false), mangle(true)
       {
         if (s == TOPLEVEL) {
           true_top_level = true;
