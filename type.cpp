@@ -558,7 +558,7 @@ namespace ast {
       Id * id = dynamic_cast<Id *>(orig_exp);
       const Fun * fun;
       if (type) {
-        const Pointer * ptr = dynamic_cast<const Pointer *>(type);
+        const Pointer * ptr = dynamic_cast<const Pointer *>(type->root);
         const Function * fun_t = dynamic_cast<const Function *>(ptr->subtype);
         fun = lookup_overloaded_symbol<Fun>(fun_t->parms, orig_exp->syn, id->sym, env);
       } else {
