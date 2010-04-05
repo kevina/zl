@@ -209,6 +209,7 @@ namespace syntax_ns {
     inline bool eq(const char * n) const;
     inline bool eq(const char * n1, const char * n2) const;
     inline bool eq(const char * n1, const char * n2, const char * n3) const;
+    inline bool eq(const char * const *, unsigned len) const;
     inline bool ne(const char * n) const;
     inline bool ne(const char * n1, const char * n2) const;
     inline bool ne(const char * n1, const char * n2, const char * n3) const;
@@ -795,6 +796,11 @@ namespace syntax_ns {
     {return simple() && (as_leaf()->what_.name == n1 || as_leaf()->what_.name == n2);}
   inline bool SyntaxBase::eq(const char * n1, const char * n2, const char * n3) const 
     {return simple() && (as_leaf()->what_.name == n1 || as_leaf()->what_.name == n2 || as_leaf()->what_.name == n3);}
+  inline bool SyntaxBase::eq(const char * const * ns, unsigned len) const {
+    if (!simple()) return false;
+    for (unsigned i = 0; i != len; ++i) if (as_leaf()->what_.name == ns[i]) return true;
+    return false;
+  }
   inline bool SyntaxBase::ne(const char * n) const {return !eq(n);}
   inline bool SyntaxBase::ne(const char * n1, const char * n2) const {return !eq(n1,n2);}
   inline bool SyntaxBase::ne(const char * n1, const char * n2, const char * n3) const 

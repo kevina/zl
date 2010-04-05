@@ -4093,6 +4093,71 @@ namespace ast {
   };
 
   //
+  //
+  //
+
+  struct GccBuiltIn : public Exp {
+    const char * what_;
+    unsigned num_parms;
+    GccBuiltIn(const char * wt, unsigned n, const Type * t) 
+      : what_(wt), num_parms(n) {type = t;}
+    const char * what() const {return what_;}
+    Vector<Exp *> parms;
+    GccBuiltIn * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      assert_num_args(num_parms);
+      add_ast_nodes(p->args_begin(), p->args_end(), parms, Parse<ExpPos>(env));
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      for (int i = 0; i != num_parms; ++i)
+        parms[i]->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      for (int i = 0; i != num_parms; ++i)
+        parms[i]->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << "(call " << what_ << " (.";
+      int i = 0;
+      while (i != num_parms) {
+        f << " " << parms[i];
+        ++i;
+      }
+      f << "))";
+    }
+  };
+
+  struct VaArg : public Exp {
+    const char * what() const {return "__builtin_va_arg";}
+    Exp * va;
+    VaArg * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      assert_num_args(2);
+      va = parse_exp(p->arg(0), env);
+      const Syntax * type_s = p->arg(1);
+      if (type_s->is_a("parm")) {
+        type_s = reparse("TOKENS", type_s->outer());
+        type_s = parse_decl_->parse_type(type_s, env);
+      }
+      type = parse_type(type_s, env);
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      va->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      va->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << "(call __builtin_va_arg (.";
+      f << " " << va;
+      f << " " << type;
+      f << "))";
+    }
+  };
+
+  //
 
   AST * parse_top(const Syntax * p) {
     Environ env(TOPLEVEL);
@@ -4330,6 +4395,14 @@ namespace ast {
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
     if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
     if (what == "environ_snapshot") return (new EnvironSnapshot)->parse_self(p, env);
+    if (what == "__builtin_va_start") 
+      return (new GccBuiltIn("__builtin_va_start", 2, VOID_T))->parse_self(p, env);
+    if (what == "__builtin_va_end") 
+      return (new GccBuiltIn("__builtin_va_end", 1, VOID_T))->parse_self(p, env);
+    if (what == "__builtin_va_arg")
+      return (new VaArg)->parse_self(p, env);
+    if (what == "__builtin_va_copy") 
+      return (new GccBuiltIn("__builtin_va_copy", 2, VOID_T))->parse_self(p, env);
     if (what == "c-assign") {
       Exp * lhs = parse_exp(p->arg(1), env);
       Exp * rhs = try_just_exp(SYN(p->str(), p->arg(0), SYN(p->arg(1)->str(), lhs), p->arg(2)), env, c);

@@ -52,7 +52,9 @@ sub compile_test($) {
 }
 
 sub do_test( $ ) {
-  my $f = $_[0];
+  my $line = $_[0];
+  my ($f, @ops) = split / /, $line;
+  my $use_zlc = grep {$_ eq 'zlc'} @ops;
   my ($base, $ext) = $f =~ /^(.+?)\.([a-z]+)$/ or die "Bad Filename: \"$f\"";
   eval {
     unlink "a.out";
@@ -60,8 +62,13 @@ sub do_test( $ ) {
     print "$f ...\n";
     flush STDIN;
     if ($ext eq 'c' || $ext eq 'zl' || $ext eq 'cpp') {
-      sys "../zl $f > $base.log";
-      compile_test($base);
+      if ($use_zlc) {
+        sys "../zlc $f > $base.log";
+        maybe_run_prog ($base);
+      } else {
+        sys "../zl $f > $base.log";
+        compile_test($base);
+      }
     } elsif ($ext eq 'sh') {
       sys "sh $f";
       maybe_run_prog ($base);

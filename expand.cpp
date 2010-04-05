@@ -1249,6 +1249,15 @@ const Syntax * e_parse_exp(const Syntax * p0, Environ & env, const char * list_i
   return res;
 }
 
+static const char * const BUILTINS[] = {
+  "environ_snapshot",
+  "__builtin_va_start",
+  "__builtin_va_end",
+  "__builtin_va_arg",
+  "__builtin_va_copy"
+};
+static const unsigned NUM_BUILTINS = 5;
+
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags) {
   if (p->have_entity()) return p;
   //printf("\n>expand>%s//\n", ~p->part(0)->to_string());
@@ -1307,11 +1316,9 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
           //  (call (id fun) (list parm1 parm2 ...))?
           p = m->expand(p, a, env);
           return partly_expand(p, pos, env, flags);
-        } else if (*n->arg(0) == "environ_snapshot") {
-          if (a->num_args() > 0)
-            throw error(a, "environ_snapshot does not take any paramaters");
-          return SYN(n->arg(0));
-        }
+        } else if (n->arg(0)->eq(BUILTINS, NUM_BUILTINS)) {
+          return SYN(p->str(), n->arg(0), PARTS(a->args_begin(), a->args_end()));
+        } 
       }
       if (TypeSymbol * t = env.symbols.find<TypeSymbol>(n->arg(0))) {
         Syntax * res = SYN(SYN("anon"), SYN(t), a);
