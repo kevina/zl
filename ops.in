@@ -26,6 +26,7 @@
   (right (bin assign =)
          (bin *= *=) (bin /= /=) (bin %= %=)
          (bin += +=) (bin -= -=)
-         (bin &= &=) (bin ^= ^=) (bin |= |=))
+         (bin &= &=) (bin ^= ^=) (bin |= |=)
+         (bin <<= <<=) (bin >>= >>=))
   (list (bin <list> ,))
 )
