@@ -637,8 +637,6 @@ namespace ast {
 
   StringC * StringC::parse_self(const Syntax * p, Environ & env) {
     syn = p;
-    assert_num_args(1,2);
-    orig = *p->arg(0);
     //printf("StringC: %s\n", ~p->to_string());
     type = env.types.inst(".ptr", env.types.ct_const(env.types.inst("char")));
     type = env.types.ct_const(type);
@@ -646,7 +644,12 @@ namespace ast {
     return this;
   }
   void StringC::compile(CompileWriter & f) {
-    f << "(s \"" << orig << "\")";
+    unsigned num_args = syn->num_args();
+    if (num_args > 1) --num_args;
+    f << "(s \"";
+    for (unsigned i = 0; i != num_args; ++i)
+      f << syn->arg(i)->as_string();
+    f << "\")";
   }
   
   CharC * CharC::parse_self(const Syntax * p, Environ & env) {

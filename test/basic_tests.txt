@@ -122,6 +122,7 @@ test136.c
 test137.c
 test138.c
 test-stdarg.c zlc
+test140.c
 
 fix_size-0-t.zl # was 67
 fix_size-1-t.zl # was 95

@@ -96,8 +96,8 @@ CONST = <f> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SP
         / <n> {'0'[xX][0-9a-fA-F]+} {INT_SUFFIX} SPACING
         / <n> {[1-9][0-9]*} {INT_SUFFIX} SPACING
         / <n> {'0'[0-7]*} {INT_SUFFIX} SPACING
-        / <s> {STRING} (<char>)
-        / <s> 'L'{STRING} (<wchar_t>)
+        / <s> {STRING}+ (<char>)
+        / <s> ('L'{STRING})+ (<wchar_t>)
         / <c> {CHAR} (<char>)
         / <c> 'L'{CHAR} (<wchar_t>);
 
@@ -195,7 +195,7 @@ TEMPLATE_CALL =
 NUM : "number" = 
     {[\d]+('.'[\d]+)?} SPACING;
 
-STRING = '"' {('\\'_/[^"])+} '"' SPACING;
+STRING = '"' {('\\'_/[^"])*} '"' SPACING;
 
 CHAR   = '\'' {('\\'_/[^'])+} '\'' SPACING;
 
