@@ -3605,20 +3605,30 @@ namespace ast {
     const char * what() const {return "return";}
     Stmt * parse_self(const Syntax * p, Environ & env) {
       syn = p;
-      assert_num_args(1);
-      ExpInsrPointWrapper wrap(env);
-      exp = parse_exp(p->arg(0), wrap.env);
-      exp = exp->resolve_to(env.frame->return_type, wrap.env);
-      return wrap.finish(this);
+      assert_num_args(0,1);
+      if (p->num_args() == 1) {
+        ExpInsrPointWrapper wrap(env);
+        exp = parse_exp(p->arg(0), wrap.env);
+        exp = exp->resolve_to(env.frame->return_type, wrap.env);
+        return wrap.finish(this);
+      } else {
+        exp = NULL;
+        return this;
+      }
     }
     void finalize(FinalizeEnviron & env) {
-      exp->finalize(env);
+      if (exp)
+        exp->finalize(env);
     }
     void compile_prep(CompileEnviron & env) {
-      exp->compile_prep(env);
+      if (exp)
+        exp->compile_prep(env);
     }
     void compile(CompileWriter & f) {
-      f << indent << "(return " << exp << ")\n";
+      if (exp) 
+        f << indent << "(return " << exp << ")\n";
+      else
+        f << indent << "(return)\n";
     }
   };
 

@@ -20,7 +20,7 @@ STMT : "statement" =
     / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<n 1>} ";" {<eblock> {EXP}/<noop>} ")" {STMT}
     / <break>    "break" ";"
     / <continue> "continue" ";"
-    / <return>   "return" {EXP} ";"
+    / <return>   "return" {EXP}? ";"
     / <local_label> "__label__" {ID} ";"
     / <goto>     "goto" {ID} ";"
     / {BLOCK}
