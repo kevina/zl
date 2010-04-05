@@ -4139,6 +4139,7 @@ namespace ast {
       if (type_s->is_a("parm")) {
         type_s = reparse("TOKENS", type_s->outer());
         type_s = parse_decl_->parse_type(type_s, env);
+        if (!type_s) throw error(p->arg(1), "Expected type.");
       }
       type = parse_type(type_s, env);
       return this;
