@@ -101,14 +101,14 @@ CONST = <f> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SP
         / <c> {CHAR} (<char>)
         / <c> 'L'{CHAR} (<wchar_t>);
 
-INT_SUFFIX = <"unsigned long long"> ([uU][lL][lL]/[lL][lL][uU])
-           / <"unsigned long"> ([uU][lL]/[lL][uU])
-           / <"long long"> [lL][lL] 
+INT_SUFFIX = <unsigned-long-long> ([uU][lL][lL]/[lL][lL][uU])
+           / <unsigned-long> ([uU][lL]/[lL][uU])
+           / <long-long> [lL][lL] 
            / <unsigned> [uU] 
            / <long> [lL] 
            / <int>;
 
-FLOATING_SUFFIX = <f> [fF] / <"long double"> [lL] / <double>;
+FLOATING_SUFFIX = <f> [fF] / <long-double> [lL] / <double>;
 
 STRUCT_UNION = <%> {"struct"/"union"/"class"/".class"} 
                    {ID/}
