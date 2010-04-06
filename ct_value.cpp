@@ -150,7 +150,7 @@ namespace ast {
     typedef UnOp Exp_T;
     static const CT_Value_Base * get_value(const UnOp * u) {
       if (!u->exp->ct_value_) return NULL;
-      if (u->exp->ct_value_->nval()) return NULL;
+      if (u->exp->ct_value_->nval()) return &ct_nval;
       typename F::argument_type x = u->exp->ct_value_direct<typename F::argument_type>();
       return new CT_Value<typename F::result_type>(F()(x));
     }
@@ -328,6 +328,7 @@ namespace {
   struct Cast_GetValue_Base {
     static const CT_Value_Base * get_value(const Exp * exp) {
       if (!exp->ct_value_) return NULL;
+      if (exp->ct_value_->nval()) return NULL;
       return new CT_Value<To>(static_cast<To>(exp->ct_value_direct<From>()));
     }
   };

@@ -640,6 +640,7 @@ namespace ast {
     void compile(CompileWriter & f, Phase phase) const;
     unsigned size() const {return of->size();}
     unsigned align() const {return of->align();}
+    const TypeInst * root_nr() const {return of->root_nr();}
   protected:
     const Type * find_root() {return of->root;}
   };

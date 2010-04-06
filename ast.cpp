@@ -1055,15 +1055,19 @@ namespace ast {
       if (init == noop()) init = NULL;
       RefInsrPointWrapper wrap2(env, top_level() ? ExpInsrPoint::TopLevelVar : ExpInsrPoint::Var);
       if (init) {
-        if (Array * array = const_cast<Array *>(dynamic_cast<const Array *>(type->root))) 
+        if (const Array * array = dynamic_cast<const Array *>(type->root_nr())) 
         {
           if (InitList * init_list = dynamic_cast<InitList *>(init)) {
             if (array->length == NPOS)
-              array->length = init_list->parts.size();
+              type = env.types.inst(".array", 
+                                    TypeParm(array->subtype), 
+                                    TypeParm(init_list->parts.size()));
             init = init->resolve_to(type, wrap2.env);
           } else if (StringC * string_c = dynamic_cast<StringC *>(init)) {
             if (array->length == NPOS)
-              array->length = string_c->val.size() + 1;
+              type = env.types.inst(".array", 
+                                    TypeParm(array->subtype), 
+                                    TypeParm(string_c->val.size() + 1));
           } else {
             init = init->resolve_to(type, wrap2.env);
           }
@@ -3785,7 +3789,7 @@ namespace ast {
     if (lhs->is_a("id")) {
       add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));
       const Symbol * sym = resolve_call(lhs->arg(0), parms, env);
-      if (const Fun * fun = dynamic_cast<const Fun *>(sym)) {
+      if (const TopLevelVarDecl * fun = dynamic_cast<const TopLevelVarDecl *>(sym)) {
         return mk_call(p, mk_id(fun, env), parms, env);
       } else if (const Syntax * res = expand_macro(p, sym, parms, env)) {
         return parse_exp(res, env);

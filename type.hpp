@@ -256,6 +256,10 @@ namespace ast {
     }
     virtual SourceStr source_str() const {return SourceStr();}
     virtual Exp * lt_sizeof() const {return NULL;}
+    // root_nr: The root type, _not_ recursively resolved.  The result
+    //          is guaranteed not to be a typedef, but any inner types 
+    //          still be a typedef.
+    virtual const TypeInst * root_nr() const {return this;} 
     virtual ~TypeInst() {}
   protected:
     virtual void finalize_hook() {} 
@@ -721,6 +725,7 @@ namespace ast {
     unsigned align() const {return of->align();}
     virtual unsigned num_parms() const {return 0;}
     virtual TypeParm parm(unsigned i) const {abort();}
+    const TypeInst * root_nr() const {return of->root_nr();}
   protected:
     const Type * find_root() {
       return of->root; 
