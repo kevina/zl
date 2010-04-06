@@ -136,6 +136,12 @@ struct DeclWorking {
   bool try_qualifier(const Syntax * p, SyntaxBuilder & qualifiers) {
     if (p->eq("const", "restrict", "volatile"))
       qualifiers.add_flag(p);
+    else if (p->eq("__const__", "__const"))
+      qualifiers.add_flag(SYN("const"));
+    else if (p->eq("__restrict__", "__restrict"))
+      qualifiers.add_flag(SYN("restrict"));
+    else if (p->eq("__volatile__", "__volatile"))
+      qualifiers.add_flag(SYN("volatile"));
     else return false;
     return true;
   }
@@ -145,7 +151,7 @@ struct DeclWorking {
   const Syntax * virtual_;
   bool pure_virtual;
   bool try_function_specifier(const Syntax * p) {
-    if      (*p == "inline") inline_ = p;
+    if      (p->eq("inline", "__inline", "__inline__")) inline_ = p;
     else if (*p == "virtual") virtual_ = p;
     else return false;
     return true;
