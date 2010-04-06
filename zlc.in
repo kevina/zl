@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 
+use Config;
+
 use warnings;
 use strict;
 
@@ -10,10 +12,12 @@ my $preprocess;
 my $lang;
 my $output;
 my @files;
-my @zl_ops;
+my @cpp_ops;
 my @zls_ops;
 my @zls_files;
+my @zl_ops;
 my @temp_files;
+my $save_temps = 0;
 
 sub arg_w_parm ($) {
     my ($arg) = @_;
@@ -56,6 +60,9 @@ while (@ARGV) {
     } elsif ($_ eq '-S') {
         push @zls_ops, $_;
         shift @ARGV;
+    } elsif ($_ eq '-save-temps') {
+        $save_temps = 1;
+        shift @ARGV;
     } elsif (/^-g(.*)/) {
         push @zls_ops, $_;
         shift @ARGV;
@@ -70,6 +77,21 @@ while (@ARGV) {
         shift @ARGV;
     } elsif (/^-W(.*)/) {
         # ignore for now
+        shift @ARGV;
+    } elsif ($p = arg_w_parm('D')) {
+        push @cpp_ops, '-D', $p;
+        shift @ARGV;
+    } elsif ($_ eq '-I-') {
+        push @cpp_ops, $_;
+        shift @ARGV;
+    } elsif ($p = arg_w_parm('I')) {
+        push @cpp_ops, '-I', $p;
+        shift @ARGV;
+    } elsif ($p = arg_w_parm('L')) {
+        push @zls_ops, '-L', $p;
+        shift @ARGV;
+    } elsif ($p = arg_w_parm('l')) {
+        push @zls_ops, '-l', $p;
         shift @ARGV;
     } elsif (/^-/) {
         die "Unknown option: $_\n";
@@ -89,22 +111,22 @@ foreach (@files) {
     my $l = $lang;
     if (!defined $l) {
         $l = $ext_map{$ext};
-        die "Unknown extension: $ext" unless defined $l;
+        $l = "obj" unless defined $l;
+        #die "Unknown extension: $ext" unless defined $l;
     }
     my $pp = $preprocess;
     $pp = ($l eq 'c' || $l eq 'cpp') && !($ext eq 'i' || $ext eq 'ii') if !defined $pp;
     my $orig_file = $file;
     if ($pp) {
         $file = "$base.i";
-        system("cpp -include $ZL_H -x c $orig_file -o $file");
-        exit 1 unless $? == 0;
+        system("zls -E -include $ZL_H -x c @cpp_ops $orig_file -o $file");
+        die "zls -E failed\n" unless $? == 0;
     }
     push @zl_ops, '-xc' if $l eq 'c';
-    if ($l ne 'zls') {
-        print("$ZL @zl_ops $file\n");
+    if ($l ne 'zls' && $l ne 'obj') {
         system("$ZL @zl_ops $file");
-        exit 1 unless $? == 0;
-        unlink $file unless $orig_file eq $file;
+        die "zl failed\n" unless $? == 0;
+        unlink $file unless $orig_file eq $file || $save_temps;
         push @zls_files, "$base.zls";
         push @temp_files, "$base.zls";
     } else {
@@ -113,7 +135,7 @@ foreach (@files) {
 }
 
 system("zls @zls_ops @zls_files");
-exit 1 unless $? == 0;
-unlink @temp_files;
+die "zls failed" unless $? == 0;
+unlink @temp_files unless $save_temps;
 
 exit 0;
