@@ -235,7 +235,7 @@ COMMENT =
 
 PARAN_EXP = {EBLOCK} / "(" {EXP} ")";
 
-ARRAY_SIZE = {EXP} EOF / <n 0>;
+ARRAY_SIZE = {EXP} EOF / <n -1>;
 
 TOKENS = <(...)> {TOKEN}*;
 

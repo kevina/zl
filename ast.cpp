@@ -638,6 +638,14 @@ namespace ast {
   StringC * StringC::parse_self(const Syntax * p, Environ & env) {
     syn = p;
     //printf("StringC: %s\n", ~p->to_string());
+    unsigned num_args = syn->num_args();
+    if (num_args > 1) --num_args;
+    StringBuf buf;
+    for (unsigned i = 0; i != num_args; ++i) {
+      String str = p->arg(i)->as_string();
+      parse_common::unescape(str.begin(), str.end(), buf);
+    }
+    val = buf.freeze();
     type = env.types.inst(".ptr", env.types.ct_const(env.types.inst("char")));
     type = env.types.ct_const(type);
     ct_value_ = &ct_nval;
@@ -709,6 +717,47 @@ namespace ast {
     Id * id = new Id(this);
     return id->construct(env);
   }
+
+  //
+  //
+  //
+
+  struct InitList : public Exp {
+    InitList() {}
+    const char * what() const {return ".";}
+    AST * part(unsigned i) {return parts[i];}
+    Vector<Exp *> parts;
+    InitList * parse_self(const Syntax * p, Environ & env) {
+      syn = p;
+      unsigned num_args = p->num_args();
+      parts.reserve(num_args);
+      add_ast_nodes(p->args_begin(), p->args_end(), parts, Parse<ExpPos>(env));
+      type = VOID_T;
+      ct_value_ = &ct_nval;
+      for (unsigned i = 0; i != parts.size(); ++i) {
+        if (!parts[i]->ct_value_) ct_value_ = NULL;
+      }
+      return this;
+    }
+    void finalize(FinalizeEnviron & env) {
+      for (unsigned i = 0; i != parts.size(); ++i)
+        parts[i]->finalize(env);
+    }
+    void compile_prep(CompileEnviron & env) {
+      for (unsigned i = 0; i != parts.size(); ++i)
+        parts[i]->compile_prep(env);
+    }
+    void compile(CompileWriter & f) {
+      f << "(.\n";
+      for (unsigned i = 0; i != parts.size(); ++i)
+        f << indent << "  " << adj_indent(2) << parts[i] << "\n";
+      f << indent << ")";
+    }
+    virtual Exp * resolve_to(const Type * type, Environ & env, TypeRelation::CastType rule) {
+      // FIXME: resolve individual components of list
+      return this;
+    }
+  };
 
   //
   // Blocks
@@ -1005,7 +1054,23 @@ namespace ast {
       init = parse_exp(init_syn, wrap.env, ExpContext(this));
       if (init == noop()) init = NULL;
       RefInsrPointWrapper wrap2(env, top_level() ? ExpInsrPoint::TopLevelVar : ExpInsrPoint::Var);
-      if (init) init = init->resolve_to(type, wrap2.env);
+      if (init) {
+        if (Array * array = const_cast<Array *>(dynamic_cast<const Array *>(type->root))) 
+        {
+          if (InitList * init_list = dynamic_cast<InitList *>(init)) {
+            if (array->length == NPOS)
+              array->length = init_list->parts.size();
+            init = init->resolve_to(type, wrap2.env);
+          } else if (StringC * string_c = dynamic_cast<StringC *>(init)) {
+            if (array->length == NPOS)
+              array->length = string_c->val.size() + 1;
+          } else {
+            init = init->resolve_to(type, wrap2.env);
+          }
+        } else {
+          init = init->resolve_to(type, wrap2.env);
+        }
+      }
       finish(this, wrap, wrap2, env);
     }
     void construct(parts_iterator i, parts_iterator e, Environ & env) {
@@ -1306,8 +1371,6 @@ namespace ast {
     var->name_p = name_p;
     var->type = parse_type(p->arg(1), env);
     var->storage_class = storage_class;
-    if (storage_class != SC_EXTERN && var->type->size() == NPOS)
-      throw error(name_p, "Size not known");
     var->add_to_sub_env(env);
     if (fresh && !shadow)
       env.add(name, var);
@@ -1317,6 +1380,8 @@ namespace ast {
       collect->second_pass.add(new CollectParseDef(var, env));
     if (shadow)
       env.add(name, var);
+    if (storage_class != SC_EXTERN && var->type->size() == NPOS)
+      throw error(name_p, "Size not known");
     return res;
   }
 
@@ -2254,43 +2319,6 @@ namespace ast {
 
   struct PostDec : public PostIncDec {
     PostDec() : PostIncDec("postdec", "--") {}
-  };
-
-  struct InitList : public Exp {
-    InitList() {}
-    const char * what() const {return ".";}
-    AST * part(unsigned i) {return parts[i];}
-    Vector<Exp *> parts;
-    InitList * parse_self(const Syntax * p, Environ & env) {
-      syn = p;
-      unsigned num_args = p->num_args();
-      parts.reserve(num_args);
-      add_ast_nodes(p->args_begin(), p->args_end(), parts, Parse<ExpPos>(env));
-      type = VOID_T;
-      ct_value_ = &ct_nval;
-      for (unsigned i = 0; i != parts.size(); ++i) {
-        if (!parts[i]->ct_value_) ct_value_ = NULL;
-      }
-      return this;
-    }
-    void finalize(FinalizeEnviron & env) {
-      for (unsigned i = 0; i != parts.size(); ++i)
-        parts[i]->finalize(env);
-    }
-    void compile_prep(CompileEnviron & env) {
-      for (unsigned i = 0; i != parts.size(); ++i)
-        parts[i]->compile_prep(env);
-    }
-    void compile(CompileWriter & f) {
-      f << "(.\n";
-      for (unsigned i = 0; i != parts.size(); ++i)
-        f << indent << "  " << adj_indent(2) << parts[i] << "\n";
-      f << indent << ")";
-    }
-    virtual Exp * resolve_to(const Type * type, Environ & env, TypeRelation::CastType rule) {
-      // FIXME: resolve individual components of list
-      return this;
-    }
   };
 
   //

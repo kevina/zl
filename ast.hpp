@@ -256,7 +256,7 @@ namespace ast {
     StringC() {}
     const char * what() const {return "s";}
     //AST * part(unsigned i);
-    String orig;
+    String val;
     //String value; // unused at the moment
     StringC * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f);
@@ -580,7 +580,7 @@ namespace ast {
     SymbolTable symbols;
     mutable SymbolNode * env_ss;
     mutable bool is_macro;
-    const Tuple * parms;
+    Tuple * parms;
     bool overload;
     const Tuple * overloadable() const {return overload ? parms : NULL;}
     const Type * ret_type;

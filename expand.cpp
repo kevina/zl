@@ -1488,7 +1488,11 @@ void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res) {
         p = reparse("TOKENS", p->inner());
       //printf("FUN_PARM: %s\n", ~p->to_string());
       if (!p->is_a("...")) {
-        Syntax * r = SYN(p->part(0)->str(), parse_type(p->part(0), env));
+        const Type * t = parse_type(p->part(0), env);
+        // an array of x as parm is really a pointer to x:
+        if (const Array * a = dynamic_cast<const Array *>(t->root))
+          t = env.types.inst(".ptr", a->subtype);
+        Syntax * r = SYN(p->part(0)->str(), t);
         if (p->num_parts() == 2) 
           r = SYN(r, p->part(1));
         res.add_part(r);

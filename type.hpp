@@ -676,22 +676,27 @@ namespace ast {
   public:
     Array(const Type * t, unsigned sz) : PointerLike(ARRAY_C, t), length(sz) {}
     unsigned length;
+    bool have_size() const {return length != NPOS;}
     unsigned align() const {return subtype->align();}
-    unsigned size() const {return subtype->size() * length;}
-    unsigned num_parms() const {return 2;}
+    unsigned size() const {return have_size() ? subtype->size() * length : NPOS;}
+    unsigned num_parms() const {return have_size() ? 2 : 1;}
     TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(subtype) : TypeParm(length);}
   };
 
   class ArraySymbol : public ParmTypeSymbol {
   public:
     ParmTypeInst * inst_p(Vector<TypeParm> & p) const {
-      assert(p.size() == 2);
+      assert(p.size() >= 1);
       assert(p[0].what == TypeParm::TYPE);
-      assert(p[1].what == TypeParm::INT);
+      unsigned sz = NPOS;
+      if (p.size() > 1) {
+        assert(p[1].what == TypeParm::INT);
+        sz = p[1].as_int;
+      }
       //assert(p[1].what == TypeParm::EXP);
-      return new Array(p[0].as_type, p[1].as_int);
+      return new Array(p[0].as_type, sz);
     }
-    unsigned required_parms() const {return 2;}
+    unsigned required_parms() const {return 1;}
     TypeParm::What parmt(unsigned i) const {
       switch (i) {
       case 0: return TypeParm::TYPE;
