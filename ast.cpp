@@ -764,25 +764,11 @@ namespace ast {
   //
 
   struct Block : public Stmt {
-    Block() {}
+    Block() : stmts() {}
     const char * what() const {return "block";}
     //AST * part(unsigned i) {return stmts[i];}
     Stmt * stmts;
-    Stmt * parse_self(const Syntax * p, Environ & env0) {
-      syn = p;
-      Environ env = env0.new_scope();
-      stmts = NULL;
-      InsrPoint ip = &stmts;
-      if (!env.exp_ip)
-        env.stmt_ip = &ip;
-      else
-        assert(env.exp_ip == env.stmt_ip);
-      add_stmts(p->args_begin(), p->args_end(), env);
-      if (stmts == NULL) // must test against stmts as last will may
-                         // be an empty_stmt
-        stmts = empty_stmt();
-      return this;
-    }
+    Stmt * parse_self(const Syntax * p, Environ & env0);
     void finalize(FinalizeEnviron & env) {
       for (Stmt * cur = stmts; cur; cur = cur->next) {
         cur->finalize(env);
@@ -800,6 +786,33 @@ namespace ast {
       f << indent << ")\n";
     }
   };
+
+  struct BlockBuilder {
+    Block * block;
+    Environ env;
+    InsrPoint ip;
+    BlockBuilder(Block * b, Environ & env0) 
+      : block(b), 
+        env(env0.new_scope()),
+        ip(&block->stmts)
+      {
+        if (!env.exp_ip)
+          env.stmt_ip = &ip;
+        else
+          assert(env.exp_ip == env.stmt_ip);
+      }
+  };
+
+  Stmt * Block::parse_self(const Syntax * p, Environ & env0) {
+    syn = p;
+    BlockBuilder b(this, env0);
+    add_stmts(p->args_begin(), p->args_end(), b.env);
+    if (stmts == NULL) // must test against stmts as last will may
+      // be an empty_stmt
+      stmts = empty_stmt();
+    return this;
+  }
+
   
   //
   //
@@ -1478,20 +1491,35 @@ namespace ast {
     Exp * exp;
     Stmt * if_true;
     Stmt * if_false;
-    If * parse_self(const Syntax * p, Environ & env) {
+    Stmt * parse_self(const Syntax * p, Environ & env0) {
       syn = p;
       assert_num_args(2,3);
-      //ExpInsrPointWrapper wrap(env);
-      exp = parse_exp(p->arg(0), env);
-      //exp = wrap.finish(exp);
-      if_true = parse_stmt(p->arg(1), env);
+      BlockBuilder bb(new Block(), env0);
+      ExpInsrPointWrapperBase wrap(bb.env);
+      exp = parse_exp(p->arg(0), wrap.env);
+      exp = exp->resolve_to(bb.env.bool_type(), wrap.env);
+      if (wrap.stmts) {
+        Var * v = new AnonTemp(bb.env.bool_type());
+        bb.env.add(SymbolKey("tmp"), v, true);
+        bb.env.add_stmt(v);
+        wrap.ip.add(mk_init(v,exp,wrap.env)->as_stmt());
+        Block * b = new Block();
+        b->stmts = wrap.stmts;
+        bb.env.add_stmt(b);
+        exp = mk_id(v,bb.env);
+      }
+      if_true = parse_stmt(p->arg(1), bb.env);
       if (p->num_args() == 3) {
-        if_false = parse_stmt(p->arg(2), env);
+        if_false = parse_stmt(p->arg(2), bb.env);
       } else {
         if_false = NULL;
       }
-      exp = exp->resolve_to(env.bool_type(), env);
-      return this;
+      if (bb.block->stmts) {
+        bb.env.add_stmt(this);
+        return bb.block;
+      } else {
+        return this;
+      }
     }
     void finalize(FinalizeEnviron & env) {
       exp->finalize(env);
