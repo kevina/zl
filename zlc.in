@@ -96,17 +96,23 @@ while (@ARGV) {
     } elsif (/^-/) {
         die "Unknown option: $_\n";
     } else {
-        push @files, $_;
+        # The order of the args relative to the files can matter. Thus
+        # we must preserve the order by grouping the args with the
+        # file list.
+        push @files, [[@zls_ops], $_];
+        @zls_ops = ();
         shift @ARGV;
     }
 }
+my @final_zls_ops = @zls_ops;
+@zls_ops = ();
 
 my %ext_map = qw(c c i c ii cpp 
                  cc cpp cp cpp cxx cpp cpp cpp CPP cpp c++ cpp C cpp
                  zl zl zls zls);
 
 foreach (@files) {
-    my $file = $_;
+    my ($zls_ops, $file) = @$_;
     my ($base, $ext) = $file =~ /^(.+?)(?:\.(.+))?$/;
     my $l = $lang;
     if (!defined $l) {
@@ -120,22 +126,23 @@ foreach (@files) {
     if ($pp) {
         $file = "$base.i";
         system("zls -E -include $ZL_H -x c @cpp_ops $orig_file -o $file");
-        die "zls -E failed\n" unless $? == 0;
+        die "FAILED: zls -E ...\n" unless $? == 0;
     }
     push @zl_ops, '-xc' if $l eq 'c';
     if ($l ne 'zls' && $l ne 'obj') {
         system("$ZL @zl_ops $file");
-        die "zl failed\n" unless $? == 0;
+        die "FAILED: $ZL @zl_ops $file\n" unless $? == 0;
         unlink $file unless $orig_file eq $file || $save_temps;
-        push @zls_files, "$base.zls";
+        push @zls_ops, @$zls_ops, "$base.zls";
         push @temp_files, "$base.zls";
     } else {
-        push @zls_files, $file;
+        push @zls_ops, @$zls_ops, $file;
     }
 }
+push @zls_ops, @final_zls_ops;
 
-system("zls @zls_ops @zls_files");
-die "zls failed" unless $? == 0;
+system("zls @zls_ops");
+die "FAILED: zls @zls_ops\n" unless $? == 0;
 unlink @temp_files unless $save_temps;
 
 exit 0;
