@@ -1102,9 +1102,10 @@ namespace ast {
       //fprintf(stderr, "SIZE OF VAR = %u\n", sizeof(Var));
       //printf("FINISH PARSE %s\n", ~syn->to_string());
       construct(syn->args_begin() + 2, syn->args_end(), env);
-      if (storage_class == SC_STATIC && type->read_only && init && init->ct_value_) {
+      if (storage_class == SC_STATIC && type->read_only && init && init->ct_value_)
         ct_value = init->ct_value_;
-      }
+      else if (lvalue == LV_TOPLEVEL && type->is(ARRAY_C)) 
+        ct_value = &ct_nval;
       return this;
     }
     Stmt * try_constructor(const UserType * ut, Environ & env) {
