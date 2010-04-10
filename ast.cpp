@@ -2575,7 +2575,7 @@ namespace ast {
 
   static void parse_stmts(parts_iterator i, parts_iterator end, Environ & env);
 
-  inline void parse_stmts(const Syntax * p, Environ & env) {
+  void parse_stmts(const Syntax * p, Environ & env) {
     parse_stmts(p->args_begin(), p->args_end(), env);
   }
 
