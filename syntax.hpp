@@ -887,8 +887,8 @@ namespace syntax_ns {
   };
 
 
-    static inline PartsArray<0> mk_pt_flg() 
-      {
+  static inline PartsArray<0> mk_pt_flg() 
+  {
     return PartsArray<0>();
   }
 

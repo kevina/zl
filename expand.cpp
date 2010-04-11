@@ -1344,9 +1344,34 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env, what == "exp" ? "seq" : ".");
     return partly_expand(p, pos, env, flags);
-  } 
+  } else if (what == "<@") {
+    if (p->num_args() < 2) {
+      throw error(p, "<@ requires 2 or more args\n");
+    } else if (p->num_args() == 2) {
+      p = p->arg(0);
+    } else {
+      SyntaxBuilder res(SYN("@"));
+      res.insure_space(p->num_parts() - 1 + p->num_flags());
+      res.add_parts(p->args_begin(), p->args_end()-1);
+      res.set_flags(p->flags_begin(), p->flags_end());
+      p = res.build(p->str());
+    }
+  }
   // we should have a primitive
   return p;
+}
+
+const Syntax * limited_expand(const Syntax * p, Environ & env) {
+  if (p->have_entity()) return p;
+  SymbolName what = p->what();
+  if (p->simple()) {
+    return p;
+  } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
+    p = env.symbols.lookup<Macro>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, p, env);
+    return limited_expand(p, env);
+  } else {
+    return p;
+  }
 }
 
 const Syntax * macro_abi::partly_expand(const Syntax * p, Position pos, Environ * env) {

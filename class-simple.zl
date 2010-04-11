@@ -212,7 +212,7 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
   }
                          
   module_p->append(replace(
-                     syntax {struct _Data {$1; $2;};},
+                     syntax {.struct _Data {$1; $2;};},
                      match_local(m, struct_p, struct_b, 0),
                      mark));
   module_p->append(replace(

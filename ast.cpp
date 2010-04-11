@@ -3044,6 +3044,8 @@ namespace ast {
 
   Stmt * parse_declare_user_type(const Syntax * p, Environ & env, DeclHandle ** handle) {
     UserType * ut = new_user_type(p->arg(0), env);
+    if (!ut->type) ut->type = env.types.inst(SymbolKey(".dummy", TAG_NS));
+    assert(ut->type);
     if (handle) {
       UserTypeBuilder * utb = new UserTypeBuilder(p->arg(0), env, ut);
       utb->do_finalize = false;
@@ -3878,6 +3880,7 @@ namespace ast {
 
   Stmt * parse_struct_union(StructUnion::Which which, const Syntax * p, Environ & env0) {
     //assert(p->is_a(what()));
+    //printf(">>%s\n", ~p->to_string());
     const Syntax * name = p->arg(0);
     StructUnion * decl;
     if (env0.symbols.exists_this_scope(name, TAG_NS)) {
@@ -3898,8 +3901,7 @@ namespace ast {
       decl->have_body = true;
       if (p->what().name[0] == '.') {
         for (unsigned i = 1; i != p->num_args(); ++i) {
-          const Syntax * q = p->arg(i);
-          assert(q);
+          const Syntax * q = partly_expand(p->arg(i), FieldPos, decl->env);
           const Syntax * name_p = q->part(1);
           assert(name_p);
           SymbolKey name = expand_binding(name_p, decl->env);

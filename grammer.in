@@ -118,6 +118,10 @@ STRUCT_UNION = <%> {"struct"/"union"/"class"/".class"}
                    (:<abi_ver> ":" "abi_ver" "(" {EXP} ")" )? 
                    {<{...}> "{" {STMT}* "}" }?;
 
+STRUCT_UNION2 = <%> {".struct"/".union"}
+                    {ID}
+                    "{" {STMT}* "}";
+
 ENUM = <enum> "enum" {ID/} 
               {<{,}> "{" ({ENUM_MEMBER} ",")* ({ENUM_MEMBER} ","?)? "}" }?;
 ENUM_MEMBER = <> {ID} ("=" {ENUM_EXP})?;

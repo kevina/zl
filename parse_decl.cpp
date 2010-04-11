@@ -157,6 +157,18 @@ struct DeclWorking {
     return true;
   }
 
+  bool try_explicit_type(const Syntax * p, Environ & env) {
+    // doesn't make sense to have two types, so if we already have a
+    // type, fail
+    if (base_type || type_symbol || inner_type) return false;
+    if (p->is_a(".type")) {
+      inner_type = p->arg(0);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   const Syntax * type_symbol_p;
   const ast::TypeSymbol * type_symbol;
   bool try_type_name(const Syntax * p, Environ & env) {
@@ -178,6 +190,23 @@ struct DeclWorking {
       return true;
     } else {
       return false;
+    }
+  }
+  Syntax * handle_embedded_decl(const Syntax * p, Environ & env) {
+    //xprintf("input>%s\n", ~p->to_string());
+    p = limited_expand(p, env);
+    //printf("INPUT>%s\n", ~p->to_string());
+    if (p->is_a("<@")) {
+      //printf("LIVE ONE\n");
+      unsigned i;
+      for (i = 0; i != p->num_args()-1; ++i) {
+        type_scope.add_part(p->arg(0));
+      }
+      //printf("%d: %s\n", i, ~p->arg(i)->to_string());
+      return p->arg(i);
+    } else {
+      //printf("NOT\n");
+      return p;
     }
   }
   bool try_struct_union(const Syntax * p, Environ &, bool by_itself = false);
@@ -384,6 +413,7 @@ bool DeclWorking::parse_first_part(parts_iterator & i,
     ++i;
   } else while (i != end) {
     const Syntax * cur = *i;
+    cur = handle_embedded_decl(cur, env);
     if (const Syntax * p = try_id(cur)) {
       const Syntax * p = cur;
       bool any = 
@@ -399,6 +429,8 @@ bool DeclWorking::parse_first_part(parts_iterator & i,
       ++i;
     } else if (try_type_name(cur, env)) {
       //fixme: this seams like a hack...
+      ++i;
+    } else if (try_explicit_type(cur, env)) {
       ++i;
     } else if (try_typeof(cur, env)) {
       ++i;

@@ -74,6 +74,7 @@ static const unsigned EXPAND_NO_ID_MACRO_CALL = 1;
 static const unsigned EXPAND_NO_FUN_MACRO_CALL = 2;
 static const unsigned EXPAND_NO_MACRO_CALL = 1 | 2;
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags = 0);
+const Syntax * limited_expand(const Syntax * p, Environ & env); // used in parse_decl
 
 ast::SymbolKey expand_binding(const Syntax * p, const ast::InnerNS * ns, Environ & env);
 static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {

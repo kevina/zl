@@ -39,7 +39,7 @@ import_file "class-simple.zlh";
   }
  */
 
-typedef struct Collect {
+typedef .struct Collect {
   bool virtual_override;
   Syntax * this_type;
 } Collect;
@@ -104,7 +104,7 @@ public:
     
     if (!body) {
       //printf("DONE (declare only) %s\n", syntax_to_string(name));
-      return replace(syntax {declare_user_type name;}, m, mark);
+      return replace(raw_syntax (<@ (declare_user_type name) (.type name)), m, mark);
     }
 
     init();
@@ -126,7 +126,7 @@ public:
       create_vtable();
 
     builder->add(replace(
-                   syntax {struct _Data {$1; $2;};},
+                   syntax {.struct _Data {$1; $2;};},
                    match_local(m, struct_p, struct_b, 0),
                    mark));
     builder->add(replace(
@@ -146,10 +146,11 @@ public:
     create_special();
 
     Syntax * res = builder->to_syntax();
+    res = replace(raw_syntax(<@ $1 (.type name)), match_local(m, res, 0), mark);
     //printf("DONE %s\n", syntax_to_string(name));
-    //dump_syntax(module_);
+    //dump_syntax(res);
     //printf("---\n");
-    return replace(res, NULL, mark);
+    return res;
   }
 
   virtual void init_match() {
