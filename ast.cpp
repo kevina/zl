@@ -3901,7 +3901,7 @@ namespace ast {
       decl->have_body = true;
       if (p->what().name[0] == '.') {
         for (unsigned i = 1; i != p->num_args(); ++i) {
-          const Syntax * q = partly_expand(p->arg(i), FieldPos, decl->env);
+          const Syntax * q = p->arg(i);
           const Syntax * name_p = q->part(1);
           assert(name_p);
           SymbolKey name = expand_binding(name_p, decl->env);

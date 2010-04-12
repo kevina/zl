@@ -49,7 +49,6 @@ int main(int argc, const char *argv[])
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
-  SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
   SourceFile * code = NULL;
   try {
     unsigned offset = 1;
@@ -112,7 +111,12 @@ int main(int argc, const char *argv[])
       parse_stmts_raw(SourceStr(code, code->begin(), code->end()), env);
     } else {
       parse_maps(env);
+      SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
       parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
+      //if (!c_mode && load_prelude) {
+      //  SourceFile * prelude_cpp = new_source_file(SOURCE_PREFIX "prelude-c++.zlh");
+      //  parse_stmts(parse_str("SLIST", SourceStr(prelude_cpp, prelude_cpp->begin(), prelude_cpp->end())),env);
+      //}
       if (debug_mode && load_prelude) {
         SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
         parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);

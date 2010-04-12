@@ -39,7 +39,7 @@ import_file "class-simple.zlh";
   }
  */
 
-typedef .struct Collect {
+typedef struct Collect {
   bool virtual_override;
   Syntax * this_type;
 } Collect;
@@ -126,7 +126,7 @@ public:
       create_vtable();
 
     builder->add(replace(
-                   syntax {.struct _Data {$1; $2;};},
+                   syntax {struct _Data {$1; $2;};},
                    match_local(m, struct_p, struct_b, 0),
                    mark));
     builder->add(replace(
