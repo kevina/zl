@@ -50,4 +50,5 @@
   user_type_have_assign;
   user_type_have_destructor;
   mangle_fun_parms;
+  gdb_breakpoint;
 };

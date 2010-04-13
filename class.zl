@@ -94,11 +94,11 @@ public:
   Syntax * destructor;
   Collect destructor_collect;
 
-  virtual Syntax * parse(Syntax * p_, Environ * e_, Mark * mark_) {
+  virtual Syntax * parse(Syntax * p_, Environ * e_, Mark * m_) {
 
     class_s = p_;
     env = e_;
-    mark = mark_;
+    mark = m_ ? m_ : new_mark(prelude_envss);
     
     init_match();
     
@@ -126,11 +126,11 @@ public:
       create_vtable();
 
     builder->add(replace(
-                   syntax {struct _Data {$1; $2;};},
+                   raw_syntax (.struct _Data @$1 @$2),
                    match_local(m, struct_p, struct_b, 0),
                    mark));
     builder->add(replace(
-                   syntax {finalize_user_type struct _Data;},
+                   raw_syntax (finalize_user_type ((` _Data tag))),
                    m,
                    mark));
     builder->add(replace(
@@ -161,8 +161,6 @@ public:
 
   virtual void init() {
     parent_s = m->var(syntax parent_n);
-    if (parent_s)
-      printf("PARENT_S = %s\n", syntax_to_string(parent_s));
     parent = parent_s ? user_type_info(parent_s, env) : NULL;
 
     context = empty_context();
@@ -408,15 +406,15 @@ public:
 
   virtual void parse_class_var(Syntax * p, SyntaxList * struct_b) {
     //printf("parse_class_var: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_args(m, raw_syntax (n @rest), p);
+    __shadow Match * m = match_args(m, raw_syntax (n t @rest), p);
     bool is_static = p->flag(syntax static);
     
     // FIXME: handle flags
     if (is_static) {
-      builder->add(replace(raw_syntax(var (` (mid n) internal) (mid @rest)), m, mark));
+      builder->add(replace(raw_syntax(var (` (mid n) internal) (mid t) (mid @rest)), m, mark));
       builder->add(replace(syntax {macro n () {n`internal;}}, m, mark));
     } else {
-      struct_b->append(p);
+      struct_b->append(replace(raw_syntax((mid t) (mid n)), m, mark));
       // FIXME: (name *)(this) may cast away const
       builder->add(replace(syntax {macro n (:this ths = this) {(*(name *)(ths))..n;}}, m, mark));
     }
@@ -651,5 +649,5 @@ public:
 
 Syntax * parse_class(Syntax * p, Environ * env) {
   ParseClass pc;
-  return pc.parse(p, env, new_mark());
+  return pc.parse(p, env, NULL);
 }

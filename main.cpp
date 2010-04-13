@@ -55,6 +55,7 @@ int main(int argc, const char *argv[])
     bool debug_mode = false;
     bool zls_mode = false;
     bool c_mode = false;
+    bool cpp_mode = false;
     bool for_ct = false;
     bool load_prelude = true;
     if (argc > offset && strcmp(argv[offset], "-d") == 0) {
@@ -71,6 +72,10 @@ int main(int argc, const char *argv[])
     }
     if (argc > offset && strcmp(argv[offset], "-xc") == 0) {
       c_mode = true;
+      offset++;
+    }
+    if (argc > offset && strcmp(argv[offset], "-xc++") == 0) {
+      cpp_mode = true;
       offset++;
     }
     if (argc > offset && strcmp(argv[offset], "-P") == 0) {
@@ -95,6 +100,8 @@ int main(int argc, const char *argv[])
           buf.append(argv[offset], dot);
         buf.append(".zls");
         output_fn = buf.freeze();
+        if (strcmp(dot, ".cpp") == 0)
+          cpp_mode = true;
       }
     } else {
         code = new_source_file(STDIN_FILENO);
@@ -113,10 +120,6 @@ int main(int argc, const char *argv[])
       parse_maps(env);
       SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
       parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
-      //if (!c_mode && load_prelude) {
-      //  SourceFile * prelude_cpp = new_source_file(SOURCE_PREFIX "prelude-c++.zlh");
-      //  parse_stmts(parse_str("SLIST", SourceStr(prelude_cpp, prelude_cpp->begin(), prelude_cpp->end())),env);
-      //}
       if (debug_mode && load_prelude) {
         SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
         parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
@@ -124,6 +127,10 @@ int main(int argc, const char *argv[])
         //parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
       } else if (load_prelude) {
         load_macro_lib(SOURCE_PREFIX "prelude-fct.so", env);
+      }
+      if (cpp_mode) {
+        SourceFile * prelude_cpp = new_source_file(SOURCE_PREFIX "prelude-c++.zlh");
+        parse_stmts(parse_str("SLIST", SourceStr(prelude_cpp, prelude_cpp->begin(), prelude_cpp->end())),env);
       }
       //if (load_prelude && !for_ct)
         //ast::import_file(SOURCE_PREFIX "test/class-new_abi.zl", env);

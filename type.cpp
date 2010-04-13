@@ -632,7 +632,7 @@ namespace ast {
       const Array   * n_a = dynamic_cast<const Array *>(need); // FIXME: Hack
       const Type * n_subtype = n_p ? n_p->subtype : n_a ? n_a->subtype : 0;
       if (!n_subtype) goto fail;
-      if (exp->type->is_null) return exp;
+      if (exp->type->is_null) return new Cast(exp, type);
       // FIXME: This probably isn't right
       if (dynamic_cast<const Function *>(have)) {
         if (rule == Implicit)

@@ -3414,8 +3414,10 @@ namespace ast {
       t = t->arg(0);
     }
     Type * type = parse_type(t, env);
+    //printf("tin>%s\n", ~type->to_string());
     Exp * exp = parse_exp(p->arg(1), env);
     Exp * res = env.type_relation->resolve_to(exp, type, env, ctype);
+    //printf("tout>%s\n", ~res->type->to_string());
     if (dynamic_cast<Cast *>(res))
       res->syn = p;
     return res;
@@ -3557,8 +3559,9 @@ namespace ast {
 
     mangle = !ct_callback && env0.mangle;
 
-    if (p->flag("__need_snapshot"))
+    if (p->flag("__need_snapshot")) {
       env_ss = *env0.top_level_environ;
+    }
 
     // FIXME: is this necessary/correct for a new frame to be created
     //        to expand/parse the _paramaters_.  Of cource is needed for
@@ -3913,7 +3916,7 @@ namespace ast {
         }
       } else {
         const Syntax * q = p->arg(1);
-        add_ast_nodes(q->parts_begin(), q->parts_end(), decl->members, Parse<FieldPos>(decl->env));
+        add_ast_nodes(q->args_begin(), q->args_end(), decl->members, Parse<FieldPos>(decl->env));
       }
       if (!env0.special())
         env0.add_defn(decl);
@@ -4145,6 +4148,11 @@ namespace ast {
 
   Vector<const Syntax *> SyntaxC::keep_me;
 
+  struct CT_EnvironSnapshot {
+    SymbolNode * val;
+    CT_EnvironSnapshot(SymbolNode * v = NULL) : val(v) {}
+  };
+
   struct EnvironSnapshot : public ExpLeaf {
     EnvironSnapshot() {}
     const char * what() const {return "environ_snapshot";}
@@ -4155,18 +4163,37 @@ namespace ast {
       env_ss = *env.top_level_environ;
       type = env.types.inst(".ptr", env.types.inst("EnvironSnapshot"));
       type = env.types.ct_const(type);
+      ct_value_ = new CT_Value<CT_EnvironSnapshot>(env_ss);
       *env.for_ct = true;
       return this;
     }
     void compile(CompileWriter & f) {
-      if (f.in_fun && f.in_fun->env_ss) 
-        f.printf("(id %s$env_ss)", ~f.in_fun->uniq_name());
-      else if (f.for_compile_time())
-        f.printf("(cast (.ptr (struct EnvironSnapshot)) (n %p (unsigned-long)))", env_ss); 
-      else 
-        f.printf("(cast (.ptr (struct EnvironSnapshot)) (n 0 (unsigned-long)))");
+      ct_value_->compile(f, NULL);
     }
   };
+
+  template<> const char * const CT_Type_Base<CT_EnvironSnapshot>::name = ".environ-snapshot";
+  template <>
+  void CT_Value<CT_EnvironSnapshot>::compile_c(CompileWriter & o, Exp *) const {
+    abort();
+  }
+  template <>
+  void CT_Value<CT_EnvironSnapshot>::compile(CompileWriter & f, Exp *) const {
+    if (f.in_fun && f.in_fun->env_ss) 
+      f.printf("(id %s$env_ss)", ~f.in_fun->uniq_name());
+    else if (f.for_compile_time())
+      f.printf("(cast (.ptr (struct EnvironSnapshot)) (n %p (unsigned-long)))", val.val); 
+    else 
+      f.printf("(cast (.ptr (struct EnvironSnapshot)) (n 0 (unsigned-long)))");
+  }
+
+  void init_ct_var(const char * n, void * * ptr, Environ & env) {
+    const TopLevelVar * var = env.top_level_symbols->find<TopLevelVar>(n);
+    assert(var);
+    const CT_Value<CT_EnvironSnapshot> * ctv 
+      = dynamic_cast<const CT_Value<CT_EnvironSnapshot> *>(var->init->ct_value_);
+    *ptr = ctv->val.val;
+  }
 
   //
   //
@@ -4235,6 +4262,17 @@ namespace ast {
   };
 
   //
+  //
+  //
+  void add_ast_primitives(Environ & env) {
+    env.add(SymbolKey("struct", SYNTAX_NS), new Primitive());
+    env.add(SymbolKey("union", SYNTAX_NS), new Primitive());
+    env.add(SymbolKey("enum", SYNTAX_NS), new Primitive());
+  }
+
+  //
+  //
+  //
 
   AST * parse_top(const Syntax * p) {
     Environ env(TOPLEVEL);
@@ -4276,6 +4314,7 @@ namespace ast {
     String what = p->what().name;
     if (what == "var") return parse_field_var(p, env);
     throw error (p, "Unsupported primitive inside a struct or union: %s", ~p->what());
+    //abort();
     //throw error (p, "Expected struct or union member.");
   }
 
@@ -4623,6 +4662,7 @@ namespace ast {
 
     Vars vars;
     Vars var_defns;
+    Vars ct_init;
     Types types;
     Types type_defns;
     Modules modules;
@@ -4643,12 +4683,22 @@ namespace ast {
       }
       VarP var = dynamic_cast<VarP>(sym);
       if (var) {
+        bool use_var = false;
         if (cw.for_compile_time()) {
           if (cw.deps->have(var)) {
-            vars.push_back(var);
+            use_var = true;
           }
         } else if (cw.for_macro_sep_c || !var->for_ct()) {
+          use_var = true;
+        }
+        if (use_var) {
           vars.push_back(var);
+          if (cw.for_macro_sep_c) {
+            const TopLevelVar * v = dynamic_cast<const TopLevelVar *>(var);
+            if (v && v->init && v->init->ct_value_ &&
+                v->init->ct_value_->type_name() == CT_Type_Base<CT_EnvironSnapshot>::name)
+              ct_init.push_back(var);
+          }
         }
         continue;
       }
@@ -4737,6 +4787,17 @@ namespace ast {
         cw << "))\n";
       }
 
+      unsigned ct_init_size = ct_init.size();
+      cw << "(var _ct_init_size (unsigned) :(__visibility__ (s protected)) " << ct_init_size << ")\n";
+      if (ct_init_size  > 0 ) {
+        cw << "(var _ct_init (.array (.ptr (char :const)) " << ct_init_size << ") :(__visibility__ (s protected)) (.\n";
+        for (Vars::const_iterator i = ct_init.begin(), e = ct_init.end(); i != e; ++i)
+        {
+          cw << "  (s \"" << ~(*i)->uniq_name() <<  "\")\n";
+        }
+        cw << "))\n";
+      }
+      
       unsigned syntaxes_size = cw.for_macro_sep_c->syntaxes.size();
       if (syntaxes_size > 0) {
         cw << "(var _syntaxes_size (unsigned) :(__visibility__ (s protected)) " << syntaxes_size << ")\n";
@@ -4751,6 +4812,7 @@ namespace ast {
         }
         cw << "))\n\n";
       }
+
     }
 
     sep(cw, "decls");

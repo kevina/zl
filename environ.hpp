@@ -87,6 +87,8 @@ namespace ast {
     CollectPart second_pass;
   };
 
+  void add_ast_primitives(Environ &);
+
   struct Environ : public gc {
     TypeRelation * type_relation;
     bool special() const {return !top_level_symbols;}
@@ -130,6 +132,7 @@ namespace ast {
         if (s == TOPLEVEL) {
           true_top_level = true;
           top_level_symbols = new TopLevelSymbolTable(&symbols.front);
+          add_ast_primitives(*this); // FIXME HACK
           type_relation = new_c_type_relation(); // FIXME HACK
           create_c_types(types); // FIXME Another HACK
           add_inner_nss(*this);

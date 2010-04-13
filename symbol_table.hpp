@@ -202,6 +202,9 @@ namespace ast {
     }
   };
 
+  struct Primitive : public Symbol {
+  };
+
   // This if for any symbol which is not lexical and _might_
   // need to made externally visible, they are not necessary
   // global

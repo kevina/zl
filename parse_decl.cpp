@@ -192,7 +192,7 @@ struct DeclWorking {
       return false;
     }
   }
-  Syntax * handle_embedded_decl(const Syntax * p, Environ & env) {
+  Syntax * handle_embedded_decl(const Syntax * p, Environ & env, bool by_itself) {
     //xprintf("input>%s\n", ~p->to_string());
     p = limited_expand(p, env);
     //printf("INPUT>%s\n", ~p->to_string());
@@ -203,7 +203,12 @@ struct DeclWorking {
         type_scope.add_part(p->arg(0));
       }
       //printf("%d: %s\n", i, ~p->arg(i)->to_string());
-      return p->arg(i);
+      if (by_itself) {
+        inner_type = p->arg(i);
+        return NULL;
+      } else {
+        return p->arg(i);
+      }
     } else {
       //printf("NOT\n");
       return p;
@@ -214,6 +219,7 @@ struct DeclWorking {
   const Syntax * parse_struct_union_body(const Syntax * p, Environ &, bool & bit_field);
   bool dots;
   Syntax * inner_type;
+  Syntax * field_size;
   void make_inner_type(const Syntax * orig);
   const Syntax * try_pointers(parts_iterator & i, 
                               parts_iterator end,
@@ -235,7 +241,7 @@ struct DeclWorking {
 class ParseDeclImpl : public ParseDecl {
 public:
   ParseDeclImpl() {}
-  const Syntax * parse_decl(const Syntax * p, Environ &);
+  const Syntax * parse_decl(const Syntax * p, Environ &, bool field_pos);
   const Syntax * parse_type(parts_iterator & i, parts_iterator e, Environ &, bool for_new = false);
   const Syntax * parse_type(const Syntax * p, Environ &);
   const Syntax * parse_fun_parms(const Syntax*, Environ &);
@@ -249,13 +255,14 @@ DeclWorking::DeclWorking(SyntaxBuilder & p)
   : type_scope(p), storage_class(NULL), what(VAR), 
     sign(NO_SIGN), size(NO_SIZE), base_type(NO_BT),
     inline_(NULL), virtual_(NULL), pure_virtual(false), 
-    type_symbol(NULL), dots(false), inner_type(NULL) {}
+    type_symbol(NULL), dots(false), inner_type(NULL),
+    field_size(NULL) {}
 
 //
 // The real code....
 //
 
-const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
+const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool field_pos)
 {
   SyntaxBuilder res;
 
@@ -306,10 +313,21 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     //printf(">1>%s\n", ~(*i)->to_string());
 
     const Syntax * id;
-    const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env);
+    const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, 
+                                               field_pos ? IdNotRequired : IdRequired);
+
+    if (!id) {
+      id = SYN(".");
+    }
 
     //if (i != end)
     //  printf(">2>%s\n", ~(*i)->to_string());
+
+    if (i != end && (*i)->eq(":")) {
+      w.field_size = SYN("0");
+      ++i;
+      while (i != end && (*i)->ne("{}")) ++i;
+    }
 
     const Syntax * decl;
     if (i != end && (*i)->eq("=")) {
@@ -328,7 +346,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env)
     } else {
       decl = w.make_declaration(id, t);
     }
-    
+
     res.add_part(decl);
 
     if (i == end) break;
@@ -380,7 +398,7 @@ const Syntax * ParseDeclImpl::parse_type(parts_iterator & i,
   const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, 
                                              for_new ? StopAtParen : IdNotRequired);
   if (id) return NULL;
-  assert(dummy.empty()); // FIXME: Error Message
+  //assert(dummy.empty()); // FIXME: Error Message
   return t;
 }
 
@@ -413,8 +431,10 @@ bool DeclWorking::parse_first_part(parts_iterator & i,
     ++i;
   } else while (i != end) {
     const Syntax * cur = *i;
-    cur = handle_embedded_decl(cur, env);
-    if (const Syntax * p = try_id(cur)) {
+    cur = handle_embedded_decl(cur, env, by_itself);
+    if (!cur) {
+      ++i;
+    } else if (const Syntax * p = try_id(cur)) {
       const Syntax * p = cur;
       bool any = 
         try_attributes(p) ||
@@ -474,13 +494,15 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
       struct_union.add_part(n);
       struct_union.set_flags(p);
       if (body) {
-        bool bit_field = false;
-        const Syntax * b = parse_struct_union_body(body, env, bit_field);
-        struct_union.add_part(b);
-        if (bit_field) {
-          struct_union.add_flag(SYN("bit-field"));
-        }
+         bool bit_field = false;
+         const Syntax * b = parse_struct_union_body(body, env, bit_field);
+         struct_union.add_part(b);
+         if (bit_field) {
+           struct_union.add_flag(SYN("bit-field"));
+         }
       }
+      //if (body)
+      //  struct_union.add_part(body);
       type_scope.add_part(struct_union.build());
     }
     return true;
@@ -489,9 +511,10 @@ bool DeclWorking::try_struct_union(const Syntax * p, Environ & env, bool by_itse
   }
 }
 
+// FIXME: Eventually Eliminate
 const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ & env, bool & bit_field)
 {
-  SyntaxBuilder res;
+  SyntaxBuilder res(SYN("{...}"));
   unsigned anon_num = 0;
   for (unsigned h = 0; h != p0->num_args(); ++h) {
 
@@ -888,6 +911,8 @@ const Syntax *  DeclWorking::make_declaration(const Syntax * id, const Syntax * 
         res.add_part(init2);
       if (storage_class)
         res.add_flag(storage_class);
+      if (field_size)
+        res.add_flag(SYN(SYN("field_size"), field_size));
       for (Attributes::const_iterator i = attributes.begin(), e =  attributes.end();
            i != e; ++i)
         res.add_flag(*i);

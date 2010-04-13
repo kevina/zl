@@ -1007,6 +1007,8 @@ namespace ast {
   void include_file(String file_name, Environ & env);
   void import_file(String file_name, Environ & env);
 
+  void init_ct_var(const char * n, void * * ptr, Environ & env);
+
 }
 
 #endif

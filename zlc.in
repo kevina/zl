@@ -133,6 +133,7 @@ foreach (@files) {
         die "FAILED: zls -E ...\n" unless $? == 0;
     }
     push @zl_ops, '-xc' if $l eq 'c';
+    push @zl_ops, '-xc' if $l eq 'cpp';
     if ($l ne 'zls' && $l ne 'obj') {
         system($ZL, @zl_ops, $file);
         die "FAILED: $ZL @zl_ops $file\n" unless $? == 0;

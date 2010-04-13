@@ -9,7 +9,7 @@ using ast::Environ;
 
 class ParseDecl {
 public:
-  virtual const Syntax * parse_decl(const Syntax * p, Environ &) = 0;
+  virtual const Syntax * parse_decl(const Syntax * p, Environ &, bool field_pos = false) = 0;
   virtual const Syntax * parse_type(parts_iterator & i, parts_iterator e, Environ &, bool for_new) = 0;
   const Syntax * parse_type(parts_iterator & i, parts_iterator e, Environ & env) 
     {return parse_type(i,e,env,false);}

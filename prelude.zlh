@@ -44,7 +44,7 @@ typedef struct EnvironSnapshot EnvironSnapshot;
 
 typedef struct Mark Mark;
 __ct_callback Mark * new_mark_f(EnvironSnapshot *);
-macro new_mark() {new_mark_f(environ_snapshot());}
+macro new_mark(es = NULL) {new_mark_f(es ? (EnvironSnapshot *)es : (EnvironSnapshot *)environ_snapshot());}
 macro new_empty_mark() {new_mark_f(0);}
 
 struct UnmarkedSyntax;
@@ -259,3 +259,6 @@ Syntax * parse_class(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;
 make_macro class`syntax parse_class :w_snapshot;
 
+EnvironSnapshot * prelude_envss = environ_snapshot();
+
+__ct_callback void gdb_breakpoint();

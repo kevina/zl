@@ -555,6 +555,11 @@ namespace ast {
   template void CT_Value<CT_LValue>::compile_c(CompileWriter & o, Exp *) const;
 
   template <>
+  void CT_Value<CT_Ptr>::compile_c(CompileWriter & o, Exp *) const {
+    o.printf("%u", val.val);
+  }
+
+  template <>
   void CT_Value<signed char>::compile_c(CompileWriter & o, Exp *) const {
     o.printf("%d", val);
   }
@@ -629,6 +634,11 @@ namespace ast {
   }
 
   template void CT_Value<CT_LValue>::compile(CompileWriter & o, Exp *) const;
+
+  template <>
+  void CT_Value<CT_Ptr>::compile(CompileWriter & o, Exp *) const {
+    o.printf("%u", val.val);
+  }
 
   template <>
   void CT_Value<signed char>::compile(CompileWriter & o, Exp *) const {

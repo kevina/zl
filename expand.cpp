@@ -1258,6 +1258,23 @@ static const char * const BUILTINS[] = {
 };
 static const unsigned NUM_BUILTINS = 5;
 
+static const Syntax * try_syntax_macro_or_primitive(const SymbolName & what, 
+                                                    const Syntax * p, 
+                                                    Environ & env) 
+{
+  if (Symbol * sym = env.symbols.find<Symbol>(SymbolKey(what, SYNTAX_NS))) {
+    if (Macro * m = dynamic_cast<Macro *>(sym)) {
+      //printf("MACRO ON %s\n", ~what.to_string());
+      return m->expand(p, p, env);
+    } else {
+      //printf("OTHER ON %s\n", ~what.to_string());
+      return NULL;
+    }
+  } else {
+    return NULL;
+  }
+}
+
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags) {
   if (p->have_entity()) return p;
   //printf("\n>expand>%s//\n", ~p->part(0)->to_string());
@@ -1290,9 +1307,8 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
       return partly_expand(reparse("EXP", p->outer()), pos, env, flags);
     else
       return partly_expand(reparse("STMT", p->outer()), pos, env, flags);
-  } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
-    p = env.symbols.lookup<Macro>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, p, env);
-    return partly_expand(p, pos, env, flags);
+  } else if (Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
+    return partly_expand(n, pos, env, flags);
   } else if (what == "id" && !(flags & EXPAND_NO_ID_MACRO_CALL)) { 
     // NOTE: ID macros can have flags, since there is no parameter list
     //       they are passed in as flags as (id <id> :(flag1 val1))
@@ -1333,7 +1349,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
     //printf("TRYING STMT PARSE on %s\n", ~p->sample_w_loc()); 
-    const Syntax * res = parse_decl_->parse_decl(p, env);
+    const Syntax * res = parse_decl_->parse_decl(p, env, pos == FieldPos);
     //printf("STMT PARSE %p on %s\n", res, ~p->sample_w_loc()); 
     if (!res)
       res = e_parse_exp(p, env, "seq");
@@ -1366,9 +1382,8 @@ const Syntax * limited_expand(const Syntax * p, Environ & env) {
   SymbolName what = p->what();
   if (p->simple()) {
     return p;
-  } else if (env.symbols.exists(SymbolKey(what, SYNTAX_NS))) { // syntax macros
-    p = env.symbols.lookup<Macro>(SymbolKey(what, SYNTAX_NS), p->str())->expand(p, p, env);
-    return limited_expand(p, env);
+  } else if (const Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
+    return limited_expand(n, env);
   } else {
     return p;
   }
@@ -1476,8 +1491,9 @@ Stmt * parse_macro(const Syntax * p, Environ & env) {
   ProcMacro * m = new ProcMacro;
   m->parse_self(p, env);
   env.add(m->real_name, m);
-  if (p->flag("w_snapshot"))
+  if (p->flag("w_snapshot")) {
     m->fun->env_ss = *env.top_level_environ;
+  }
   return empty_stmt();
 }
 
@@ -1627,6 +1643,16 @@ void load_macro_lib(ParmString lib, Environ & env) {
       }
     }
     //printf("^^^\n");
+  }
+  unsigned ct_init_size = *(unsigned *)dlsym(lh, "_ct_init_size");
+  if (ct_init_size > 0) {
+    const char * * i = (const char * *)dlsym(lh, "_ct_init");
+    const char * * e = i + ct_init_size;
+    //printf("---\n");
+    for (; i != e; ++i) {
+      void * * p = (void * *)dlsym(lh, *i);
+      init_ct_var(*i, p, env);
+    }
   }
   unsigned syntaxes_size = *(unsigned *)dlsym(lh, "_syntaxes_size");
   if (syntaxes_size > 0) {
@@ -1785,3 +1811,6 @@ extern "C" namespace macro_abi {
     return ~buf.freeze();
   }
 }
+
+extern "C" void gdb_breakpoint() {}
+
