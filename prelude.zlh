@@ -6,7 +6,7 @@
 typedef unsigned size_t;
 typedef struct _IO_FILE FILE;
 extern "C" int printf (const char *, ...);
-extern "C" int snprintf(const char * str, size_t size, const char * format, ...);
+extern "C" int snprintf(char * str, size_t size, const char * format, ...);
 macro NULL() {0;}
 typedef int bool;
 extern "C" void * malloc(size_t);

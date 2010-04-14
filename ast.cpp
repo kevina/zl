@@ -3701,7 +3701,10 @@ namespace ast {
     }
   };
 
-  static void resolve_fun_parms(const Vector<Exp *> & parms, Vector<Exp *> * res, const Tuple * fun_parms, 
+  static void resolve_fun_parms(const Vector<Exp *> & parms, 
+                                TypeConv res[],
+                                TypeRelation::CheckOnlyType check_only,
+                                const Tuple * fun_parms, 
                                 Environ & env, Syntax * syn = NULL) {
     if (!fun_parms->vararg && parms.size() != fun_parms->parms.size()) 
       throw error(syn, 
@@ -3715,16 +3718,12 @@ namespace ast {
     const int num_parms = parms.size();
     int i = 0;
     for (;i != typed_parms; ++i) {
-      Exp * r = env.type_relation->resolve_to(parms[i], fun_parms->parms[i].type, env, 
-                                              TypeRelation::Implicit, 
-                                              res ? TypeRelation::CheckOnlyFalse : TypeRelation::CheckOnly);
-      if (res)
-        (*res)[i] = r;
+      res[i] = env.type_relation->resolve_to(parms[i], fun_parms->parms[i].type, env, 
+                                             TypeRelation::Implicit, check_only);
     }
-    if (res) 
-      for (;i != num_parms; ++i) {
-        (*res)[i] = parms[i]->def_arg_prom(env);
-      }
+    for (;i != num_parms; ++i) {
+      res[i] = TypeConv(TypeConv::Ellipsis, parms[i]->def_arg_prom(env));
+    }
   }
 
   struct Call : public Exp {
@@ -3745,7 +3744,11 @@ namespace ast {
         throw error (lhs->syn, "Expected function type");
       type = ftype->ret;
       lvalue = type->addressable ? LV_NORMAL : LV_FALSE;
-      resolve_fun_parms(parms, &parms, ftype->parms, env, syn->arg(1));
+      unsigned num_parms = parms.size();
+      TypeConv res[num_parms];
+      resolve_fun_parms(parms, res, TypeRelation::CheckOnlyFalse, ftype->parms, env, syn->arg(1));
+      for (unsigned i = 0; i != num_parms; ++i)
+        parms[i] = res[i];
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -3792,24 +3795,107 @@ namespace ast {
     }
   };
 
+  struct Candidate {
+    const Symbol * sym;
+    TypeConv resolved_parms[1];
+  };
+
+  struct Seen {
+    const Symbol * sym;
+    Error * error;
+    Seen(const Symbol * s, Error * e = NULL) 
+      : sym(s), error(e) {}
+    bool operator==(const Symbol * s) const {return s == sym;}
+  };
+
+  // -1: x, 0: neither, 1: y
+  static int better_match(const Vector<Exp *> & parms,
+                   TypeConv x[], TypeConv y[]) 
+  {
+    unsigned num_parms = parms.size();
+    int better = 0;
+    for (unsigned i = 0; i != num_parms; ++i) {
+      if (x[i].rank() < y[i].rank()) {
+        if (better == 0 || better == -1) better = -1;
+        else return 0;
+      } else if (x[i].rank() > y[i].rank()) {
+        if (better == 0 || better == 1) better = 1;
+        else return 0;
+      }
+    }
+    return better;
+  }
+
   const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env) {
     const Symbol * sym = env.symbols.lookup<Symbol>(name);
-    if (const OverloadedSymbol * cur = dynamic_cast<const OverloadedSymbol *>(sym)) {
-      Vector<const Symbol *> syms;
-      for (; cur; cur = cur->next)
+    if (const OverloadedSymbol * first = dynamic_cast<const OverloadedSymbol *>(sym)) {
+      Vector<Candidate *> candidates;
+      Vector<Seen> seen;
+      Candidate * res = NULL;
+      for (const OverloadedSymbol * cur = first; cur; cur = cur->next)
       {
         try {
-          if (std::find(syms.begin(), syms.end(), cur->sym) != syms.end()) continue;
-          resolve_fun_parms(parms, NULL, cur->sym->overloadable(), env, NULL);
-          syms.push_back(cur->sym);
-        } catch (...) {}
+          if (std::find(seen.begin(), seen.end(), cur->sym) != seen.end()) continue;
+          if (!res)
+            res = (Candidate *)GC_MALLOC(sizeof(Candidate) + sizeof(TypeConv)*(parms.size()-1));
+          resolve_fun_parms(parms, res->resolved_parms, TypeRelation::CheckOnly, 
+                            cur->sym->overloadable(), env, NULL);
+          res->sym = cur->sym;
+          candidates.push_back(res);
+          res = NULL;
+          seen.push_back(cur->sym);
+        } catch (Error * error) {
+          seen.push_back(Seen(cur->sym, error));
+        }
       }
-      if (syms.size() == 0)
-        throw error(name, "No match for call to %s", ~name->to_string());
-      if (syms.size() > 1)
-        throw error(name, "Multiple matches for call to %s", ~name->to_string());
-      //assert(syms.size() == 1); // FIXME: Error Message
-      sym = syms.front();
+      if (candidates.size() == 0) {
+        if (seen.size() == 1)
+          throw seen[0].error;
+        else
+          throw error(name, "No match for call to %s", ~name->to_string());
+      } else if (candidates.size() == 1) {
+        sym = candidates.front()->sym;
+      } else if (candidates.size() > 1) {
+        //printf("LOOKING FOR MATCH FOR: %s\n", ~parms[0]->type->to_string());
+        // now use a process of elimination to find the best match
+        Vector<Candidate *>::iterator 
+          new_begin = candidates.begin(),
+          cur       = candidates.begin() + 1,
+          end       = candidates.end();
+        Candidate * first = *new_begin;
+        while (cur != end) {
+          if (first == *cur) {
+            ++cur;
+            continue;
+          }
+          //printf("COMPARING:\n  %s %d\n  %s %d\n", 
+          //       ~first->sym->overloadable()->to_string(), first->resolved_parms[0].rank(), 
+          //       ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[0].rank());
+          int res = better_match(parms, first->resolved_parms, (*cur)->resolved_parms);
+          if (res == 0) {
+            //printf("  no better match\n");
+            // no better match, try next one
+            ++cur;
+          } else if (res == -1)  {
+            //printf("  first is better\n");
+            // first is better, eliminate second (cur)
+            std::swap(*new_begin, *cur);
+            ++new_begin;
+            ++cur;
+          } else if (res == 1) {
+            //printf("  second is better\n");
+            // second (cur) is better, eliminate first, restart comparison
+            first = *cur;
+            ++new_begin;
+            cur = new_begin;
+          }        
+        }
+        //printf("===\n");
+        if (end - new_begin > 1)
+          throw error(name, "Multiple matches for call to %s", ~name->to_string());
+        else
+          sym = first->sym;
+      }
     }
     return sym;
   }

@@ -159,11 +159,39 @@ namespace ast {
   extern PrintInst const * const zle_print_inst;
   extern PrintInst const * const mangle_print_inst;
 
+  struct TypeConv {
+    // lower rank is better
+    enum {Fail, ExactMatch, Promotion, Conversion, User, Ellipsis, Other};
+    static const unsigned RankBits = 3;
+    static const unsigned RankMask = ~((~0)<<RankBits);
+    enum {//Identity          = ExactMatch|(1<<RankBits), 
+          //LvalueRvalue      = ExactMatch|(2<<RankBits),
+          //ArrayPointer      = ExactMatch|(3<<RankBits),
+          //FunctionPointer   = ExactMatch|(4<<RankBits),
+          //Qualification     = ExactMatch|(5<<RankBits),
+          IntProm       = Promotion |(1<<RankBits),
+          FloatProm     = Promotion |(2<<RankBits),
+          IntConv       = Conversion|(1<<RankBits),
+          FloatConv     = Conversion|(2<<RankBits),
+          FloatInt      = Conversion|(3<<RankBits),
+          PointerConv   = Conversion|(4<<RankBits),
+          PointerMember = Conversion|(5<<RankBits),
+          BoolConv      = Conversion|(6<<RankBits),
+          ToBase        = Conversion|(7<<RankBits)};
+    unsigned conv;
+    unsigned rank() const {return conv & RankMask;}
+    Exp * exp;
+    operator Exp*() {return exp;}
+    TypeConv() {}
+    TypeConv(unsigned c, Exp * e)
+      : conv(c), exp(e) {}
+  };
+
   class TypeRelation {
   public:
     enum CastType {Implicit, Explicit, Static, Reinterpret, Const, Dynamic};
     enum CheckOnlyType {CheckOnlyFalse, CheckOnly};
-    virtual Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit, CheckOnlyType = CheckOnlyFalse) const = 0;
+    virtual TypeConv resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit, CheckOnlyType = CheckOnlyFalse) const = 0;
     virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
     virtual void resolve_assign(Exp * &, Exp * &, Environ & env) const = 0;
     virtual Exp * to_effective(Exp * exp, Environ & env) const = 0;

@@ -1,0 +1,4 @@
+CHAR
+INT
+FLOAT
+INT

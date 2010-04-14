@@ -885,16 +885,18 @@ namespace ast {
     if (!cur)
       throw unknown_error(id);
     Vector<const Symbol *> syms;
-    for (; cur; cur = cur->next) {
+    while (cur) {
       //IOUT.printf("FOS: %s %p\n", ~cur->name(), cur->sym);
       if (to_find) {
         const Tuple * have = cur->sym->overloadable();
         assert(have);
-        if (to_find->parms.size() != have->parms.size()) continue;
+        if (to_find->parms.size() != have->parms.size()) goto next;
         for (unsigned i = 0; i != to_find->parms.size(); ++i)
-          if (to_find->parms[i].type->root != have->parms[i].type->root) continue;
+          if (to_find->parms[i].type->root != have->parms[i].type->root) goto next;
       }
       syms.push_back(cur->sym);
+    next:
+      cur = cur->next;
     }
     if (syms.size() == 0)
       return NULL;

@@ -538,14 +538,15 @@ namespace ast {
 
   class C_TypeRelation : public TypeRelation {
   public:
-    Exp * resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule, CheckOnlyType) const;
+    TypeConv resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule, CheckOnlyType) const;
     Exp * to_effective(Exp * exp, Environ & env) const;
     Exp * def_arg_prom(Exp * exp, Environ & env) const;
     void resolve_assign(Exp * & lhs, Exp * & rhs, Environ & env) const;
     const Type * unify(int rule, const Type *, const Type *) const;
   };
 
-  Exp * C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule, CheckOnlyType check_only) const {
+#define TC(conv, exp) TypeConv(TypeConv::conv, exp)
+  TypeConv C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule, CheckOnlyType check_only) const {
     static int i = -1;
     ++i;
 
@@ -564,10 +565,10 @@ namespace ast {
       } else {
         fun = lookup_overloaded_symbol<Fun>(NULL, orig_exp->syn, id->sym, env);
       }
-      return mk_id(fun, env);
+      return TC(Other, mk_id(fun, env));
     }
 
-    if (!type) return orig_exp;
+    if (!type) return TC(Other, orig_exp);
 
     Exp * exp = orig_exp;
     const Type * have = exp->type->unqualified;
@@ -585,7 +586,7 @@ namespace ast {
       if (!exp->lvalue
           || (env.temp_ip && env.temp_ip->where >= ExpInsrPoint::Var && exp->lvalue < LV_NORMAL))
       {
-        return to_ref(make_temp(exp, env), env);
+        return TC(ExactMatch, to_ref(make_temp(exp, env), env));
         //throw error(orig_exp->syn, 
         //            "Can not take a reference of temporary (yet) in conversion from \"%s\" to \"%s\"",
         //            ~orig_exp->type->to_string(), ~type->to_string());
@@ -593,10 +594,10 @@ namespace ast {
       if (exp->type->read_only && !n_r->subtype->read_only)
         throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                     ~orig_exp->type->to_string(), ~type->to_string());
-      return to_ref(exp, env);
+      return TC(ExactMatch, to_ref(exp, env));
     }
 
-    if (have == need) return exp;
+    if (have == need) return TC(ExactMatch, exp);
 
     //printf("%i RESOLVE_TO %s (%s) (%s) %d\n", 
     //       i, orig_exp->syn ? ~orig_exp->syn->to_string() : "?", 
@@ -606,10 +607,33 @@ namespace ast {
 
     // FIXME: Is this right?
     if (rule == Reinterpret /* || rule == Explicit*/) // FIXME: This isn't always legal
-      return new Cast(exp, type);
+      return TC(Other, new Cast(exp, type));
 
-    if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
-      return new Cast(exp, type); 
+    //if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
+    //  return TypeConf(TypeConv::Conversion, Cast(exp, type));
+    if (have->is(INT_C)) {
+      if (need->is(INT_C)) {
+        const Int * have_i = dynamic_cast<const Int *>(have);
+        const Int * need_i = dynamic_cast<const Int *>(need);
+        if (need_i->min <= have_i->min && have_i->max <= need_i->max)
+          return TC(IntProm, new Cast(exp, type));
+        else
+          return TC(IntConv, new Cast(exp, type));
+      } else if (need->is(FLOAT_C)) {
+        return TypeConv(TypeConv::FloatInt, new Cast(exp, type));
+      }
+    } else if (have->is(FLOAT_C)) {
+      if (need->is(FLOAT_C)) {
+        const Float * have_f = dynamic_cast<const Float *>(have);
+        const Float * need_f = dynamic_cast<const Float *>(need);
+        if (have_f->size_ <= need_f->size_) //FIXME: Should use precision, but thats currently not set correctly
+          return TC(FloatProm, new Cast(exp, type));
+        else
+          return TC(FloatConv, new Cast(exp, type));
+      } else if (need->is(INT_C)) {
+        return TC(FloatInt, new Cast(exp, type));
+      }
+    }
 
 #if 0
     // FIXME: This is not really C...
@@ -624,7 +648,7 @@ namespace ast {
     // deal with pointer to int case
     // fixme, need to seperate out boolean case, and issue a warning otherwise
     if (have->is(POINTER_C) && need->is(INT_C))
-      return new Cast(exp, type); 
+      return TC(BoolConv,new Cast(exp, type));
 
     // deal with pointer types
     {
@@ -632,13 +656,13 @@ namespace ast {
       const Array   * n_a = dynamic_cast<const Array *>(need); // FIXME: Hack
       const Type * n_subtype = n_p ? n_p->subtype : n_a ? n_a->subtype : 0;
       if (!n_subtype) goto fail;
-      if (exp->type->is_null) return new Cast(exp, type);
+      if (exp->type->is_null) return TC(PointerConv, new Cast(exp, type));
       // FIXME: This probably isn't right
       if (dynamic_cast<const Function *>(have)) {
         if (rule == Implicit)
-          return exp;
+          return TC(PointerConv, exp);
         else
-          return new Cast(exp, type);
+          return TC(PointerConv, new Cast(exp, type));
       }
       const Pointer * h_p = dynamic_cast<const Pointer *>(have);
       const Array   * h_a = dynamic_cast<const Array *>(have);
@@ -646,16 +670,16 @@ namespace ast {
       if (!h_subtype) goto fail;
       if (dynamic_cast<const Function *>(h_subtype->unqualified) // FIXME: Hack
           && dynamic_cast<const Function *>(n_subtype->unqualified))
-        return new Cast(exp, type);
+        return TC(PointerConv, new Cast(exp, type));
       const UserType * hu, * nu;
       if (h_subtype->unqualified == n_subtype->unqualified ||
           dynamic_cast<const Void *>(h_subtype->unqualified) ||
           dynamic_cast<const Void *>(n_subtype->unqualified) /* this one is C only */)  
       {
         if (rule == Explicit)
-          return new Cast(exp, type);
+          return TC(PointerConv, new Cast(exp, type));
         else if (!h_subtype->read_only || n_subtype->read_only) 
-          return exp;
+          return TC(PointerConv, exp);
         else
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
@@ -666,9 +690,9 @@ namespace ast {
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
         else if (h_subtype->is(n_subtype->category))
-          return check_only ? NULL : cast_up(exp, n_subtype, env);
+          return TC(PointerConv, check_only ? NULL : cast_up(exp, n_subtype, env));
         else if (n_subtype->is(h_subtype->category) && rule == Explicit || rule == Static)
-          return check_only ? NULL : cast_down(exp, nu, env);
+          return TC(Other, check_only ? NULL : cast_down(exp, nu, env));
         else
           goto fail;
       } else {
@@ -679,7 +703,7 @@ namespace ast {
 
   fail:
     if (rule == Explicit) // FIXME: This isn't always legal
-      return new Cast(exp, type);
+      return TC(Other,new Cast(exp, type));
 
     throw error(orig_exp->syn, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
                 ~type->to_string(), ~orig_exp->type->to_string());
