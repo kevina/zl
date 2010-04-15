@@ -1834,34 +1834,17 @@ namespace ast {
   // BinOp
   //
 
-  struct OverloadExtraCmp {
-    const Type * t;
-    OverloadExtraCmp(const Type * t0) : t(t0) {}
-    bool operator() (const SymbolNode * n) {
-      const Symbol * sym = n->value;
-      const Fun * fun = dynamic_cast<const Fun *>(sym);
-      if (!fun) return false;
-      return fun->parms->parms[0].type->effective->unqualified == t;
-    }
-  };
-
   Exp * BinOp::parse_self(const Syntax * p, Environ & env) {
     syn = p;
     assert_num_args(2);
     lhs = parse_exp(p->arg(0), env);
     rhs = parse_exp(p->arg(1), env);
-    if (lhs->type->effective->unqualified == rhs->type->effective->unqualified
-        && lhs->type->effective->is(USER_C)) 
+    if (lhs->type->effective->is(USER_C) || rhs->type->effective->is(USER_C))
     {
-      NoOpGather gather;
-      OverloadExtraCmp cmp(lhs->type->effective->unqualified);
       // FIXME: Need to preserve marks somehow
-      Fun * fun = find_symbol<Fun>(SymbolKey(what_,OPERATOR_NS), 
-                                   env.symbols.front, NULL, NormalStrategy, gather, cmp);
-      if (fun)
-        return parse_exp(SYN(SYN("call"), 
-                             SYN(mk_id(fun, env)),
-                             SYN(SYN("."), SYN(lhs), SYN(rhs))), env);
+      return parse_exp(SYN(SYN("call"), 
+                           SYN(SYN("`"), SYN(op), SYN("operator")),
+                           SYN(SYN("."), SYN(lhs), SYN(rhs))), env);
     }
     return construct(env);
   }
@@ -3453,57 +3436,47 @@ namespace ast {
     SymbolKey name;
     bool is_op = false;
     if (p->arg(0)->is_a("operator")) {
-      name = *p->arg(0)->arg(0);
-      if (name.name == "==")
-        name.name = "eq";
-      else if (name.name == "!=")
-        name.name = "ne";
-      else
-        throw error(p, "Overloading of \"%s\" not supported yet.\n", ~name.name);
-      name.ns = OPERATOR_NS;
       is_op = true;
+      name = *p->arg(0)->arg(0);
+      name.ns = OPERATOR_NS;
     } else {
       name = expand_binding(p->arg(0), env);
     }
     
     Fun * f = NULL;
-    if (!is_op) {
-      Symbol * s = find_symbol<Symbol>(name, env.symbols.front, env.symbols.back, ThisScope);
-      //if (s)
-      //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
-      //if (s)
-      //  assert(name.name == s->name());
-      if (s) {
-        const Tuple * parms = expand_fun_parms(p->arg(1), env);
-        f = const_cast<Fun *>(find_overloaded_symbol<Fun>(parms, p->arg(0), s, env));
-      }
-      //if (s)
-      //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
-      //if (s)
-      //  assert(name.name == s->name());
+    Symbol * s = find_symbol<Symbol>(name, env.symbols.front, env.symbols.back, ThisScope);
+    //if (s)
+    //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
+    //if (s)
+    //  assert(name.name == s->name());
+    if (s) {
+      const Tuple * parms = expand_fun_parms(p->arg(1), env);
+      f = const_cast<Fun *>(find_overloaded_symbol<Fun>(parms, p->arg(0), s, env));
     }
+    //if (s)
+    //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
+    //if (s)
+    //  assert(name.name == s->name());
     bool previous_declared = f;
     if (previous_declared) {
       if (p->num_args() > 3)
         f->parse_forward_i(p, env, collect);
     } else {
       f = new Fun;
-      if (is_op) f->overload = false; // FIXME: Hack
       f->storage_class = get_storage_class(p);
       make_static_if_marked(f->storage_class, name);
       if (env.interface && f->storage_class == SC_STATIC)
         return empty_stmt();
       //f->num = f->storage_class == SC_STATIC ? NPOS : 0;
       f->parse_forward_i(p, env, collect);
-      env.add(name, f, is_op ? true : false);
       if (is_op) {
+        f->overload = true;
         if (f->parms->num_parms() != 2)
           throw error(p, "Expected two paramaters for operator overloading.");
-        if (f->parms->parms[0].type != f->parms->parms[1].type)
-          throw error(p, "Paramater types for operator overloading must match.");
-        if (!f->parms->parms[0].type->is(USER_C))
-          throw error(p, "Paramater types for operator overloading must be user type.");
+        if (!f->parms->parms[0].type->is(USER_C) && !f->parms->parms[1].type->is(USER_C))
+          throw error(p, "At least one paramater type for operator overloading must be a user type.");
       }
+      env.add(name, f);
     }
     return f;
   }
@@ -3523,22 +3496,14 @@ namespace ast {
   }
 
   bool Fun::uniq_name(OStream & o) const {
-    if (key->ns == OPERATOR_NS) {
-      o << "op$";
-      TopLevelVarDecl::uniq_name(o);
-      o << "$";
-      const UserType * ut = dynamic_cast<const UserType *>(parms->parms[0].type->effective->unqualified);
-      ut->uniq_name(o);
-    } else {
-      StringBuf buf;
-      TopLevelVarDecl::uniq_name(buf);
-      if (overload && mangle) {
-        for (unsigned i = 0; i != parms->parms.size(); ++i) {
-          mangle_print_inst->to_string(*parms->parms[i].type, buf);
-        }
+    StringBuf buf;
+    TopLevelVarDecl::uniq_name(buf);
+    if (overload && mangle) {
+      for (unsigned i = 0; i != parms->parms.size(); ++i) {
+        mangle_print_inst->to_string(*parms->parms[i].type, buf);
       }
-      o << buf.freeze();
     }
+    o << buf.freeze();
     return num != NPOS;
   }
   
@@ -3856,7 +3821,7 @@ namespace ast {
       } else if (candidates.size() == 1) {
         sym = candidates.front()->sym;
       } else if (candidates.size() > 1) {
-        //printf("LOOKING FOR MATCH FOR: %s\n", ~parms[0]->type->to_string());
+        printf("LOOKING FOR MATCH FOR: %s\n", ~parms[1]->type->to_string());
         // now use a process of elimination to find the best match
         Vector<Candidate *>::iterator 
           new_begin = candidates.begin(),
@@ -3868,29 +3833,29 @@ namespace ast {
             ++cur;
             continue;
           }
-          //printf("COMPARING:\n  %s %d\n  %s %d\n", 
-          //       ~first->sym->overloadable()->to_string(), first->resolved_parms[0].rank(), 
-          //       ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[0].rank());
+          printf("COMPARING:\n  %s %d\n  %s %d\n", 
+                 ~first->sym->overloadable()->to_string(), first->resolved_parms[1].conv, 
+                 ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[1].conv);
           int res = better_match(parms, first->resolved_parms, (*cur)->resolved_parms);
           if (res == 0) {
-            //printf("  no better match\n");
+            printf("  no better match\n");
             // no better match, try next one
             ++cur;
           } else if (res == -1)  {
-            //printf("  first is better\n");
+            printf("  first is better\n");
             // first is better, eliminate second (cur)
             std::swap(*new_begin, *cur);
             ++new_begin;
             ++cur;
           } else if (res == 1) {
-            //printf("  second is better\n");
+            printf("  second is better\n");
             // second (cur) is better, eliminate first, restart comparison
             first = *cur;
             ++new_begin;
             cur = new_begin;
           }        
         }
-        //printf("===\n");
+        printf("===\n");
         if (end - new_begin > 1)
           throw error(name, "Multiple matches for call to %s", ~name->to_string());
         else
@@ -4970,6 +4935,34 @@ namespace ast {
   //
   //
   //
+
+  struct OpMangle {
+    const char * op;
+    const char * name;
+  };
+
+  OpMangle OP_MANGLE[] = {
+    {"==", "eq"}, {"!=", "ne"}, {"<",  "lt"}, {">",  "gt"}, {"<=", "le"}, {">=", "ge"},
+    {"+", "plus"}, {"-", "minus"}, {"*", "times"}, {"/", "div"}, {"%", "mod"},
+    {"<<", "lshift"}, {">>", "rshift"}, {"^", "xor"}, {"&", "and"}, {"|", "or"},
+    {"+=", "aplus"}, {"-=", "aminus"}, {"*=", "atimes"}, {"/=", "adiv"}, {"%=", "amod"},
+    {"<<=", "alshift"}, {">>=", "arshift"}, {"^=", "axor"}, {"&=", "aand"}, {"|=", "aor"},
+    {"[]", "array"}, {"()", "call"}};
+  static unsigned OP_MANGLE_SIZE = sizeof(OP_MANGLE) / sizeof(OpMangle);
+
+  void asm_name(const SymbolKey * key, OStream & o) {
+    //printf("?%s\n", ~key->to_string());
+    if (key->ns == OPERATOR_NS) {
+      //printf(stderr, "LIVE ONE\n");
+      unsigned i;
+      for (i = 0; i != OP_MANGLE_SIZE; ++i) 
+        if (key->name == OP_MANGLE[i].op) break;
+      assert(i != OP_MANGLE_SIZE);
+      o << "op$" << OP_MANGLE[i].name;
+    } else {
+      o << key->name;
+    }
+  }
 }
 
 extern "C" namespace macro_abi {

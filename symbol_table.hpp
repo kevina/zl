@@ -169,6 +169,9 @@ namespace ast {
 
   enum Pass {AllPasses, FirstPass, SecondPass};
 
+  // defined in ast.cpp
+  void asm_name(const SymbolKey * key, OStream &);
+
   struct Symbol : public gc {
     typedef ::TypeInfo<Symbol> TypeInfo;
     const SymbolKey * key;
@@ -197,7 +200,7 @@ namespace ast {
     virtual const Syntax * get_prop(SymbolName n) const {abort();}
   protected:
     virtual bool uniq_name(OStream & o) const {
-      o << name();
+      asm_name(key, o);
       return true;
     }
   };
@@ -236,11 +239,12 @@ namespace ast {
         o << "$";
       }
       if (num == 0) {
-        o << name();
+        asm_name(key, o);
         if (where) 
           o << "$";
       } else {
-        o.printf("%s$$%u", ~name(), num);
+        asm_name(key, o);
+        o.printf("$$%u", num);
       }
       return num != NPOS;
     }
