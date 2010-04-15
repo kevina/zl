@@ -235,15 +235,14 @@ namespace ast {
     virtual String ct_type_name() const {return exact_type->to_string();}
     bool addressable;
     bool read_only;
-    bool ct_const; // compile time const
     bool is_null;
     TypeInst(TypeCategory * c = UNKNOWN_C)
       : category(c), 
-        addressable(false), read_only(false), ct_const(false), is_null(false)
+        addressable(false), read_only(false), is_null(false)
       , exact_type() {}
     TypeInst(const TypeInst * p) 
       : category(p->category), 
-        addressable(p->addressable), read_only(p->read_only), ct_const(p->ct_const), is_null(p->is_null)
+        addressable(p->addressable), read_only(p->read_only), is_null(p->is_null)
       , exact_type() {}
     void to_string(StringBuf & buf, const PrintInst * pi = NULL) const 
       {if (pi == NULL) pi = type_symbol->print_inst; pi->to_string(*this, buf);}
@@ -660,16 +659,14 @@ namespace ast {
 
   class QualifiedType : public ParmTypeInst {
   public:
-    enum {CONST = 1, VOLATILE = 2, RESTRICT = 4, CT_CONST = 8};
+    enum {CONST = 1, VOLATILE = 2, RESTRICT = 4};
     const Type * subtype;
     unsigned qualifiers; // BIT FIELD
   public:
     QualifiedType(unsigned q, const Type * t) 
       : ParmTypeInst(t->category), subtype(t) {
-      if (q & CT_CONST) q |= CONST; 
       qualifiers = q;
       if (q & CONST) read_only = true;
-      if (q & CT_CONST) ct_const = true;
     }
     unsigned num_parms() const {return 2;}
     TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(qualifiers) : TypeParm(subtype);}

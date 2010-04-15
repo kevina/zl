@@ -545,6 +545,19 @@ namespace ast {
     const Type * unify(int rule, const Type *, const Type *) const;
   };
 
+  static const Int * INT;
+  static const Int * UINT;
+
+  static const Int * int_promotion(const Int * x) {
+    // 6.3.1.1: Integer promotions
+    assert(x->min != x->max);
+    //printf("%lld <= %lld && %llu <= %llu %p %p\n", INT->min, x->min, x->max, INT->max, INT, x);
+    if (INT->min <= x->min && x->max <= INT->max) return INT;
+    //printf("%lld <= %lld && %llu <= %llu %p %p\n", UINT->min, x->min, x->max, UINT->max, UINT, x);
+    if (UINT->min <= x->min && x->max <= UINT->max) return UINT;
+    return x;
+  }
+
 #define TC(conv, exp) TypeConv(TypeConv::conv, exp)
   TypeConv C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule, CheckOnlyType check_only) const {
     static int i = -1;
@@ -615,7 +628,8 @@ namespace ast {
       if (need->is(INT_C)) {
         const Int * have_i = dynamic_cast<const Int *>(have);
         const Int * need_i = dynamic_cast<const Int *>(need);
-        if (need_i->min <= have_i->min && have_i->max <= need_i->max)
+        const Int * prom = int_promotion(have_i);
+        if (prom == need_i)
           return TC(IntProm, new Cast(exp, type));
         else
           return TC(IntConv, new Cast(exp, type));
@@ -747,19 +761,6 @@ namespace ast {
     }
   }
 
-  static const Int * INT;
-  static const Int * UINT;
-
-  const Int * int_promotion(const Int * x) {
-    // 6.3.1.1: Integer promotions
-    assert(x->min != x->max);
-    //printf("%lld <= %lld && %llu <= %llu %p %p\n", INT->min, x->min, x->max, INT->max, INT, x);
-    if (INT->min <= x->min && x->max <= INT->max) return INT;
-    //printf("%lld <= %lld && %llu <= %llu %p %p\n", UINT->min, x->min, x->max, UINT->max, UINT, x);
-    if (UINT->min <= x->min && x->max <= UINT->max) return UINT;
-    return x;
-  }
-
   const Type * C_TypeRelation::unify(int rule, const Type * x, const Type * y) const {
     // 6.3.1.8: Usual arithmetic conversions
     x = x->effective->unqualified;
@@ -859,7 +860,7 @@ namespace ast {
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {
-    return inst(".qualified", TypeParm(QualifiedType::CT_CONST), TypeParm(t));
+    return inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(t));
   }
 
 }

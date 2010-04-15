@@ -3821,7 +3821,7 @@ namespace ast {
       } else if (candidates.size() == 1) {
         sym = candidates.front()->sym;
       } else if (candidates.size() > 1) {
-        printf("LOOKING FOR MATCH FOR: %s\n", ~parms[1]->type->to_string());
+        //printf("LOOKING FOR MATCH FOR: %s\n", ~parms[1]->type->to_string());
         // now use a process of elimination to find the best match
         Vector<Candidate *>::iterator 
           new_begin = candidates.begin(),
@@ -3833,29 +3833,29 @@ namespace ast {
             ++cur;
             continue;
           }
-          printf("COMPARING:\n  %s %d\n  %s %d\n", 
-                 ~first->sym->overloadable()->to_string(), first->resolved_parms[1].conv, 
-                 ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[1].conv);
+          //printf("COMPARING:\n  %s %d\n  %s %d\n", 
+          //       ~first->sym->overloadable()->to_string(), first->resolved_parms[1].rank(), 
+          //       ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[1].rank());
           int res = better_match(parms, first->resolved_parms, (*cur)->resolved_parms);
           if (res == 0) {
-            printf("  no better match\n");
+            //printf("  no better match\n");
             // no better match, try next one
             ++cur;
           } else if (res == -1)  {
-            printf("  first is better\n");
+            //printf("  first is better\n");
             // first is better, eliminate second (cur)
             std::swap(*new_begin, *cur);
             ++new_begin;
             ++cur;
           } else if (res == 1) {
-            printf("  second is better\n");
+            //printf("  second is better\n");
             // second (cur) is better, eliminate first, restart comparison
             first = *cur;
             ++new_begin;
             cur = new_begin;
           }        
         }
-        printf("===\n");
+        //printf("===\n");
         if (end - new_begin > 1)
           throw error(name, "Multiple matches for call to %s", ~name->to_string());
         else
@@ -4055,7 +4055,7 @@ namespace ast {
     decl->body = NULL;
     if (p->num_args() > 1) {
       Vector<TypeParm> q_parms;
-      q_parms.push_back(TypeParm(QualifiedType::CT_CONST));
+      q_parms.push_back(TypeParm(QualifiedType::CONST));
       q_parms.push_back(TypeParm(decl));
       const Type * t = env.types.find(".qualified")->inst(q_parms);
       int val = 0;
