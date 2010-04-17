@@ -119,10 +119,10 @@ int main(int argc, const char *argv[])
     } else {
       parse_maps(env);
       SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
-      parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end())),env);
+      parse_stmts(parse_str("SLIST", SourceStr(prelude, prelude->begin(), prelude->end()), &env) ,env);
       if (debug_mode && load_prelude) {
         SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
-        parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end())), env);
+        parse_stmts(parse_str("SLIST", SourceStr(prelude_body, prelude_body->begin(), prelude_body->end()), &env), env);
         //SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
         //parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
       } else if (load_prelude) {
@@ -130,14 +130,14 @@ int main(int argc, const char *argv[])
       }
       if (cpp_mode) {
         SourceFile * prelude_cpp = new_source_file(SOURCE_PREFIX "prelude-c++.zlh");
-        parse_stmts(parse_str("SLIST", SourceStr(prelude_cpp, prelude_cpp->begin(), prelude_cpp->end())),env);
+        parse_stmts(parse_str("SLIST", SourceStr(prelude_cpp, prelude_cpp->begin(), prelude_cpp->end()), &env), env);
       }
       //if (load_prelude && !for_ct)
         //ast::import_file(SOURCE_PREFIX "test/class-new_abi.zl", env);
         //ast::include_file(SOURCE_PREFIX "test/class-this_reg.zlh", env);
       if (c_mode)
         env.mangle = false;
-      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())),env);
+      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end()), &env), env);
     }
     ast::CompileWriter out;
     out.open(output_fn, "w");

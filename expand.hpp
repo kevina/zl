@@ -81,7 +81,8 @@ static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
   return expand_binding(p, ast::DEFAULT_NS, env);
 }
 
-const Syntax * reparse(String what, ReparseInfo p, ReplTable * r = NULL, 
+const Syntax * reparse(String what, ReparseInfo p, Environ * env = NULL,
+                       ReplTable * r = NULL, 
                        const Replacements * additional_repls = NULL);
 
 ast::Stmt * parse_map(const Syntax * p, Environ & env);

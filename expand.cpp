@@ -860,7 +860,7 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   //rparms->macro_def = Macro::macro_def;
   const Syntax * res;
   if (p->is_a("{}")) {
-    res = reparse("STMTS", p->inner(), rparms);
+    res = reparse("STMTS", p->inner(), NULL, rparms);
     if (res->num_args() == 1)
       res = res->arg(0);
   } else {
@@ -877,7 +877,9 @@ const Syntax * macro_abi::replace(const UnmarkedSyntax * p, Match * match, Mark 
   return ::replace(p, match, mark);
 }
 
-const Syntax * reparse(String what, ReparseInfo p, ReplTable * r, const Replacements * additional_repls) {
+const Syntax * reparse(String what, ReparseInfo p, Environ * env,
+                       ReplTable * r, const Replacements * additional_repls) 
+{
   //printf("REPARSE %s %s AS %s\n", ~p->sample_w_loc(), ~p->to_string(), ~what);
   const Replacements * repls = combine_repl(p.repl, r);
   Replacements combined_repls;
@@ -891,7 +893,7 @@ const Syntax * reparse(String what, ReparseInfo p, ReplTable * r, const Replacem
   }
   const Syntax * res;
   try {
-    res = parse_str(what, p.str, &combined_repls, p.cache);
+    res = parse_str(what, p.str, env, &combined_repls, p.cache);
   } catch (Error * err) {
     //Annon * annon = new ReparseAnnon(p, what);
     //annon->prev = p->str().annon; // FIXME: Is this right
@@ -921,7 +923,7 @@ const Syntax * reparse(String what, ReparseInfo p, ReplTable * r, const Replacem
 }
 
 const Syntax * macro_abi::reparse(const Syntax * s, const char * what, Environ * env) {
-  return ::reparse(what, s->outer());
+  return ::reparse(what, s->outer(), env);
 }
 
 static const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs, bool splice=false);
@@ -1070,7 +1072,7 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
             (*i)->outer_si = cs.new_;
           }
         }
-        repl = reparse(what, repl->inner(), NULL, rs);
+        repl = reparse(what, repl->inner(), NULL, NULL, rs);
       }
     }
     return repl;
@@ -1180,7 +1182,7 @@ static const Syntax * handle_paran(parts_iterator & i,
   ++i;
   //printf("handle_paran: %s\n", ~p->to_string());
   try {
-    const Syntax * exp = reparse("PARAN_EXP", p->outer());
+    const Syntax * exp = reparse("PARAN_EXP", p->outer(), &env);
     //printf("handle_paran:: %s\n", ~exp->to_string());
     const Syntax * type = parse_decl_->parse_type(exp, env);
     if (type) return SYN(p->str(), SYN(".type"), type);
@@ -1292,21 +1294,21 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     return partly_expand(SYN(p->str(), ID, p), pos, env, flags);
   } else if (what == "{}") {
     if (pos == ExpPos)
-      return partly_expand(reparse("INIT", p->inner()), pos, env, flags);
+      return partly_expand(reparse("INIT", p->inner(), &env), pos, env, flags);
     else
-      return partly_expand(reparse("BLOCK", p->outer()), pos, env, flags);
+      return partly_expand(reparse("BLOCK", p->outer(), &env), pos, env, flags);
   } else if (what == "()") {
-    return partly_expand(reparse("PARAN_EXP", p->outer()), pos, env, flags);
+    return partly_expand(reparse("PARAN_EXP", p->outer(), &env), pos, env, flags);
   } else if (what == "[]") {
-    return partly_expand(reparse("EXP", p->inner()), pos, env, flags);
+    return partly_expand(reparse("EXP", p->inner(), &env), pos, env, flags);
   } else if (what == "parm") {
     //abort();
     if (pos == NoPos)
-      return partly_expand(reparse("ID", p->outer()), pos, env, flags);
+      return partly_expand(reparse("ID", p->outer(), &env), pos, env, flags);
     else if (pos & ExpPos)
-      return partly_expand(reparse("EXP", p->outer()), pos, env, flags);
+      return partly_expand(reparse("EXP", p->outer(), &env), pos, env, flags);
     else
-      return partly_expand(reparse("STMT", p->outer()), pos, env, flags);
+      return partly_expand(reparse("STMT", p->outer(), &env), pos, env, flags);
   } else if (Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
     return partly_expand(n, pos, env, flags);
   } else if (what == "id" && !(flags & EXPAND_NO_ID_MACRO_CALL)) { 
@@ -1324,7 +1326,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     assert_num_args(p, 2);
     const Syntax * n = partly_expand(p->arg(0), OtherPos, env, flags | EXPAND_NO_ID_MACRO_CALL);
     const Syntax * a = p->arg(1);
-    if (a->is_a("()")) a = reparse("SPLIT", a->inner());
+    if (a->is_a("()")) a = reparse("SPLIT", a->inner(), &env);
     if (n && n->is_a("id")) {
       if (!(flags & EXPAND_NO_FUN_MACRO_CALL)) {
         const Macro * m = env.symbols.find<Macro>(n->arg(0));
@@ -1526,7 +1528,7 @@ void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res) {
       expand_fun_parms(p, env, res);
     } else {
       if (p->is_a("parm") || p->is_a("()"))
-        p = reparse("TOKENS", p->inner());
+        p = reparse("TOKENS", p->inner(), &env);
       //printf("FUN_PARM: %s\n", ~p->to_string());
       if (!p->is_a("...")) {
         const Type * t = parse_type(p->part(0), env);

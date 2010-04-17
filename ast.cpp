@@ -1007,7 +1007,7 @@ namespace ast {
       if (init_syn->eq(".")) {
         if (i == e) throw unknown_error(init_syn);
         init_syn = *i++;
-        if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner());
+        if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner(), &env);
         const UserType * user_type = dynamic_cast<const UserType *>(type->unqualified->root);
         printf("CON: %s\n", ~init_syn->to_string());
         if (user_type) {
@@ -3240,7 +3240,7 @@ namespace ast {
     clock_t start = clock();
     printf("INCLUDING: %s\n", ~file_name);
     SourceFile * code = new_source_file(file_name);
-    parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env);
+    parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end()), &env), env);
     clock_t parse_done = clock();
     clock_t load_done = clock();
     printf("Include Time (%s): %f  (parse: %f)\n", ~file_name,
@@ -3271,7 +3271,7 @@ namespace ast {
     try {
       env.interface = true;
       assert(!env.collect);
-      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end())), env);
+      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end()), &env), env);
     } catch (...) {
       env.interface = env_interface_orig;
       throw;
@@ -3391,7 +3391,7 @@ namespace ast {
     assert_num_args(p, 2);
     const Syntax * t = p->arg(0);
     if (t->is_a("<>")) {
-      t = reparse("TOKENS", t->inner());
+      t = reparse("TOKENS", t->inner(), &env);
       t = parse_decl_->parse_type(t, env);
     } else if (t->is_a(".type")) {
       t = t->arg(0);
@@ -4291,7 +4291,7 @@ namespace ast {
       va = parse_exp(p->arg(0), env);
       const Syntax * type_s = p->arg(1);
       if (type_s->is_a("parm")) {
-        type_s = reparse("TOKENS", type_s->outer());
+        type_s = reparse("TOKENS", type_s->outer(), &env);
         type_s = parse_decl_->parse_type(type_s, env);
         if (!type_s) throw error(p->arg(1), "Expected type.");
       }
@@ -4315,6 +4315,21 @@ namespace ast {
   //
   //
   //
+
+  struct TemplateId : public Symbol {
+  };
+  
+  Stmt * parse_template(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
+    env.add(n, new TemplateId);
+    return empty_stmt();
+  }
+
+  //
+  //
+  //
+
   void add_ast_primitives(Environ & env) {
     env.add(SymbolKey("struct", SYNTAX_NS), new Primitive());
     env.add(SymbolKey("union", SYNTAX_NS), new Primitive());
@@ -4492,6 +4507,7 @@ namespace ast {
     if (what == "include_file") return parse_include_file(p, env);
     if (what == "import_file") return parse_import_file(p, env);
     if (what == "extern") return parse_extern(p, env);
+    if (what == "template") return parse_template(p, env);
     return 0;
   }
 
@@ -4963,6 +4979,18 @@ namespace ast {
       o << key->name;
     }
   }
+
+  bool template_id(const Syntax * id, ast::Environ * env) {
+    if (!env) {
+      printf("NO ENV\n");
+      return false;
+    }
+    if (env->symbols.find<TemplateId>(id))
+      return true;
+    else
+      return false;
+  }
+
 }
 
 extern "C" namespace macro_abi {

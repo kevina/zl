@@ -745,6 +745,7 @@ namespace ast {
     const Type * parent;
     const Type * type;
     Module * module;
+    //Vector<TypeParm> template_parms;
     Exp * lt_sizeof_;
     Exp * lt_sizeof() const {return lt_sizeof_;}
     bool defined;
@@ -756,7 +757,7 @@ namespace ast {
     using SimpleType::finalize;
     void compile(CompileWriter &, Phase) const;
   };
-  
+
   //
   //
   //

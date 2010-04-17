@@ -394,6 +394,13 @@ namespace syntax_ns {
     mutable_parts_iterator parts_begin()       {return parts_;}
     parts_iterator         parts_end()   const {return parts_end_;}
     mutable_parts_iterator parts_end()         {return parts_end_;}
+    //unsigned num_args()         const {return num_parts() - 1;}
+    //Syntax *  arg(unsigned i)   const {return part(i+1);}
+    //Syntax * & arg(unsigned i)        {return part(i+1);}
+    //parts_iterator args_begin() const {return parts_begin() + 1;}
+    //parts_iterator args_begin()       {return parts_begin() + 1;}
+    //parts_iterator args_end()   const {return parts_end();}
+    //parts_iterator args_end()         {return parts_end();}
     flags_iterator         flags_begin() const {return flags_;}
     mutable_flags_iterator flags_begin()       {return flags_;}
     flags_iterator         flags_end()   const {return flags_end_;}
