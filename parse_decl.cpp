@@ -550,7 +550,6 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
       args.insert(args.begin(), p->args_begin(), p->args_end());
       continue;
     }
-    printf(">?>%s\n", ~p->to_string());
 
     DeclWorking w(type_scope);
 

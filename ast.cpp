@@ -171,27 +171,16 @@ namespace ast {
   struct Parse {
     Environ & env;
     Parse(Environ & e) : env(e) {}
-    const Syntax * partly_expand(const Syntax * p) const {
-      return ::partly_expand(p, pos, env);
+    const Syntax * partly_expand(const Syntax * p, unsigned flags = 0) const {
+      return ::partly_expand(p, pos, env, flags);
     }
     typedef typename PositionTypeInfo<pos>::t Ret;
     Ret * finish_parse(const Syntax * p) const;
     Ret * operator() (const Syntax * p) const {
-    loop:
       p = partly_expand(p);
-      if (p->is_a("@{}")) {
-        p = reparse("STMT", p->inner(), &env);
-        goto loop;
-      }
       return finish_parse(p);
     }
-    //static const char * reparse_as;
   };
-
-  //template <Position POS>
-  //const char * Parse<POS>::reparse_as = "STMT"; 
-  //template <>
-  //const char * Parse<ExpPos>::reparse_as = "STMT"; 
 
   // needed here otherwise gcc gets confuses
   template <>
@@ -217,7 +206,7 @@ namespace ast {
   template <Position POS, typename C>
   void parse_ast_node(const Syntax * p, Environ & env, C * container) {
     Parse<POS> prs(env);
-    p = prs.partly_expand(p);
+    p = prs.partly_expand(p, EXPAND_NO_BLOCK_LIST);
     if (p->is_a("@")) {
       parse_ast_nodes<POS>(p->args_begin(), p->args_end(), env, container);
     } else if (p->is_a("@{}")) {
@@ -239,13 +228,9 @@ namespace ast {
   void reparse_ast_nodes(ReparseInfo r, Environ & env, C * container) 
   {
     while (!r.str.empty()) {
-      //printf("1> %p %p\n", r.str.begin, r.str.end);
-      const Syntax * p = reparse_prod(/*Parse<POS>::reparse_as*/ "STMT", r, &env);
-      //printf("2> %p %p\n", r.str.begin, r.str.end);
+      const Syntax * p = reparse_prod("STMT", r, &env);
       parse_ast_node<POS>(p, env, container);
-      //printf("3> %p %p\n", r.str.begin, r.str.end);
     }
-    //printf("DONE\n");
   }
 
   static inline void parse_stmt_part(const Syntax * p, Environ & env) 
@@ -4440,8 +4425,6 @@ namespace ast {
     try_error(p, env);
     res = try_just_decl(p, env);
     if (res) return res;
-    if (p->is_a("@{}")) abort();
-    if (p->is_a(".")) abort();
     throw error (p, "Unsupported primative at top level:: %s", ~p->what());
     //throw error (p, "Expected top level expression.");
   }
@@ -4485,7 +4468,6 @@ namespace ast {
     res = try_exp_stmt(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
-    if (p->is_a("@{}")) abort();
     throw error (p, "Expected statement in: %s.", ~p->to_string());
   }
 
@@ -4522,18 +4504,12 @@ namespace ast {
     res = try_just_exp(p, env, c); 
     if (res) return res;
     //abort();
-    if (p->is_a("@{}")) abort();
     throw error (p, "Unsupported primative at expression position: %s", ~p->what().name);
     //throw error (p, "Expected expression.");
   }
 
   static Exp * parse_exp(const Syntax * p, Environ & env, ExpContext c) {
-  loop:
     p = partly_expand(p, ExpPos, env);
-    if (p->is_a("@{}")) {
-      p = reparse("STMT", p->inner(), &env);
-      goto loop;
-    }
     return just_parse_exp(p, env, c);
   }
 

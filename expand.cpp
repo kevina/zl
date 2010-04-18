@@ -807,12 +807,10 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
 extern "C" namespace macro_abi {
 
   Match * match_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
-    printf("MATCH_F: %p : %s : %s : %p\n", m, ~pattern->to_string(), ~with->to_string(), mark);
     return match(m, pattern, with, 0, mark);
   }
   
   Match * match_args_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
-    printf("MATCH_ARGS_F: %p : %s : %s : %p\n", m, ~pattern->to_string(), ~with->to_string(), mark);
     return match(m, pattern, with, 1, mark);
   }
   
@@ -1309,7 +1307,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
       return partly_expand(reparse("INIT", p->inner(), &env), pos, env, flags);
     else
       return partly_expand(reparse("BLOCK", p->outer(), &env), pos, env, flags);
-   } else if (what == "@{}") {
+  } else if (what == "@{}" && !(flags & EXPAND_NO_BLOCK_LIST)) {
     ReparseInfo r = p->inner();
     const Syntax * p0 = reparse_prod("STMTE", r, &env);
     if (r.str.empty()) {
@@ -1438,7 +1436,7 @@ struct PartlyExpandSyntaxEnum : public SyntaxEnum {
         goto try_again;
       }
     }
-    res = partly_expand(res, pos, *env);
+    res = partly_expand(res, pos, *env, EXPAND_NO_BLOCK_LIST);
     if (res->is_a("@")) {
       stack.push_back(top);
       top = new SimpleSyntaxEnum(res->args_begin(), res->args_end());

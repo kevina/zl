@@ -7,8 +7,6 @@ TOP = <top> SPACING {STMT}+;
 # C Statement
 #
 
-STMTE = {STMT} / <noop> EOF;
-
 STMT : "statement" = 
       <<mid PARM>> {RAW_ID} ";"
     / <lcstmt> {CASE_LABEL} ":" {STMT}
@@ -62,7 +60,7 @@ MAKE_MACRO  =
     <%> ({"make_macro"/"make_syntax_macro"}) {ID} {ID}? {:<> ':'{"w_snapshot"}}? ";";
 
 MODULE = 
-    <%> {"module"/"user_type"} {ID} ({<{...}> {BRACEL} } / ";");
+    <%> {"module"/"user_type"} {TID} ({<{...}> {BRACEL} } / ";");
 
 IMPORT = 
     <import> "import" {ID} ";";
@@ -85,9 +83,9 @@ MATCH = <<mid>> {RAW_ID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <r
 
 TOKEN_ : "token'" =  <<mid PARM>> {RAW_ID} !("`" / "::") /  
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
-         / {RAW} / {TEMPLATE_CALL} / {TEMPLATE_ID}
+         / {RAW} / {TEMPLATE_CALL} 
          / {BRACK} / {CONST}
-         / {ID} / {SYM};
+         / {TID} / {SYM};
 
 TOKEN : "token" = {TOKEN_} 
       / {PARAN} / {BRACE};
@@ -194,6 +192,9 @@ ID_W_INNER =
 ID =
   <fluid> "fluid" {ID} / {ID_W_INNER};
 
+TID = 
+  {TEMPLATE_ID} / {ID};
+
 RAW = 
   <raw> "__raw" {PARAN};
 
@@ -247,7 +248,9 @@ ARRAY_SIZE = {EXP} EOF / <n -1>;
 
 TOKENS = <(...)> {TOKEN}*;
 
-STMTS = <@> {STMT}*;
+STMTS = <@> {STMT}*; # FIXME: Eventually remove
+
+STMTE = {STMT} / <noop> EOF;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
 SPLIT = <.> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;
