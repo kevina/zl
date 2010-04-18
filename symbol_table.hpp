@@ -192,6 +192,7 @@ namespace ast {
     }
     virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
     virtual const class Tuple * overloadable() const {return NULL;}
+    virtual bool is_template() const {return false;}
     virtual SymbolNode * add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}
     virtual ~Symbol() {}

@@ -47,7 +47,7 @@ namespace syntax_ns {
   };
 
   struct ReparseInfo {
-    const SourceStr & str;
+    SourceStr str;
     const Replacements * repl;
     void * cache;
     ReparseInfo(const SourceStr & s, const Replacements * r, void * c)
@@ -940,8 +940,37 @@ namespace syntax_ns {
 #define PARTS mk_pt_flg
 #define FLAGS mk_pt_flg
 
-  static inline Leaf * new_syntax(const char * n) {return new Leaf(n);}
-  static inline Leaf * new_syntax(String n) {return new Leaf(n);}
+  extern const Leaf SYN_AT;
+  extern const Leaf SYN_DOT;
+  extern const Leaf SYN_ATB;
+  extern const Leaf SYN_ID;
+
+  static inline const Leaf * new_leaf(const char * n) {
+
+    const Leaf * r = NULL;
+
+    if (n[0] == '@') {
+      if (!n[1])
+        r = &SYN_AT;
+      else if (strcmp(n+1, "{}") == 0)
+        r = &SYN_ATB;
+    } else if (strcmp(n, ".") == 0) {
+      //return new Leaf(n);
+      r = &SYN_DOT;
+    } else if (strcmp(n, "id") == 0) {
+      //return new Leaf(n);
+      r = &SYN_ID;
+    }
+    if (r) {
+      assert(r->eq(n));
+      return r;
+    } else {
+      return new Leaf(n);
+    }
+  }
+
+  static inline const Leaf * new_syntax(const char * n) {return new_leaf(n);}
+  static inline const Leaf * new_syntax(String n) {return new Leaf(n);}
   static inline Leaf * new_syntax(SymbolName n) {return new Leaf(n);}
 
   static inline Leaf * new_syntax(const char * n, const SourceStr & str) {return new Leaf(n, str);}

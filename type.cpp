@@ -121,6 +121,9 @@ namespace ast {
     case DOTS:
       buf.printf("...");
       break;
+    case UNKNOWN:
+      abort();
+      break;
     }
   }
 
@@ -358,6 +361,65 @@ namespace ast {
   inline TypeOf::TypeOf(Exp * a) 
     : WrapperTypeInst(a->type->effective, a->syn), of_ast(a) {}
 
+  void parse_type_parms(parts_iterator start, parts_iterator end, 
+                        const TypeSymbol * t, Vector<TypeParm> & parms, 
+                        Environ & env, bool in_tuple) 
+  {
+    unsigned sz = end - start;
+    parms.reserve(sz);
+    for (int i = 0; i != sz; ++i) {
+      const Syntax * p0 = start[i];
+      SymbolKey n;
+      if (in_tuple && !p0->part(0)->simple()) { // HACK!
+	if (p0->num_parts() > 1)
+	  n = expand_binding(p0->part(1), env);
+	p0 = p0->part(0);
+      }
+      switch(t->parmt(i)) {
+      case TypeParm::TYPE: {
+	if (*p0 == "...") {
+	  parms.push_back(TypeParm::dots());
+	} else {
+	  Type * t0 = parse_type(p0, env);
+	  parms.push_back(TypeParm(t0, n));
+	}
+        break;
+      }
+      case TypeParm::INT: {
+        parms.push_back(TypeParm(parse_ct_value(p0, env)));
+        break;
+      }
+      case TypeParm::TUPLE: {
+        Type * t0 = parse_type(p0, env);
+        Tuple * tt = dynamic_cast<Tuple *>(t0);
+        if (!tt)
+          throw error(p0, "Expected Tuple Type");
+        parms.push_back(TypeParm(TypeParm::TUPLE, t0));
+        break;
+      }
+      case TypeParm::EXP: {
+        Exp * exp = parse_exp(p0, env); // FIXME: Do I really need to parse here....
+        parms.push_back(TypeParm(exp));
+        break;
+      }
+      case TypeParm::NONE: {
+        abort();
+        //throw error(p0, "Two Many Type Paramaters");
+      }
+      case TypeParm::DOTS: {
+	abort(); // special case, should not happen
+      }
+      case TypeParm::UNKNOWN: {
+        if (p0->is_a(".type")) {
+          parms.push_back(TypeParm(parse_type(p0, env), n));
+        } else {
+          parms.push_back(TypeParm(parse_ct_value(p0, env)));
+        }
+      }}
+    }
+  }
+
+
   Type * parse_type(const Syntax * p, Environ & env) {
     if (p->have_entity()) {
       Type * type = p->entity<Type>();
@@ -421,55 +483,15 @@ namespace ast {
         assert(t);
       }
     }
-    if (t->required_parms() == 0 && sz != 0 && name_str != "." /* HACK! */)
+    bool in_tuple = name_str == ".";
+    if (t->required_parms() == 0 && sz != 0 && !in_tuple /* HACK! */)
       throw error(p, "Type \"%s\" is not a paramatized type.", ~name_str);
     if (t->required_parms() > sz) 
       throw error(p, "Not enough paramaters for \"%s\" type, %d required, but got %d",
                   ~name_str, t->required_parms(), sz);
     Vector<TypeParm> parms;
-    parms.reserve(sz);
-    for (int i = 0; i != sz; ++i) {
-      const Syntax * p0 = p->arg(i);
-      SymbolKey n;
-      if (name_str == "." && !p0->part(0)->simple()) { // HACK!
-	if (p0->num_parts() > 1)
-	  n = expand_binding(p0->part(1), env);
-	p0 = p0->part(0);
-      }
-      switch(t->parmt(i)) {
-      case TypeParm::TYPE: {
-	if (*p0 == "...") {
-	  parms.push_back(TypeParm::dots());
-	} else {
-	  Type * t0 = parse_type(p0, env);
-	  parms.push_back(TypeParm(t0, n));
-	}
-        break;
-      }
-      case TypeParm::INT: {
-        parms.push_back(TypeParm(parse_ct_value(p0, env)));
-        break;
-      }
-      case TypeParm::TUPLE: {
-        Type * t0 = parse_type(p0, env);
-        Tuple * tt = dynamic_cast<Tuple *>(t0);
-        if (!tt)
-          throw error(p0, "Expected Tuple Type");
-        parms.push_back(TypeParm(TypeParm::TUPLE, t0));
-        break;
-      }
-      case TypeParm::EXP: {
-        Exp * exp = parse_exp(p0, env); // FIXME: Do I really need to parse here....
-        parms.push_back(TypeParm(exp));
-        break;
-      }
-      case TypeParm::NONE: {
-        throw error(p0, "Two Many Type Paramaters");
-      }
-      case TypeParm::DOTS: {
-	abort(); // special case, should not happen
-      }}
-    }
+    if (sz > 0) // needed because sz != num_args() due to tagged types
+      parse_type_parms(p->args_begin(), p->args_end(), t, parms, env, in_tuple);
     Type * inst_type = t->inst(parms);
     unsigned qualifiers = 0;
     if (p->flag("const"))    qualifiers |= QualifiedType::CONST;

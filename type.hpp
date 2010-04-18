@@ -7,9 +7,7 @@
 #include "util.hpp"
 #include "symbol_table.hpp"
 #include "string_buf.hpp"
-
-namespace syntax_ns { struct SyntaxBase; typedef const SyntaxBase Syntax; }
-using syntax_ns::Syntax;
+#include "syntax.hpp"
 
 namespace ast {
 
@@ -59,7 +57,7 @@ namespace ast {
   extern TypeCategory * const USER_C;
 
   struct TypeParm : public gc {
-    enum What {NONE, TYPE, INT, TUPLE, EXP, DOTS};
+    enum What {NONE, TYPE, INT, TUPLE, EXP, DOTS, UNKNOWN};
     What what;
     union {
       const Type * as_type;
@@ -129,6 +127,8 @@ namespace ast {
     case TypeParm::EXP:
       return lhs.as_exp == rhs.as_exp;
     case TypeParm::DOTS:
+      return true;
+    case TypeParm::UNKNOWN:
       return true;
     }
     abort(); // this should't happen
@@ -504,6 +504,8 @@ namespace ast {
   //
 
   Type * parse_type(const Syntax * p, Environ & env);
+  void parse_type_parms(parts_iterator i, parts_iterator end, const TypeSymbol *, Vector<TypeParm> & parms, 
+                        Environ & env, bool in_tuple = false);
 
   //
   //

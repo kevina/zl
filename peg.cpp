@@ -1637,48 +1637,30 @@ private:
   ProdProps props_obj;
 };
 
-const Syntax * parse_str(String what, SourceStr str, ast::Environ * ast_env,
-                         const Replacements * repls, void * cache) 
+const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
+                          const Replacements * repls, void * cache, 
+                          bool match_complete_str) 
 {
   pprintf("BEGIN %s: %s\n", ~what, ~sample(str.begin, str.end));
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
-  clock_t start = clock();
-  //str.source = new ParseSourceInfo(str, what);
+  //clock_t start = clock();
   MatchEnviron env;
   env.mids = repls;
   env.ast_env = ast_env;
   Prod * p = parse.named_prods[what];
-  //parse.clear_cache();
-  //Cache local;
-  //if (!cache) {
-  //  printf("%s: no cache on: %s\n", ~what, ~sample(str.begin, str.end, 60));
-  //} else {
-  //  printf("%s: CACHE ON: %s\n", ~what, ~sample(str.begin, str.end, 60));
-  //}
   env.cache.reset(cache ? (Cache::Data *)cache : new Cache::Data);
-  //local_cache = new Cache; //&local;
-  //GC_print_finalization_stats();
   SyntaxBuilder dummy;
   const char * s = str.begin;
   const char * e = p->match(str, &dummy, env);
-  //::cache.data->dump_stats();
   env.mids = 0;
-  //assert(s != e);
-  //printf("%p %p %p : %.*s\n", s, e, str.end, str.end - str.begin, str.begin);
-  if (e == str.end) {
-    //printf(">>%.*s<<\n", e-s, s);
-    //dummy[0]->print();
-    //printf("\n");
-  } else {
-    //printf("GETTING ERROR\n");
+  if (!e || (match_complete_str && e != str.end)) {
     ParseErrors errors;
     const char * e0 = p->match_f(str, errors, env);
     assert(e0 == e);
-    //local_cache->data.dump_stats();
     throw errors.to_error(new ParseSourceInfo(str, what), parse.file);
   }
-  //local_cache->data.dump_stats();
-  clock_t stop = clock();
+  str.begin = e;
+  //clock_t stop = clock();
   //printf("PARSE STR ... as %s time: %f\n", ~what, (stop - start)/1000000.0);
   dummy.make_flags_parts();
   assert(dummy.single_part());

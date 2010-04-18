@@ -1,3 +1,5 @@
+#include <deque>
+
 #include "peg.hpp"
 #include "parse_decl.hpp"
 #include "string_buf.hpp"
@@ -175,13 +177,32 @@ struct DeclWorking {
     // doesn't make sense to have two types, so if we already have a
     // type, fail
     if (base_type || type_symbol || inner_type) return false;
-    const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
-    if (ts) {
-      type_symbol_p = p;
-      type_symbol = ts;
-      return true;
+    // Handle template types
+    if (p->is_a("tid")) {
+      printf("tid>%s\n", ~p->to_string());
+      //const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p->arg(0));
+      if (true) {
+        SyntaxBuilder res(p->arg(0));
+        if (p->arg(1)->is_a("<>")) {
+          expand_template_parms(p->arg(1), res, env);
+        } else {
+          res.add_parts(p->args_begin() + 1, p->args_end());
+        }
+        inner_type = res.build(p->str());
+        printf("TID>%s\n", ~inner_type->to_string());
+        return true;
+      } else {
+        return false;
+      }
     } else {
-      return false;
+      const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
+      if (ts) {
+        type_symbol_p = p;
+        type_symbol = ts;
+        return true;
+      } else {
+        return false;
+      }
     }
   }
   bool try_typeof(const Syntax * p, Environ &) {
@@ -516,9 +537,20 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
 {
   SyntaxBuilder res(SYN("{...}"));
   unsigned anon_num = 0;
-  for (unsigned h = 0; h != p0->num_args(); ++h) {
 
-    const Syntax * p = p0->arg(h);
+  std::deque<const Syntax *> args(p0->args_begin(), p0->args_end());
+
+  while (!args.empty()) {
+
+    const Syntax * p = args.front();
+    args.pop_front();
+    if (p->is_a("@{}"))
+      p = reparse("STMTS", p->inner(), &env);
+    if (p->is_a("@")) {
+      args.insert(args.begin(), p->args_begin(), p->args_end());
+      continue;
+    }
+    printf(">?>%s\n", ~p->to_string());
 
     DeclWorking w(type_scope);
 
@@ -708,7 +740,7 @@ void DeclWorking::make_inner_type(const Syntax * orig) {
     // work as expected.
     inner_type = SYN(type_symbol ? type_symbol_p : SYN(t.freeze()));
   } else {
-    // stuct or union
+    // stuct, union or template
     // nothing to do
   }
   if (!qualifiers.empty()) {

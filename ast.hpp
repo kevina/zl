@@ -745,7 +745,6 @@ namespace ast {
     const Type * parent;
     const Type * type;
     Module * module;
-    //Vector<TypeParm> template_parms;
     Exp * lt_sizeof_;
     Exp * lt_sizeof() const {return lt_sizeof_;}
     bool defined;
@@ -774,6 +773,7 @@ namespace ast {
   AST * parse_top(const Syntax * p, Environ & env);
   void parse_stmts_raw(SourceStr, Environ & env);
   void parse_stmts(const Syntax * p, Environ & env);
+  void parse_stmts(SourceStr str, Environ & env);
 
   Stmt * parse_top_level(const Syntax * p, Environ & env);
   Stmt * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect);

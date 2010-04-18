@@ -3,11 +3,11 @@
 
 TOP = <top> SPACING {STMT}+;
 
-SLIST = <@> SPACING {STMT}+;
-
 #
 # C Statement
 #
+
+STMTE = {STMT} / <noop> EOF;
 
 STMT : "statement" = 
       <<mid PARM>> {RAW_ID} ";"
@@ -41,7 +41,7 @@ STMT : "statement" =
     / <template> "template" {ID} ";"
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
-    / <extern> "extern" {STRING} ("{" {STMT}* "}" / {STMT})
+    / <extern> "extern" {STRING} ({BRACEL} / {STMT})
 #   / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
     / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
    ;
@@ -62,7 +62,7 @@ MAKE_MACRO  =
     <%> ({"make_macro"/"make_syntax_macro"}) {ID} {ID}? {:<> ':'{"w_snapshot"}}? ";";
 
 MODULE = 
-    <%> {"module"/"user_type"} {ID} ({<{...}> "{" {STMT}* "}" } / ";");
+    <%> {"module"/"user_type"} {ID} ({<{...}> {BRACEL} } / ";");
 
 IMPORT = 
     <import> "import" {ID} ";";
@@ -92,7 +92,9 @@ TOKEN_ : "token'" =  <<mid PARM>> {RAW_ID} !("`" / "::") /
 TOKEN : "token" = {TOKEN_} 
       / {PARAN} / {BRACE};
 
-TEMPLATE_ID = <<tid>> {ID} '<' SPACING (!'>' {TOKEN})* '>' SPACING;
+TEMPLATE_PARM = <(...)> (!('>'/',') {TOKEN})+;
+TEMPLATE_PARMS = <\<\>> ({TEMPLATE_PARM} ("," {TEMPLATE_PARM})*) / ;
+TEMPLATE_ID = <<tid>> {ID} '<' SPACING {TEMPLATE_PARMS} '>' SPACING;
 
 # FIXME: Add support for hex-floats
 CONST = <f> {([0-9]*'.'[0-9]+/[0-9]+'.')([eE][+-]?[0-9]+)?} {FLOATING_SUFFIX} SPACING
@@ -119,7 +121,7 @@ STRUCT_UNION = <%> {"struct"/"union"/"class"/".class"}
                    (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
                    (:<fix_vtable_size> ":" "fix_vtable_size" "(" {EXP} ")" )? # used for test101
                    (:<abi_ver> ":" "abi_ver" "(" {EXP} ")" )? 
-                   {<{...}> "{" {STMT}* "}" }?;
+                   {<{...}> {BRACEL} }?;
 
 ENUM = <enum> "enum" {ID/} 
               {<{,}> "{" ({ENUM_MEMBER} ",")* ({ENUM_MEMBER} ","?)? "}" }?;
@@ -147,18 +149,21 @@ EXP = <exp> {TOKEN}+;
 
 INIT = <<mid>> {RAW_ID} / <init> {TOKEN}+;
 
-BLOCK = <block> "{" {STMT}* "}";
+BLOCK = <block> {BRACEL};
 
-EBLOCK = <eblock> "(" "{" {STMT}* "}" ")";
+EBLOCK = <eblock> "(" {BRACEL} ")";
 
 #
 # Raw Tokens
 #
 
-BRACE = <<reparse {}>> "{" {RAW_TOKEN*} "}";
-PARAN = <<reparse ()>> "(" {RAW_TOKEN*} ")";
-BRACK = <<reparse []>> "[" {RAW_TOKEN*} "]";
-ANGLE = <<reparse \<\>>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
+RAW_TOKENS = {RAW_TOKEN*};
+
+BRACE  = <<reparse {}>>  "{" {RAW_TOKENS} "}";
+BRACEL = <<reparse @{}>> "{" {RAW_TOKENS} "}";
+PARAN  = <<reparse ()>>  "(" {RAW_TOKENS} ")";
+BRACK  = <<reparse []>>  "[" {RAW_TOKENS} "]";
+ANGLE  = <<reparse \<\>>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
 
 # RAW_ID and CONST is not strictly needed but it will make reparsing
 # the string more efficient

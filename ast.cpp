@@ -177,10 +177,21 @@ namespace ast {
     typedef typename PositionTypeInfo<pos>::t Ret;
     Ret * finish_parse(const Syntax * p) const;
     Ret * operator() (const Syntax * p) const {
+    loop:
       p = partly_expand(p);
-     return finish_parse(p);
+      if (p->is_a("@{}")) {
+        p = reparse("STMT", p->inner(), &env);
+        goto loop;
+      }
+      return finish_parse(p);
     }
+    //static const char * reparse_as;
   };
+
+  //template <Position POS>
+  //const char * Parse<POS>::reparse_as = "STMT"; 
+  //template <>
+  //const char * Parse<ExpPos>::reparse_as = "STMT"; 
 
   // needed here otherwise gcc gets confuses
   template <>
@@ -188,59 +199,116 @@ namespace ast {
   template <>
   Stmt * Parse<StmtDeclPos>::finish_parse(const Syntax * p) const;
 
-  template <typename C, typename P>
-  void add_ast_nodes(parts_iterator i, parts_iterator end, 
-                     C & container, const P & prs) {
-    for (; i != end; ++i) {
-      const Syntax * p = prs.partly_expand(*i);
-      if (p->is_a("@")) {
-        add_ast_nodes(p->args_begin(), p->args_end(), container, prs);
-      } else {
-        typename C::value_type ast = prs.finish_parse(p);
-        container.push_back(ast);
-      }
+  template <Position POS, typename C>
+  void parse_ast_nodes(parts_iterator i, parts_iterator end, Environ & env, C * container = NULL);
+  template <Position POS, typename C> 
+  void reparse_ast_nodes(ReparseInfo p, Environ & env, C * container = NULL);
+
+  template <Position POS, typename C>
+  void finish_parse(const Syntax * p, Parse<POS> & prs, C * container) {
+    container->push_back(prs.finish_parse(p));
+  }
+
+  template <Position POS>
+  void finish_parse(const Syntax * p, Parse<POS> & prs, void *) {
+    prs.finish_parse(p);
+  }
+
+  template <Position POS, typename C>
+  void parse_ast_node(const Syntax * p, Environ & env, C * container) {
+    Parse<POS> prs(env);
+    p = prs.partly_expand(p);
+    if (p->is_a("@")) {
+      parse_ast_nodes<POS>(p->args_begin(), p->args_end(), env, container);
+    } else if (p->is_a("@{}")) {
+      reparse_ast_nodes<POS>(p->inner(), env, container);
+    } else {
+      finish_parse(p, prs, container);
     }
   }
 
-  void add_stmts(parts_iterator i, parts_iterator end, Environ & env)
+  template <Position POS, typename C>
+  void parse_ast_nodes(parts_iterator i, parts_iterator end, Environ & env, C * container = NULL)
   {
-    Parse<StmtDeclPos> prs(env);
     for (; i != end; ++i) {
-      const Syntax * p = prs.partly_expand(*i);
-      if (p->is_a("@")) {
-        add_stmts(p->args_begin(), p->args_end(), env);
-      } else {
-        Stmt * cur = prs.finish_parse(p);
-        prs.env.add_stmt(cur);
-      }
+      parse_ast_node<POS>(*i, env, container);
     }
   }
-  
+
+  template <Position POS, typename C>
+  void reparse_ast_nodes(ReparseInfo r, Environ & env, C * container) 
+  {
+    while (!r.str.empty()) {
+      //printf("1> %p %p\n", r.str.begin, r.str.end);
+      const Syntax * p = reparse_prod(/*Parse<POS>::reparse_as*/ "STMT", r, &env);
+      //printf("2> %p %p\n", r.str.begin, r.str.end);
+      parse_ast_node<POS>(p, env, container);
+      //printf("3> %p %p\n", r.str.begin, r.str.end);
+    }
+    //printf("DONE\n");
+  }
+
+  static inline void parse_stmt_part(const Syntax * p, Environ & env) 
+  {
+    parse_ast_node<TopLevel,void>(p, env, NULL);
+  }
+
+  void parse_stmts_raw(SourceStr str, Environ & env) {
+    while (!str.empty()) {
+      parse_parse::Res r = parse_parse::parse(str);
+      parse_stmt_part(r.parse, env);
+      str.begin = r.end;
+    }
+  }
+
+  static void parse_stmts(parts_iterator i, parts_iterator end, Environ & env);
+
+  void parse_stmts(const Syntax * p, Environ & env) {
+    parse_stmts(p->args_begin(), p->args_end(), env);
+  }
+
+  void parse_stmts(SourceStr str, Environ & env) {
+    parse_prod("SPACING", str);
+    while (!str.empty()) {
+      const Syntax * p = parse_prod("STMT", str, &env);
+      parse_stmt_part(p, env);
+    }
+  }
+
+  static void parse_stmts(parts_iterator i, parts_iterator end, Environ & env) {
+    for (; i != end; ++i) {
+      parse_stmt_part(*i, env);
+    }
+  }
+
+  AST * parse_top(const Syntax * p, Environ & env) {
+    assert(p->is_a("top")); // FIXME Error
+    parse_stmts(p, env);
+    return empty_stmt();
+  }
+
   struct AddAllButLast {
-    Parse<StmtDeclPos> prs;
     const Syntax * last;
-    AddAllButLast(Environ & env) : prs(env), last() {}
-    void add(const Syntax * cur) {
+    AddAllButLast() : last() {}
+    void add(const Syntax * cur, Parse<StmtDeclPos> & prs) {
       if (last) {
         Stmt * stmt = prs.finish_parse(last);
         prs.env.add_stmt(stmt);
       } 
       last = cur;
     }
-    void add(parts_iterator i, parts_iterator end) {
-      for (; i != end; ++i) {
-        const Syntax * p = prs.partly_expand(*i);
-        if (p->is_a("@"))
-          add(p->args_begin(), p->args_end());
-        else
-          add(p);
-      }
-    }
-    void flush() {
-      add(NULL);
+    void flush(Environ & env) {
+      Parse<StmtDeclPos> prs(env);
+      add(NULL, prs);
     }
   };
-  
+
+  template <>
+  void finish_parse(const Syntax * p, Parse<StmtDeclPos> & prs, AddAllButLast * container) {
+    container->add(p, prs);
+  }
+
+
   //
   //
   //
@@ -731,7 +799,7 @@ namespace ast {
       syn = p;
       unsigned num_args = p->num_args();
       parts.reserve(num_args);
-      add_ast_nodes(p->args_begin(), p->args_end(), parts, Parse<ExpPos>(env));
+      parse_ast_nodes<ExpPos>(p->args_begin(), p->args_end(), env, &parts);
       type = VOID_T;
       ct_value_ = &ct_nval;
       for (unsigned i = 0; i != parts.size(); ++i) {
@@ -801,12 +869,15 @@ namespace ast {
         else
           assert(env.exp_ip == env.stmt_ip);
       }
+    void push_back(Stmt * cur) {
+      env.add_stmt(cur);
+    }
   };
 
   Stmt * Block::parse_self(const Syntax * p, Environ & env0) {
     syn = p;
     BlockBuilder b(this, env0);
-    add_stmts(p->args_begin(), p->args_end(), b.env);
+    parse_ast_nodes<StmtDeclPos>(p->args_begin(), p->args_end(), b.env, &b);
     if (stmts == NULL) // must test against stmts as last will may
       // be an empty_stmt
       stmts = empty_stmt();
@@ -1013,7 +1084,7 @@ namespace ast {
         if (user_type) {
           // find constructor to use
           Vector<Exp *> parms;
-          add_ast_nodes(init_syn->args_begin(), init_syn->args_end(), parms, Parse<ExpPos>(wrap.env));
+          parse_ast_nodes<ExpPos>(init_syn->args_begin(), init_syn->args_end(), wrap.env, &parms);
           if (parms.size() == 1 && parms[0]->type->unqualified == type->unqualified) {
             // We will be calling a copy constructor, but go via the
             // path of an init value to give us an opportunity to
@@ -1427,11 +1498,11 @@ namespace ast {
     Environ env = oenv.new_scope();
     env.scope = EXTENDED_EXP;
     env.stmt_ip = env.exp_ip;
-    AddAllButLast wk(env);
-    wk.add(p->args_begin(), p->args_end());
+    AddAllButLast wk;
+    parse_ast_nodes<StmtDeclPos>(p->args_begin(), p->args_end(), env, &wk);
     if (!wk.last) return noop();
     if (c.void_context()) {
-      wk.flush();
+      wk.flush(env);
       return noop();
     } else {
       return just_parse_exp(wk.last, env, c);
@@ -2542,48 +2613,6 @@ namespace ast {
   //
   //
 
-  void parse_stmts_raw(SourceStr str, Environ & env) {
-    Parse<TopLevel> prs(env);
-    while (!str.empty()) {
-      parse_parse::Res r = parse_parse::parse(str);
-      const Syntax * p = prs.partly_expand(r.parse);
-      if (p->is_a("@")) {
-        parse_stmts(p, env);
-      } else {
-        prs.finish_parse(p);
-      }
-      str.begin = r.end;
-    }
-  }
-
-  static void parse_stmts(parts_iterator i, parts_iterator end, Environ & env);
-
-  void parse_stmts(const Syntax * p, Environ & env) {
-    parse_stmts(p->args_begin(), p->args_end(), env);
-  }
-
-  static void parse_stmts(parts_iterator i, parts_iterator end, Environ & env) {
-    Parse<TopLevel> prs(env);
-    for (; i != end; ++i) {
-      const Syntax * p = prs.partly_expand(*i);
-      if (p->is_a("@")) {
-        parse_stmts(p, env);
-      } else {
-        prs.finish_parse(p);
-      }
-    }
-  }
-
-  AST * parse_top(const Syntax * p, Environ & env) {
-    assert(p->is_a("top")); // FIXME Error
-    parse_stmts(p, env);
-    return empty_stmt();
-  }
-
-  //
-  //
-  //
-
   void Module::compile(CompileWriter & f, Phase phase) const {
     assert(f.target_lang = CompileWriter::ZLE);
     if (phase == Forward) {
@@ -2689,18 +2718,13 @@ namespace ast {
     bool do_finalize;
     const SourceStr & source_str() const {return name->str();} // FIXME: This isn't quite right
     void add_syntax(const Syntax * p) {
-      //printf("QQ: ADD SYNTAX %p (%s): %s\n", this, ~name->to_string(), ~p->to_string());
-      p = prs.partly_expand(p);
-      if (p->is_a("@")) {
-        add_syntax(p->args_begin(), p->args_end());
-      } else {
-        Stmt * cur = prs.finish_parse(p);
-        lenv->add_stmt(cur);
-      }
+      parse_ast_node<TopLevel>(p, *lenv, this);
     }
     void add_syntax(parts_iterator i, parts_iterator end) {
-      for (; i != end; ++i)
-        add_syntax(*i);
+      parse_ast_nodes<TopLevel>(i, end, *lenv, this);
+    }
+    void push_back(Stmt * cur) {
+      lenv->add_stmt(cur);
     }
     struct Finalize : public CollectAction {
       ModuleBuilder * builder;
@@ -2977,6 +3001,42 @@ namespace ast {
   //
   //
 
+  class TemplateUserTypeInst : public UserType {
+  public:
+    TemplateUserTypeInst() : UserType() {}
+    Vector<TypeParm> template_parms;
+    TemplateUserTypeInst * template_next;
+    unsigned num_parms() const {return template_parms.size();}
+    TypeParm parm(unsigned i) const {return template_parms[i];}
+  };
+
+  class TemplateUserType : public TypeSymbol {
+  public:
+    unsigned required_parms() const {return 0;}
+    virtual TypeParm::What parmt(unsigned i) const {return TypeParm::UNKNOWN;}
+    virtual Type * inst(Vector<TypeParm> & p);
+    TemplateUserTypeInst * find_inst(Vector<TypeParm> & p) const {
+      for (TemplateUserTypeInst * cur = insts; cur; cur = cur->template_next) {
+        if (cur->template_parms == p) return cur;
+      }
+      return NULL;
+    }
+    void add_inst(Vector<TypeParm> & p, TemplateUserTypeInst * ut) {
+      assert(!find_inst(p));
+      ut->template_next = insts;
+      insts = ut;
+    }
+    bool is_template() const {return true;}
+    TemplateUserTypeInst * insts;
+  };
+
+  Type * TemplateUserType::inst(Vector<TypeParm> & p) {
+    Type * t = find_inst(p);
+    if (t) return t;
+    else throw error("No inst found for givin parms in %s", ~name());
+  }
+
+
   void UserType::compile(CompileWriter & f, Phase phase) const {
     if (f.target_lang != CompileWriter::ZLE)
       return;
@@ -2993,17 +3053,34 @@ namespace ast {
   // "new" is for lack of a better name as it doesn't necessary create
   // a new instance
   UserType * new_user_type(const Syntax * p, Environ & env) {
-    SymbolName name = *p;
-    //printf("PARSING USER TYPE %s\n", ~name);
-    UserType * s = env.symbols.find_this_scope<UserType>(SymbolKey(name));
-    if (!s) {
-      //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
-      s = new UserType;
-      s->category = new TypeCategory(name.name, USER_C);
-      s->module = new_module(p, env);
-      add_simple_type(env.types, SymbolKey(name), s, env.where);
+    if (p->is_a("tid")) {
+      SymbolName name = expand_binding(p->arg(0), env);
+      TemplateUserType * ts = env.symbols.find_this_scope<TemplateUserType>(SymbolKey(name));
+      if (!ts) env.add(name, ts = new TemplateUserType());
+      Vector<TypeParm> parms;
+      parse_type_parms(p->args_begin() + 1, p->args_end(), ts, parms, env);
+      TemplateUserTypeInst * s = ts->find_inst(parms);
+      if (!s) {
+        //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
+        s = new TemplateUserTypeInst;
+        s->category = new TypeCategory(name.name, USER_C);
+        s->module = new_module(p, env);
+        ts->add_inst(parms, s);
+      }
+      return s;
+    } else {
+      SymbolName name = expand_binding(p, env);
+      //printf("PARSING USER TYPE %s\n", ~name);
+      UserType * s = env.symbols.find_this_scope<UserType>(SymbolKey(name));
+      if (!s) {
+        //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
+        s = new UserType;
+        s->category = new TypeCategory(name.name, USER_C);
+        s->module = new_module(p, env);
+        add_simple_type(env.types, SymbolKey(name), s, env.where);
+      }
+      return s;
     }
-    return s;
   }
 
   void finalize_user_type(UserType * s, Environ & env) {
@@ -3240,7 +3317,7 @@ namespace ast {
     clock_t start = clock();
     printf("INCLUDING: %s\n", ~file_name);
     SourceFile * code = new_source_file(file_name);
-    parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end()), &env), env);
+    parse_stmts(SourceStr(code, code->begin(), code->end()), env);
     clock_t parse_done = clock();
     clock_t load_done = clock();
     printf("Include Time (%s): %f  (parse: %f)\n", ~file_name,
@@ -3271,7 +3348,7 @@ namespace ast {
     try {
       env.interface = true;
       assert(!env.collect);
-      parse_stmts(parse_str("SLIST", SourceStr(code, code->begin(), code->end()), &env), env);
+      parse_stmts(SourceStr(code, code->begin(), code->end()), env);
     } catch (...) {
       env.interface = env_interface_orig;
       throw;
@@ -3872,7 +3949,7 @@ namespace ast {
     Syntax * lhs = partly_expand(p->arg(0), ExpPos, env);
     Vector<Exp *> parms;
     if (lhs->is_a("id")) {
-      add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));
+      parse_ast_nodes<ExpPos>(p->arg(1)->args_begin(), p->arg(1)->args_end(), env, &parms);
       const Symbol * sym = resolve_call(lhs->arg(0), parms, env);
       if (const TopLevelVarDecl * fun = dynamic_cast<const TopLevelVarDecl *>(sym)) {
         return mk_call(p, mk_id(fun, env), parms, env);
@@ -3883,7 +3960,7 @@ namespace ast {
       }
     } else {
       Exp * lhs_e = just_parse_exp(lhs, env, ExpContext()); // must be done here
-      add_ast_nodes(p->arg(1)->args_begin(), p->arg(1)->args_end(), parms, Parse<ExpPos>(env));
+      parse_ast_nodes<ExpPos>(p->arg(1)->args_begin(), p->arg(1)->args_end(), env, &parms);
       return mk_call(p, lhs_e, parms, env);
     }
   }
@@ -3967,7 +4044,7 @@ namespace ast {
         }
       } else {
         const Syntax * q = p->arg(1);
-        add_ast_nodes(q->args_begin(), q->args_end(), decl->members, Parse<FieldPos>(decl->env));
+        parse_ast_nodes<FieldPos>(q->args_begin(), q->args_end(), decl->env, &decl->members);
       }
       if (!env0.special())
         env0.add_defn(decl);
@@ -4260,7 +4337,7 @@ namespace ast {
     GccBuiltIn * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       assert_num_args(num_parms);
-      add_ast_nodes(p->args_begin(), p->args_end(), parms, Parse<ExpPos>(env));
+      parse_ast_nodes<ExpPos>(p->args_begin(), p->args_end(), env, &parms);
       return this;
     }
     void finalize(FinalizeEnviron & env) {
@@ -4317,6 +4394,7 @@ namespace ast {
   //
 
   struct TemplateId : public Symbol {
+    bool is_template() const {return true;}
   };
   
   Stmt * parse_template(const Syntax * p, Environ & env) {
@@ -4362,6 +4440,8 @@ namespace ast {
     try_error(p, env);
     res = try_just_decl(p, env);
     if (res) return res;
+    if (p->is_a("@{}")) abort();
+    if (p->is_a(".")) abort();
     throw error (p, "Unsupported primative at top level:: %s", ~p->what());
     //throw error (p, "Expected top level expression.");
   }
@@ -4405,6 +4485,7 @@ namespace ast {
     res = try_exp_stmt(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
+    if (p->is_a("@{}")) abort();
     throw error (p, "Expected statement in: %s.", ~p->to_string());
   }
 
@@ -4441,12 +4522,18 @@ namespace ast {
     res = try_just_exp(p, env, c); 
     if (res) return res;
     //abort();
+    if (p->is_a("@{}")) abort();
     throw error (p, "Unsupported primative at expression position: %s", ~p->what().name);
     //throw error (p, "Expected expression.");
   }
 
   static Exp * parse_exp(const Syntax * p, Environ & env, ExpContext c) {
+  loop:
     p = partly_expand(p, ExpPos, env);
+    if (p->is_a("@{}")) {
+      p = reparse("STMT", p->inner(), &env);
+      goto loop;
+    }
     return just_parse_exp(p, env, c);
   }
 
@@ -4982,10 +5069,11 @@ namespace ast {
 
   bool template_id(const Syntax * id, ast::Environ * env) {
     if (!env) {
-      printf("NO ENV\n");
+      printf("TEMPLATE_ID: NO ENV\n");
       return false;
     }
-    if (env->symbols.find<TemplateId>(id))
+    const Symbol * sym = env->symbols.find<Symbol>(id);
+    if (sym && sym->is_template())
       return true;
     else
       return false;

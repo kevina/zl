@@ -14,8 +14,16 @@ using namespace parse_common;
 
 using syntax_ns::SyntaxBase;
 
-SymbolName syntax_ns::UNKNOWN_WHAT("<unknown>");
-SymbolName syntax_ns::SynEntity::WHAT("<entity>");
+namespace syntax_ns {
+  SymbolName UNKNOWN_WHAT("<unknown>");
+  SymbolName SynEntity::WHAT("<entity>");
+
+  const Leaf SYN_AT("@");
+  const Leaf SYN_DOT(".");
+  const Leaf SYN_ATB("@{}");
+  const Leaf SYN_ID("id");
+}
+
 
 void SyntaxBase::dump_type_info() {
   if ((type_inf & NUM_PARTS_INLINED) || (type_inf & NUM_PARTS_MASK)) 

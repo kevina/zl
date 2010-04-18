@@ -215,7 +215,7 @@ public:
     //SyntaxEnum * itr = parent_m->symbols();
     //Syntax * syn;
     //while ((syn = itr->next())) {
-    //  exports->append(syn);
+    //  exports->append(syn);x
     //}
   }
 
@@ -408,6 +408,7 @@ public:
     //printf("parse_class_var: %s\n", syntax_to_string(p));
     __shadow Match * m = match_args(m, raw_syntax (n t @rest), p);
     bool is_static = p->flag(syntax static);
+    printf("??%p %p\n", m->var(syntax n), m->var(syntax t));
     
     // FIXME: handle flags
     if (is_static) {

@@ -401,6 +401,8 @@ const Syntax * flatten(const Syntax * p) {
 
 static const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs, 
                               bool allow_plain_mids, bool * splice);
+static const Syntax * reparse_replace(const Syntax * new_name, 
+                                      const Syntax * p, ReplTable * r);
 
 struct Macro : public Declaration, public Symbol {
   SymbolKey real_name;
@@ -805,10 +807,12 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
 extern "C" namespace macro_abi {
 
   Match * match_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+    printf("MATCH_F: %p : %s : %s : %p\n", m, ~pattern->to_string(), ~with->to_string(), mark);
     return match(m, pattern, with, 0, mark);
   }
   
   Match * match_args_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+    printf("MATCH_ARGS_F: %p : %s : %s : %p\n", m, ~pattern->to_string(), ~with->to_string(), mark);
     return match(m, pattern, with, 1, mark);
   }
   
@@ -860,9 +864,10 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   //rparms->macro_def = Macro::macro_def;
   const Syntax * res;
   if (p->is_a("{}")) {
-    res = reparse("STMTS", p->inner(), NULL, rparms);
-    if (res->num_args() == 1)
-      res = res->arg(0);
+    //res = reparse("STMTS", p->inner(), NULL, rparms);
+    //if (res->num_args() == 1)
+    //  res = res->arg(0);
+    res = reparse_replace(SYN("@{}"), p, rparms);
   } else {
     res = replace(p, rparms, NULL, true, NULL);
   }
@@ -877,8 +882,9 @@ const Syntax * macro_abi::replace(const UnmarkedSyntax * p, Match * match, Mark 
   return ::replace(p, match, mark);
 }
 
-const Syntax * reparse(String what, ReparseInfo p, Environ * env,
-                       ReplTable * r, const Replacements * additional_repls) 
+const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env,
+                            bool match_complete_str,
+                            ReplTable * r, const Replacements * additional_repls)
 {
   //printf("REPARSE %s %s AS %s\n", ~p->sample_w_loc(), ~p->to_string(), ~what);
   const Replacements * repls = combine_repl(p.repl, r);
@@ -893,7 +899,7 @@ const Syntax * reparse(String what, ReparseInfo p, Environ * env,
   }
   const Syntax * res;
   try {
-    res = parse_str(what, p.str, env, &combined_repls, p.cache);
+    res = parse_prod(what, p.str, env, &combined_repls, p.cache, match_complete_str);
   } catch (Error * err) {
     //Annon * annon = new ReparseAnnon(p, what);
     //annon->prev = p->str().annon; // FIXME: Is this right
@@ -1000,11 +1006,7 @@ static const Syntax * replace(const Syntax * p,
     return SYN(ci, *p);
   } else if (p->is_reparse()) {
     Syntax * res = 
-      new ReparseSyntax(SYN(p->part(0), r->mark, r->expand_source_info(p->part(0))),
-                        combine_repl(p->repl, r),
-                        p->as_reparse()->cache,
-                        r->expand_source_info_str(p->outer().str),
-                        r->expand_source_info_str(p->inner().str));
+      reparse_replace(p->part(0), p, r);
     //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
     return res;
   } else {
@@ -1037,6 +1039,16 @@ static const Syntax * replace(const Syntax * p,
     //printf("REPLACE Res %d: %s\n", seql, ~res->to_string());
     return res.build(r->expand_source_info_str(p));
   }
+}
+
+static const Syntax * reparse_replace(const Syntax * new_name, 
+                                      const Syntax * p, ReplTable * r)
+{
+  return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->part(0))),
+                           combine_repl(p->repl, r),
+                           p->as_reparse()->cache,
+                           r->expand_source_info_str(p->outer().str),
+                           r->expand_source_info_str(p->inner().str));
 }
 
 const Syntax * replace_context(const Syntax * p, const Marks * context);
@@ -1297,6 +1309,17 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
       return partly_expand(reparse("INIT", p->inner(), &env), pos, env, flags);
     else
       return partly_expand(reparse("BLOCK", p->outer(), &env), pos, env, flags);
+   } else if (what == "@{}") {
+    ReparseInfo r = p->inner();
+    const Syntax * p0 = reparse_prod("STMTE", r, &env);
+    if (r.str.empty()) {
+      return partly_expand(p0, pos, env, flags);
+    } else {
+      p0 = partly_expand(p0, pos, env, flags);
+      ReparseSyntax * p1 = p->as_reparse()->clone();
+      p1->inner_.begin = r.str.begin;
+      return SYN(SYN("@"), p0, p1);
+    }
   } else if (what == "()") {
     return partly_expand(reparse("PARAN_EXP", p->outer(), &env), pos, env, flags);
   } else if (what == "[]") {
@@ -1419,6 +1442,11 @@ struct PartlyExpandSyntaxEnum : public SyntaxEnum {
     if (res->is_a("@")) {
       stack.push_back(top);
       top = new SimpleSyntaxEnum(res->args_begin(), res->args_end());
+      goto try_again;
+    } else if (res->is_a("@{}")) {
+      stack.push_back(top);
+      const Syntax * r = reparse("STMTS", res->inner());
+      top = new SimpleSyntaxEnum(r->args_begin(), r->args_end());
       goto try_again;
     }
     return res;
@@ -1558,7 +1586,16 @@ Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
   return tuple;
 }
 
-
+void expand_template_parms(const Syntax * p, SyntaxBuilder & res, Environ & env) {
+  assert(p->is_a("<>"));
+  parts_iterator i = p->args_begin(), e = p->args_end();
+  while (i != e) {
+    const Syntax * type = parse_decl_->parse_type(*i, env);
+    if (type) res.add_part(SYN(p->str(), SYN(".type"), type));
+    else res.add_part(parse_exp_->parse(*i, "seq"));
+    ++i;
+  }
+}
 
 void compile_for_ct(Deps & deps, Environ & env) {
 

@@ -66,10 +66,11 @@ static inline const Replacements * combine_repl(const Replacements * rs, ReplTab
   }
 }
 
+ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
+void expand_template_parms(const Syntax *, SyntaxBuilder &, Environ & env);
+
 enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4, 
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32};
-ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
-
 static const unsigned EXPAND_NO_ID_MACRO_CALL = 1;
 static const unsigned EXPAND_NO_FUN_MACRO_CALL = 2;
 static const unsigned EXPAND_NO_MACRO_CALL = 1 | 2;
@@ -81,9 +82,16 @@ static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
   return expand_binding(p, ast::DEFAULT_NS, env);
 }
 
-const Syntax * reparse(String what, ReparseInfo p, Environ * env = NULL,
-                       ReplTable * r = NULL, 
-                       const Replacements * additional_repls = NULL);
+const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env = NULL,
+                            bool match_complete_str = false, 
+                            ReplTable * match_complete_str = NULL, 
+                            const Replacements * additional_repls = NULL);
+static inline const Syntax * reparse(String what, ReparseInfo p, Environ * env = NULL,
+                                     ReplTable * r = NULL, 
+                                     const Replacements * additional_repls = NULL) 
+{
+  return reparse_prod(what, p, env, true, r, additional_repls);
+}
 
 ast::Stmt * parse_map(const Syntax * p, Environ & env);
 ast::Stmt * parse_macro(const Syntax * p, Environ & env);
