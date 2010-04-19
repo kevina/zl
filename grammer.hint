@@ -1,7 +1,7 @@
 # This was initially created with scripts/analy-cache.pl.  TOKEN,
-# SPACING, and RAW_TOKEN where also made trans as they are low cost
+# SPACING, and RAW_TOKEN where also made trans as they are low cost.
+# BLOCK and EBLOCK are also made trans for now.
 TOP: trans;
-SLIST: trans;
 STMT: trans;
 CASE_LABEL: trans;
 CASE_EXP: trans;
@@ -14,6 +14,9 @@ MATCH_LIST: trans;
 MATCH: trans;
 TOKEN_:;
 TOKEN: trans;
+TEMPLATE_PARM: trans;
+TEMPLATE_PARMS: trans;
+TEMPLATE_ID: trans;
 CONST:;
 INT_SUFFIX: trans;
 FLOATING_SUFFIX: trans;
@@ -29,13 +32,16 @@ EXP: trans;
 INIT: trans;
 BLOCK: trans;
 EBLOCK: trans;
+RAW_TOKENS: trans;
 BRACE:;
+BRACEL:;
 PARAN:;
 BRACK:;
 ANGLE: trans;
 RAW_TOKEN: trans;
 RAW_ID:;
-BASIC_ID: trans;
+BASIC_ID:;
+ID_W_TEMPLATE: trans;
 ID_W_NS: trans;
 ID_W_INNER: trans;
 ID:;
@@ -52,6 +58,7 @@ PARAN_EXP: trans;
 ARRAY_SIZE: trans;
 TOKENS: trans;
 STMTS: trans;
+STMTE: trans;
 SPLIT_TOKEN: trans;
 SPLIT: trans;
 SPLIT_ITEM: trans;
