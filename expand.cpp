@@ -1921,3 +1921,16 @@ extern "C" namespace macro_abi {
 
 extern "C" void gdb_breakpoint() {}
 
+extern "C" {
+
+  void * ct_malloc(size_t size) {
+    printf("CT MALLOC\n");
+    return GC_MALLOC(size);
+  }
+
+  void ct_free(void * ptr) {
+    return GC_FREE(ptr);
+  }
+
+}
+

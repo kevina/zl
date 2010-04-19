@@ -16,6 +16,18 @@ macro offsetof(TYPE, MEMBER) {(size_t) &(reinterpret_cast<TYPE *>(0))->MEMBER;}
 extern "C" void *memcpy(void *dest, const void *src, size_t n);
 extern "C" void *memmove(void *dest, const void *src, size_t n);
 
+// If compiling for compile time these will point to ct_malloc and
+// ct_free, otherwise they will point to malloc and free.
+extern "C" void * zl_malloc(size_t);
+extern "C" void zl_free(void *);
+
+// Use these (or zl_ variants) when allocating memory in a macro so
+// that the compilers garbage collector will know about it which is
+// important if the memory contains pointers to other objects.
+// ct_free is optional.
+__ct_callback void * ct_malloc(size_t);
+__ct_callback void ct_free(void *);
+
 //
 // language support
 //
@@ -25,14 +37,14 @@ macro false() {0;}
 
 __raw(smacro new (type @rest)
         (eblock 
-          (var tmp (.ptr type) (call malloc (. (sizeof (.type type)))))
+          (var tmp (.ptr type) (call zl_malloc (. (sizeof (.type type)))))
           (construct (deref tmp) type  @rest)
           tmp));
 
 __raw(smacro delete (exp)
         (eblock (var tmp (.ptr void))
           (assign tmp (destroy (deref exp)))
-          (call free (. tmp))));
+          (call zl_free (. tmp))));
 
 __raw(.struct .dummy);
 
@@ -60,6 +72,8 @@ __ct_callback unsigned syntax_num_args(Syntax *);
 __ct_callback Syntax * syntax_flag(Syntax *, UnmarkedSyntax *);
 __ct_callback bool syntax_eq(Syntax *, UnmarkedSyntax *);
 __ct_callback SyntaxEnum * syntax_args(Syntax *);
+__ct_callback Syntax * stash_ptr_in_syntax(void *);
+__ct_callback void * extract_ptr_from_syntax(Syntax *);
 struct Syntax;
 user_type Syntax {
   finalize_user_type struct Syntax;
@@ -77,6 +91,8 @@ user_type Syntax {
   macro flag(str, :this this) {syntax_flag(this, str);}
   macro eq(str, :this this) {syntax_eq(this, str);}
   macro ne(str, :this this) {!syntax_eq(this, str);}
+  macro stash_ptr(ptr) {stash_ptr_in_syntax(ptr);}
+  macro extract_ptr(:this this) {extract_ptr_from_syntax(ptr);}
 }
 
 user_type SyntaxList;
@@ -235,19 +251,20 @@ __ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * pr
 
 __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
 
-//
 
 __ct_callback const char * mangle_fun_parms(Syntax *, const Environ *);
 
+__ct_callback void gdb_breakpoint();
+
 //
-//
+// make_syntax_macro
 //
 
 Syntax * parse_make_syntax_macro(Syntax * p, Environ * env);
 make_macro make_syntax_macro`syntax parse_make_syntax_macro :w_snapshot;
 
 //
-//
+// class support
 //
 
 Syntax * partly_expand_class(Syntax *, Mark *, Environ *);
@@ -259,6 +276,9 @@ Syntax * parse_class(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;
 make_macro class`syntax parse_class :w_snapshot;
 
+//
+// misc.
+//
+
 EnvironSnapshot * prelude_envss = environ_snapshot();
 
-__ct_callback void gdb_breakpoint();

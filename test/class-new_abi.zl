@@ -51,8 +51,8 @@ import_file "../class.zl";
 };
 
 Syntax * parse_class_new_abi(Syntax * p, Environ * env) {
-  ParseClassNewABI pc;
-  return pc.parse(p, env, new_mark());
+  ParseClassNewABI * pc = new ParseClassNewABI;
+  return pc->parse(p, env, new_mark());
 }
 
 make_syntax_macro class parse_class_new_abi :w_snapshot;

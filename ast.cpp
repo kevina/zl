@@ -777,6 +777,15 @@ namespace ast {
     return id->construct(env);
   }
 
+  void BasicVar::compile_lvalue(CompileWriter & o) const {
+    String n = uniq_name();
+    if (n == "zl_malloc")
+      n = o.for_macro_sep_c || o.for_compile_time() ? "ct_malloc" : "malloc";
+    else if (n == "zl_free")
+      n = o.for_macro_sep_c || o.for_compile_time() ? "ct_free" : "free";
+    o << n;
+  }
+
   //
   //
   //

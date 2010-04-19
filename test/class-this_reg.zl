@@ -36,8 +36,8 @@ extern void * this_reg;
 };
 
 Syntax * parse_class_this_reg(Syntax * p, Environ * env) {
-  ParseClassThisReg pc;
-  return pc.parse(p, env, new_mark());
+  ParseClassThisReg * pc = new ParseClassThisReg;
+  return pc->parse(p, env, new_mark());
 }
 
 make_syntax_macro class parse_class_this_reg :w_snapshot;

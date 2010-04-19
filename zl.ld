@@ -51,4 +51,8 @@
   user_type_have_destructor;
   mangle_fun_parms;
   gdb_breakpoint;
+  stash_ptr_in_syntax;
+  extract_ptr_from_syntax;
+  ct_malloc;
+  ct_free;
 };

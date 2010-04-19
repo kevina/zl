@@ -501,7 +501,7 @@ namespace ast {
     // as_lvalue returnes the variable as an lvalue exp, normally this
     // means wrapping in an Id, but if we are not a real variable...
     virtual Exp * as_lvalue(Environ & env) const;
-    virtual void compile_lvalue(CompileWriter & o) const {o << uniq_name();}
+    virtual void compile_lvalue(CompileWriter & o) const;
   protected:
     BasicVar() : name_p(), type(), ct_value(), lvalue(LV_NORMAL), ids(NULL) {}
     BasicVar(const Type * t, LValue lv = LV_NORMAL) : name_p(), type(t), ct_value(), lvalue(lv) {}

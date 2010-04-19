@@ -648,6 +648,6 @@ public:
 };
 
 Syntax * parse_class(Syntax * p, Environ * env) {
-  ParseClass pc;
-  return pc.parse(p, env, NULL);
+  ParseClass * pc = new ParseClass;
+  return pc->parse(p, env, NULL);
 }
