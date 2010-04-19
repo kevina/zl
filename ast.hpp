@@ -721,8 +721,11 @@ namespace ast {
   //
   //
 
+  class UserType;
+
   struct Module : public Declaration, public TopLevelSymbol {
-    Module() {}
+    Module() : user_type() {}
+    UserType * user_type;
     SymbolTableBase syms;
     //Vector<const Syntax *> exports; // \...
     const char * what() const {return "module";}

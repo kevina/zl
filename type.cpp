@@ -411,7 +411,7 @@ namespace ast {
       }
       case TypeParm::UNKNOWN: {
         if (p0->is_a(".type")) {
-          parms.push_back(TypeParm(parse_type(p0, env), n));
+          parms.push_back(TypeParm(parse_type(p0->arg(0), env), n));
         } else {
           parms.push_back(TypeParm(parse_ct_value(p0, env)));
         }
@@ -484,7 +484,9 @@ namespace ast {
       }
     }
     bool in_tuple = name_str == ".";
-    if (t->required_parms() == 0 && sz != 0 && !in_tuple /* HACK! */)
+    //if (t->required_parms() == 0 && sz != 0 && !in_tuple /* HACK! */)
+    //  throw error(p, "Type \"%s\" is not a paramatized type.", ~name_str);
+    if (t->parmt(0) == TypeParm::NONE && sz != 0)
       throw error(p, "Type \"%s\" is not a paramatized type.", ~name_str);
     if (t->required_parms() > sz) 
       throw error(p, "Not enough paramaters for \"%s\" type, %d required, but got %d",

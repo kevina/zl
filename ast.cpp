@@ -3008,6 +3008,7 @@ namespace ast {
     }
     void add_inst(Vector<TypeParm> & p, TemplateUserTypeInst * ut) {
       assert(!find_inst(p));
+      ut->template_parms = p;
       ut->template_next = insts;
       insts = ut;
     }
@@ -3018,7 +3019,7 @@ namespace ast {
   Type * TemplateUserType::inst(Vector<TypeParm> & p) {
     Type * t = find_inst(p);
     if (t) return t;
-    else throw error("No inst found for givin parms in %s", ~name());
+    throw error(0, "No inst found for givin parms in %s", ~name());
   }
 
 
@@ -3043,13 +3044,20 @@ namespace ast {
       TemplateUserType * ts = env.symbols.find_this_scope<TemplateUserType>(SymbolKey(name));
       if (!ts) env.add(name, ts = new TemplateUserType());
       Vector<TypeParm> parms;
-      parse_type_parms(p->args_begin() + 1, p->args_end(), ts, parms, env);
+      if (p->arg(1)->is_a("<>")) {
+        SyntaxBuilder tmp;
+        expand_template_parms(p->arg(1), tmp, env);
+        parse_type_parms(tmp.parts_begin(), tmp.parts_end(), ts, parms, env);
+      } else {
+        parse_type_parms(p->args_begin() + 1, p->args_end(), ts, parms, env);
+      }
       TemplateUserTypeInst * s = ts->find_inst(parms);
       if (!s) {
         //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
         s = new TemplateUserTypeInst;
         s->category = new TypeCategory(name.name, USER_C);
-        s->module = new_module(p, env);
+        s->module = new_module(p->arg(0), env);
+        s->module->user_type = s;
         ts->add_inst(parms, s);
       }
       return s;
@@ -3062,6 +3070,7 @@ namespace ast {
         s = new UserType;
         s->category = new TypeCategory(name.name, USER_C);
         s->module = new_module(p, env);
+        s->module->user_type = s;
         add_simple_type(env.types, SymbolKey(name), s, env.where);
       }
       return s;
@@ -3126,9 +3135,9 @@ namespace ast {
     assert_num_args(p, 1);
     Module * m = dynamic_cast<Module *>(env.where);
     //printf("FINALIZE USER TYPE %s\n", ~m->name.to_string());
-    Type * t0 = env.types.inst(SymbolName(*m->key)); 
-    //                        ^^ need to kill namespace but preserve marks
-    UserType * s = dynamic_cast<UserType *>(t0);
+    //Type * t0 = env.types.inst(SymbolName(*m->key)); 
+    ////                        ^^ need to kill namespace but preserve marks
+    UserType * s = m->user_type;
     s->type = parse_type(p->arg(0), env);
     finalize_user_type(s, env);
     return empty_stmt();
