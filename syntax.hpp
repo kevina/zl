@@ -783,8 +783,8 @@ namespace syntax_ns {
     return find_flag(this, n);
   }
 
-  inline String SyntaxBase::as_string() const {assert(first_part_simple()); return what();}
-  inline const SymbolName & SyntaxBase::as_symbol_name() const {assert(first_part_simple()); return what();}
+  inline String SyntaxBase::as_string() const {assert(simple()); return what();}
+  inline const SymbolName & SyntaxBase::as_symbol_name() const {assert(simple()); return what();}
   inline SyntaxBase::operator String () const {return as_string();}
   inline SyntaxBase::operator const SymbolName & () const {return as_symbol_name();}
   inline const char * SyntaxBase::operator ~ () const {return ~as_string();}

@@ -736,7 +736,7 @@ bool match_list(Match * m,
     bool ok = match_prep(m, p, r, rt);
     if (!ok) return false;
     if (p) {
-      SymbolName v = *p;
+      SymbolName v = p->what();
       if (v == "@") {
         now_optional = true;
         ++p_i; 
@@ -1332,16 +1332,19 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
       return partly_expand(reparse("STMT", p->outer(), &env), pos, env, flags);
   } else if (Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
     return partly_expand(n, pos, env, flags);
-  } else if (what == "id" && !(flags & EXPAND_NO_ID_MACRO_CALL)) { 
-    // NOTE: ID macros can have flags, since there is no parameter list
+  } else if (what == "id") {
+    p = expand_id(p, env);
+    if (!(flags & EXPAND_NO_ID_MACRO_CALL)) { 
+      // NOTE: ID macros can have flags, since there is no parameter list
     //       they are passed in as flags as (id <id> :(flag1 val1))
-    assert_num_args(p, 1);
-    const Syntax * n = p;
-    const Macro * m = env.symbols.find<Macro>(n->arg(0));
-    if (m && !m->overloadable()) { // id macro
-      Syntax * a = SYN(PARTS(SYN(".")), FLAGS(p->flags_begin(), p->flags_end()));
-      p = m->expand(p, a, env);
-      return partly_expand(p, pos, env, flags);
+      assert_num_args(p, 1);
+      const Syntax * n = p;
+      const Macro * m = env.symbols.find<Macro>(n->arg(0));
+      if (m && !m->overloadable()) { // id macro
+        Syntax * a = SYN(PARTS(SYN(".")), FLAGS(p->flags_begin(), p->flags_end()));
+        p = m->expand(p, a, env);
+        return partly_expand(p, pos, env, flags);
+      }
     }
   } else if (what == "call") {
     assert_num_args(p, 2);
@@ -1487,6 +1490,8 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     return expand_binding(p->arg(0), ns, env);
   } else if (p->is_a("::")) {
     throw error(p, "Can not use outer namespaces in binding form");
+  } else if (p->is_a("tid")) {
+    return SymbolKey(flatten_template_id(p, env), ns);
   } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
     return s->name;
   } else {
@@ -1592,6 +1597,71 @@ void expand_template_parms(const Syntax * p, SyntaxBuilder & res, Environ & env)
     if (type) res.add_part(SYN(p->str(), SYN(".type"), type));
     else res.add_part(parse_exp_->parse(*i, "seq"));
     ++i;
+  }
+}
+
+const Syntax * expand_template_id(const Syntax * p, Environ & env) {
+  assert(p->is_a("tid"));
+  if (p->arg(1)->is_a("<>")) {
+    SyntaxBuilder res(p->part(0));
+    res.add_part(p->arg(0));
+    expand_template_parms(p->arg(1), res, env);
+    return res.build(p->str());
+  } else {
+    return p;
+  }
+}
+
+SymbolName flatten_template_id(const Syntax * p, Environ & env) {
+  p = expand_template_id(p, env);
+  StringBuf buf;
+  SymbolKey n = expand_binding(p->arg(0), NULL, env);
+  buf.printf("%s$t%u", ~n.name, p->num_args() - 1);
+  for (unsigned i = 1; i < p->num_args(); ++i) {
+    const Syntax * q = p->arg(i);
+    if (q->is_a(".type")) {
+      Type * t = parse_type(q->arg(0), env);
+      mangle_print_inst->to_string(*t, buf);
+    } else {
+      int v = parse_ct_value(q, env);
+      buf.printf("$i%d", v);
+    }
+  }
+  return SymbolName(buf.freeze(), n.marks);
+}
+
+const Syntax * expand_id(const Syntax * p, Environ & env) {
+  if (p->simple()) {
+    return p;
+  } else if (p->is_a("fluid") || p->is_a("id")) {
+    const Syntax * q = expand_id(p->arg(0), env);
+    if (q == p->arg(0))
+      return p;
+    else
+      return SYN(p->str(), p->part(0), q);
+  } else if (p->is_a("`")) {
+    const Syntax * q = expand_id(p->arg(0), env);
+    if (q == p->arg(0))
+      return p;
+    else if (q->num_args() == 2) 
+      return SYN(p->str(), p->part(0), q, p->arg(1));
+    else {
+      SyntaxBuilder res(p->part(0));
+      res.add_part(q);
+      res.add_parts(p->args_begin() + 1, p->args_end());
+      return res.build();
+    }
+  } else if (p->is_a("::")) {
+    const Syntax * q = expand_id(p->arg(0), env);
+    const Syntax * r = expand_id(p->arg(1), env);
+    if (q == p->arg(0) && r == p->arg(1))
+      return p;
+    else
+      return SYN(p->str(), p->part(0), q, r);
+  } else if (p->is_a("tid")) {
+    return SYN(flatten_template_id(p, env));
+  } else {
+    return p;
   }
 }
 

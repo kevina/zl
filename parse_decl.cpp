@@ -177,32 +177,14 @@ struct DeclWorking {
     // doesn't make sense to have two types, so if we already have a
     // type, fail
     if (base_type || type_symbol || inner_type) return false;
-    // Handle template types
-    if (p->is_a("tid")) {
-      printf("tid>%s\n", ~p->to_string());
-      //const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p->arg(0));
-      if (true) {
-        SyntaxBuilder res(p->arg(0));
-        if (p->arg(1)->is_a("<>")) {
-          expand_template_parms(p->arg(1), res, env);
-        } else {
-          res.add_parts(p->args_begin() + 1, p->args_end());
-        }
-        inner_type = res.build(p->str());
-        printf("TID>%s\n", ~inner_type->to_string());
-        return true;
-      } else {
-        return false;
-      }
+    p = expand_id(p, env);
+    const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
+    if (ts) {
+      type_symbol_p = p;
+      type_symbol = ts;
+      return true;
     } else {
-      const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
-      if (ts) {
-        type_symbol_p = p;
-        type_symbol = ts;
-        return true;
-      } else {
-        return false;
-      }
+      return false;
     }
   }
   bool try_typeof(const Syntax * p, Environ &) {

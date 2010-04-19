@@ -68,6 +68,9 @@ static inline const Replacements * combine_repl(const Replacements * rs, ReplTab
 
 ast::Tuple * expand_fun_parms(const Syntax * parse, Environ & env);
 void expand_template_parms(const Syntax *, SyntaxBuilder &, Environ & env);
+const Syntax * expand_template_id(const Syntax * p, Environ & env);
+SymbolName flatten_template_id(const Syntax * p, Environ & env);
+const Syntax * expand_id(const Syntax * p, Environ & env);
 
 enum Position {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4, 
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32};
@@ -148,7 +151,7 @@ SyntaxEnum * partly_expand_list(const Syntax * p, Position pos, Environ & env);
 
 static inline const bool is_raw_id(const Syntax * p) 
 {
-  return (p->simple() || p->is_a("fluid") || p->is_a("`") || p->is_a("::"));
+  return (p->simple() || p->is_a("fluid") || p->is_a("`") || p->is_a("::")) || p->is_a("tid");
 }
 
 static inline const Syntax * try_id(const Syntax * p)

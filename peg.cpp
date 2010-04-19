@@ -930,10 +930,10 @@ public:
     MatchRes r = prod.match(str, &res, env);
     if (!r) return r;
     const Syntax * id = res.part(1);
-    printf("TEMPLATE? %s\n", ~id->to_string());
+    //printf("TEMPLATE? %s\n", ~id->to_string());
     if (!ast::template_id(id, env.ast_env))
       return FAIL;
-    printf("TEMPLATE YES: %s\n", ~id->to_string());
+    //printf("TEMPLATE YES: %s\n", ~id->to_string());
     str.end = r;
     if (parts) {
       Syntax * res_syn = parms.empty() ? res.build(str) : gather(str, res);

@@ -659,7 +659,10 @@ namespace ast {
   Literal * Literal::parse_self(const Syntax * p, Environ & env) {
     syn = p;
     assert_num_args(1,2);
-    type = env.types.inst(p->num_args() > 1 ? *p->arg(1) : String("int"));
+    if (p->num_args() > 1)
+      type = parse_type(p->arg(1), env);
+    else
+      type = env.types.inst("int");
     ct_value_ = new_literal_ct_value(p->arg(0), type, env);
     return this;
   }
@@ -679,7 +682,10 @@ namespace ast {
   FloatC * FloatC::parse_self(const Syntax * p, Environ & env) {
     syn = p;
     assert_num_args(1,2);
-    type = env.types.inst(p->num_args() > 1 ? *p->arg(1) : String("double"));
+    if (p->num_args() > 1)
+      type = parse_type(p->arg(1), env);
+    else
+      type = env.types.inst("double");
     ct_value_ = new_float_ct_value(p->arg(0), type, env);
     return this;
   }
@@ -2658,7 +2664,7 @@ namespace ast {
   // "new" is for lack of a better name as it doesn't necessary create
   // a new instance
   Module * new_module(const Syntax * p, Environ & env) {
-    SymbolKey n = SymbolKey(*p, OUTER_NS);
+    SymbolKey n = expand_binding(p, OUTER_NS, env);
     Module * m = env.symbols.find_this_scope<Module>(n);
     if (!m) {
       m = new Module();
@@ -2784,7 +2790,7 @@ namespace ast {
         o << " (forward)";
     }
     Stmt * complete(Environ & env) {
-      SymbolName n = *name;
+      SymbolName n = expand_binding(name, env);
       //IOUT.printf("QQ: COMPLETE ON %p (%s)\n", this, ~name->to_string());
       module->where = env.where;
       Module * module_in_env = env.symbols.find_this_scope<Module>(SymbolKey(n, OUTER_NS));
@@ -2982,47 +2988,6 @@ namespace ast {
     return empty_stmt();
   }
 
-  //
-  //
-  //
-
-  class TemplateUserTypeInst : public UserType {
-  public:
-    TemplateUserTypeInst() : UserType() {}
-    Vector<TypeParm> template_parms;
-    TemplateUserTypeInst * template_next;
-    unsigned num_parms() const {return template_parms.size();}
-    TypeParm parm(unsigned i) const {return template_parms[i];}
-  };
-
-  class TemplateUserType : public TypeSymbol {
-  public:
-    unsigned required_parms() const {return 0;}
-    virtual TypeParm::What parmt(unsigned i) const {return TypeParm::UNKNOWN;}
-    virtual Type * inst(Vector<TypeParm> & p);
-    TemplateUserTypeInst * find_inst(Vector<TypeParm> & p) const {
-      for (TemplateUserTypeInst * cur = insts; cur; cur = cur->template_next) {
-        if (cur->template_parms == p) return cur;
-      }
-      return NULL;
-    }
-    void add_inst(Vector<TypeParm> & p, TemplateUserTypeInst * ut) {
-      assert(!find_inst(p));
-      ut->template_parms = p;
-      ut->template_next = insts;
-      insts = ut;
-    }
-    bool is_template() const {return true;}
-    TemplateUserTypeInst * insts;
-  };
-
-  Type * TemplateUserType::inst(Vector<TypeParm> & p) {
-    Type * t = find_inst(p);
-    if (t) return t;
-    throw error(0, "No inst found for givin parms in %s", ~name());
-  }
-
-
   void UserType::compile(CompileWriter & f, Phase phase) const {
     if (f.target_lang != CompileWriter::ZLE)
       return;
@@ -3039,42 +3004,18 @@ namespace ast {
   // "new" is for lack of a better name as it doesn't necessary create
   // a new instance
   UserType * new_user_type(const Syntax * p, Environ & env) {
-    if (p->is_a("tid")) {
-      SymbolName name = expand_binding(p->arg(0), env);
-      TemplateUserType * ts = env.symbols.find_this_scope<TemplateUserType>(SymbolKey(name));
-      if (!ts) env.add(name, ts = new TemplateUserType());
-      Vector<TypeParm> parms;
-      if (p->arg(1)->is_a("<>")) {
-        SyntaxBuilder tmp;
-        expand_template_parms(p->arg(1), tmp, env);
-        parse_type_parms(tmp.parts_begin(), tmp.parts_end(), ts, parms, env);
-      } else {
-        parse_type_parms(p->args_begin() + 1, p->args_end(), ts, parms, env);
-      }
-      TemplateUserTypeInst * s = ts->find_inst(parms);
-      if (!s) {
-        //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
-        s = new TemplateUserTypeInst;
-        s->category = new TypeCategory(name.name, USER_C);
-        s->module = new_module(p->arg(0), env);
-        s->module->user_type = s;
-        ts->add_inst(parms, s);
-      }
-      return s;
-    } else {
-      SymbolName name = expand_binding(p, env);
-      //printf("PARSING USER TYPE %s\n", ~name);
-      UserType * s = env.symbols.find_this_scope<UserType>(SymbolKey(name));
-      if (!s) {
-        //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
-        s = new UserType;
-        s->category = new TypeCategory(name.name, USER_C);
-        s->module = new_module(p, env);
-        s->module->user_type = s;
-        add_simple_type(env.types, SymbolKey(name), s, env.where);
-      }
-      return s;
+    SymbolName name = expand_binding(p, env);
+    //printf("PARSING USER TYPE %s\n", ~name);
+    UserType * s = env.symbols.find_this_scope<UserType>(SymbolKey(name));
+    if (!s) {
+      //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
+      s = new UserType;
+      s->category = new TypeCategory(name.name, USER_C);
+      s->module = new_module(p, env);
+      s->module->user_type = s;
+      add_simple_type(env.types, SymbolKey(name), s, env.where);
     }
+    return s;
   }
 
   void finalize_user_type(UserType * s, Environ & env) {
@@ -5054,7 +4995,7 @@ namespace ast {
 
   bool template_id(const Syntax * id, ast::Environ * env) {
     if (!env) {
-      printf("TEMPLATE_ID: NO ENV\n");
+      //printf("TEMPLATE_ID: NO ENV\n");
       return false;
     }
     const Symbol * sym = env->symbols.find<Symbol>(id);
