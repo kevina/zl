@@ -1,0 +1,17 @@
+template Foo;
+
+class Foo<int> {
+  int x;
+  static int X;
+};
+
+class Foo<unsigned int> {
+  int y;
+};
+
+int main() {
+  Foo<int> i;
+  Foo<unsigned> j;
+  i.x + j.y;
+  Foo<int>::X = 9;
+}

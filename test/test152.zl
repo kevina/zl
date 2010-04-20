@@ -1,0 +1,21 @@
+template Vector;
+
+user_type Vector<int> {
+  struct Data;
+  finalize_user_type struct Data;
+  int x;
+}
+
+user_type Vector<unsigned> {
+  struct Data;
+  finalize_user_type struct Data;
+}
+
+int main() {
+  Vector<int> *abc;
+  Vector<unsigned> *abc;
+  Vector<int>::x;
+}
+
+
+
