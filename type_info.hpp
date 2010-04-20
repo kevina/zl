@@ -17,6 +17,8 @@ namespace ast {
   struct DeclHandle;
 }
 
+struct PointerEntity;
+
 template <typename T> struct TypeInfo;
 template <> struct TypeInfo<Error> {
   typedef Error type; 
@@ -45,6 +47,8 @@ template <> struct TypeInfo<syntax_ns::SyntaxBuilderBase> {
 template <> struct TypeInfo<ast::DeclHandle> {
   typedef ast::DeclHandle type; 
   static const unsigned id = 0x7FF;};
-
+template <> struct TypeInfo<PointerEntity> {
+  typedef PointerEntity type; 
+  static const unsigned id = 0xFFF;};
 
 #endif

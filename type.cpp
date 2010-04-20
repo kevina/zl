@@ -598,9 +598,9 @@ namespace ast {
       if (type) {
         const Pointer * ptr = dynamic_cast<const Pointer *>(type->root);
         const Function * fun_t = dynamic_cast<const Function *>(ptr->subtype);
-        fun = lookup_overloaded_symbol<Fun>(fun_t->parms, orig_exp->syn, id->sym, env);
+        fun = lookup_overloaded_symbol<Fun>(fun_t->parms, orig_exp->syn, id->sym, &env);
       } else {
-        fun = lookup_overloaded_symbol<Fun>(NULL, orig_exp->syn, id->sym, env);
+        fun = lookup_overloaded_symbol<Fun>(NULL, orig_exp->syn, id->sym, &env);
       }
       return TC(Other, mk_id(fun, env));
     }

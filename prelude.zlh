@@ -92,7 +92,7 @@ user_type Syntax {
   macro eq(str, :this this) {syntax_eq(this, str);}
   macro ne(str, :this this) {!syntax_eq(this, str);}
   macro stash_ptr(ptr) {stash_ptr_in_syntax(ptr);}
-  macro extract_ptr(:this this) {extract_ptr_from_syntax(ptr);}
+  macro extract_ptr(:this this) {extract_ptr_from_syntax(this);}
 }
 
 user_type SyntaxList;
@@ -273,7 +273,9 @@ __raw(smacro pseudo_member (VAR TYPE VAL)
       (alias VAR TYPE VAL :need_constructor));
 
 Syntax * parse_class(Syntax * p, Environ * env);
+Syntax * parse_memberdecl(Syntax * p, Environ * env);
 //make_syntax_macro class parse_class;
+make_macro memberdecl`internal parse_memberdecl :w_snapshot; // HACK!
 make_macro class`syntax parse_class :w_snapshot;
 
 //

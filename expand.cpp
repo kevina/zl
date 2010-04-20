@@ -533,7 +533,7 @@ struct ProcMacro : public Macro {
     assert_num_args(1, 2);
     real_name = expand_binding(p->arg(0), e);
     fun = lookup_overloaded_symbol<Fun>
-      (NULL, p->num_args() == 1 ? p->arg(0) : p->arg(1), NULL, e);
+      (NULL, p->num_args() == 1 ? p->arg(0) : p->arg(1), &e);
     fun->is_macro = true;
     def = fun->syn;
     return this;
@@ -752,11 +752,9 @@ bool match_list(Match * m,
         }
         r = n.build();
       }
-      if (r) {
-        add_match_var(m, v, r);
-      } else {
-        if (!now_optional) return false;
-      }
+      add_match_var(m, v, r);
+      if (!r && !now_optional) 
+        return false;
     }
     ++p_i;
     ++r_i;
@@ -1739,7 +1737,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
     //printf("---\n");
     for (; i != e; ++i) {
       //printf(">>%s\n", *i);
-      const Fun * fun = find_overloaded_symbol<Fun>(NULL, NULL, env.find_tls(*i), env);
+      const Fun * fun = find_overloaded_symbol<Fun>(NULL, NULL, env.find_tls(*i), &env);
       String uniq_name = fun->uniq_name();
       if (fun->is_macro) {
         fun->ct_ptr = dlsym(lh, ~uniq_name);
@@ -1887,6 +1885,10 @@ namespace syntax_ns {
 //
 //
 
+struct PointerEntity {
+  typedef TypeInfo<PointerEntity> TypeInfo;
+};
+
 extern "C" namespace macro_abi {
 
   size_t ct_value(const Syntax * p, Environ * env) {
@@ -1906,7 +1908,15 @@ extern "C" namespace macro_abi {
   const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
     if (sym->is_a("id")) sym = sym->arg(0);
     if (prop->is_a("id")) prop = prop->arg(0);
-    return env->symbols.lookup<Symbol>(sym)->get_prop(*prop);
+    return lookup_fancy_symbol<Symbol>(sym, NULL, *env)->get_prop(*prop);
+  }
+
+  Syntax * stash_ptr_in_syntax(void * ptr) {
+    return SYN(SourceStr(), static_cast<PointerEntity *>(ptr));
+  }
+
+  void * extract_ptr_from_syntax(Syntax * syn) {
+    return syn->entity<PointerEntity>();
   }
 
   const char * mangle_fun_parms(const Syntax * p, Environ * env) {
@@ -1917,6 +1927,7 @@ extern "C" namespace macro_abi {
     }
     return ~buf.freeze();
   }
+
 }
 
 extern "C" void gdb_breakpoint() {}
@@ -1924,7 +1935,6 @@ extern "C" void gdb_breakpoint() {}
 extern "C" {
 
   void * ct_malloc(size_t size) {
-    printf("CT MALLOC\n");
     return GC_MALLOC(size);
   }
 

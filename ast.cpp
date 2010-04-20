@@ -2848,7 +2848,7 @@ namespace ast {
       Module * m = dynamic_cast<Module *>(env.where);
       m->add_prop(*p->arg(0), p->arg(1));
     } else {
-      Symbol * sym = env.symbols.find<Symbol>(p->arg(0));
+      Symbol * sym = lookup_fancy_symbol<Symbol>(p->arg(0), NULL, env);
       sym->add_prop(*p->arg(1), p->arg(2));
     }
     return empty_stmt();
@@ -3219,13 +3219,14 @@ namespace ast {
     GatherMarks gather;
     const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env0.symbols.front, NULL, 
                                              NormalStrategy, gather);
-    const Syntax * d = p->arg(1);
-    const Symbol * s = lookup_symbol<Symbol>(d->arg(0), DEFAULT_NS, m->syms.front, m->syms.back, StripMarks);
+    //const Syntax * d = p->arg(1);
     Environ env = env0.new_scope();
     import_module(m, env, gather, true);
-    const Symbol * pm = m->find_symbol<Symbol>("_parse_memberdecl");
-    
-    parse_top_level(d, env);
+    p = partly_expand(p, TopLevel, env);
+    if (p->is_a("memberdecl"))
+      p = p->arg(1);
+    lookup_symbol<Symbol>(p->arg(0), DEFAULT_NS, m->syms.front, m->syms.back, StripMarks);
+    parse_top_level(p, env);
     return empty_stmt();
   }
 
@@ -3472,7 +3473,7 @@ namespace ast {
     //  assert(name.name == s->name());
     if (s) {
       const Tuple * parms = expand_fun_parms(p->arg(1), env);
-      f = const_cast<Fun *>(find_overloaded_symbol<Fun>(parms, p->arg(0), s, env));
+      f = const_cast<Fun *>(find_overloaded_symbol<Fun>(parms, p->arg(0), s, &env));
     }
     //if (s)
     //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
