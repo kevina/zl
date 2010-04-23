@@ -588,7 +588,8 @@ namespace ast {
       //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
       //printf("ADDING %s (%p) to symbol table\n", ~k.name, dynamic_cast<Symbol *>(sym));
       *front = new SymbolNode(s, k, sym, flags, *front);
-      return *front;
+      return *front
+;
     }
     void splice(SymbolNode * first, SymbolNode * last) {
       last->next = *front;
@@ -622,26 +623,30 @@ namespace ast {
   public:
     bool is_root() {return back == 0;}
     SymbolInsrPoint ip;
+    SymbolInsrPoint import_ip;
   public:
     SymbolTable() 
       : SymbolTableBase(), ip(&front) {}
     SymbolTable(SymbolNode * f, SymbolNode * b)
-      : SymbolTableBase(f,b), ip(&front) {}
-    SymbolTable(SymbolNode * f, SymbolNode * b, SymbolNode * * i)
-      : SymbolTableBase(f,b), ip(i) {}
+      : SymbolTableBase(f,b), ip(&front), import_ip(&front) {}
+    SymbolTable(SymbolNode * f, SymbolNode * b, SymbolNode * * i, SymbolNode * * j)
+      : SymbolTableBase(f,b), ip(i), import_ip(j) {}
     SymbolTable(const SymbolTable & o)
-      : SymbolTableBase(o), ip(o.ip.front == &o.front ? &front : o.ip) {}
+      : SymbolTableBase(o), ip(o.ip.front == &o.front ? &front : o.ip), 
+        import_ip(o.import_ip.front == &o.front ? &front : o.import_ip) {}
     SymbolTable & operator=(const SymbolTable & o) {
       SymbolTableBase::operator=(o);
       ip = o.ip.front == &o.front ? &front : o.ip;
+      import_ip = o.ip.front == &o.front ? &front : o.import_ip;
       return *this;
     }
     SymbolTable new_scope() const {
       return SymbolTable(front, front);
     }
     SymbolTable new_open_scope() const {
-      SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
-      return SymbolTable(placeholder, front, &placeholder->next);
+      SymbolNode * import_placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
+      SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, import_placeholder);
+      return SymbolTable(placeholder, front, &placeholder->next, &import_placeholder->next);
     }
     SymbolTable new_scope(SymbolInsrPoint & o) const {
       SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);

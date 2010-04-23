@@ -91,16 +91,24 @@ void SourceStr::sample_w_loc(OStream & o, unsigned max_len) const {
   //o << end_pos_str(":", o, "");
 }
 
-void SyntaxBase::sample_w_loc(OStream & o, unsigned max_len) const {
+void SyntaxBase::sample_w_loc(OStream & o, unsigned max_len, unsigned syn_len) const {
   if (!str().empty())
     str().sample_w_loc(o, max_len);
   else
     o.printf("a %s", ~what().name);
+  if (syn_len > 0) {
+    o << ": ";
+    StringBuf buf;
+    to_string(buf);
+    if (buf.size() > syn_len)
+      buf.resize(syn_len);
+    o << buf.freeze();
+  }
 }
 
-String SyntaxBase::sample_w_loc(unsigned max_len) const {
+String SyntaxBase::sample_w_loc(unsigned max_len, unsigned syn_len) const {
   StringBuf buf;
-  sample_w_loc(buf, max_len);
+  sample_w_loc(buf, max_len, syn_len);
   return buf.freeze();
 }
 

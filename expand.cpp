@@ -213,6 +213,8 @@ bool ExpandSourceInfo::dump_info_self(OStream & o) const {
 //
 //
 
+static const Syntax * const NO_MATCH = SYN(SYN("@"));
+
 // misnamed, now replaces and marks and so much more
 struct ReplTable {
   typedef Vector<std::pair<SymbolName, const Syntax *> > Table;
@@ -677,6 +679,7 @@ extern "C" namespace macro_abi {
 
 void add_match_var(Match * m, const SymbolName & n, const Syntax * repl) {
   if (n == "_") return; // "_" is a special variable meaning: don't care
+  //printf("AM: x%p %p\n", NO_MATCH, repl);
   m->push_back(Match::value_type(n, repl));
 }
 
@@ -752,8 +755,10 @@ bool match_list(Match * m,
         }
         r = n.build();
       }
+      if (!r && now_optional)
+        r = NO_MATCH;
       add_match_var(m, v, r);
-      if (!r && !now_optional) 
+      if (!r/* && !now_optional*/) 
         return false;
     }
     ++p_i;
@@ -814,8 +819,15 @@ extern "C" namespace macro_abi {
   
   const Syntax * match_var(Match * m, UnmarkedSyntax * n) {
     Match::const_iterator i = m->begin(), e = m->end();
-    for (; i != e; ++i)
-    if (i->first == *n) return i->second;
+    for (; i != e; ++i) {
+      if (i->first == *n) {
+        //printf("%s %p %p %s\n", ~n->to_string(), NO_MATCH, i->second, ~i->second->to_string());
+        if (i->second == NO_MATCH)
+          return NULL;
+        else
+          return i->second;
+      }
+    }
     return NULL;
   }
   
@@ -928,7 +940,7 @@ const Syntax * macro_abi::reparse(const Syntax * s, const char * what, Environ *
   return ::reparse(what, s->outer(), env);
 }
 
-static const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs, bool splice=false);
+static const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs);
 
 static const Syntax * try_mid(const Syntax * mid_p, const Syntax * p, ReplTable * r, const Replacements * rs, bool * splice_r) {
   SymbolName mid = *mid_p;
@@ -940,13 +952,14 @@ static const Syntax * try_mid(const Syntax * mid_p, const Syntax * p, ReplTable 
   } 
   const Syntax * p0 = r->lookup(mid);
   if (!p0) return NULL;
+  if (p0 == NO_MATCH) splice = true;
   if (splice_r) *splice_r = splice;
   //printf("MID ");
   //p->str().sample_w_loc(COUT);
   //printf(" ");
   //p->arg(0)->str().sample_w_loc(COUT);
   //printf("\n");
-  const Syntax * res = replace_mid(p, p0, r, rs, splice);
+  const Syntax * res = replace_mid(p, p0, r, rs);
     //printf("REPLACE res %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
   return res;
 }
@@ -977,25 +990,6 @@ static const Syntax * replace(const Syntax * p,
   } else if (p->is_a("mid")/* && r->have(*p->arg(0))*/) {
     const Syntax * res = try_mid(p->arg(0), p, r, rs, splice_r);
     if (!res) goto def;
-#if 0
-    SymbolName mid = *p->arg(0);
-    bool splice = false;
-    if (mid.name[0] == '@') {
-      mid.name = mid.name.c_str() + 1;
-      assert(splice_r);
-      splice = true;
-    } 
-    const Syntax * p0 = r->lookup(mid);
-    if (!p0) goto def;
-    if (splice_r) *splice_r = splice;
-    //printf("MID ");
-    //p->str().sample_w_loc(COUT);
-    //printf(" ");
-    //p->arg(0)->str().sample_w_loc(COUT);
-    //printf("\n");
-    const Syntax * res = replace_mid(p, p0, r, rs, splice);
-    //printf("REPLACE res %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
-#endif
     return res;
   } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f")) {
     ChangeSrc<ExpandSourceInfo> ci(r);
@@ -1049,7 +1043,7 @@ static const Syntax * reparse_replace(const Syntax * new_name,
 
 const Syntax * replace_context(const Syntax * p, const Marks * context);
 
-const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs, bool splice) {
+const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs) {
   if (repl->is_a("@")) {
     SyntaxBuilder res(repl->part(0));
     for (parts_iterator i = repl->args_begin(), e = repl->args_end(); i != e; ++i) {
@@ -1670,6 +1664,8 @@ void compile_for_ct(Deps & deps, Environ & env) {
   for (unsigned i = 0, sz = deps.size(); i != sz; ++i) {
     deps.merge(deps[i]->deps());
   }
+  deps.insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("ct_malloc"), NULL));
+  deps.insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("ct_free"), NULL));
 
   //printf("COMPILE FOR CT DEPS: %d\n", deps.size());
   //for (Deps::iterator i = deps.begin(), e = deps.end(); i != e; ++i)

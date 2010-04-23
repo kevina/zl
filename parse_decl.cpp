@@ -777,7 +777,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
       t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
       ++i;
     } catch (Error * err) {
-      printf("note: %s\n", ~err->message());
+      //printf("note: %s\n", ~err->message());
     }
   } else if ((*i)->is_a(".") || (*i)->is_a("(...)")) {
     t = make_function_type(t, *i, env);

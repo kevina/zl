@@ -741,8 +741,18 @@ namespace ast {
     next = sym->ids; 
     sym->ids = this;
     const TopLevelVarDecl * tl = sym->top_level();
-    if (tl && env.deps)
-      env.deps->insert(tl);
+    if (tl && env.deps) {
+      String un = tl->uniq_name();
+      if (un == "zl_malloc") {
+        env.deps->insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("malloc"), NULL));
+        assert(env.deps->back());
+      } else if (un == "zl_free") {
+        env.deps->insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("free"), NULL));
+        assert(env.deps->back());
+      } else {
+        env.deps->insert(tl);
+      }
+    }
     if (sym->ct_value)
       ct_value_ = sym->ct_value;
     type = sym->type;
@@ -1080,7 +1090,7 @@ namespace ast {
         init_syn = *i++;
         if (init_syn->is_a("()")) init_syn = reparse("SPLIT", init_syn->inner(), &env);
         const UserType * user_type = dynamic_cast<const UserType *>(type->unqualified->root);
-        printf("CON: %s\n", ~init_syn->to_string());
+        //printf("CON: %s\n", ~init_syn->to_string());
         if (user_type) {
           // find constructor to use
           Vector<Exp *> parms;
@@ -1112,7 +1122,7 @@ namespace ast {
               synb.add_part(SYN(*i));
             synb.set_flags(init_syn->flags_begin(), init_syn->flags_end());
             Syntax * parms_s = synb.build();
-            printf("NOW PARSING CONSTRUCTOR %s\n", ~parms_s->to_string());
+            //printf("NOW PARSING CONSTRUCTOR %s\n", ~parms_s->to_string());
             Exp * call = parse_exp(SYN(SYN("member"), 
                                        SYN(mk_id(this, env)),
                                        SYN(SYN("call"), SYN(sym), parms_s)),
@@ -2906,8 +2916,12 @@ namespace ast {
         res->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED | SymbolNode::DIFF_SCOPE);
       }
     }
-    env.symbols.splice(l.first, l.last);
-    env.add(SymbolKey("", SPECIAL_NS), new Import(m));
+    //env.symbols.splice(l.first, l.last);
+    //env.add(SymbolKey("", SPECIAL_NS), new Import(m));
+    env.symbols.import_ip.splice(l.first, l.last);
+    SymbolNode * n = env.symbols.import_ip.add(env.where, SymbolKey("", SPECIAL_NS), 
+                                               new Import(m));
+    n->value->key = &n->key;
   }
 
   Stmt * parse_bring_to_this_scope(const Syntax * p, Environ & env) {
@@ -3019,10 +3033,10 @@ namespace ast {
     if (!s) {
       //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
       s = new UserType;
-      s->category = new TypeCategory(name.name, USER_C);
       s->module = new_module(p, env);
       s->module->user_type = s;
       add_simple_type(env.types, SymbolKey(name), s, env.where);
+      s->category = new TypeCategory(s->full_name(), USER_C);
     }
     return s;
   }
@@ -3041,9 +3055,19 @@ namespace ast {
 
   struct UserTypeBuilder : public ModuleBuilder {
     UserTypeBuilder(const Syntax * p, Environ & e)
-      : ModuleBuilder(p, e, new_user_type(p, e)) {}
+      : ModuleBuilder(p, e, new_user_type(p, e)) {add_self_to_module();}
     UserTypeBuilder(const Syntax * p, Environ & e, UserType * u)
-      : ModuleBuilder(p, e, u) {}
+      : ModuleBuilder(p, e, u) {add_self_to_module();}
+    void add_self_to_module() {
+      SymbolNode * cur = outer_env->symbols.front;
+      while (cur) {
+       if (cur->value == user_type) break;
+       cur = cur->next;
+      }
+      assert(cur);
+      SymbolNode * n = lenv->symbols.add(module, cur->key, cur->value, cur->flags);
+      n->set_flags(SymbolNode::ALIAS);
+    }
   };
 
   Stmt * parse_declare_user_type(const Syntax * p, Environ & env, DeclHandle ** handle) {
@@ -3136,10 +3160,12 @@ namespace ast {
     // FIXME: Add check that we are in a user_type
     Module * m = dynamic_cast<Module *>(env.where);
     UserType * parent_t = dynamic_cast<UserType *>(env.types.inst(parent));
-    UserType * child_t  = dynamic_cast<UserType *>(env.types.inst(SymbolKey(m->name())));
+    UserType * child_t  = m->user_type; //dynamic_cast<UserType *>(env.types.inst(SymbolKey(m->name())));
+    //printf("MAKE_SUBTYPE: %s %s\n", ~parent->to_string(), ~m->full_name());
     assert(!child_t->parent);
+    assert(parent_t != child_t);
     child_t->parent = parent_t;
-    child_t->category = new TypeCategory(child_t->name(), parent_t->category);
+    child_t->category->parent0 = parent_t->category;
 
     add_cast(m, up_cast, "up_cast", parent_t, child_t, env);
     if (down_cast)
@@ -4446,7 +4472,7 @@ namespace ast {
     res = try_exp_stmt(p, env);
     if (res) return res;
     //throw error (p, "Unsupported primative at statement position: %s", ~p->name);
-    p->print(); printf("\n");
+    //p->print(); printf("\n");
     throw error (p, "Expected statement or declaration.");
   }
 
@@ -4489,6 +4515,7 @@ namespace ast {
   }
 
   Stmt * try_just_decl(const Syntax * p, Environ & env, DeclHandle ** handle) {
+    try {
     if (DeclHandle * decl = p->entity<DeclHandle>()) {
       if (handle) {
         assert(env.special() && !env.collect);
@@ -4532,9 +4559,18 @@ namespace ast {
     if (what == "extern") return parse_extern(p, env);
     if (what == "template") return parse_template(p, env);
     return 0;
+    } catch (Error * err) {
+      StringBuf buf = err->extra;
+      buf << "While parsing decl: ";
+      p->sample_w_loc(buf, 40, 40);
+      buf << "\n";
+      err->extra = buf.freeze();
+      throw err;
+    }
   }
 
   Stmt * try_just_stmt(const Syntax * p, Environ & env) {
+    try {
     if (Stmt * stmt = p->entity<Stmt>()) return stmt;
     String what = p->what().name;
     if (what == "goto")    return (new Goto)->parse_self(p, env);
@@ -4546,9 +4582,18 @@ namespace ast {
     if (what == "return")  return (new Return)->parse_self(p, env);
     if (what == "cleanup") return (new Cleanup)->parse_self(p, env);
     return 0;
+    } catch (Error * err) {
+      StringBuf buf = err->extra;
+      buf << "While parsing stmt: ";
+      p->sample_w_loc(buf, 40, 40);
+      buf << "\n";
+      err->extra = buf.freeze();
+      throw err;
+    }
   }
 
   Exp * try_just_exp(const Syntax * p, Environ & env, ExpContext c) {
+    try {
     if (Exp * exp = p->entity<Exp>()) return exp;
     String what = p->what().name;
     if (what == "id")      return (new Id)->parse_self(p, env);
@@ -4619,6 +4664,14 @@ namespace ast {
       return new CompoundAssign(what, op.freeze(), lhs, binop, env);
     }
     return 0;
+    } catch (Error * err) {
+      StringBuf buf = err->extra;
+      buf << "While parsing exp: ";
+      p->sample_w_loc(buf, 40, 60);
+      buf << "\n";
+      err->extra = buf.freeze();
+      throw err;
+    }
   }
 
   Stmt * try_exp_stmt(const Syntax * p, Environ & env) {

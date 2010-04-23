@@ -724,6 +724,9 @@ namespace ast {
       } else if ((hu = dynamic_cast<const UserType *>(h_subtype->unqualified)) &&
                  (nu = dynamic_cast<const UserType *>(n_subtype->unqualified)))
       { // this is C++ only
+        //printf("XYZ %d>%s %s | %s %s\n", i,
+        //       ~h_subtype->to_string(), ~n_subtype->to_string(),
+        //       ~hu->to_string(), ~nu->to_string());
         if (h_subtype->read_only && !n_subtype->read_only)
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
