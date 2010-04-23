@@ -45,7 +45,7 @@
                    // really means an error and not just "not enough
                    // space"
       va_copy(ap,ap0);
-      res = vsnprintf(end_, avail, format, ap);
+      res = vsnprintf(end_, avail + 1, format, ap);
       va_end(ap);
       if (res < 0) {
         reserve_i(); goto loop;
