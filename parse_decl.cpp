@@ -283,7 +283,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
   bool r = w.parse_first_part(i, end, env, true);
 
   //if (i != end)
-  //  printf("<>%d %s\n", i - p->args_begin(), ~(*i)->to_string());
+  //  printf("<>%d %s\n", i - args.pbegin(), ~(*i)->to_string());
 
   if (i != end && r && (*i)->is_a("()")) 
     try {
@@ -293,6 +293,25 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
       const_cast<const Syntax * &>(*i) = parms;
       w.inner_type = SYN(SYN("void"));
       --i;
+    } catch (...) {}
+
+  if (i + 3 < end && i[0]->eq("::") && i[1]->eq("~") && i[3]->is_a("()"))
+    try {
+      // so we have a destructor defined outside the class
+      const Syntax * paran = reparse("TOKENS", i[3]->inner());
+      const Syntax * parms = w.parse_fun_parms(paran, env);
+      if (env.scope >= ast::LEXICAL) return NULL;
+      // ok now the fun part ...
+      unsigned offset = i - args.pbegin();
+      Vector<const Syntax *>::iterator ii = args.begin() + offset;
+      ii[-1] = SYN(i[0], i[-1], SYN(i[1], i[2]));
+      ii[ 0] = parms;
+      args.erase(ii+1, ii+4);
+      i = args.pbegin() + (offset - 1);
+      end = args.pend();
+      w.inner_type = SYN(SYN("void"));
+      //for (parts_iterator j = i; j != end; ++j)
+      //  printf(" >%s\n", ~j[0]->to_string());
     } catch (...) {}
 
   if (i != end && (*i)->eq("~")) {

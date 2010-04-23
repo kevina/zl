@@ -357,17 +357,22 @@ public:
     builder->add(replace(syntax {_VTable _vtable;}, m, mark));
   }
 
+  Syntax * prep_constructor(Syntax * constructor) {
+    Match * m0 = match(m, raw_syntax (w n parms ret @ body @_), constructor);
+    if (m0->var(syntax body))
+      constructor =
+        replace(raw_syntax(w n parms ret (block $1 $2 body)),
+                match_local(m0, constructor_code[0], constructor_code[1], 0), mark);
+    return constructor;
+  }
+
   virtual void create_special() {
     destructor_code->reverse();
 
     SyntaxEnum * itr = constructors->elements();
     Syntax * constructor;
     while ((constructor = itr->next())) {
-      Match * m0 = match(m, raw_syntax (w n parms ret body @_), constructor);
-      constructor =
-        replace(raw_syntax(w n parms ret (block $1 $2 body)),
-                match_local(m0, constructor_code[0], constructor_code[1], 0), mark);
-      parse_class_fun(constructor, NULL);
+      parse_class_fun(prep_constructor(constructor), NULL);
     }
     constructors = NULL;
 
@@ -400,10 +405,11 @@ public:
     }
 
     if (destructor) {
-      Match * m0 = match(m, raw_syntax ($w $n $parms $ret $body @rest), destructor);    
-      destructor =
-        replace(raw_syntax($w $n $parms (.ptr (void)) (block $body $1 (return this)) @rest), 
-                match_local(m0, destructor_code, 0), mark);
+      Match * m0 = match(m, raw_syntax ($w $n $parms $ret @ $body @rest), destructor);
+      if (m0->var(syntax $body))
+        destructor =
+          replace(raw_syntax($w $n $parms (.ptr (void)) (block $body $1 (return this)) @rest), 
+                  match_local(m0, destructor_code, 0), mark);
     } else if (need_destructor) {
       destructor =
         partly_expand(
@@ -430,7 +436,7 @@ public:
       builder->add(replace(syntax {macro n (:this ths = this) {(*(name *)(ths))..n;}}, m, mark));
     }
   }
-  
+
   virtual Syntax * parse_class_fun(Syntax * p, struct Collect * collect) {
     //printf("parse_class_fun: %s\n", syntax_to_string(p));
     __shadow Match * m = match_args(m, raw_syntax (n parms0 ret @ body @rest), p);
@@ -459,34 +465,10 @@ public:
     bool is_static = p->flag(syntax static);
     bool is_virtual = p->flag(syntax virtual);
 
-    // create unique name vtable entry, needs to different so that we
-    // don't confuse vtable entries for special functions such as
-    // _destructor with the real function
-    char sbuf[1024];
-    snprintf(sbuf, 1024, "%s%s$fp", 
-             syntax_to_string(m->var(syntax n)),
-             mangle_fun_parms(m->var(syntax parms0), lenv)),
-    m = match(m, syntax fpn,
-              replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
-  
-    bool virtual_override = parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn));
-
-    if (!is_virtual && virtual_override)
-      is_virtual = true;
-
-    Syntax * this_type = NULL;
-    if (!is_static) {
-      if (virtual_override) {
-        this_type = get_symbol_prop(replace(raw_syntax(:: (:: parent_n _VTable) fpn), m, mark),
-                                    syntax this_type,
-                                    env);
-        //replace(raw_syntax(.tprop (.type (.tprop (-> (reinterpret_cast 
-        //                                                (.ptr ((:: parent_n _VTable))) 0) fpn) 
-        //                                    inner)) (parm 0)), m, mark);
-      } else {
-        this_type = replace(raw_syntax(.ptr name), m, mark);
-      }
-    }
+    m = create_vtable_entry_name(m);
+    bool virtual_override = determine_virtual_override(m);
+    if (!is_virtual && virtual_override) is_virtual = true;
+    Syntax * this_type = is_static ? NULL : determine_this_type(m, virtual_override);
   
     SyntaxList * macro_parms = new_syntax_list();
     SyntaxList * call_parms  = new_syntax_list();
@@ -559,6 +541,35 @@ public:
     return NULL;
   }
 
+  Match * create_vtable_entry_name(Match * m) {
+    // create unique name vtable entry, needs to different so that we
+    // don't confuse vtable entries for special functions such as
+    // _destructor with the real function
+    char sbuf[1024];
+    snprintf(sbuf, 1024, "%s%s$fp", 
+             syntax_to_string(m->var(syntax n)),
+             mangle_fun_parms(m->var(syntax parms0), lenv));
+    return match(m, syntax fpn,
+                 replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
+  }
+
+  bool determine_virtual_override(Match * m) {
+    return parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn));
+  }
+
+  Syntax * determine_this_type(Match * m, bool virtual_override) {
+    if (virtual_override) {
+      return get_symbol_prop(replace(raw_syntax(:: (:: parent_n _VTable) fpn), m, mark),
+                             syntax this_type,
+                             env);
+      //replace(raw_syntax(.tprop (.type (.tprop (-> (reinterpret_cast 
+      //                                                (.ptr ((:: parent_n _VTable))) 0) fpn) 
+      //                                    inner)) (parm 0)), m, mark);
+    } else {
+      return replace(raw_syntax(.ptr name), m, mark);
+    }
+  }
+
   virtual Syntax * mk_call(Syntax * fun, Syntax * ths, SyntaxList * parms) {
     if (ths)
       return replace(raw_syntax (call $1 (. $2 $3)), 
@@ -577,14 +588,21 @@ public:
     return new_parms;
   }
 
+  // ok the body part is a bit of a lie...
   virtual Syntax * parse_class_fun_body(Syntax * p, Collect * collect) {
     //printf("parse_class_fun: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_args(m, raw_syntax (n parms ret body @rest), p);
+    __shadow Match * m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
     m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
     
     // FIXME: handle flags
 
-    builder->add(mk_method_defn(m, collect->virtual_override, collect->this_type, m->varl(syntax parms)));
+    if (m->var(syntax body)) {
+      builder->add(mk_method_defn(m, collect->virtual_override, collect->this_type, m->varl(syntax parms)));
+    } else {
+      SyntaxList * new_parms = mk_method_parms(collect->this_type, m->varl(syntax parms));
+      builder->add(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret)),
+                           match_local(m, new_parms, 0), mark));
+    }
     
     return NULL;
   }
@@ -666,32 +684,31 @@ public:
     __shadow Match * m = match_args(m, raw_syntax (n parms0 ret @ body @rest), p);
     m = match_args(m, raw_syntax (@parms), m->var(syntax parms0));
 
+    Syntax * class_name = m->var(syntax name);
+    Syntax * name = m->var(syntax n);
+
+    //printf("ABC>%s\n", syntax_to_string(name));
+    if (name->eq(class_name)) { // constructor
+      Syntax * c = replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark);
+      c = prep_constructor(c);
+      return parse_class_fun_defn(c);
+    } else if (name->eq(raw_syntax (operator =))) { // assign
+      // just change the name, nothing special needs to be done
+      m = match(m, syntax n, replace(syntax _assign, m, mark));
+    } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) { // destructor
+      m = match(m, syntax n, replace(syntax _destructor, m, mark));
+      m = match(m, syntax ret, replace(raw_syntax(.ptr void), m, mark));
+      m = match(m, syntax body, replace(raw_syntax(block body $1 (return this)), match_local(m, destructor_code, 0), mark));
+      return mk_method_defn(m, destructor_collect.virtual_override, destructor_collect.this_type, m->varl(syntax parms));
+    }
+
     // FIXME: handle flags
     bool is_static = p->flag(syntax static);
 
-    // create unique name vtable entry, needs to different so that we
-    // don't confuse vtable entries for special functions such as
-    // _destructor with the real function
-    char sbuf[1024];
-    snprintf(sbuf, 1024, "%s%s$fp", 
-             syntax_to_string(m->var(syntax n)),
-             mangle_fun_parms(m->var(syntax parms0), lenv)),
-    m = match(m, syntax fpn,
-              replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
-    
-    bool virtual_override = parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn));
+    m = create_vtable_entry_name(m);
+    bool virtual_override = determine_virtual_override(m);
+    Syntax * this_type = is_static ? NULL : determine_this_type(m, virtual_override);
 
-    Syntax * this_type = NULL;
-    if (!is_static) {
-      if (virtual_override) {
-        this_type = get_symbol_prop(replace(raw_syntax(:: (:: parent_n _VTable) fpn), m, mark),
-                                    syntax this_type,
-                                    env);
-      } else {
-        this_type = replace(raw_syntax(.ptr name), m, mark);
-      }
-    }
-  
     SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     
     return mk_method_defn(m, virtual_override, this_type, m->varl(syntax parms));
