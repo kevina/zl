@@ -24,8 +24,7 @@ import_file "../class.zl";
     builder->add(replace(syntax {macro _parent (:this ths = this) {*ths->_parent_ptr;}}, m, mark));
 
     register_field(m->var(syntax _parent), 
-                   replace(raw_syntax (parent_n), m, mark), 
-                   0);
+                   replace(raw_syntax (parent_n), m, mark));
 
     // The setting of the child pointer needs to come after the
     // parent's constructor is called
