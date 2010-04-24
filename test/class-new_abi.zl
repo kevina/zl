@@ -15,8 +15,8 @@ import_file "../class.zl";
     Syntax * p_init = replace(syntax {_parent_ptr = malloc(sizeof(parent_n));}, m, mark);
     need_constructor = true;
     need_copy_constructor = true;
-    constructor_code[0]->append(p_init);
-    copy_constructor_code[0]->append(p_init);
+    constructor_code->append(p_init);
+    copy_constructor_code->append(p_init);
     Syntax * p_cleanup = replace(syntax {free(_parent_ptr);}, m, mark);
     need_destructor = true;
     destructor_code->append(p_cleanup);
@@ -30,8 +30,8 @@ import_file "../class.zl";
     // The setting of the child pointer needs to come after the
     // parent's constructor is called
     Syntax * p_init_2 = replace(syntax {_parent_ptr->_child_ptr = this;}, m, mark);
-    constructor_code[0]->append(p_init_2);
-    copy_constructor_code[0]->append(p_init_2);
+    constructor_code->append(p_init_2);
+    copy_constructor_code->append(p_init_2);
     
     builder->add(replace(syntax {macro cast_up(p) {(*p).._parent_ptr;}}, m, mark));
     builder->add(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>((*p).._child_ptr);}}, m, mark));
@@ -44,9 +44,9 @@ import_file "../class.zl";
                     struct_p);
     Syntax * c_init = replace(syntax{_child_ptr = 0;}, m, mark);
     need_constructor = true;
-    constructor_code[0]->append(replace(syntax{_child_ptr = 0;}, m, mark));
+    constructor_code->append(replace(syntax{_child_ptr = 0;}, m, mark));
     need_copy_constructor = true;
-    copy_constructor_code[0]->append(replace(syntax{_child_ptr = 0;}, m, mark));
+    copy_constructor_code->append(replace(syntax{_child_ptr = 0;}, m, mark));
   }
 };
 

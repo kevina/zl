@@ -75,15 +75,15 @@ public:
   SyntaxList * vtable_b;
   SyntaxList * vtable_i;
   SyntaxList * exports;
-  SyntaxList * fields[2];
+  SyntaxList * fields;
 
   SyntaxList * constructors;
 
   bool need_constructor;
-  SyntaxList * constructor_code[2];
+  SyntaxList * constructor_code;
 
   bool need_copy_constructor;
-  SyntaxList * copy_constructor_code[2];
+  SyntaxList * copy_constructor_code;
 
   bool need_assign;
   SyntaxList * assign_code;
@@ -142,8 +142,8 @@ public:
                    m,
                    mark));
     builder->add(replace(
-                   raw_syntax (add_prop fields (. @$1 @$2)),
-                   match_local(m, fields[0], fields[1], 0),
+                   raw_syntax (add_prop fields (. @$1)),
+                   match_local(m, fields, 0),
                    mark));
 
     //module_b->append(replace(
@@ -189,8 +189,7 @@ public:
     vtable_b = new_syntax_list();
     vtable_i = new_syntax_list();
     exports  = new_syntax_list();
-    fields[0] = new_syntax_list();
-    fields[1] = new_syntax_list();
+    fields = new_syntax_list();
 
     m = match(m, syntax _Data, replace_context(syntax _Data, context));
     m = match(m, syntax _parent, replace_context(syntax _parent, context));
@@ -234,7 +233,7 @@ public:
     parse_class_var(partly_expand(replace(syntax {parent_n _parent;}, m, mark), FieldPos, lenv),
                     struct_p);
     register_field(m->var(syntax _parent), 
-                   replace(raw_syntax (parent_n), m, mark), 0);
+                   replace(raw_syntax (parent_n), m, mark));
     
     builder->add(replace(syntax {macro cast_up(p) {&(*p).._parent;}}, m, mark));
     builder->add(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>(p);}}, m, mark));
@@ -260,13 +259,13 @@ public:
       Syntax * err = NULL;
       if (strcmp(what, "var")==0) {
         parse_class_var(member, struct_b);
-        register_field(m0->var(syntax n), m0->var(syntax type), 1);
+        register_field(m0->var(syntax n), m0->var(syntax type));
       } else if (strcmp(what, "alias")==0) {
         Match * m0 = match(m, raw_syntax (what n type value @_), member);
         //builder->add(replace(raw_syntax (macro n (:(this (reparse this this))) value), m0, mark));
         builder->add(replace(syntax {macro n (:this ths = this) {({__shadow typeof(ths) fluid this = ths; value;});}}, m0, mark));
         if (member->flag(syntax need_constructor))
-          register_field(m0->var(syntax n), m0->var(syntax type), 1);
+          register_field(m0->var(syntax n), m0->var(syntax type));
       } else if (strcmp(what, "fun")==0) {
         err = parse_class_fun(member, NULL);      
       } else if (strcmp(what, "add_prop")==0) {
@@ -347,9 +346,9 @@ public:
     exports->append(replace(syntax _vptr, m, mark));
     Syntax * assign = replace(syntax (_set_vptr(&_vtable)), m, mark);
     need_constructor = true;
-    constructor_code[0]->append(assign);
+    constructor_code->append(assign);
     need_copy_constructor = true;
-    copy_constructor_code[0]->append(assign);
+    copy_constructor_code->append(assign);
     
     exports->append(replace(syntax _VTable, m, mark));
     exports->append(replace(syntax _VTable`outer, m, mark));
@@ -361,8 +360,8 @@ public:
     Match * m0 = match(m, raw_syntax (w n parms ret @ body @_), constructor);
     if (m0->var(syntax body))
       constructor =
-        replace(raw_syntax(w n parms ret (block $1 $2 body)),
-                match_local(m0, constructor_code[0], constructor_code[1], 0), mark);
+        replace(raw_syntax(w n parms ret (block $1 body)),
+                match_local(m0, constructor_code, 0), mark);
     return constructor;
   }
 
@@ -379,8 +378,8 @@ public:
     if (!builder->have_default_constructor() && need_constructor) {
       constructor = 
         partly_expand(
-          replace(syntax{void _constructor() {$1; $2;}}, 
-                  match_local(m, constructor_code[0], constructor_code[1], 0), mark), 
+          replace(syntax{void _constructor() {$1;}}, 
+                  match_local(m, constructor_code, 0), mark), 
           FieldPos, lenv);
       parse_class_fun(constructor, NULL);
     }
@@ -388,8 +387,8 @@ public:
     if (!builder->have_copy_constructor() && need_copy_constructor) {
       constructor = 
         partly_expand(
-          replace(syntax{void _constructor(const name & other) {$1; $2; }}, 
-                  match_local(m, copy_constructor_code[0], copy_constructor_code[1], 0), mark), 
+          replace(syntax{void _constructor(const name & other) {$1;}}, 
+                  match_local(m, copy_constructor_code, 0), mark), 
           FieldPos, lenv);
       parse_class_fun(constructor, NULL);
     }
@@ -633,12 +632,10 @@ public:
     constructors = new_syntax_list();
 
     need_constructor = false;
-    constructor_code[0] = new_syntax_list();
-    constructor_code[1] = new_syntax_list();
+    constructor_code = new_syntax_list();
     
     need_copy_constructor = false;
-    copy_constructor_code[0] = new_syntax_list();
-    copy_constructor_code[1] = new_syntax_list();
+    copy_constructor_code = new_syntax_list();
     
     need_assign = false;
     assign_code = new_syntax_list();
@@ -652,21 +649,21 @@ public:
   }
   
   // FIXME: Rename
-  virtual void register_field(Syntax * name, Syntax * type, unsigned which) {
+  virtual void register_field(Syntax * name, Syntax * type) {
     Match * m0 = match(m, syntax n, name);
     const UserType * ut = user_type_info(type, lenv);
 
-    fields[which]->append(name);
+    fields->append(name);
     
     if (ut && ut->have_default_constructor()) {
       need_constructor = true;
-      constructor_code[which]->append(
+      constructor_code->append(
         replace(raw_syntax(member (mid n) (call _constructor (.))), m0, mark));
     }
     
     if (ut && ut->have_copy_constructor())
       need_copy_constructor = true;
-    copy_constructor_code[which]->append(
+    copy_constructor_code->append(
       replace(raw_syntax(init-assign (mid n) (member other (mid n))), 
               m0, mark));
     
