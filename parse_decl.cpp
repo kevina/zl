@@ -774,6 +774,8 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   if (i == end || (*i)->eq(",", "=", ":")) {
     stop = true;
     goto def;
+  } else if ((p = handle_unparsed_scope_op(i, end, env))) {
+    id = p;
   } else if ((p = handle_w_tilda(i, end, env))) {
     id = p;
   } else if ((p = handle_operator_fun_id(i, end, env))) {

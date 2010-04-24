@@ -617,6 +617,10 @@ public:
     else
       body = m->var(syntax body);
     body = mk_method_body(this_type, body);
+    if (body)
+      printf("AND THE BODY IS %s\n", syntax_to_string(body));
+    else
+      printf("NO BODY!!!\n");
     return replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid $2)),
                    match_local(m, new_parms, body, 0), mark);
   }
@@ -694,6 +698,7 @@ public:
       return parse_class_fun_defn(c);
     } else if (name->eq(raw_syntax (operator =))) { // assign
       // just change the name, nothing special needs to be done
+      printf("OK GOT ASSIGN\n");
       m = match(m, syntax n, replace(syntax _assign, m, mark));
     } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) { // destructor
       m = match(m, syntax n, replace(syntax _destructor, m, mark));

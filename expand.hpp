@@ -167,6 +167,10 @@ const Syntax * handle_w_tilda(parts_iterator & i,
                               parts_iterator e,
                               Environ & env);
 
+const Syntax * handle_unparsed_scope_op(parts_iterator & i,
+                                        parts_iterator e,
+                                        Environ & env);
+
 const Syntax * expand_macro(const Syntax *, const ast::Symbol *, 
                             const Vector<ast::Exp *> &, Environ & env);
 

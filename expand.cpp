@@ -1218,6 +1218,11 @@ static const Syntax * handle_new(parts_iterator & i,
     return SYN(p, type);
 }
 
+static Syntax * handle_operator_fun_id(const Syntax * p,
+                                       parts_iterator & i, 
+                                       parts_iterator e,
+                                       Environ & env);
+
 const Syntax * handle_operator_fun_id(parts_iterator & i, 
                                       parts_iterator e,
                                       Environ & env) 
@@ -1226,6 +1231,14 @@ const Syntax * handle_operator_fun_id(parts_iterator & i,
   if (!p->is_a("operator")) return NULL;
   ++i;
   if (!p->simple()) return p; // already handled
+  return handle_operator_fun_id(p, i, e, env);
+}
+
+static Syntax * handle_operator_fun_id(const Syntax * p,
+                                       parts_iterator & i, 
+                                       parts_iterator e,
+                                       Environ & env) 
+{
   assert(i != e); // FIXME: error message
   const Syntax * type = parse_decl_->parse_type(i, e, env);
   if (type) {
@@ -1235,13 +1248,63 @@ const Syntax * handle_operator_fun_id(parts_iterator & i,
   }
 }
 
+
+const Syntax * handle_w_tilda(parts_iterator & i, 
+                              parts_iterator e,
+                              Environ & env) 
+{
+  const Syntax * p = *i;
+  if (!p->is_a("~")) return NULL;
+  ++i;
+  if (!p->simple()) return p; // already handled
+  assert(i != e); // FIXME: error message
+  return SYN(p, *i++);
+}
+
+const Syntax * handle_unparsed_scope_op(parts_iterator & i,
+                                        parts_iterator e,
+                                        Environ & env)
+{
+  const Syntax * p = i[0];
+  const Syntax * op;
+  const Syntax * lhs;
+  // First check for the case when "X::operator =" will incorrectly
+  // parse as ((:: X operator) =)
+  if (p->is_a("::") && !p->simple() && p->arg(1)->eq("operator")) {
+    op = p->part(0);
+    lhs = p->arg(0);
+    ++i;
+    p = handle_operator_fun_id(p->arg(1), i, e, env);
+    printf("YES %s\n", ~p->to_string());
+  } else {
+    if (i + 2 >= e) return NULL;
+    const Syntax * op  = i[1];
+    if (op->ne("::")) return NULL;
+    i += 2;
+    const Syntax * lhs = p;
+    p = NULL;
+    if (!p) p = handle_operator_fun_id(i, e, env);
+    if (!p) p = handle_w_tilda(i, e, env);
+    if (!p) {
+      // This case shouldn't normally happen, but you never know...
+      p = try_id(*i);
+      if (p) {
+        const Syntax * q = handle_unparsed_scope_op(i, e, env);
+        if (q) p = q;
+      }
+    }
+  }
+  if (!p) throw unknown_error(*i);
+  return SYN(op, lhs, p);
+}
+
 const Syntax * e_parse_exp(const Syntax * p0, Environ & env, const char * list_is) {
-  //printf("e_parse_exp: %s\n", ~p0->to_string());
   SyntaxBuilder tmp(p0->part(0));
   parts_iterator i = p0->args_begin(), e = p0->args_end();
   while (i != e) {
     const Syntax * p = NULL;
     if (!p) p = handle_paran(i, e, env);
+    if (!p) p = handle_unparsed_scope_op(i, e, env);
     if (!p) p = handle_new(i, e, env);
     if (!p) p = handle_operator_fun_id(i, e, env);
     if (!p) p = *i++;
@@ -1490,18 +1553,6 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     fprintf(stderr, "Unsupported Binding Form: %s\n", ~p->to_string());
     abort();
   }
-}
-
-const Syntax * handle_w_tilda(parts_iterator & i, 
-                              parts_iterator e,
-                              Environ & env) 
-{
-  const Syntax * p = *i;
-  if (!p->is_a("~")) return NULL;
-  ++i;
-  if (!p->simple()) return p; // already handled
-  assert(i != e); // FIXME: error message
-  return SYN(p, *i++);
 }
 
 Stmt * parse_map(const Syntax * p, Environ & env) {
