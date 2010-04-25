@@ -778,7 +778,7 @@ namespace ast {
       if (id) return SYN(id->sym);
     }
     const Syntax * res = try_id(p);
-    if (!res) abort(); //throw error(p, "Expected identifier");
+    if (!res) throw error(p, "Expected identifier");
     return res;
   }
 
@@ -3838,6 +3838,8 @@ namespace ast {
     }
     return better;
   }
+
+  void breakpoint() {}
 
   const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env) {
     const Symbol * sym = env.symbols.lookup<Symbol>(name);

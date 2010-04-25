@@ -498,6 +498,8 @@ struct SimpleMacro : public Macro {
     using macro_abi::Syntax;
     Mark * mark = new Mark(env);
     Match * m = match_args_f(NULL, parms, p, mark);
+    if (!m)
+      throw error(p, "Wrong number of arguments or other mismatch in call to %s.", ~real_name.name);
     if (free)
       m = match_f(m, free, replace_context(free, get_context(p)), mark);
     Syntax * res = replace(repl, m, mark);
@@ -749,6 +751,7 @@ bool match_list(Match * m,
         v.name = v.name.c_str() + 1;
         SyntaxBuilder n(SYN("@"));
         n.add_parts(r_i, r_end);
+        r_i = r_end;
         for (flags_iterator i = with->flags_begin(), e = with->flags_end(); i != e; ++i) {
           if (!pattern->flag((*i)->what()))
             n.add_flag(*i);
@@ -758,12 +761,14 @@ bool match_list(Match * m,
       if (!r && now_optional)
         r = NO_MATCH;
       add_match_var(m, v, r);
-      if (!r/* && !now_optional*/) 
+      if (!r) 
         return false;
     }
     ++p_i;
     ++r_i;
   }
+  if (r_i < r_end)
+    return false;
   for (flags_iterator i = pattern->flags_begin(), e = pattern->flags_end(); i != e; ++i) {
     const Syntax * w = with->flag((*i)->what());
     match_parm(m, (*i)->arg(0), w ? w->arg(0) : NULL, rt);
@@ -1052,8 +1057,8 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     for (flags_iterator i = repl->flags_begin(), e = repl->flags_end(); i != e; ++i) {
       const Syntax * q = *i;
       SyntaxBuilder r0(q->part(0)); // FIXME: I think I need to do more with first part
-      if (q->num_args() > 0) // FIXME: Can there me more than one arg?
-        r0.add_part(replace_mid(mid, (*i)->part(1), r, rs));
+      for (unsigned j = 0; j != q->num_args(); ++j)
+        r0.add_part(replace_mid(mid, q->arg(j), r, rs));
       res.add_flag(r0.build());
     }
     return res.build(repl->str());

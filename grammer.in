@@ -40,9 +40,12 @@ STMT : "statement" =
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
     / <extern> "extern" {STRING} ({BRACEL} / {STMT})
-#   / <stmt>   ({TOKEN_}+ {PARAN} {BRACE} / {TOKEN}+ ";")
-    / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
+    / <stmt>   ({TOKEN_}+ {PARAN} {INIT_LIST}? {BRACE} / {TOKEN}+ ";")
+#   / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
    ;
+
+INIT_LIST =
+  <init> ":" (<> {ID} {PARAN}) (<> "," {ID} {PARAN})*;
 
 CASE_LABEL =
       <case> "case" {CASE_EXP}

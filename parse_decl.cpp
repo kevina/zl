@@ -281,7 +281,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
   DeclWorking w(res);
 
   bool r = w.parse_first_part(i, end, env, true);
-
+  
   //if (i != end)
   //  printf("<>%d %s\n", i - args.pbegin(), ~(*i)->to_string());
 
@@ -338,6 +338,9 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
     const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, 
                                                field_pos ? IdNotRequired : IdRequired);
 
+    //if (t)
+    //  printf("T>%s\n", ~t->to_string());
+
     if (!id) {
       id = SYN(".");
     }
@@ -349,6 +352,9 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
       w.field_size = SYN("0");
       ++i;
       while (i != end && (*i)->ne("{}")) ++i;
+    } else if (i != end && (*i)->is_a("init")) {
+      w.attributes.push_back(*i);
+      ++i;
     }
 
     const Syntax * decl;

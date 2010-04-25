@@ -746,6 +746,7 @@ namespace ast {
     if (rule == Explicit) // FIXME: This isn't always legal
       return TC(Other,new Cast(exp, type));
 
+    if (i == 2538) abort();
     throw error(orig_exp->syn, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
                 ~type->to_string(), ~orig_exp->type->to_string());
   }

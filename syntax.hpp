@@ -22,7 +22,7 @@ namespace syntax_ns {
   using ast::SymbolName;
 
   // This namespace is to hide lots of internally used symbols, do _not_
-  // import. The important synbols are exported at the end of the header file
+  // import. The important symbols are exported at the end of the header file
 
   struct SyntaxBase;
   typedef const SyntaxBase Syntax;
@@ -80,7 +80,7 @@ namespace syntax_ns {
   //     2: extra info -- implies NoParts unless <normal>
   //       00 = <normal> 
   //       01 = SynEntity
-  //       10 = Reparse -- unused for now
+  //       10 = Reparse
   //   1: first part simple
   //  [1: mutable -- unused]
   //  [1: w_sourcestr -- unused]
