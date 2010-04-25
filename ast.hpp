@@ -136,7 +136,7 @@ namespace ast {
     };
     void assert_num_args(int min, int max) {
       if (syn->num_args() < min || syn->num_args() > max) 
-        throw error(0, syn->str(), "%s: Wrong Number of Arguments", what());
+        throw error(syn, "%s: Wrong Number of Arguments", what());
     };
     //virtual AST * synself(const Syntax * p, Environ &) = 0;
       // ^^ returns itself, to allow chaining ie 

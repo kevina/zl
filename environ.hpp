@@ -234,16 +234,16 @@ namespace ast {
     return env->symbols.find<TypeSymbol>(p, ns);
   }
 
-  inline void TypeSymbolTable::add(const SymbolKey & k, TypeSymbol * t) {
-    env->add(k, t);
+  inline SymbolNode * TypeSymbolTable::add(const SymbolKey & k, TypeSymbol * t) {
+    return env->add(k, t);
   }
 
-  inline void TypeSymbolTable::add_internal(const SymbolKey & k, TypeSymbol * t) {
-    env->add_internal(k, t);
+  inline SymbolNode * TypeSymbolTable::add_internal(const SymbolKey & k, TypeSymbol * t) {
+    return env->add_internal(k, t);
   }
 
-  inline void TypeSymbolTable::add_alias(const SymbolKey & k, TypeSymbol * t) {
-    env->add_alias(k, t);
+  inline SymbolNode * TypeSymbolTable::add_alias(const SymbolKey & k, TypeSymbol * t) {
+    return env->add_alias(k, t);
   }
 }
 

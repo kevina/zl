@@ -49,7 +49,7 @@ while (@ARGV) {
         shift @ARGV;
     } elsif ($p = arg_w_parm('x')) {
         $lang = $p;
-        die "Unknown lang: $lang\n" unless $lang =~ /^(c|cpp|zl|zls)$/;
+        die "Unknown lang: $lang\n" unless $lang =~ /^(c|c\+\+|zl|zls)$/;
         shift @ARGV;
     } elsif ($p = arg_w_parm('o')) {
         $output = $p;
@@ -108,8 +108,8 @@ while (@ARGV) {
 my @final_zls_ops = @zls_ops;
 @zls_ops = ();
 
-my %ext_map = qw(c c i c ii cpp 
-                 cc cpp cp cpp cxx cpp cpp cpp CPP cpp c++ cpp C cpp
+my %ext_map = qw(c c i c ii c++ 
+                 cc c++ cp c++ cxx c++ cpp c++ CPP c++ c++ c++ C c++
                  zl zl zls zls);
 
 foreach (@files) {
@@ -133,7 +133,7 @@ foreach (@files) {
         die "FAILED: zls -E ...\n" unless $? == 0;
     }
     push @zl_ops, '-xc' if $l eq 'c';
-    push @zl_ops, '-xc' if $l eq 'cpp';
+    push @zl_ops, '-xc++' if $l eq 'c++';
     if ($l ne 'zls' && $l ne 'obj') {
         system($ZL, @zl_ops, $file);
         die "FAILED: $ZL @zl_ops $file\n" unless $? == 0;

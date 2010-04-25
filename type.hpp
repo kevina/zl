@@ -109,9 +109,9 @@ namespace ast {
       return inst(n, parms);
     }
     Type * ct_const(const Type * t);
-    inline void add(const SymbolKey & k, TypeSymbol * t);
-    inline void add_internal(const SymbolKey & k, TypeSymbol * t);
-    inline void add_alias(const SymbolKey & k, TypeSymbol * t);
+    inline SymbolNode * add(const SymbolKey & k, TypeSymbol * t);
+    inline SymbolNode * add_internal(const SymbolKey & k, TypeSymbol * t);
+    inline SymbolNode * add_alias(const SymbolKey & k, TypeSymbol * t);
   };
 
   static inline bool operator==(TypeParm lhs, TypeParm rhs) {
@@ -337,15 +337,15 @@ namespace ast {
     sym.add_internal(name, t);
   }
 
-  static inline SimpleType *  
+  static inline SymbolNode *  
   declare_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
                   TopLevelSymbol * where = NULL)
   {
-    sym.add(name, t);
-    return t;
+    return sym.add(name, t);
   }
 
-  static inline SimpleType *  
+  //static inline SimpleType *  
+  static inline SymbolNode *
   add_simple_type(TypeSymbolTable sym, SymbolKey name, SimpleType * t, 
                   TopLevelSymbol * where = NULL)
   {

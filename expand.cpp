@@ -990,7 +990,11 @@ static const Syntax * replace(const Syntax * p,
     //printf("MARK %s\n", ~p->what());
     const Syntax * res = NULL;
     if (allow_plain_mids) res = try_mid(p, SYN(SYN("mid"), p), r, rs, splice_r);
+    //if (res)
+    //  printf("ok 1: %s\n", ~res->to_string());
     if (!res) res = SYN(p, r->mark, r->expand_source_info(p));
+    //if (res)
+    //  printf("ok 2: %s\n", ~res->to_string());
     return res;
   } else if (p->is_a("mid")/* && r->have(*p->arg(0))*/) {
     const Syntax * res = try_mid(p->arg(0), p, r, rs, splice_r);
@@ -1280,7 +1284,7 @@ const Syntax * handle_unparsed_scope_op(parts_iterator & i,
     lhs = p->arg(0);
     ++i;
     p = handle_operator_fun_id(p->arg(1), i, e, env);
-    printf("YES %s\n", ~p->to_string());
+    //printf("YES %s\n", ~p->to_string());
   } else {
     if (i + 2 >= e) return NULL;
     const Syntax * op  = i[1];

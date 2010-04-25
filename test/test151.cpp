@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 struct OStream {
-  FILE * unused;
+  void * unused;
 };
 
 OStream & operator<< (const OStream &, int d) {

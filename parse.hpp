@@ -30,9 +30,8 @@ Error * error(const Syntax *, const char * fmt, ...)
   __attribute__ ((format (printf, 2, 3)));
 Error * error(const char * pos, const char * fmt, ...)
   __attribute__ ((format (printf, 2, 3)));
-Error * error(int, const char * pos, const char * fmt, ...);
-Error * error(int, const char * fmt, ...)
-  __attribute__ ((format (printf, 2, 3)));
+
+#define NO_LOC (const Syntax *)NULL
 
 #define unknown_error(pos) error(pos, "Unknown Error (%s:%d %s)", __FILE__, __LINE__, __FUNCTION__)
 

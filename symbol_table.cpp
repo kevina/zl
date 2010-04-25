@@ -107,7 +107,6 @@ namespace ast {
       if (flags & SymbolNode::IMPORTED) printf(" IMPORTED");
       if (flags & SymbolNode::DIFF_SCOPE) printf(" DIFF_SCOPE");
       if (flags & SymbolNode::INTERNAL) printf(" INTERVAL");
-      if (flags & SymbolNode::TOP_LEVEL) printf(" TOP_LEVEL");
       printf("\n");
     }
   }

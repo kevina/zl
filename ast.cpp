@@ -327,7 +327,7 @@ namespace ast {
       const Symbol * prev0 = env.symbols.find_this_scope<Symbol>(k);
       const OverloadedSymbol * prev = dynamic_cast<const OverloadedSymbol *>(prev0);
       if (prev0 && !prev) {
-        throw unknown_error(0); // FIXME: If shadow_ok than we need to keep looking...
+        throw unknown_error(NO_LOC); // FIXME: If shadow_ok than we need to keep looking...
       }
       //if (prev)
       //  IOUT.printf("... AND A PREV %p %p\n", prev, prev0);
@@ -369,9 +369,12 @@ namespace ast {
     }
   };
 
+  //static unsigned numm = 0;
+
   SymbolNode * TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
     //assert(!env.symbols.exists_this_scope(k));
     // FIXME: Have more precise check
+    //printf("%d ADDING: %s\n", numm++, ~k.to_string());
     if (!shadow_ok && !overloadable() && env.symbols.exists_this_scope(k)) {
       fprintf(stderr, "TLS SHADOW %s\n", ~k.to_string());
       //abort();
@@ -423,8 +426,10 @@ namespace ast {
         goto finish;
       } else if (static_cast<const Symbol *>(this) == tl->value) {
         fprintf(stderr, "tls mismatch %s\n", ~uniq_key);
+        throw error(NO_LOC, "tls mismatch %s\n", ~uniq_key);
       } else {
         fprintf(stderr, "TLS MISMATCH %s\n", ~uniq_key);
+        throw error(NO_LOC, "TLS MISMATCH %s\n", ~uniq_key);
       }
       abort();
       //goto finish;
@@ -2680,14 +2685,21 @@ namespace ast {
       env.add("_destructor", new Trivial(parms_empty));
   }
 
+  static const bool OUTER_SCOPE = true;
+
   // "new" is for lack of a better name as it doesn't necessary create
   // a new instance
-  Module * new_module(const Syntax * p, Environ & env) {
+  Module * new_module(const Syntax * p, Environ & env, bool outer_scope = false) {
     SymbolKey n = expand_binding(p, OUTER_NS, env);
-    Module * m = env.symbols.find_this_scope<Module>(n);
+    Module * m = outer_scope 
+      ? env.symbols.find<Module>(n)
+      : env.symbols.find_this_scope<Module>(n);
     if (!m) {
       m = new Module();
-      env.add(n, m);
+      SymbolNode * node = env.add(n, m);
+      if (outer_scope)
+        node->set_flags(SymbolNode::ALIAS | SymbolNode::DIFF_SCOPE 
+                        | SymbolNode::PUSH_TO_OUTER_SCOPE);
     }
     return m;
   }
@@ -2765,10 +2777,26 @@ namespace ast {
       }
       //IOUT.printf("QQ: ADDING DEFN %p (%s)\n", this, ~name->to_string());
       env.add_defn(module);
+      add_push_outer_symbols(env);
       if (env.parse_def() && !env.collect) 
         finalize_second_pass(env);
       else if (env.collect) {
         env.collect->second_pass.add(new FinalizeSecondPass(this, env));
+      }
+    }
+    void add_push_outer_symbols(Environ & env) {
+      //printf("OK add_push_outer_symbols on %s\n", name ? ~name->to_string() : "??");
+      SymbolNode * cur = module->syms.front;
+      SymbolNode * back = module->syms.back;
+      for (; cur != back; cur = cur->next) {
+        if (cur->flags & SymbolNode::PUSH_TO_OUTER_SCOPE) {
+          //printf("YEAH! %s\n", ~cur->key.to_string());
+          SymbolNode * node = env.symbols.add(env.where, cur->key, cur->value);
+          if (dynamic_cast<const Module *>(env.where))
+            node->flags = cur->flags;
+        } else {
+          //printf("NOPE! %p %p %s\n", cur, cur->value, ~cur->key.to_string());
+        }
       }
     }
     struct FinalizeSecondPass : public CollectAction {
@@ -2814,7 +2842,7 @@ namespace ast {
       module->where = env.where;
       Module * module_in_env = env.symbols.find_this_scope<Module>(SymbolKey(n, OUTER_NS));
       if (module_in_env) {
-        if(module != module_in_env) throw unknown_error(0);
+        if (module != module_in_env) throw unknown_error(NO_LOC);
       } else {
         module->key = NULL;
         env.add(SymbolKey(n, OUTER_NS), module);
@@ -3026,16 +3054,23 @@ namespace ast {
 
   // "new" is for lack of a better name as it doesn't necessary create
   // a new instance
-  UserType * new_user_type(const Syntax * p, Environ & env) {
+  UserType * new_user_type(const Syntax * p, Environ & env, bool outer_scope = false) {
     SymbolName name = expand_binding(p, env);
-    //printf("PARSING USER TYPE %s\n", ~name);
-    UserType * s = env.symbols.find_this_scope<UserType>(SymbolKey(name));
+    //printf("PARSING USER TYPE %s %d\n", ~name, outer_scope);
+    UserType * s = outer_scope 
+      ? env.symbols.find<UserType>(SymbolKey(name)) 
+      : env.symbols.find_this_scope<UserType>(SymbolKey(name));
     if (!s) {
       //printf("ADDING USER TYPE SYM %s (where = %s)\n", ~name, env.where ? ~env.where->full_name() : "<nil>");
       s = new UserType;
-      s->module = new_module(p, env);
+      s->module = new_module(p, env, outer_scope);
       s->module->user_type = s;
-      add_simple_type(env.types, SymbolKey(name), s, env.where);
+      SymbolNode * node = add_simple_type(env.types, SymbolKey(name), s, env.where);
+      if (outer_scope) {
+        node->set_flags(SymbolNode::ALIAS | SymbolNode::DIFF_SCOPE 
+                        | SymbolNode::PUSH_TO_OUTER_SCOPE);
+        //printf("HUMM %p %p %d\n", node, node->value, node->flags & SymbolNode::PUSH_TO_OUTER_SCOPE);
+      }
       s->category = new TypeCategory(s->full_name(), USER_C);
     }
     return s;
@@ -3071,7 +3106,13 @@ namespace ast {
   };
 
   Stmt * parse_declare_user_type(const Syntax * p, Environ & env, DeclHandle ** handle) {
-    UserType * ut = new_user_type(p->arg(0), env);
+    assert_num_args(p, 1);
+    bool outer = p->flag("outer");
+    if (outer && !dynamic_cast<const Module *>(env.where))
+      outer = false;
+    //if (p && outer)
+    //  printf("OUTER %s\n", ~p->to_string());
+    UserType * ut = new_user_type(p->arg(0), env, outer);
     if (!ut->type) ut->type = env.types.inst(SymbolKey(".dummy", TAG_NS));
     assert(ut->type);
     if (handle) {
@@ -3953,7 +3994,7 @@ namespace ast {
     } else {
       TypeAlias * decl = new TypeAlias(of);
       decl->syn = p;
-      SimpleType * talias = add_simple_type(env.types, n, decl, env.where);
+      add_simple_type(env.types, n, decl, env.where);
     }
     return empty_stmt();
   }

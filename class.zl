@@ -187,6 +187,10 @@ public:
   virtual void init_match() {
     m = match_args(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), class_s, mark);
     name = m->var(syntax name);
+    if (strcmp(syntax_to_string(name), "") == 0) {
+      name = replace(syntax anon, m, mark);
+      m = match(m, syntax name, name);
+    }
     body = m->var(syntax body);
   }
 
@@ -766,7 +770,7 @@ public:
       return parse_class_fun_defn(c);
     } else if (name->eq(raw_syntax (operator =))) { // assign
       // just change the name, nothing special needs to be done
-      printf("OK GOT ASSIGN\n");
+      //printf("OK GOT ASSIGN\n");
       m = match(m, syntax n, replace(syntax _assign, m, mark));
     } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) { // destructor
       m = match(m, syntax n, replace(syntax _destructor, m, mark));

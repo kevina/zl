@@ -203,7 +203,17 @@ struct DeclWorking {
       //printf("LIVE ONE\n");
       unsigned i;
       for (i = 0; i != p->num_args()-1; ++i) {
-        type_scope.add_part(p->arg(0));
+        const Syntax * q = p->arg(i);
+        //printf("?!? %s\n", ~q->to_string());
+        if (!by_itself && q->is_a("declare_user_type")) {
+          //printf("YEP declare_user_type\n");
+          SyntaxBuilder b;
+          b.add_parts(q->parts_begin(), q->parts_end());
+          b.set_flags(q->flags_begin(), q->flags_end());
+          b.add_flag(SYN("outer"));
+          q = b.build(q->str());
+        } 
+        type_scope.add_part(q);
       }
       //printf("%d: %s\n", i, ~p->arg(i)->to_string());
       if (by_itself) {

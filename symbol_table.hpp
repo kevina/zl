@@ -233,6 +233,8 @@ namespace ast {
         o << "$";
       }
       o << name();
+      if (num != 0)
+        o.printf("$$%u", num);
     }
     bool uniq_name(OStream & o) const {
       if (num == 0 && mangle && where) {
@@ -354,7 +356,8 @@ namespace ast {
                    // for overload resolution.
     Symbol * value;
     SymbolNode * next;
-    enum {ALIAS = 1, IMPORTED = 2, DIFF_SCOPE = 4, INTERNAL = 8, TOP_LEVEL = 16};
+    enum {ALIAS = 1, IMPORTED = 2, DIFF_SCOPE = 4, INTERNAL = 8, 
+          PUSH_TO_OUTER_SCOPE = 16};
     unsigned flags;
     bool alias() const {return flags & ALIAS;}
     bool imported() const {return flags & IMPORTED;}
@@ -588,8 +591,7 @@ namespace ast {
       //if (find_symbol<Symbol>(k, *front, back, ThisScope)) return; // FIXME: throw error
       //printf("ADDING %s (%p) to symbol table\n", ~k.name, dynamic_cast<Symbol *>(sym));
       *front = new SymbolNode(s, k, sym, flags, *front);
-      return *front
-;
+      return *front;
     }
     void splice(SymbolNode * first, SymbolNode * last) {
       last->next = *front;
@@ -643,15 +645,25 @@ namespace ast {
     SymbolTable new_scope() const {
       return SymbolTable(front, front);
     }
-    SymbolTable new_open_scope() const {
-      SymbolNode * import_placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
-      SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, import_placeholder);
-      return SymbolTable(placeholder, front, &placeholder->next, &import_placeholder->next);
-    }
     SymbolTable new_scope(SymbolInsrPoint & o) const {
       SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
       o.front = &placeholder->next;
       return SymbolTable(placeholder, front);
+    }
+    //SymbolTable new_open_scope() const {
+    //  SymbolNode * import_placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
+    //  SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, import_placeholder);
+    //  return SymbolTable(placeholder, front, &placeholder->next, &import_placeholder->next);
+    //}
+    SymbolTable new_open_scope(SymbolInsrPoint * o = NULL) const {
+      SymbolNode * outer_placeholder = front;
+      //if (o) {
+      //  outer_placeholder = new SymbolNode(NULL, SymbolKey(), NULL, front);
+      //  o->front = &outer_placeholder->next;
+      //}
+      SymbolNode * import_placeholder = new SymbolNode(NULL, SymbolKey(), NULL, outer_placeholder);
+      SymbolNode * placeholder = new SymbolNode(NULL, SymbolKey(), NULL, import_placeholder);
+      return SymbolTable(placeholder, front, &placeholder->next, &import_placeholder->next);
     }
     template <typename T> 
     T * find(const SymbolKey & k, Strategy ms = NormalStrategy) const {
