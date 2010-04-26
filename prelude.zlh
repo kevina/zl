@@ -278,6 +278,9 @@ Syntax * parse_memberdecl(Syntax * p, Environ * env);
 make_macro memberdecl`internal parse_memberdecl :w_snapshot; // HACK!
 make_macro class`syntax parse_class :w_snapshot;
 
+Syntax * parse_enum(Syntax * p, Environ * env);
+make_macro stupid_hack_dont_use parse_enum;
+
 //
 // misc.
 //

@@ -32,3 +32,20 @@ Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
 }
 
 include_file "class.zl";
+
+Syntax * parse_enum(Syntax * p, Environ * env) {
+  printf("%s\n", syntax_to_string(p));
+  Mark * mark = new_mark(prelude_envss);
+  Match * m = match_args(0, raw_syntax(name @ (pattern ({,} @members))), p);
+  if (strcmp(syntax_to_string(m->var(syntax name)), "") == 0)
+    m = match(m, syntax name, replace(syntax anon, m, mark));
+  if (m->var(syntax members)) {
+    return replace(raw_syntax(<@ (@ (.enum name @members) (talias name (enum name)))
+                              (.type name)), m, mark);
+  } else {
+    return replace(raw_syntax(<@ (talias name (enum name))
+                              (.type name)), m, mark);
+  }
+}
+
+

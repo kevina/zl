@@ -37,6 +37,7 @@ STMT : "statement" =
     / <export> "export" {ID} ("," {ID})* ";"
     / <add_prop> "add_prop" {BASIC_ID} {SYNTAX_P} ";"
     / <template> "template" {ID} ";"
+    / <using> "using" {ID}+ ";"
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
     / <extern> "extern" {STRING} ({BRACEL} / {STMT})

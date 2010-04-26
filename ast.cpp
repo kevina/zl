@@ -4601,6 +4601,7 @@ namespace ast {
     if (what == "import_file") return parse_import_file(p, env);
     if (what == "extern") return parse_extern(p, env);
     if (what == "template") return parse_template(p, env);
+    if (what == "using") return empty_stmt();
     return 0;
     } catch (Error * err) {
       StringBuf buf = err->extra;

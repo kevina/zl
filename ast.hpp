@@ -861,6 +861,8 @@ namespace ast {
       return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy, gather, cmp);
     } else if (p->is_a("::")) {
       //printf("w/outer %s %s\n", ~p->to_string(), ~p->sample_w_loc());
+      if (p->arg(0)->eq("std")) // HACK!
+        return lookup_symbol<T>(p->arg(1), ns, start, stop, strategy, gather, cmp);
       const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, start, stop, strategy);
       //printf("W/OUTER %s %p %p\n", ~p->to_string(), m, m->syms);
       unsigned last = p->num_args() - 1;

@@ -1,1 +1,4 @@
 make_macro struct`syntax parse_class;
+
+make_macro enum`syntax parse_enum;
+
