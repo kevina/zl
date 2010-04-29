@@ -3760,15 +3760,19 @@ namespace ast {
                                 TypeRelation::CheckOnlyType check_only,
                                 const Tuple * fun_parms, 
                                 Environ & env, Syntax * syn = NULL) {
-    if (!fun_parms->vararg && parms.size() != fun_parms->parms.size()) 
+    if (fun_parms->required_args() == fun_parms->max_args() && parms.size() != fun_parms->required_args()) 
       throw error(syn, 
-                  "Wrong number of parameters, expected %u but got %u when calling %s",
-                  fun_parms->parms.size(), parms.size(), "??");
-    else if (fun_parms->vararg && parms.size() < fun_parms->parms.size())
+                  "Wrong number of parameters, expected %u but got %u when calling %s.",
+                  fun_parms->parms.size(), parms.size(), syn ? ~syn->to_string() : "<unknown>");
+    else if (fun_parms->required_args() != fun_parms->max_args() && parms.size() < fun_parms->required_args()) 
       throw error(syn,
-                  "Not enough parameters, expected at least %u but got %u when calling %s",
-                  fun_parms->parms.size(), parms.size(), "??");
-    const int typed_parms = fun_parms->parms.size();
+                  "Not enough parameters, expected at least %u but got %u when calling %s.",
+                  fun_parms->parms.size(), parms.size(), syn ? ~syn->to_string() : "<unknown>");
+    else if (fun_parms->required_args() != fun_parms->max_args() && parms.size() > fun_parms->max_args()) 
+      throw error(syn,
+                  "Too many parameters, expected at most %u but got %u when calling %s.",
+                  fun_parms->parms.size(), parms.size(), syn ? ~syn->to_string() : "<unknown>");
+    const int typed_parms = std::min(parms.size(), fun_parms->parms.size());
     const int num_parms = parms.size();
     int i = 0;
     for (;i != typed_parms; ++i) {
@@ -3895,7 +3899,7 @@ namespace ast {
           if (!res)
             res = (Candidate *)GC_MALLOC(sizeof(Candidate) + sizeof(TypeConv)*(parms.size()-1));
           resolve_fun_parms(parms, res->resolved_parms, TypeRelation::CheckOnly, 
-                            cur->sym->overloadable(), env, NULL);
+                            cur->sym->overloadable(), env, name);
           res->sym = cur->sym;
           candidates.push_back(res);
           res = NULL;
@@ -3904,6 +3908,7 @@ namespace ast {
           seen.push_back(Seen(cur->sym, error));
         }
       }
+      //printf("RESOLVE CALL %s: candidates %d\n", ~name->to_string(), candidates.size());
       if (candidates.size() == 0) {
         if (seen.size() == 1)
           throw seen[0].error;
@@ -3925,8 +3930,8 @@ namespace ast {
             continue;
           }
           //printf("COMPARING:\n  %s %d\n  %s %d\n", 
-          //       ~first->sym->overloadable()->to_string(), first->resolved_parms[1].rank(), 
-          //       ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[1].rank());
+          //       ~first->sym->overloadable()->to_string(), first->resolved_parms[0].rank(), 
+          //       ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[0].rank());
           int res = better_match(parms, first->resolved_parms, (*cur)->resolved_parms);
           if (res == 0) {
             //printf("  no better match\n");

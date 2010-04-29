@@ -47,7 +47,7 @@ void SyntaxBase::dump_type_info() {
 
 //
 // SourceStr
-// 
+//
 
 bool pos_str(const SourceFile * source, const char * pos,
              const char * pre, OStream & o, const char * post,

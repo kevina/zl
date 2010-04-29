@@ -542,9 +542,10 @@ public:
     m = create_vtable_entry_name(m);
     bool virtual_override = determine_virtual_override(m);
     if (!is_virtual && virtual_override) is_virtual = true;
-    Syntax * this_type = is_static ? NULL : determine_this_type(m, virtual_override);
+    Syntax * this_type = is_static ? NULL : determine_this_type(p, m, virtual_override);
   
     SyntaxList * macro_parms = new_syntax_list();
+    SyntaxList * typed_parms = new_syntax_list();
     SyntaxList * call_parms  = new_syntax_list();
   
     //if (!is_static) 
@@ -553,15 +554,37 @@ public:
     unsigned i = 0;
     Syntax * parm;
     while ((parm = parms_enum->next())) {
-      char sbuf[8];
-      snprintf(sbuf, 8, "arg%d", i);
-      Syntax * arg = replace(string_to_syntax(sbuf), 0, mark);
-      macro_parms->append(arg);
-      call_parms->append(arg);
+      Match * m0 = match(m, raw_syntax(type @ name :(default default)), parm);
+      //printf("AND THE PARM IS %s w/ type %s\n", syntax_to_string(parm), syntax_to_string(m0->var(syntax type)));
+      //printf("AND THE PARM IS %s\n", syntax_to_string(parm));
+      Syntax * arg = m0 ? m0->var(syntax name) : NULL;
+      bool now_optional = false;
+      if (!arg) {
+        char sbuf[8];
+        snprintf(sbuf, 8, "arg%d", i);
+        arg = replace(string_to_syntax(sbuf), 0, mark);
+      }
+      if (m0) {
+        if (m0->var(syntax default)) {
+          //printf("W/DEFAULT MAN\n");
+          macro_parms->append(replace(raw_syntax(reparse name default), m0, mark));
+          if (!now_optional)
+            typed_parms->append(replace(syntax @, NULL, mark));
+          now_optional = true;
+        } else {
+          macro_parms->append(replace(raw_syntax(reparse $1), match_local(m0, arg, NULL), mark));
+        }
+        typed_parms->append(parm);
+        call_parms->append(arg);
+      } else if (parm->eq(syntax ...)) {
+        macro_parms->append(replace(raw_syntax (reparse @varargs), NULL, mark));
+        typed_parms->append(parm);
+        call_parms->append(replace(syntax varargs, NULL, mark));
+      }
       ++i;
     }
     if (!is_static)
-      macro_parms->append(replace(syntax (:this ths = this), m, mark));
+      macro_parms->append_flag(replace(raw_syntax(this (reparse ths this)), m, mark));
     SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     
     if (!collect && m->var(syntax body)) {
@@ -578,8 +601,11 @@ public:
     Syntax * call_nv = mk_call(replace(syntax n`internal, m, mark),
                                !is_static ? replace(syntax ths, m, mark) : NULL, 
                                call_parms);
-    builder->add(replace(syntax {macro n`non_virtual ($1) :typed_parms($2) {$3;}},
-                         match_local(m, macro_parms, m->var(syntax parms), call_nv, 0), mark));
+    //printf("TP: %s\n", syntax_to_string(typed_parms));
+    //builder->add(replace(syntax {macro n`non_virtual ($1) :typed_parms($2) {$3;}},
+    //                     match_local(m, macro_parms, typed_parms, call_nv, 0), mark));
+    builder->add(replace(raw_syntax (macro (` n non_virtual) (@$1) :(typed-parms (. @$2)) $3),
+                         match_local(m, macro_parms, typed_parms, call_nv, 0), mark));
     
     if (is_virtual) {
       //m = match(m, syntax fpn, m->var(syntax n));
@@ -594,9 +620,10 @@ public:
                                   replace(syntax this, m, mark),
                                   call_parms);
         builder->add(replace(
-                       syntax {macro n ($1) :typed_parms($2) {({__shadow name * fluid this = ths; $3;});}},
-                       //syntax {macro n ($1) {(ths->_vptr->fpn)($2);}},
-                       match_local(m, macro_parms, m->var(syntax parms), call_v, 0),
+                       //syntax {macro n ($1) :typed_parms($2) {({__shadow name * fluid this = ths; $3;});}},
+                       raw_syntax (macro n (@$1) :(typed-parms (. @$2)) 
+                                  (eblock (:shadow var (fluid this) (.ptr (name)) ths) $3)),
+                       match_local(m, macro_parms, typed_parms, call_v, 0),
                        mark));
         m = match(m, syntax pfun, 
                   replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
@@ -604,14 +631,22 @@ public:
         vtable_b->append(replace(raw_syntax (add_prop fpn this_type $1), 
                                  match_local(m, this_type, 0), mark));
       }
-      vtable_i->append(replace(raw_syntax (assign (-> (id _vt) (id (mid fpn))) 
-                                           (id (` (mid n) internal))), m, mark));
+      if (p->flag(syntax pure_virtual)) {
+        vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) 0), m, mark));
+      } else {
+        vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) (` n internal)), m, mark));
+      }
     } else {
-      builder->add(replace(syntax {macro n ($1) :typed_parms($2) {$3;}},
-                           match_local(m, macro_parms, m->var(syntax parms), call_nv, 0), mark));
+      //printf("OK HERE WE GO: %s %s\n", 
+      //       syntax_to_string(macro_parms),
+      //       syntax_to_string(typed_parms));
+      builder->add(replace(raw_syntax (macro n (@$1) :(typed-parms (. @$2)) $3),
+                           //syntax {macro n ($1) :typed_parms($2) {$3;}},
+                           match_local(m, macro_parms, typed_parms, call_nv, 0), mark));
     }
     builder->add(replace(raw_syntax (add_prop (fun n (. @parms)) is_method true), m, mark));
 
+    //printf("DONE %s\n", syntax_to_string(m->var(syntax n)));
     return NULL;
   }
 
@@ -631,7 +666,7 @@ public:
     return parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn));
   }
 
-  Syntax * determine_this_type(Match * m, bool virtual_override) {
+  Syntax * determine_this_type(Syntax * p, Match * m, bool virtual_override) {
     if (virtual_override) {
       return get_symbol_prop(replace(raw_syntax(:: (:: parent_n _VTable) fpn), m, mark),
                              syntax this_type,
@@ -639,6 +674,8 @@ public:
       //replace(raw_syntax(.tprop (.type (.tprop (-> (reinterpret_cast 
       //                                                (.ptr ((:: parent_n _VTable))) 0) fpn) 
       //                                    inner)) (parm 0)), m, mark);
+    } else if (p->flag(syntax const_method)) {
+      return replace(raw_syntax(.ptr (name :const)), m, mark);
     } else {
       return replace(raw_syntax(.ptr name), m, mark);
     }
@@ -784,7 +821,7 @@ public:
 
     m = create_vtable_entry_name(m);
     bool virtual_override = determine_virtual_override(m);
-    Syntax * this_type = is_static ? NULL : determine_this_type(m, virtual_override);
+    Syntax * this_type = is_static ? NULL : determine_this_type(p, m, virtual_override);
 
     SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     

@@ -486,6 +486,7 @@ struct SimpleMacro : public Macro {
       free = free->arg(0);
     const Syntax * typed_parms_syn = p->flag("typed-parms");
     if (typed_parms_syn) {
+      //printf("TYPED PARMS = %s\n", ~typed_parms_syn->to_string());
       typed_parms = expand_fun_parms(typed_parms_syn->arg(0), e); 
     }
     ChangeSrc<SyntaxSourceInfo> cs(p->arg(2));
@@ -692,7 +693,7 @@ bool match_list(Match * m,
 
 // if match_prep sets p == 0 then there is nothing more to do
 bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl, ReplTable * rt) {
-  //printf("match_parm <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
+  //printf("match_prep <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   if (p->num_args() > 0) {
     if (p->is_a("pattern")) {
       if (!repl) return true;
@@ -704,8 +705,10 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl, ReplTable 
       return res;
     } else if (p->is_a("reparse")) {
       if (!repl) {
-        if (p->num_args() > 1)
+        if (p->num_args() > 1) {
           repl = replace(p->arg(1), rt, NULL, false, NULL);
+          //printf("REPL = %s\n" , ~repl->to_string());
+        }
       }
       p = p->arg(0);
     } else {
@@ -734,6 +737,8 @@ bool match_list(Match * m,
                 const Syntax * with,    parts_iterator r_i, parts_iterator r_end,
                 ReplTable * rt)
 {
+  //static unsigned dc = 0;
+  //printf("match_list %d\n", dc++);
   bool now_optional = false;
   while (p_i != p_end) {
     const Syntax * p = *p_i;
@@ -839,7 +844,7 @@ extern "C" namespace macro_abi {
   SyntaxEnum * match_varl(Match * m, UnmarkedSyntax * n) {
     const Syntax * p = match_var(m, n);
     if (p) {
-      assert(p->is_a("@"));
+      assert(!p->simple() && p->is_a("@"));
       return new SimpleSyntaxEnum(p->args_begin(), p->args_end());
     } else {
       return NULL;
@@ -947,6 +952,7 @@ const Syntax * macro_abi::reparse(const Syntax * s, const char * what, Environ *
 
 static const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs);
 
+//static unsigned seql9 = 0;
 static const Syntax * try_mid(const Syntax * mid_p, const Syntax * p, ReplTable * r, const Replacements * rs, bool * splice_r) {
   SymbolName mid = *mid_p;
   bool splice = false;
@@ -965,7 +971,7 @@ static const Syntax * try_mid(const Syntax * mid_p, const Syntax * p, ReplTable 
   //p->arg(0)->str().sample_w_loc(COUT);
   //printf("\n");
   const Syntax * res = replace_mid(p, p0, r, rs);
-    //printf("REPLACE res %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
+  //printf("REPLACE res %d: %s %s\n", seql9++, ~res->sample_w_loc(), ~res->to_string());
   return res;
 }
 
@@ -1020,7 +1026,7 @@ static const Syntax * replace(const Syntax * p,
       const Syntax * q = replace(p->part(i), r, rs, allow_plain_mids, &splice);
       if (splice) {
         //printf("??%d %s\n", x, ~q->to_string());
-        if (!q->is_a("@")) throw unknown_error(q);
+        if (q->simple() || !q->is_a("@")) throw unknown_error(q);
         res.add_parts(q->args_begin(), q->args_end());
         res.merge_flags(q);
       } else {
@@ -1053,7 +1059,7 @@ static const Syntax * reparse_replace(const Syntax * new_name,
 const Syntax * replace_context(const Syntax * p, const Marks * context);
 
 const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * r, const Replacements * rs) {
-  if (repl->is_a("@")) {
+  if (!repl->simple() && repl->is_a("@")) {
     SyntaxBuilder res(repl->part(0));
     for (parts_iterator i = repl->args_begin(), e = repl->args_end(); i != e; ++i) {
       res.add_part(replace_mid(mid, *i, r, rs));
@@ -1504,7 +1510,7 @@ struct PartlyExpandSyntaxEnum : public SyntaxEnum {
       }
     }
     res = partly_expand(res, pos, *env, EXPAND_NO_BLOCK_LIST);
-    if (res->is_a("@")) {
+    if (!res->simple() && res->is_a("@")) {
       stack.push_back(top);
       top = new SimpleSyntaxEnum(res->args_begin(), res->args_end());
       goto try_again;
@@ -1559,8 +1565,7 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
     return s->name;
   } else {
-    fprintf(stderr, "Unsupported Binding Form: %s\n", ~p->to_string());
-    abort();
+    throw error(p, "Unsupported Binding Form: %s\n", ~p->to_string());
   }
 }
 
@@ -1604,16 +1609,23 @@ void assert_num_args(const Syntax * p, unsigned min, unsigned max) {
     throw error(p->arg(max), "Too many arguments for \"%s\"", ~p->what());
 }
 
-void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res) {
+static void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res, 
+                             unsigned & num_required,  bool required = true) {
   for (unsigned i = 0; i != args->num_args(); ++i) {
     const Syntax * p = args->arg(i);
-    if (p->is_a("@")) {
-      expand_fun_parms(p, env, res);
+    if (p->is_a("@") && !p->simple()) {
+      expand_fun_parms(p, env, res, num_required, required);
     } else {
-      if (p->is_a("parm") || p->is_a("()"))
+      if (p->is_a("parm") || p->is_a("()")) 
         p = reparse("TOKENS", p->inner(), &env);
       //printf("FUN_PARM: %s\n", ~p->to_string());
-      if (!p->is_a("...")) {
+      if (p->eq("@")) {
+        //printf("GOT @\n");
+        required = false;
+      } else if (p->is_a("...")) {
+        res.add_part(p);
+        required = false;
+      } else {
         const Type * t = parse_type(p->part(0), env);
         // an array of x as parm is really a pointer to x:
         if (const Array * a = dynamic_cast<const Array *>(t->root))
@@ -1622,21 +1634,23 @@ void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res) {
         if (p->num_parts() == 2) 
           r = SYN(r, p->part(1));
         res.add_part(r);
-      } else {
-        res.add_part(p);
+        if (required) ++num_required;
       }
     }
   }
 }
 
 Tuple * expand_fun_parms(const Syntax * parse, Environ & env) {
-  //printf("FUN_PARMS: %s\n", ~parse->to_string());
   if (parse->is_a("(...)")) 
     parse = parse_decl_->parse_fun_parms(parse, env);
+  //printf("FUN_PARMS: %s\n", ~parse->to_string());
   SyntaxBuilder res(parse->part(0));
-  expand_fun_parms(parse, env, res);
+  unsigned num_required = 0;
+  expand_fun_parms(parse, env, res, num_required);
   Type * type = parse_type(res.build(), env);
   Tuple * tuple = dynamic_cast<Tuple *>(type);
+  tuple->required = num_required;
+  //printf("YES %d\n", tuple->required);
   assert(tuple); // FIXME: Error Message?
   return tuple;
 }

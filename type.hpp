@@ -463,8 +463,11 @@ namespace ast {
     };
     typedef Vector<Parm> Parms;
     Parms parms;
+    unsigned required;
     int vararg;
-    Tuple() : vararg() {}
+    unsigned required_args() const {return required;}
+    unsigned max_args() const {return vararg ? UINT_MAX : parms.size();}
+    Tuple() : required(), vararg() {}
     virtual unsigned num_parms() const {return parms.size() + vararg;}
     virtual TypeParm parm(unsigned i) const {
       if (i < parms.size())
@@ -491,6 +494,7 @@ namespace ast {
 	} else {
 	  assert(p[i].what == TypeParm::TYPE);
 	  r->parms.push_back(Tuple::Parm(p[i].as_type, p[i].name));
+          ++r->required;
 	}
       }
       r->type_symbol = this;

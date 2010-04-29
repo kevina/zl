@@ -11,7 +11,7 @@
 
 /*
   -- declarations
-  (var ID TYPE INIT) flags: 
+  (var ID TYP INIT) flags: 
   (talias alias TYPE)
   (fun ID PARMS RET BODY]) flags:
   (struct ID [BODY]) 
@@ -815,7 +815,28 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
       ++i;
     } catch (Error * err) {
       //printf("note: %s\n", ~err->message());
+      goto cont;
     }
+    if (i != end && (*i)->eq("const")) {
+      ++i;
+      //printf("CONST!\n");
+      attributes.push_back(SYN("const_method"));
+    }
+    if (virtual_ && i != end && (*i)->eq("=")) {
+      ++i;
+      if (i == end)
+        throw error(NO_LOC, "Expected \"0\".");
+      ++i;
+      //printf("PURE!\n");
+      attributes.push_back(SYN("pure_virtual"));
+    } 
+    if (i != end && (*i)->eq("throw")) {
+      // ignore throw spec. for now
+      ++i;
+      if (i == end || !(*i)->is_a("()")) 
+        throw error(*i, "Expected \"(\"");
+      ++i;
+    } 
   } else if ((*i)->is_a(".") || (*i)->is_a("(...)")) {
     t = make_function_type(t, *i, env);
     ++i;
@@ -823,15 +844,8 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     // we axre an array of type t
     t = try_arrays(i, end, t);
   }
+cont:
 
-  if (i != end && (*i)->eq("throw")) {
-    // ignore throw spec. for now
-    ++i;
-    if (i == end || !(*i)->is_a("()")) 
-      throw error(*i, "Expected \"(\"");
-    ++i;
-  } 
-  
   if (outer) {
     parts_iterator j = outer->args_begin();
     t = parse_outer_type_info(id, j, outer->args_end(), t, env, mode);
@@ -847,27 +861,38 @@ const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
 {
   if (parms->is_a(".")) return parms;
   SyntaxBuilder ps(SYN("."));
-  //printf("MAKE FUNCTION TYPE: %s %s\n", ~ret->to_string(), ~parms->to_string());
+  //printf("MAKE FUNCTION TYPE: %s\n", ~parms->to_string());
   parts_iterator i = parms->args_begin();
   parts_iterator end = parms->args_end();
   if (i != end) for (;;) {
-    parts_iterator begin = i;
-    DeclWorking w(type_scope);
-    const Syntax * id = NULL;
-    bool r = w.parse_first_part(i, end, env, false);
-    if (!r) throw error(*i, "Expected type or \"...\".");
-    if (w.dots) {
-      ps.add_part(w.inner_type); // FIXME: Preserve source info..
+    if ((*i)->eq("@")) {
+      ps.add_part(*i);
+      ++i;
     } else {
-      w.make_inner_type(parms);
-      const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, IdNotRequired);
-      SyntaxBuilder p;
-      assert(t);
-      p.add_part(t);
-      if (id)
-	p.add_part(id);
-      ps.add_part(p.build());
-      //ps->add_part(t);
+      parts_iterator begin = i;
+      DeclWorking w(type_scope);
+      const Syntax * id = NULL;
+      bool r = w.parse_first_part(i, end, env, false);
+      if (!r) throw error(*i, "Expected type or \"...\".");
+      if (w.dots) {
+        ps.add_part(w.inner_type); // FIXME: Preserve source info..
+      } else {
+        w.make_inner_type(parms);
+        const Syntax * t = w.parse_outer_type_info(id, i, end, w.inner_type, env, IdNotRequired);
+        SyntaxBuilder p;
+        assert(t);
+        p.add_part(t);
+        if (id)
+          p.add_part(id);
+        if (i != end && (*i)->eq("=")) {
+          ++i;
+          // default parm
+          const Syntax * init = w.parse_init_exp(i, end);
+          p.add_flag(SYN(SYN("default"), init));
+        }
+        ps.add_part(p.build());
+        //ps->add_part(t);
+      }
     } 
     if (i == end) break;
     if (!(*i)->eq(",")) throw error(*i, "Expected \",\" got \"%s\".", ~(*i)->to_string());
