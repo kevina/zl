@@ -435,7 +435,8 @@ struct Macro : public Declaration, public Symbol {
     //printf("%d EXPAND: %s %s\n", c, ~s->sample_w_loc(), ~p->sample_w_loc());
     try {
       MacroInfo whocares(s,def);
-      const Syntax * res = expand(p, env);
+      Syntax * res = expand(p, env);
+      res->str_ = s->str(); // OK, maybe this is a bit harsh
       // Don't do this for now, might cause weird problems
       //SourceStr n = s->str();
       //n.source = new ResultSourceInfo(n.source, res->str());
@@ -494,7 +495,7 @@ struct SimpleMacro : public Macro {
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ &) const {
-    //printf("EXPANDING MAP %s\n", ~name);
+    //printf("EXPANDING PARMS %s\n", ~p->to_string());
     using namespace macro_abi;
     using macro_abi::Syntax;
     Mark * mark = new Mark(env);
@@ -870,6 +871,10 @@ extern "C" namespace macro_abi {
   }
 }
 
+//
+//
+//
+
 const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   ReplTable * rparms 
     = new ReplTable(mark, 
@@ -900,49 +905,45 @@ const Syntax * macro_abi::replace(const UnmarkedSyntax * p, Match * match, Mark 
   return ::replace(p, match, mark);
 }
 
+struct ReplToApply {
+  const Replacements * repls;
+  Replacements combined_repls;
+  ReplToApply() : repls() {}
+  void init(const Replacements * repl, ReplTable * table, const Replacements * additional) {
+    repls = combine_repl(repl, table);
+    if (repls)
+      combined_repls = *repls;
+    if (additional)
+      combined_repls.insert(combined_repls.end(), additional->begin(), additional->end());
+  }
+  ReplToApply(const Replacements * repl, ReplTable * table = NULL, const Replacements * additional = NULL) 
+    {init(repl,table,additional);}
+  const Syntax * apply(const Syntax * res) {
+    if (repls) {
+      for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
+           i != e; ++i) 
+      {
+        combined_repls.erase(combined_repls.begin());
+        res = replace(res, *i, &combined_repls, false, NULL);
+      }
+    }
+    return res;
+  }
+};
+
 const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env,
                             bool match_complete_str,
                             ReplTable * r, const Replacements * additional_repls)
 {
-  //printf("REPARSE %s %s AS %s\n", ~p->sample_w_loc(), ~p->to_string(), ~what);
-  const Replacements * repls = combine_repl(p.repl, r);
-  Replacements combined_repls;
-  if (repls) {
-    //printf("repls = %s\n", ~repls->to_string());
-    combined_repls = *repls;
-  }
-  if (additional_repls) {
-    //printf("combined_repls = %s\n", ~additional_repls->to_string());
-    combined_repls.insert(combined_repls.end(), additional_repls->begin(), additional_repls->end());
-  }
+  //printf("REPARSE %s AS %s\n", ~p.str.to_string(), ~what);
+  //printf("....... %s\n", ~p.orig->sample_w_loc());
+  ReplToApply to_apply(p.repl, r, additional_repls);
   const Syntax * res;
-  try {
-    res = parse_prod(what, p.str, env, &combined_repls, p.cache, match_complete_str);
-  } catch (Error * err) {
-    //Annon * annon = new ReparseAnnon(p, what);
-    //annon->prev = p->str().annon; // FIXME: Is this right
-    //err->annon = annon;
-    //puts(~err->message());
-    throw err;
-  }
-  //res = SYN(new ReparseAnnon(p, what), res);
+  res = parse_prod(what, p.str, env, &to_apply.combined_repls, p.cache, match_complete_str);
   //printf("PARSED STRING %s\n", ~res->to_string());
-  if (repls) {
-    //printf("# repls = %d\n", repls->size());
-    for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
-         i != e; ++i) 
-    {
-      combined_repls.erase(combined_repls.begin());
-      //printf("?REPLACE %i\n", i - repls->begin());
-      //res->print();
-      //printf("\n");
-      res = replace(res, *i, &combined_repls, false, NULL);
-      //printf("?replace %i\n", i - repls->begin());
-      //res->print();
-      //printf("\n");
-    }
-  }
-  //printf("REPARSE %s RES: %s\n", ~p->to_string(), ~res->to_string());
+  res = to_apply.apply(res);
+  //printf("REPARSE %s RES: %s\n", "??"/*~p->to_string()*/, ~res->to_string());
+  //printf("....... %s\n", ~res->sample_w_loc());
   return res;
 }
 
@@ -1104,7 +1105,7 @@ const Syntax * replace_context(const Syntax * p, const Marks * context) {
     return res;
   } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f")) {
     return p;
-  } else if (p->is_a("{}") || p->is_a("()") || p->is_a("[]") || p->is_a("parm")) {
+  } else if (p->is_reparse()) {
     // raw tokens
     fprintf(stderr, "Unhandled Case\n");
     abort();
@@ -1440,8 +1441,12 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     Syntax * res = SYN(p->str(), PARTS(p->part(0), p->arg(0), a));
     p = res;
   } else if (what == "raw") {
-    parse_parse::Res r = parse_parse::parse(p->part(1)->str());
-    return partly_expand(r.parse, pos, env, flags);
+    ReparseInfo ri = p->arg(0)->outer();
+    ReplToApply ria(ri.repl);
+    parse_parse::Res r = parse_parse::parse(ri.str);
+    const Syntax * res = ria.apply(r.parse);
+    const_cast<Syntax *>(res)->str_ = p->str();
+    return partly_expand(res, pos, env, flags);
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
     //printf("TRYING STMT PARSE on %s\n", ~p->sample_w_loc()); 
@@ -1455,6 +1460,11 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     //printf("PARSE EXP %s\n", ~p->to_string());
     assert_pos(p, pos, ExpPos);
     p = e_parse_exp(p, env, what == "exp" ? "seq" : ".");
+    return partly_expand(p, pos, env, flags);
+  } else if (what == "(...)") {
+    const Syntax * type = parse_decl_->parse_type(p, env);
+    if (type) return SYN(p->str(), SYN(".type"), type);
+    p = e_parse_exp(p, env, "seq");
     return partly_expand(p, pos, env, flags);
   } else if (what == "<@") {
     if (p->num_args() < 2) {
@@ -1476,10 +1486,18 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
 const Syntax * limited_expand(const Syntax * p, Environ & env) {
   if (p->have_entity()) return p;
   SymbolName what = p->what();
+  p = expand_id(p, env);
   if (p->simple()) {
     return p;
   } else if (const Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
     return limited_expand(n, env);
+  } else if (what == "parm") {
+    return limited_expand(reparse("PARM_", p->outer(), &env), env);
+  } else if (what == "(...)") {
+    const Syntax * type = parse_decl_->parse_type(p, env);
+    if (type) return SYN(p->str(), SYN(".type"), type);
+    p = e_parse_exp(p, env, "seq");
+    return limited_expand(p, env);
   } else {
     return p;
   }
@@ -1509,16 +1527,16 @@ struct PartlyExpandSyntaxEnum : public SyntaxEnum {
         goto try_again;
       }
     }
-    res = partly_expand(res, pos, *env, EXPAND_NO_BLOCK_LIST);
+    res = partly_expand(res, pos, *env/*, EXPAND_NO_BLOCK_LIST*/);
     if (!res->simple() && res->is_a("@")) {
       stack.push_back(top);
       top = new SimpleSyntaxEnum(res->args_begin(), res->args_end());
       goto try_again;
-    } else if (res->is_a("@{}")) {
-      stack.push_back(top);
-      const Syntax * r = reparse("STMTS", res->inner());
-      top = new SimpleSyntaxEnum(r->args_begin(), r->args_end());
-      goto try_again;
+      //} else if (res->is_a("@{}")) {
+      //stack.push_back(top);
+      //const Syntax * r = reparse("STMTS", res->inner(), env);
+      //top = new SimpleSyntaxEnum(r->args_begin(), r->args_end());
+      //goto try_again;
     }
     return res;
   }
@@ -1532,6 +1550,10 @@ extern "C" namespace macro_abi {
   
   SyntaxEnum * partly_expand_list(SyntaxEnum * l, Position pos, Environ * env) {
     return new PartlyExpandSyntaxEnum(l, pos, env);
+  }
+
+  Syntax * expand_id(Syntax * p, Environ * env) {
+    return ::expand_id(p, *env);
   }
   
   const Syntax * pre_parse(const Syntax * p, Environ * env) {

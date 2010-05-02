@@ -231,8 +231,8 @@ class ParseExpImpl : public ParseExp {
     OpInfo(const Op * o, const Syntax * p)
       : op(o), parse(p) {}
   };
-  Vector<const Syntax *> val_s;
-  Vector<OpInfo>         opr_s;
+  Vector<Syntax *> val_s;
+  Vector<OpInfo>   opr_s;
   String list_is;
 public:
 
@@ -311,7 +311,10 @@ public:
       assert(val_s.size() == 1);
       // Don't do this for now, cases weird problems
       //return new Syntax(p->str(), *val_s.front());
-      return val_s.front();
+      Syntax * res = val_s.front();
+      if (!res->is_a("syntax") && !res->is_a("raw_syntax"))
+        res->str_ = p->str();
+      return res;
     } catch (Error * err) {
       printf("?? %s %s\n", ~p->sample_w_loc(), ~p->to_string());
       //abort();

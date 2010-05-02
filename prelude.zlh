@@ -160,6 +160,7 @@ typedef enum  {NoPos = 0, OtherPos = 1, TopLevel = 2, FieldPos = 4,
                StmtDeclPos = 8, StmtPos = 16, ExpPos = 32} Position;
 __ct_callback Syntax * partly_expand(Syntax *, Position pos, Environ *);
 __ct_callback SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
+__ct_callback Syntax * expand_id(Syntax *, Environ *);
 __ct_callback Syntax * pre_parse(Syntax *, Environ *);
 __ct_callback Syntax * reparse(Syntax *, const char *, Environ *);
 

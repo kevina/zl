@@ -272,6 +272,7 @@ public:
                                           FieldPos, lenv);
     Syntax * member;
     while ((member = itr->next)) {
+      //printf("MEMBER: %s\n", syntax_to_string(member));
       Match * m0 = match(m, raw_syntax (what n @ type @_), member);
       if (!m0) {
         builder->add(member);
@@ -399,7 +400,7 @@ public:
     void init(Syntax * syn) {
       if (syn) {
         size = syn->num_args();
-        data = zl_malloc(sizeof(struct InitCode) * size);
+        data = zl_malloc(sizeof(struct Data) * size);
         for (unsigned i = 0; i != size; ++i) {
           data[i].field = syn->arg(i)->part(0);
           data[i].code = syn->arg(i)->part(1);
@@ -518,8 +519,9 @@ public:
     //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
     //assert(!(is_static && is_virtual)); // FIXME Error message
 
-    Syntax * class_name = m->var(syntax name);
-    Syntax * name = m->var(syntax n);
+    Syntax * class_name = expand_id(m->var(syntax name), lenv);
+    Syntax * name = expand_id(m->var(syntax n), lenv);
+    //printf("<><>%s %s\n", syntax_to_string(class_name), syntax_to_string(name));
     if (name->eq(class_name)) {
       constructors->append
         (replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark));
@@ -528,7 +530,8 @@ public:
       //printf("ASSIGN\n");
       // just change the name, nothing special needs to be done
       m = match(m, syntax n, replace(syntax _assign, m, mark));
-    } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) {
+    } else if (!name->simple() && name->part(0)->eq(syntax ~) 
+               && expand_id(name->part(1), lenv)->eq(class_name)) {
       //printf("DESTRUCTOR\n");
       // change the return type to "void *", the body will get fixed up later
       destructor = replace(raw_syntax(fun _destructor (. @parms) (.ptr void) body @rest), m, mark);

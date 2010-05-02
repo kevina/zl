@@ -25,6 +25,7 @@
   replace_context;
   partly_expand;
   partly_expand_list;
+  expand_id;
   pre_parse;
   reparse;
   string_to_syntax;

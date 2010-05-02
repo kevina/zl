@@ -212,6 +212,11 @@ namespace ast {
     Stmt(const Syntax * p = 0) : AST(p), next() {}
     Stmt * next;
     inline Exp * as_exp(Environ & env); 
+    void end_line(CompileWriter & f, const AST * ast = NULL) const {
+      if (!ast) ast = this;
+      ast->source_str().pos_str(" # ", f, "");
+      f << "\n";
+    }
   };
 
   struct StmtLeaf : public Stmt {

@@ -94,7 +94,9 @@ static inline const Syntax * reparse(String what, ReparseInfo p, Environ * env =
                                      ReplTable * r = NULL, 
                                      const Replacements * additional_repls = NULL) 
 {
-  return reparse_prod(what, p, env, true, r, additional_repls);
+  const Syntax * res = reparse_prod(what, p, env, true, r, additional_repls);
+  const_cast<Syntax *>(res)->str_ = p.orig->str();
+  return res;
 }
 
 ast::Stmt * parse_map(const Syntax * p, Environ & env);

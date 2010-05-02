@@ -427,11 +427,14 @@ namespace ast {
       return type;
     }
     TypeSymbolTable types = env.types;
+    p = limited_expand(p, env);
     p = flatten(p); // FIXME: This is an overkill...
+    if (p->is_a(".type")) p = p->arg(0);
     unsigned sz = p->num_args();
     const InnerNS * ns = DEFAULT_NS;
     //printf("TYPE: %s %s\n", ~p->what(), ~p->to_string());
     const Syntax * name = p->part(0);
+    name = expand_id(name, env); // FIXME: Is this the right place
     String name_str = name->what().name;
     String tag;
     if (name_str == "struct" || name_str == "union" || name_str == "enum") {

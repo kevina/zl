@@ -88,6 +88,7 @@ struct SubStr {
   unsigned size() const {return end - begin;}
   operator const char * () {return begin;}
   SubStr & operator=(const char * s) {begin = s; return *this;}
+  String to_string() {return String(begin,end);}
 };
 
 inline void String::assign(const SubStr & str) {assign(str.begin, str.size());}

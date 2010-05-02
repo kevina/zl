@@ -138,7 +138,8 @@ namespace ast {
       exp->compile_prep(env);
     }
     void compile(CompileWriter & f) {
-      f << indent << exp << "\n";
+      f << indent << exp;
+      end_line(f, exp);
     }
   };
 
@@ -655,7 +656,8 @@ namespace ast {
     }
     void compile_prep(CompileEnviron & env) {}
     void compile(CompileWriter & o) {
-      o << indent << "(goto " << sym << ")\n";
+      o << indent << "(goto " << sym << ")";
+      end_line(o);
     }
   };
   
@@ -1255,7 +1257,8 @@ namespace ast {
           f << " " << init;
         }
       }
-      f << ")\n";        
+      f << ")";
+      end_line(f);
     }
 
   };
@@ -1621,8 +1624,9 @@ namespace ast {
         if_false->compile_prep(env);
     }
     void compile(CompileWriter & f) {
-      f << indent << "(if " << exp << "\n";
-      f << adj_indent(2) << if_true;
+      f << indent << "(if " << exp;
+      end_line(f, exp);
+      f << "\n" << adj_indent(2) << if_true;
       //f << indent << "else\n";
       if (if_false)
         f << adj_indent(2) << if_false;
@@ -3077,7 +3081,7 @@ namespace ast {
   }
 
   void finalize_user_type(UserType * s, Environ & env) {
-    assert(s->num == s->module->num);
+    zl_assert(s->num == s->module->num);
     s->defined = true;
     s->finalize();
     Symbol * vs = env.symbols.find_this_scope<Symbol>("_sizeof");
@@ -3245,7 +3249,7 @@ namespace ast {
       } else {
         const Syntax * n = expand_id(arg1);
         const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms.front, t->module->syms.back, StripMarks);
-        Syntax * c = new_syntax(p->str(), PARTS(ID, SYN(n->str(), sym)), FLAGS(SYN(THIS, ptr_exp)));
+        Syntax * c = SYN(p->str(), PARTS(ID, SYN(n->str(), sym)), FLAGS(SYN(THIS, ptr_exp)));
         //SYN(p->str(), ID, SYN(n, sym));
         //c->add_flag(SYN(THIS, ptr_exp));
         call = c;
@@ -3749,9 +3753,10 @@ namespace ast {
     }
     void compile(CompileWriter & f) {
       if (exp) 
-        f << indent << "(return " << exp << ")\n";
+        f << indent << "(return " << exp << ")";
       else
-        f << indent << "(return)\n";
+        f << indent << "(return)";
+      end_line(f);
     }
   };
 
@@ -4606,12 +4611,12 @@ namespace ast {
     if (what == "import_file") return parse_import_file(p, env);
     if (what == "extern") return parse_extern(p, env);
     if (what == "template") return parse_template(p, env);
-    if (what == "using") return empty_stmt();
+    if (what == "empty") return empty_stmt();
     return 0;
     } catch (Error * err) {
       StringBuf buf = err->extra;
       buf << "While parsing decl: ";
-      p->sample_w_loc(buf, 40, 40);
+      p->sample_w_loc(buf, 40, 80);
       buf << "\n";
       err->extra = buf.freeze();
       throw err;
@@ -5106,11 +5111,15 @@ namespace ast {
   }
 
   bool template_id(const Syntax * id, ast::Environ * env) {
+    //printf("TEMPLATE_ID?: %s\n", ~id->to_string());
     if (!env) {
-      //printf("TEMPLATE_ID: NO ENV\n");
+      //abort();
+      printf("TEMPLATE_ID: NO ENV\n");
       return false;
     }
+    if (id->is_a("mid")) id = id->arg(0); // XXX: MAGA HACK!
     const Symbol * sym = env->symbols.find<Symbol>(id);
+    //printf("TEMPLATE_ID??: %p %d\n", sym, sym ? (bool)sym->is_template() : -1);
     if (sym && sym->is_template())
       return true;
     else

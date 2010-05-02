@@ -37,7 +37,7 @@ STMT : "statement" =
     / <export> "export" {ID} ("," {ID})* ";"
     / <add_prop> "add_prop" {BASIC_ID} {SYNTAX_P} ";"
     / <template> "template" {ID} ";"
-    / <using> "using" {ID}+ ";"
+    / <empty> ("using"/"friend") TOKEN+ ";"
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
     / <extern> "extern" {STRING} ({BRACEL} / {STMT})
@@ -85,7 +85,7 @@ MATCH = <<mid>> {RAW_ID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <r
 # C Token
 #
 
-TOKEN_ : "token'" =  <<mid PARM>> {RAW_ID} !("`" / "::") /  
+TOKEN_ : "token'" =  <<mid PARM>> {RAW_ID} !("`" / "::" / "<") /  
          {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {RAW} / {TEMPLATE_CALL} 
          / {BRACK} / {CONST}
@@ -94,7 +94,7 @@ TOKEN_ : "token'" =  <<mid PARM>> {RAW_ID} !("`" / "::") /
 TOKEN : "token" = {TOKEN_} 
       / {PARAN} / {BRACE};
 
-TEMPLATE_PARM = <(...)> (!('>'/',') {TOKEN})+;
+TEMPLATE_PARM = <<mid>> {RAW_ID} / <(...)> (!('>'/',') {TOKEN})+;
 TEMPLATE_PARMS = <\<\>> ({TEMPLATE_PARM} ("," {TEMPLATE_PARM})*) / ;
 TEMPLATE_ID = <<tid>> {BASIC_ID} '<' SPACING {TEMPLATE_PARMS} '>' SPACING;
 
@@ -258,7 +258,11 @@ SPLIT_PARM = <<reparse parm>> {SPLIT_TOKEN*};
 PARAN_LIST = "(" {SPLIT} ")";
 
 PARM : "macro paramater" = 
-   {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
+   {STMT} EOF / {PARM_};
+
+PARM_ : "macro paramater" = 
+   {TOKEN} EOF / <(...)> {TOKEN}+ EOF;
+
 
 EOF = SPACING !_ ;
 

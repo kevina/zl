@@ -1017,7 +1017,7 @@ public:
     if (!r) return r;
     assert(res.num_parts() == 1);
     ReparseSyntax * syn = const_cast<ReparseSyntax *>(res.part(0)->as_reparse());
-    syn->str_ = SourceStr(str, r);
+    syn->str_ = syn->outer_ = SourceStr(str, r);
     syn->parts_[0] = name;
     syn->cache = env.cache.data;
     syn->finalize();
@@ -1657,6 +1657,7 @@ const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
     ParseErrors errors;
     const char * e0 = p->match_f(str, errors, env);
     assert(e0 == e);
+    //if (what == "SYNTAX_STR") abort();
     throw errors.to_error(new ParseSourceInfo(str, what), parse.file);
   }
   str.begin = e;

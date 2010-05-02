@@ -34,6 +34,7 @@ Error * error(const char * pos, const char * fmt, ...)
 #define NO_LOC (const Syntax *)NULL
 
 #define unknown_error(pos) error(pos, "Unknown Error (%s:%d %s)", __FILE__, __LINE__, __FUNCTION__)
+#define zl_assert(exp) do {if (!(exp)) throw error(NO_LOC, "Assert failed (%s:%d %s): " #exp, __FILE__, __LINE__, __FUNCTION__);} while (false)
 
 struct ParseSourceInfo : public SourceInfo {
   SourceStr str;

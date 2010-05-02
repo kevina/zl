@@ -177,7 +177,6 @@ struct DeclWorking {
     // doesn't make sense to have two types, so if we already have a
     // type, fail
     if (base_type || type_symbol || inner_type) return false;
-    p = expand_id(p, env);
     const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
     if (ts) {
       type_symbol_p = p;
@@ -196,9 +195,6 @@ struct DeclWorking {
     }
   }
   Syntax * handle_embedded_decl(const Syntax * p, Environ & env, bool by_itself) {
-    //xprintf("input>%s\n", ~p->to_string());
-    p = limited_expand(p, env);
-    //printf("INPUT>%s\n", ~p->to_string());
     if (p->is_a("<@")) {
       //printf("LIVE ONE\n");
       unsigned i;
@@ -367,7 +363,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
       ++i;
     }
 
-    const Syntax * decl;
+    Syntax * decl;
     if (i != end && (*i)->eq("=")) {
       ++i;
       const Syntax * init = w.parse_init_exp(i, end);
@@ -385,6 +381,8 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
       decl = w.make_declaration(id, t);
     }
 
+    if (decl->str().source == p->str().source)
+      decl->str_ = p->str();
     res.add_part(decl);
 
     if (i == end) break;
@@ -416,7 +414,8 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
     ret = SYN(SYN("@"), PARTS(res.parts_begin(), res.parts_end()));
 
   //printf(">OUT>%s\n", ~ret->to_string());
-  
+
+  ret->str_ = p->str();
   return ret;
 }
 
@@ -468,7 +467,7 @@ bool DeclWorking::parse_first_part(parts_iterator & i,
     inner_type = SYN("...", (*i)->str());
     ++i;
   } else while (i != end) {
-    const Syntax * cur = *i;
+    const Syntax * cur = limited_expand(*i, env);
     cur = handle_embedded_decl(cur, env, by_itself);
     if (!cur) {
       ++i;
@@ -811,7 +810,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     // do nothing
   } else if (mode != StopAtParen && (*i)->is_a("()")) {
     try {
-      t = make_function_type(t, reparse("TOKENS", (*i)->inner()), env);
+      t = make_function_type(t, reparse("TOKENS", (*i)->inner(), &env), env);
       ++i;
     } catch (Error * err) {
       //printf("note: %s\n", ~err->message());
