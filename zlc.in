@@ -16,7 +16,7 @@ my @files;
 my @cpp_ops;
 my @zls_ops;
 my @zls_files;
-my @zl_ops;
+#my @zl_ops;
 my @temp_files;
 my $save_temps = 0;
 
@@ -45,7 +45,10 @@ while (@ARGV) {
         $preprocess = 0;
         shift @ARGV;
     } elsif ($_ eq '-pp') {
-        $preprocess = 1;
+        $preprocess = 1; #$preprocess == 0;
+        shift @ARGV;
+    } elsif ($_ eq '-E') {
+        $preprocess = 2;
         shift @ARGV;
     } elsif ($p = arg_w_parm('x')) {
         $lang = $p;
@@ -122,16 +125,18 @@ foreach (@files) {
         #die "Unknown extension: $ext" unless defined $l;
     }
     my $pp = $preprocess;
-    $pp = ($l eq 'c' || $l eq 'cpp') && !($ext eq 'i' || $ext eq 'ii') if !defined $pp;
+    $pp = ($l eq 'c' || $l eq 'c++') && !($ext eq 'i' || $ext eq 'ii') if !defined $pp;
     my $orig_file = $file;
-    my @local_cpp_ops = ('-I', $CPP_INCLUDE, '-D', "__cplusplus=1")
-        if ($l eq 'cpp');
+    my @local_cpp_ops = ('-I', $CPP_INCLUDE, '-D', '__cplusplus=1')
+        if ($l eq 'c++');
     if ($pp) {
         $file = "$base.i";
-        system('zls', '-E', '-include', $ZL_H, '-x', 'c', @local_cpp_ops, 
-               @cpp_ops, $orig_file, '-o', $file);
+        system('zls', '-E', '-include', $ZL_H, '-x', 'c', '-D', '__zl=1',
+               @local_cpp_ops, @cpp_ops, $orig_file, '-o', $file);
         die "FAILED: zls -E ...\n" unless $? == 0;
     }
+    #next if $preprocess > 1;
+    my @zl_ops;
     push @zl_ops, '-xc' if $l eq 'c';
     push @zl_ops, '-xc++' if $l eq 'c++';
     if ($l ne 'zls' && $l ne 'obj') {
@@ -146,8 +151,11 @@ foreach (@files) {
 }
 push @zls_ops, @final_zls_ops;
 
+#if ($preprocess <= 1) {
 system('zls', @zls_ops);
 die "FAILED: zls @zls_ops\n" unless $? == 0;
+#}
+
 unlink @temp_files unless $save_temps;
 
 exit 0;

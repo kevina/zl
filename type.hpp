@@ -156,28 +156,35 @@ namespace ast {
   extern PrintInst const * const c_print_inst;
   extern PrintInst const * const zl_print_inst;
   extern PrintInst const * const zls_print_inst;
+  extern PrintInst const * const zls_kill_const_print_inst;
   extern PrintInst const * const zle_print_inst;
   extern PrintInst const * const mangle_print_inst;
 
   struct TypeConv {
     // lower rank is better
-    enum {Fail, ExactMatch, Promotion, Conversion, User, Ellipsis, Other};
-    static const unsigned RankBits = 3;
-    static const unsigned RankMask = ~((~0)<<RankBits);
-    enum {//Identity          = ExactMatch|(1<<RankBits), 
-          //LvalueRvalue      = ExactMatch|(2<<RankBits),
-          //ArrayPointer      = ExactMatch|(3<<RankBits),
-          //FunctionPointer   = ExactMatch|(4<<RankBits),
-          //Qualification     = ExactMatch|(5<<RankBits),
-          IntProm       = Promotion |(1<<RankBits),
-          FloatProm     = Promotion |(2<<RankBits),
-          IntConv       = Conversion|(1<<RankBits),
-          FloatConv     = Conversion|(2<<RankBits),
-          FloatInt      = Conversion|(3<<RankBits),
-          PointerConv   = Conversion|(4<<RankBits),
-          PointerMember = Conversion|(5<<RankBits),
-          BoolConv      = Conversion|(6<<RankBits),
-          ToBase        = Conversion|(7<<RankBits)};
+    static const unsigned SubRankBits = 4;
+    static const unsigned RankMask = ~((1 << SubRankBits) - 1);
+    enum {Fail = 0, 
+          ExactMatch = 1 << SubRankBits, 
+          Promotion  = 2 << SubRankBits, 
+          Conversion = 3 << SubRankBits, 
+          User       = 4 << SubRankBits, 
+          Ellipsis   = 5 << SubRankBits, 
+          Other      = 6 << SubRankBits};
+    enum {Identity          = ExactMatch | 1, // unused
+          LvalueRvalue      = ExactMatch | 2, // unused
+          ArrayPointer      = ExactMatch | 3, // unused
+          FunctionPointer   = ExactMatch | 4, // unused
+          Qualification     = ExactMatch | 5, // unused
+          IntProm       = Promotion | 1,
+          FloatProm     = Promotion | 2,
+          IntConv       = Conversion| 1,
+          FloatConv     = Conversion| 2,
+          FloatInt      = Conversion| 3,
+          PointerConv   = Conversion| 4,
+          PointerMember = Conversion| 5,
+          BoolConv      = Conversion| 6,
+          ToBase        = Conversion| 7};
     unsigned conv;
     unsigned rank() const {return conv & RankMask;}
     Exp * exp;
@@ -430,7 +437,7 @@ namespace ast {
     TypeParm parm(unsigned) const {return TypeParm(of);}
   protected:
     const Type * find_root() {
-      return of->root; 
+      return of->root;
     }
   };
 
@@ -632,7 +639,7 @@ namespace ast {
   public:
     Reference(const Type * st)
       : ParmTypeInst(st->category), subtype(st) 
-      {addressable = true; read_only = st->read_only;}
+      {addressable = true; /*read_only = st->read_only;*/}
     const Type * subtype;
     const Type * find_effective() const {return subtype;}
     unsigned size() const {return subtype->size();}

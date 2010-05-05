@@ -57,11 +57,12 @@ namespace ast {
   class GenericPrintInst : public PrintInst { 
   public:
     enum Mode {ZLS_MODE, ZL_MODE} mode;
-    GenericPrintInst(Mode m = ZL_MODE) : mode(m) {}
+    bool kill_const;
+    GenericPrintInst(Mode m = ZL_MODE) : mode(m), kill_const(false) {}
     void to_string(const TypeInst &, StringBuf & buf) const;
     void declaration(String var, const TypeInst &, StringBuf & buf) const;
   private:
-    void to_string0(const TypeInst &, StringBuf & buf) const;
+    void to_string0(const TypeInst &, StringBuf & buf, bool keep_const = true) const;
   };
 
   class CPrintInst : public PrintInst { 
@@ -85,6 +86,11 @@ namespace ast {
     ZLSPrintInst() : GenericPrintInst(ZLS_MODE) {}
   };
 
+  class ZLSKillConstPrintInst : public ZLSPrintInst { 
+  public:
+    ZLSKillConstPrintInst() : ZLSPrintInst() {kill_const = true;}
+  };
+
   class ZLEPrintInst : public GenericPrintInst { 
   public:
     ZLEPrintInst() : GenericPrintInst(ZL_MODE) {}
@@ -100,6 +106,7 @@ namespace ast {
   PrintInst const * const c_print_inst = new CPrintInst();
   PrintInst const * const zl_print_inst = new ZLPrintInst();
   PrintInst const * const zls_print_inst = new ZLSPrintInst();
+  PrintInst const * const zls_kill_const_print_inst = new ZLSKillConstPrintInst();
   PrintInst const * const zle_print_inst = new ZLEPrintInst();
   PrintInst const * const mangle_print_inst = new ManglePrintInst();
   
@@ -146,7 +153,7 @@ namespace ast {
     return true;
   }
 
-  void GenericPrintInst::to_string0(const TypeInst & type0, StringBuf & buf) const {
+  void GenericPrintInst::to_string0(const TypeInst & type0, StringBuf & buf, bool keep_const) const {
     bool zls_mode = mode == ZLS_MODE;
     const TypeInst * type = &type0;
     for (;;) { // loop while something changed
@@ -181,9 +188,9 @@ namespace ast {
       }
     } else if (const QualifiedType * t = dynamic_cast<const QualifiedType *>(type)) {
       to_string0(*t->subtype, buf);
-      if (t->qualifiers & QualifiedType::CONST)    buf += " :const";
-      if (t->qualifiers & QualifiedType::VOLATILE) buf += " :volatile";
-      if (t->qualifiers & QualifiedType::RESTRICT) buf += " :restrict";
+      if (t->qualifiers & QualifiedType::CONST && keep_const)  buf += " :const";
+      if (t->qualifiers & QualifiedType::VOLATILE)             buf += " :volatile";
+      if (t->qualifiers & QualifiedType::RESTRICT)             buf += " :restrict";
     } else if (const Reference * t = zls_mode ? dynamic_cast<const Reference *>(type) : NULL) {
       buf += ".ptr ";
       to_string(*t->subtype, buf);
@@ -200,7 +207,7 @@ namespace ast {
 
   void GenericPrintInst::to_string(const TypeInst & type, StringBuf & buf) const {
     buf << "(";
-    to_string0(type, buf);
+    to_string0(type, buf, !kill_const);
     buf << ")";
   }
 
@@ -585,8 +592,10 @@ namespace ast {
     return x;
   }
 
-#define TC(conv, exp) TypeConv(TypeConv::conv, exp)
-  TypeConv C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, CastType rule, CheckOnlyType check_only) const {
+#define TC(conv, exp) TypeConv(TypeConv::conv, check_only ? NULL : (exp))
+  TypeConv C_TypeRelation::resolve_to(Exp * orig_exp, const Type * type, Environ & env, 
+                                      CastType rule, CheckOnlyType check_only) const 
+  {
     static int i = -1;
     ++i;
 
@@ -610,35 +619,75 @@ namespace ast {
 
     if (!type) return TC(Other, orig_exp);
 
-    Exp * exp = orig_exp;
-    const Type * have = exp->type->unqualified;
+    const Type * have = orig_exp->type->unqualified;
+    const Type * have_qualified = orig_exp->type->root;
     const Type * need = type->unqualified;
+    // FIXME: Should't need exp below if check_only...
+    //Exp * exp = check_only ? NULL : orig_exp;
+    Exp * exp = orig_exp;
     
     const Reference * h_r = dynamic_cast<const Reference *>(have);
     const Reference * n_r = dynamic_cast<const Reference *>(need);
     if (h_r) {
-      exp = from_ref(exp, env);
-      have = exp->type->unqualified;
+      if (!check_only)
+        exp = from_ref(exp, env);
+      //have = exp->type->unqualified;
+      //have_qualified = exp->type->root;
+      have = h_r->subtype->unqualified;
+      have_qualified = h_r->subtype->root;
     }
     if (n_r) {
-      if (have != n_r->subtype->unqualified) 
-        goto fail;
-      if (!exp->lvalue
-          || (env.temp_ip && env.temp_ip->where >= ExpInsrPoint::Var && exp->lvalue < LV_NORMAL))
-      {
-        return TC(ExactMatch, to_ref(make_temp(exp, env), env));
-        //throw error(orig_exp->syn, 
-        //            "Can not take a reference of temporary (yet) in conversion from \"%s\" to \"%s\"",
-        //            ~orig_exp->type->to_string(), ~type->to_string());
+      unsigned conv = TypeConv::ExactMatch;
+      const UserType * hu, * nu;
+      if (have != n_r->subtype->unqualified) {
+        if ((hu = dynamic_cast<const UserType *>(have)) &&
+            (nu = dynamic_cast<const UserType *>(n_r->subtype->unqualified))) 
+        {
+          if (have_qualified->read_only && !n_r->subtype->read_only)
+            throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+                        ~have->to_string(), ~need->to_string());
+          else if (hu->is(nu->category))
+            return TC(PointerConv, ptr_to_ref(cast_up(addrof(exp, env), nu, env), env));
+          else if (nu->is(hu->category) && rule == Explicit || rule == Static)
+            return TC(Other, ptr_to_ref(cast_down(addrof(exp, env), nu, env), env));
+          else
+            goto fail;
+        } else if (n_r->subtype->read_only) {
+          //goto fail;
+          TypeConv res = resolve_to(exp, n_r->subtype->unqualified, env, rule, check_only);
+          conv = res.conv;
+          exp = res.exp;
+          //have = exp->type->unqualified;
+          //have_qualified = exp->type->root;
+          have = n_r->subtype->unqualified;
+          have_qualified = n_r->subtype->root;
+        } else {
+          goto fail;
+        }
       }
-      if (exp->type->read_only && !n_r->subtype->read_only)
+      //if (!check_only)
+      //  printf("888> %s vs. %s\n", 
+      //         ~exp->type->unqualified->to_string(), 
+      //         ~n_r->subtype->unqualified->to_string());
+      if (have_qualified->read_only && !n_r->subtype->read_only)
         throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                     ~orig_exp->type->to_string(), ~type->to_string());
-      return TC(ExactMatch, to_ref(exp, env));
+      if (check_only)
+        return TypeConv(conv, NULL);
+      if (!exp->lvalue
+          || (env.temp_ip && env.temp_ip->where >= ExpInsrPoint::Var && exp->lvalue < LV_NORMAL))
+        exp = make_temp(exp, env);
+      if (exp->type->unqualified != n_r->subtype->unqualified)
+        // need a cast here since the pointer types are incompatible to the backend
+        return TypeConv(conv, new Cast(to_ref(exp, env), type));
+      else
+        return TypeConv(conv, to_ref(exp, env));
     }
 
     if (have == need) return TC(ExactMatch, exp);
-
+    //printf("NO MATCH %p:%s %p:%s\n", 
+    //       have, ~have->to_string(),
+    //       need, ~need->to_string());
     //printf("%i RESOLVE_TO %s (%s) (%s) %d\n", 
     //       i, orig_exp->syn ? ~orig_exp->syn->to_string() : "?", 
     //       ~orig_exp->type->to_string(),
@@ -649,8 +698,6 @@ namespace ast {
     if (rule == Reinterpret /* || rule == Explicit*/) // FIXME: This isn't always legal
       return TC(Other, new Cast(exp, type));
 
-    //if (have->is(NUMERIC_C) && need->is(NUMERIC_C))
-    //  return TypeConf(TypeConv::Conversion, Cast(exp, type));
     if (have->is(INT_C)) {
       if (need->is(INT_C)) {
         const Int * have_i = dynamic_cast<const Int *>(have);
@@ -689,7 +736,7 @@ namespace ast {
     // deal with pointer to int case
     // fixme, need to seperate out boolean case, and issue a warning otherwise
     if (have->is(POINTER_C) && need->is(INT_C))
-      return TC(BoolConv,new Cast(exp, type));
+      return TC(BoolConv, new Cast(exp, type));
 
     // deal with pointer types
     {
@@ -697,7 +744,9 @@ namespace ast {
       const Array   * n_a = dynamic_cast<const Array *>(need); // FIXME: Hack
       const Type * n_subtype = n_p ? n_p->subtype : n_a ? n_a->subtype : 0;
       if (!n_subtype) goto fail;
-      if (exp->type->is_null) return TC(PointerConv, new Cast(exp, type));
+      // FIXME: I should be able to say have->is_null, fix up handling
+      //        of ZeroT to make this possible.
+      if (orig_exp->type->is_null) return TC(PointerConv, new Cast(exp, type));
       // FIXME: This probably isn't right
       if (dynamic_cast<const Function *>(have)) {
         if (rule == Implicit)
@@ -717,13 +766,17 @@ namespace ast {
           dynamic_cast<const Void *>(h_subtype->unqualified) ||
           dynamic_cast<const Void *>(n_subtype->unqualified) /* this one is C only */)  
       {
-        if (rule == Explicit)
+        if (rule == Explicit) {
           return TC(PointerConv, new Cast(exp, type));
-        else if (!h_subtype->read_only || n_subtype->read_only) 
-          return TC(PointerConv, exp);
-        else
+        } else if (!h_subtype->read_only || n_subtype->read_only) {
+          if (h_subtype->unqualified == n_subtype->unqualified)
+            return TC(ExactMatch, exp);
+          else
+            return TC(PointerConv, exp);
+        } else {
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
+        }
       } else if ((hu = dynamic_cast<const UserType *>(h_subtype->unqualified)) &&
                  (nu = dynamic_cast<const UserType *>(n_subtype->unqualified)))
       { // this is C++ only
@@ -734,9 +787,9 @@ namespace ast {
           throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
                       ~have->to_string(), ~need->to_string());
         else if (h_subtype->is(n_subtype->category))
-          return TC(PointerConv, check_only ? NULL : cast_up(exp, n_subtype, env));
+          return TC(PointerConv, cast_up(exp, nu, env));
         else if (n_subtype->is(h_subtype->category) && rule == Explicit || rule == Static)
-          return TC(Other, check_only ? NULL : cast_down(exp, nu, env));
+          return TC(Other, cast_down(exp, nu, env));
         else
           goto fail;
       } else {
@@ -855,6 +908,8 @@ namespace ast {
     add_c_int(types, "unsigned-long-long");
 
     types.add_alias("unsigned", types.find("unsigned-int"));
+
+    types.add_alias("wchar_t", types.find("long"));
 
     add_c_int(types, "char");
 

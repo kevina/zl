@@ -474,13 +474,13 @@ struct SimpleMacro : public Macro {
   const Syntax * repl;
   const SymbolNode * env;
   SimpleMacro * parse_self(const Syntax * p, Environ & e) {
-    //printf("PARSING MAP %s\n%s\n", ~p->arg(0)->to_string(), ~p->to_string());
     env = e.symbols.front;
     //entity = p->str().source;
     def = syn = p;
     assert_num_args(3);
     real_name = expand_binding(p->arg(0), e);
     parms = flatten(p->arg(1));
+    //printf("PARSING MAP %s\n%s\n", ~real_name.to_string(), ~p->to_string());
     //printf("MAP PARMS %s: %s\n", ~p->arg(0)->what().name, ~parms->to_string());
     free = p->flag("free");
     if (free)
@@ -645,6 +645,10 @@ extern "C" namespace macro_abi {
   
   int syntax_list_empty(const SyntaxList * p) {
     return p->num_args() == 0;
+  }
+  
+  unsigned syntax_list_size(const SyntaxList * p) {
+    return p->num_args();
   }
   
   size_t syntax_list_append(SyntaxList * l, const Syntax * p) {
@@ -1256,6 +1260,11 @@ static Syntax * handle_operator_fun_id(const Syntax * p,
                                        Environ & env) 
 {
   assert(i != e); // FIXME: error message
+  const Syntax * o = *i;
+  if (o->is_a("[]") || o->is_a("()")) {
+    ++i;
+    return SYN(p, o->part(0));
+  }
   const Syntax * type = parse_decl_->parse_type(i, e, env);
   if (type) {
     return SYN(p, type);
@@ -1382,6 +1391,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     ReparseInfo r = p->inner();
     const Syntax * p0 = reparse_prod("STMTE", r, &env);
     if (r.str.empty()) {
+      const_cast<Syntax *>(p0)->str_ = p->str();
       return partly_expand(p0, pos, env, flags);
     } else {
       p0 = partly_expand(p0, pos, env, flags);
@@ -1577,6 +1587,8 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     assert_num_args(p, 1);
     const FluidBinding * b = env.symbols.lookup<FluidBinding>(p->arg(0), ns);
     return SymbolKey(b->rebind, ns);
+  } else if (p->is_a("operator")) {
+    return SymbolKey(*p->arg(0), ns ? ns : OPERATOR_NS);
   } else if (p->is_a("`")) {
     const InnerNS * ns = lookup_inner_ns(p, env.symbols.front);
     return expand_binding(p->arg(0), ns, env);
@@ -1638,7 +1650,7 @@ static void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder &
     if (p->is_a("@") && !p->simple()) {
       expand_fun_parms(p, env, res, num_required, required);
     } else {
-      if (p->is_a("parm") || p->is_a("()")) 
+      if (p->is_reparse())
         p = reparse("TOKENS", p->inner(), &env);
       //printf("FUN_PARM: %s\n", ~p->to_string());
       if (p->eq("@")) {
@@ -2011,7 +2023,14 @@ extern "C" namespace macro_abi {
     return syn->entity<PointerEntity>();
   }
 
-  const char * mangle_fun_parms(const Syntax * p, Environ * env) {
+  const char * mangle_name(Syntax * p, Environ * env) {
+    SymbolKey name = expand_binding(p, *env);
+    StringBuf buf;
+    asm_name(&name, buf);
+    return buf.freeze();
+  }
+
+  const char * mangle_fun_parms(Syntax * p, Environ * env) {
     Tuple * parms = expand_fun_parms(p, *env);
     StringBuf buf;
     for (unsigned i = 0; i != parms->parms.size(); ++i) {

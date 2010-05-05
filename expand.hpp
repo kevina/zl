@@ -83,7 +83,7 @@ const Syntax * limited_expand(const Syntax * p, Environ & env); // used in parse
 
 ast::SymbolKey expand_binding(const Syntax * p, const ast::InnerNS * ns, Environ & env);
 static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
-  return expand_binding(p, ast::DEFAULT_NS, env);
+  return expand_binding(p, NULL, env);
 }
 
 const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env = NULL,

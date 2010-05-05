@@ -118,6 +118,7 @@ namespace ast {
     bool true_top_level;
     bool interface;
     bool mangle;
+    bool link_once;
     Type * void_type() {return types.inst("<void>");}
     //Type * bool_type() {return types.inst("<bool>");}
     Type * bool_type() {return types.inst("int");}
@@ -127,7 +128,7 @@ namespace ast {
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
         deps(), for_ct(), temp_ip(), exp_ip(), collect(),
-        true_top_level(false), interface(false), mangle(true)
+        true_top_level(false), interface(false), mangle(true), link_once(false)
       {
         if (s == TOPLEVEL) {
           true_top_level = true;
@@ -150,13 +151,15 @@ namespace ast {
         deps(other.deps), for_ct(other.for_ct), 
         stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), 
         collect(other.collect),
-        true_top_level(other.true_top_level), interface(other.interface), mangle(other.mangle) {}
+        true_top_level(other.true_top_level), interface(other.interface), 
+        mangle(other.mangle), link_once(other.link_once) {}
     Environ new_scope() const {
       Environ env = *this;
       env.true_top_level = false;
       env.stmt_ip = NULL;
       env.collect = NULL;
       env.symbols = symbols.new_scope();
+      env.link_once = false;
       return env;
     }
     Environ new_open_scope() const {
@@ -165,6 +168,7 @@ namespace ast {
       env.stmt_ip = NULL;
       env.collect = NULL;
       env.symbols = symbols.new_open_scope();
+      env.link_once = false;
       return env;
     }
     Environ new_extended_exp(ExpInsrPoint * ip, bool force_new_scope) const {
@@ -214,6 +218,7 @@ namespace ast {
       env.frame = new Frame();
       env.top_level_environ = &symbols.front;
       env.for_ct = NULL;
+      env.link_once = false;
       return env;
     }
   private:

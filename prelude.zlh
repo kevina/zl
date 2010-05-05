@@ -98,6 +98,7 @@ user_type Syntax {
 user_type SyntaxList;
 __ct_callback SyntaxList * new_syntax_list();
 __ct_callback int syntax_list_empty(const SyntaxList *);
+__ct_callback unsigned syntax_list_size(const SyntaxList *);
 __ct_callback size_t syntax_list_append(SyntaxList *, Syntax *);
 __ct_callback void syntax_list_append_flag(SyntaxList *, Syntax *);
 __ct_callback void syntax_list_append_all(SyntaxList *, SyntaxEnum *);
@@ -110,8 +111,8 @@ user_type SyntaxList {
   macro _up_cast (x) {reinterpret_cast<Syntax *>(x);}
   macro _down_cast (x) {reinterpret_cast<SyntaxList *>(x);}
   make_subtype Syntax _up_cast _down_cast;
-  //export empty, append;
   macro empty(:this this) {syntax_list_empty(this);}
+  macro size(:this this) {syntax_list_size(this);}
   macro append(:this this, syn) {syntax_list_append(this, syn);}
   macro append_flag(:this this, syn) {syntax_list_append_flag(this, syn);}
   macro append_all(:this this, els) {syntax_list_append_all(this, els);}
@@ -180,6 +181,7 @@ __ct_callback bool module_have_symbol(const Module *, const Syntax *);
 __ct_callback bool user_type_have_default_constructor(const UserType *);
 __ct_callback bool user_type_have_copy_constructor(const UserType *);
 __ct_callback bool user_type_have_assign(const UserType *);
+__ct_callback bool user_type_can_have_assign(const UserType *);
 __ct_callback bool user_type_have_destructor(const UserType *);
 
 //struct Symbol;
@@ -197,6 +199,7 @@ user_type UserType {
   macro have_default_constructor(:this this) {user_type_have_default_constructor(this);}
   macro have_copy_constructor(:this this) {user_type_have_copy_constructor(this);}
   macro have_assign(:this this) {user_type_have_assign(this);}
+  macro can_have_assign(:this this) {user_type_can_have_assign(this);}
   macro have_destructor(:this this) {user_type_have_destructor(this);}
 }
 
@@ -238,6 +241,7 @@ user_type UserTypeBuilder {
   macro have_default_constructor(:this this) {this->user_type->have_default_constructor();}
   macro have_copy_constructor(:this this) {this->user_type->have_copy_constructor();}
   macro have_assign(:this this) {this->user_type->have_assign();}
+  macro can_have_assign(:this this) {this->user_type->can_have_assign();}
   macro have_destructor(:this this) {this->user_type->have_destructor();}
 }
 
@@ -253,6 +257,7 @@ __ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * pr
 __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
 
 
+__ct_callback const char * mangle_name(Syntax *, Environ *);
 __ct_callback const char * mangle_fun_parms(Syntax *, const Environ *);
 
 __ct_callback void gdb_breakpoint();

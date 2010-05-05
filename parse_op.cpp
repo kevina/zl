@@ -309,8 +309,6 @@ public:
       if (val_s.size() > 1)
         throw error(val_s[val_s.size()-2], "Extra operand(s).");
       assert(val_s.size() == 1);
-      // Don't do this for now, cases weird problems
-      //return new Syntax(p->str(), *val_s.front());
       Syntax * res = val_s.front();
       if (!res->is_a("syntax") && !res->is_a("raw_syntax"))
         res->str_ = p->str();

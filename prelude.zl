@@ -39,13 +39,15 @@ Syntax * parse_enum(Syntax * p, Environ * env) {
   Match * m = match_args(0, raw_syntax(name @ (pattern ({,} @members))), p);
   if (strcmp(syntax_to_string(m->var(syntax name)), "") == 0)
     m = match(m, syntax name, replace(syntax anon, m, mark));
+  Syntax * res;
   if (m->var(syntax members)) {
-    return replace(raw_syntax(<@ (@ (.enum name @members) (talias name (enum name)))
-                              (.type name)), m, mark);
+    res = replace(raw_syntax(<@ (@ (.enum name @members) (talias name (enum name)))
+                             (.type name)), m, mark);
   } else {
-    return replace(raw_syntax(<@ (talias name (enum name))
-                              (.type name)), m, mark);
+    res = replace(raw_syntax(<@ (talias name (enum name))
+                             (.type name)), m, mark);
   }
+  return res;
 }
 
 

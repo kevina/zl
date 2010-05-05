@@ -144,6 +144,8 @@ test158.cpp
 test159.cpp
 test160.cpp
 test161.cpp
+test162.cpp
+test163.cpp
 
 fix_size-0-t.zl # was 67
 fix_size-1-t.zl # was 95

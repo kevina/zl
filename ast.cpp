@@ -391,7 +391,7 @@ namespace ast {
       if (!env.where->named_outer())
         num = NPOS;
     }
-    if (k.marks || k.ns != tl_namespace())
+    if (k.marks || (k.ns != tl_namespace() && k.ns != INTERNAL_NS))
       num = NPOS;
     //printf("ADDED %s %s %s %p %p\n", ~name(), ~k.to_string(), ~key->to_string(), local, local->value);
     if (env.special()) {
@@ -406,7 +406,8 @@ namespace ast {
   void TopLevelSymbol::finish_add_to_env(SymbolNode * local, Environ & env) {
     local->set_flags(SymbolNode::ALIAS);
     if (num == NPOS)
-      assign_uniq_num<TopLevelSymbol>(this, *env.top_level_symbols->front);
+      assign_uniq_num(*env.top_level_symbols->front);
+    //assign_uniq_num<TopLevelSymbol>(this, *env.top_level_symbols->front);
     //printf(">>%d %s %u %u %s\n", env.special(), ~k.to_string(), num, NPOS, typeid(*this).name());
     String old_uniq_name_ = uniq_name_;
     uniq_name_ = String();
@@ -1042,6 +1043,19 @@ namespace ast {
     return have_special(ut, "_assign", cmp);
   }
 
+  bool can_have_assign(const UserType * ut) {
+    assert(ut->type);
+    const StructUnion * t = dynamic_cast<const StructUnion *>(ut->type);
+    assert(t);
+    Vector<Member>::const_iterator 
+      i = t->members.begin(),
+      end = t->members.end();
+    for (; i != end; ++i)
+      if (i->sym->type->read_only || dynamic_cast<const Reference *>(i->sym->type))
+        return false;
+    return true;
+  }
+
   struct AlwaysTrueCmp {
     bool operator() (const Symbol *) {return true;}
   };
@@ -1399,6 +1413,7 @@ namespace ast {
     Stmt * finish_parse(Environ & env0) {
       // Need to create a new fake scope to capture any dependencies
       // when initializing the var
+      link_once = env0.link_once;
       Environ env = env0.new_scope();
       env.where = this;
       env.deps = &deps_;
@@ -1733,17 +1748,7 @@ namespace ast {
   }
 
   void UnOp::compile(CompileWriter & f) {
-    String w = what();
-    if (f.target_lang == CompileWriter::ZLS) {
-      if (w == "addrof_ref") w = "addrof"; // HACK
-      if (w == "deref_ref") w = "deref"; // HACK
-      f << "(" << w << " " << exp << ")";
-    } else if (f.target_lang == CompileWriter::ZLE) {
-      if (w == "addrof_ref" || w == "deref_ref") 
-        f << exp;
-      else
-      f << "(" << w << " " << exp << ")";
-    }
+    f << "(" << what() << " " << exp << ")";
   }
 
   const Type * resolve_unop(Environ & env, TypeCategory * cat, Exp * & exp) {
@@ -1796,20 +1801,34 @@ namespace ast {
     }
   };
 
-  struct AddrOf : public UnOp {
-    AddrOf() : UnOp("addrof", "&") {}
-    AddrOf(Exp * e) : UnOp("addrof", "&") {exp = e;}
-    void resolve(Environ & env) {
+  Exp * parse_array_access(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    Exp * obj = parse_exp(p->arg(0), env);
+    if (obj->type->effective->is(USER_C)) {
+      return parse_exp(SYN(SYN("member"), 
+                           SYN(obj),
+                           SYN(SYN("call"),
+                               SYN(SYN("`"), SYN("[]"), SYN("operator")),
+                               SYN(SYN("."), p->arg(1)))),
+                       env);
+    } else {
+      return parse_exp(SYN(SYN("deref"), SYN(SYN("plus"), SYN(obj), p->arg(1))), env);
+    }
+  }
+
+  struct AddrOfBase : public UnOp {
+    AddrOfBase(const char * w) : UnOp(w, "&") {}
+    void resolve_(Environ & env, const char * tn) {
       if (!exp->lvalue) {
         throw error(exp->syn, "Can not be used as lvalue");
       }
       exp = exp->to_effective(env);
       // FIXME: add check for register qualifier
-      TypeSymbol * t = env.types.find(".ptr");
+      TypeSymbol * t = env.types.find(tn);
       Vector<TypeParm> p;
       p.push_back(TypeParm(exp->type));
       type = t->inst(p);
-    }
+    }    
     void make_ct_value() {
       if (!exp->ct_value_) {
         if (exp->lvalue == LV_TOPLEVEL) 
@@ -1821,34 +1840,36 @@ namespace ast {
         ct_value_ = new CT_Value<CT_Ptr>(val.addr);
       }
     }
+    void compile(CompileWriter & f);
   };
 
-  struct AddrOfRef : public UnOp {
-    AddrOfRef() : UnOp("addrof_ref", "&") {}
-    void resolve(Environ & env) {
-      if (!exp->lvalue) {
-        throw error(exp->syn, "Can not be used as lvalue");
-      }
-      TypeSymbol * t = env.types.find(".ref");
-      Vector<TypeParm> p;
-      p.push_back(TypeParm(exp->type));
-      type = t->inst(p);
-    }
+  struct AddrOf : public AddrOfBase {
+    AddrOf() : AddrOfBase("addrof") {}
+    AddrOf(Exp * e) : AddrOfBase("addrof") {exp = e;}
+    void resolve(Environ & env) {resolve_(env, ".ptr");}
+  };
+
+  struct AddrOfRef : public AddrOfBase {
+    AddrOfRef() : AddrOfBase("addrof_ref") {}
+    void resolve(Environ & env) {resolve_(env, ".ref");}
+  };
+
+  struct DeRefBase : public UnOp {
+    DeRefBase(const char * w) : UnOp(w, "*") {}
     void make_ct_value() {
-      if (!exp->ct_value_) {
-        if (exp->lvalue == LV_TOPLEVEL) 
-          ct_value_ = &ct_nval;
-      } else if (exp->ct_value_->nval()) {
+      if (!exp->ct_value_) return;
+      if (exp->ct_value_->nval()) {
         ct_value_ = &ct_nval;
       } else {
-        CT_LValue val = exp->ct_value_direct<CT_LValue>();
-        ct_value_ = new CT_Value<CT_Ptr>(val.addr);
+        CT_Ptr val = exp->ct_value_direct<CT_Ptr>();
+        ct_value_ = new CT_Value<CT_LValue>(CT_LValue(val));
       }
     }
+    void compile(CompileWriter & f);
   };
 
-  struct DeRef : public UnOp {
-    DeRef() : UnOp("deref", "*") {}
+  struct DeRef : public DeRefBase {
+    DeRef() : DeRefBase("deref") {}
     void resolve(Environ & env) {
       exp = exp->to_effective(env);
       check_type(exp, POINTER_C);
@@ -1857,41 +1878,67 @@ namespace ast {
       type = t->subtype;
       lvalue = LV_NORMAL;
     }
-    void make_ct_value() {
-      if (!exp->ct_value_) return;
-      if (exp->ct_value_->nval()) {
-        ct_value_ = &ct_nval;
-      } else {
-        CT_Ptr val = exp->ct_value_direct<CT_Ptr>();
-        ct_value_ = new CT_Value<CT_LValue>(CT_LValue(val));
-      }
-    }
   };
 
-  struct DeRefRef : public UnOp {
-    DeRefRef() : UnOp("deref_ref", "*") {}
+  struct DeRefRef : public DeRefBase {
+    DeRefRef() : DeRefBase("deref_ref") {}
     void resolve(Environ & env) {
       const Reference * t = dynamic_cast<const Reference *>(exp->type->unqualified);
       type = t->subtype;
       lvalue = LV_NORMAL;
     }
-    void make_ct_value() {
-      if (!exp->ct_value_) return;
-      if (exp->ct_value_->nval()) {
-        ct_value_ = &ct_nval;
-      } else {
-        CT_Ptr val = exp->ct_value_direct<CT_Ptr>();
-        ct_value_ = new CT_Value<CT_LValue>(CT_LValue(val));
-      }
-    }
   };
 
+  void AddrOfBase::compile(CompileWriter & f) {
+    String w = what();
+    if (f.target_lang == CompileWriter::ZLS) {
+      if (DeRefBase * deref = dynamic_cast<DeRefBase *>(exp)) {
+        f << deref->exp;
+      } else {
+        if (w == "addrof_ref") w = "addrof"; // HACK
+        f << "(" << w << " " << exp << ")";
+      }
+    } else if (f.target_lang == CompileWriter::ZLE) {
+      if (w == "addrof_ref") 
+        f << exp;
+      else
+      f << "(" << w << " " << exp << ")";
+    }
+  }
+
+  void DeRefBase::compile(CompileWriter & f) {
+    String w = what();
+    if (f.target_lang == CompileWriter::ZLS) {
+      if (AddrOfBase * addrof = dynamic_cast<AddrOf *>(exp)) {
+        f << addrof->exp;
+      } else {
+        if (w == "deref_ref") w = "deref"; // HACK
+        f << "(" << w << " " << exp << ")";
+      }
+    } else if (f.target_lang == CompileWriter::ZLE) {
+      if (w == "deref_ref") 
+        f << exp;
+      else
+      f << "(" << w << " " << exp << ")";
+    }
+  }
+
+  Exp * addrof(Exp * exp, Environ & env) {
+     AddrOf * addrof = new AddrOf;
+     addrof->exp = exp;
+     addrof->construct(env);
+     DeRef * deref = dynamic_cast<DeRef *>(addrof->exp);
+     if (deref) return deref->exp;
+     return addrof;
+  }
+
+  Exp * ptr_to_ref(Exp * exp, Environ & env) {
+    return exp;
+  }
+
   Exp * parse_addrof(const Syntax * p, Environ & env) {
-    AddrOf * addrof = new AddrOf;
-    addrof->parse_self(p, env);
-    DeRef * deref = dynamic_cast<DeRef *>(addrof->exp);
-    if (deref) return deref->exp;
-    return addrof;
+    Exp * exp = parse_exp(p->arg(0), env);
+    return addrof(exp, env);
   }
 
   Exp * parse_deref(const Syntax * p, Environ & env) {
@@ -2072,7 +2119,7 @@ namespace ast {
   };
 
   static Exp * try_user_assign(Exp * lhs, Exp * rhs, Environ & env) {
-    const UserType * ut = dynamic_cast<const UserType *>(lhs->type->unqualified);
+    const UserType * ut = dynamic_cast<const UserType *>(lhs->type->effective);
     if (ut && have_assign(ut)) {
       return parse_exp(SYN(SYN("member"), 
                            SYN(lhs),
@@ -2085,9 +2132,9 @@ namespace ast {
   }
 
   static Exp * mk_assign(Exp * lhs, Exp * rhs, Environ & env) {
-    env.type_relation->resolve_assign(lhs, rhs, env);
     Exp * assign = try_user_assign(lhs, rhs, env);
     if (assign) return assign;
+    env.type_relation->resolve_assign(lhs, rhs, env);
     Assign * exp = new Assign(lhs, rhs);
     return exp->construct(env);
   }
@@ -2108,6 +2155,16 @@ namespace ast {
       type = lhs->type;
       rhs->resolve_to(lhs->type, env);
       lvalue = lhs->lvalue;
+    }
+    void compile(CompileWriter & f) {
+      f << "( assign ";
+      if (lhs->type->read_only) 
+        f << "(deref " 
+          << "(cast (.ptr " << kill_const() << lhs->type << ") "
+          << "(addrof " << lhs << "))) ";
+      else
+        f << lhs << " ";
+      f << rhs << ")";
     }
   };
 
@@ -2431,6 +2488,30 @@ namespace ast {
   //
   //
 
+  Exp * try_just_exp(const Syntax * p, Environ & env, ExpContext c);
+  static const char * op_from_mangled(const char *);
+  static Exp * parse_c_assign(const Syntax * p, Environ & env, ExpContext c) {
+    String what = p->what().name;
+    Exp * lhs = parse_exp(p->arg(1), env);
+    if (lhs->type->effective->is(USER_C)) {
+      const char * op = op_from_mangled(p->arg(0)->what().name);
+      return parse_exp(SYN(SYN("call"),
+                           SYN(SYN("`"), SYN(op), SYN("operator")),
+                           SYN(SYN("."), SYN(lhs), p->arg(2))), env);
+    } else {
+      Exp * rhs = try_just_exp(SYN(p->str(), p->arg(0), SYN(p->arg(1)->str(), lhs), p->arg(2)), env, c);
+      if (!rhs) return 0;
+      BinOp * binop = dynamic_cast<BinOp *>(rhs);
+      StringBuf op;
+      op << binop->op << "=";
+      return new CompoundAssign(what, op.freeze(), lhs, binop, env);
+    }
+  }
+
+  //
+  //
+  //
+
   Stmt * ExpInsrPointWrapper::finish() {
     if (!stmts) return NULL;
     Block * b = new Block();
@@ -2632,6 +2713,17 @@ namespace ast {
   //
   //
 
+  void Module::assign_uniq_num(SymbolNode * cur) const {
+    ast::assign_uniq_num<TopLevelSymbol>(this, cur);
+    if (user_type) {
+      if (user_type->num == NPOS)
+        ast::assign_uniq_num<TopLevelSymbol>(user_type, cur);
+      unsigned max_num = std::max(num, user_type->num);
+      num = max_num;
+      user_type->num = max_num;
+    }
+  }
+
   void Module::compile(CompileWriter & f, Phase phase) const {
     assert(f.target_lang = CompileWriter::ZLE);
     if (phase == Forward) {
@@ -2744,6 +2836,7 @@ namespace ast {
     bool do_finalize;
     const SourceStr & source_str() const {return name->str();} // FIXME: This isn't quite right
     void add_syntax(const Syntax * p) {
+      //printf("ADD SYNTAX: %s\n", ~p->to_string());
       parse_ast_node<TopLevel>(p, *lenv, this);
     }
     void add_syntax(parts_iterator i, parts_iterator end) {
@@ -3043,6 +3136,22 @@ namespace ast {
     return empty_stmt();
   }
 
+  Stmt * parse_once(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1, NPOS);
+    const Syntax * name = p->arg(0);
+    Symbol * sym = find_fancy_symbol<Symbol>(name, NULL, env);
+    if (!sym) {
+      parse_stmts(p->args_begin() + 1, p->args_end(), env);
+    }
+    return empty_stmt();
+  }
+
+  void UserType::assign_uniq_num(SymbolNode * cur) const {
+    assert(module);
+    module->assign_uniq_num(cur);
+    assert(num != NPOS);
+  }
+
   void UserType::compile(CompileWriter & f, Phase phase) const {
     if (f.target_lang != CompileWriter::ZLE)
       return;
@@ -3081,7 +3190,7 @@ namespace ast {
   }
 
   void finalize_user_type(UserType * s, Environ & env) {
-    zl_assert(s->num == s->module->num);
+    assert(s->num == s->module->num);
     s->defined = true;
     s->finalize();
     Symbol * vs = env.symbols.find_this_scope<Symbol>("_sizeof");
@@ -3402,7 +3511,9 @@ namespace ast {
   //
   //
 
-  Exp * cast_up(Exp * exp, const Type * type, Environ & env) {
+  // strictly speaking the prototype could be: cast_up(... const Type * type ...)
+  // but to avoid errors we still insist that it be a UserType
+  Exp * cast_up(Exp * exp, const UserType * type, Environ & env) {
     exp = exp->to_effective(env);
     const PointerLike * from_ptr = dynamic_cast<const PointerLike *>(exp->type->unqualified);
     const QualifiedType * from_qualified = dynamic_cast<const QualifiedType *>(from_ptr->subtype->root);
@@ -3499,6 +3610,29 @@ namespace ast {
     return res;
   }
 
+  Exp * parse_implicit_ptr_cast(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2);
+    const Syntax * t = p->arg(0);
+    if (t->is_a("<>")) {
+      t = reparse("TOKENS", t->inner(), &env);
+      t = parse_decl_->parse_type(t, env);
+    } else if (t->is_a(".type")) {
+      t = t->arg(0);
+    }
+    Type * type = parse_type(t, env);
+    Exp * exp = parse_exp(p->arg(1), env);
+    const Pointer * from = dynamic_cast<const Pointer *>(exp->type->effective);
+    if (!from) throw unknown_error(p);
+    if (const QualifiedType * q = dynamic_cast<const QualifiedType *>(from->subtype)) {
+      type = env.types.inst(".qualified", TypeParm(q->qualifiers), TypeParm(type));
+    }
+    type = env.types.inst(".ptr", type);
+    Exp * res = env.type_relation->resolve_to(exp, type, env, TypeRelation::Implicit);
+    if (dynamic_cast<Cast *>(res))
+      res->syn = p;
+    return res;
+  }
+
   //
   //
   //
@@ -3564,10 +3698,17 @@ namespace ast {
       f->parse_forward_i(p, env, collect);
       if (is_op) {
         f->overload = true;
-        if (f->parms->num_parms() != 2)
-          throw error(p, "Expected two paramaters for operator overloading.");
-        if (!f->parms->parms[0].type->is(USER_C) && !f->parms->parms[1].type->is(USER_C))
-          throw error(p, "At least one paramater type for operator overloading must be a user type.");
+        if (name.name == "[]") {
+          if (f->parms->num_parms() != 1)
+            throw error(p, "Expected one paramaters when overloading %s.", ~name.name);
+          if (!f->parms->parms[0].type->is(USER_C))
+            throw error(p, "At least one paramater type for operator overloading must be a user type.");
+        } else {
+          if (f->parms->num_parms() != 2)
+            throw error(p, "Expected two paramaters for operator overloading.");
+          if (!f->parms->parms[0].type->is(USER_C) && !f->parms->parms[1].type->is(USER_C))
+            throw error(p, "At least one paramater type for operator overloading must be a user type.");
+        }
       }
       env.add(name, f);
     }
@@ -3616,6 +3757,7 @@ namespace ast {
     if (p->flag("__constructor__")) static_constructor = true;
 
     mangle = !ct_callback && env0.mangle;
+    if (env0.where == NULL && p->arg(0)->eq("main")) mangle = false;
 
     if (p->flag("__need_snapshot")) {
       env_ss = *env0.top_level_environ;
@@ -3651,6 +3793,9 @@ namespace ast {
 
   Stmt * Fun::finish_parse(Environ & env0) {
     assert(syn->num_args() > 3);
+
+    if (!static_constructor && storage_class != SC_STATIC)
+      link_once = env0.link_once;
 
     Environ env = env0.new_frame();
     env.where = this;
@@ -3706,7 +3851,8 @@ namespace ast {
   void Fun::compile(CompileWriter & f, Phase phase) const {
     if (!body && phase == Body)
       return;
-    //f << indent << "# " << full_name() << "\n";
+    if (phase != Forward)
+      f << indent << "# " << full_name() << "\n";
     if (env_ss && phase != Forward) {
       f << "(var " << uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
     }
@@ -3714,13 +3860,14 @@ namespace ast {
     f << " " << parms;
     f << " " << ret_type;
     write_storage_class(f);
-    //if (inline_) FIXME: Inline not support by zls yet
-    //    f << " :inline";
+    if (inline_) 
+      f << " :inline";
     if (static_constructor)
       f << " :__constructor__";
     if (body && phase != Forward) {
       f.in_fun = this;
-      f << " " << body;
+      end_line(f);
+      f << adj_indent(2) << body;
       f.in_fun = NULL;
     }
     f << ")\n";
@@ -3891,6 +4038,26 @@ namespace ast {
 
   void breakpoint() {}
 
+  const char * parms_to_string(const Vector<Exp *> & parms) {
+    StringBuf buf;
+    unsigned num_parms = parms.size();
+    if (num_parms == 0) return "";
+    buf << parms[0]->type->to_string();
+    for (unsigned i = 1; i < num_parms; ++i)
+      buf << ", " << parms[i]->type->to_string();
+    return buf.freeze();
+  }
+
+  const char * dump_rank(unsigned num_parms, const Candidate * candidate) {
+    StringBuf buf;
+    buf << " (";
+    for (unsigned i = 0; i != num_parms; ++i) {
+      buf.printf("0x%x ", candidate->resolved_parms[i].conv);
+    }
+    buf << ")";
+    return buf.freeze();
+  }
+
   const Symbol * resolve_call(const Syntax * name, const Vector<Exp *> & parms, Environ & env) {
     const Symbol * sym = env.symbols.lookup<Symbol>(name);
     if (const OverloadedSymbol * first = dynamic_cast<const OverloadedSymbol *>(sym)) {
@@ -3918,11 +4085,12 @@ namespace ast {
         if (seen.size() == 1)
           throw seen[0].error;
         else
-          throw error(name, "No match for call to %s", ~name->to_string());
+          throw error(name, "No match for call to %s(%s)", 
+                      ~name->to_string(), parms_to_string(parms));
       } else if (candidates.size() == 1) {
         sym = candidates.front()->sym;
       } else if (candidates.size() > 1) {
-        //printf("LOOKING FOR MATCH FOR: %s\n", ~parms[1]->type->to_string());
+        //printf("LOOKING FOR MATCH FOR: (%s)\n", parms_to_string(parms));
         // now use a process of elimination to find the best match
         Vector<Candidate *>::iterator 
           new_begin = candidates.begin(),
@@ -3934,9 +4102,9 @@ namespace ast {
             ++cur;
             continue;
           }
-          //printf("COMPARING:\n  %s %d\n  %s %d\n", 
-          //       ~first->sym->overloadable()->to_string(), first->resolved_parms[0].rank(), 
-          //       ~(*cur)->sym->overloadable()->to_string(), (*cur)->resolved_parms[0].rank());
+          //printf("COMPARING:\n  %s %s\n  %s %s\n", 
+          //       ~first->sym->overloadable()->to_string(), dump_rank(parms.size(), first), 
+          //       ~(*cur)->sym->overloadable()->to_string(), dump_rank(parms.size(), *cur));
           int res = better_match(parms, first->resolved_parms, (*cur)->resolved_parms);
           if (res == 0) {
             //printf("  no better match\n");
@@ -3957,10 +4125,12 @@ namespace ast {
           }        
         }
         //printf("===\n");
-        if (end - new_begin > 1)
-          throw error(name, "Multiple matches for call to %s", ~name->to_string());
-        else
+        if (end - new_begin > 1) {
+          throw error(name, "Multiple matches for call to %s(%s)", 
+                      ~name->to_string(), parms_to_string(parms));
+        } else {
           sym = first->sym;
+        }
       }
     }
     return sym;
@@ -3975,7 +4145,7 @@ namespace ast {
     if (lhs->is_a("id")) {
       parse_ast_nodes<ExpPos>(p->arg(1)->args_begin(), p->arg(1)->args_end(), env, &parms);
       const Symbol * sym = resolve_call(lhs->arg(0), parms, env);
-      if (const TopLevelVarDecl * fun = dynamic_cast<const TopLevelVarDecl *>(sym)) {
+      if (const VarDecl * fun = dynamic_cast<const VarDecl *>(sym)) {
         return mk_call(p, mk_id(fun, env), parms, env);
       } else if (const Syntax * res = expand_macro(p, sym, parms, env)) {
         return parse_exp(res, env);
@@ -4610,8 +4780,10 @@ namespace ast {
     if (what == "include_file") return parse_include_file(p, env);
     if (what == "import_file") return parse_import_file(p, env);
     if (what == "extern") return parse_extern(p, env);
+    if (what == "once") return parse_once(p, env);
     if (what == "template") return parse_template(p, env);
     if (what == "empty") return empty_stmt();
+    if (what == "link_once") {env.link_once = true; return empty_stmt();}
     return 0;
     } catch (Error * err) {
       StringBuf buf = err->extra;
@@ -4681,6 +4853,7 @@ namespace ast {
     if (what == "ge")      return (new Ge)->parse_self(p, env);
     if (what == "not")     return (new Not)->parse_self(p, env);
     if (what == "bnot")    return (new Compliment)->parse_self(p, env);
+    if (what == ".[]")     return parse_array_access(p, env);
     if (what == "addrof")  return parse_addrof(p, env);
     if (what == "deref")   return parse_deref(p, env);
     if (what == "member")  return parse_member_access(p, env);
@@ -4692,8 +4865,9 @@ namespace ast {
     if (what == "sizeof")  return (new SizeOf)->parse_self(p, env);
     if (what == "cast")    return parse_cast(p, env, TypeRelation::Explicit);
     if (what == "icast")   return parse_cast(p, env, TypeRelation::Implicit);
-    if (what == "implicit_cast")    return parse_cast(p, env, TypeRelation::Implicit);
-    if (what == "reinterpret_cast") return parse_cast(p, env, TypeRelation::Reinterpret);
+    if (what == "implicit_cast")     return parse_cast(p, env, TypeRelation::Implicit);
+    if (what == "implicit_ptr_cast") return parse_implicit_ptr_cast(p, env);
+    if (what == "reinterpret_cast")  return parse_cast(p, env, TypeRelation::Reinterpret);
     if (what == ".")       return (new InitList)->parse_self(p, env);
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
     //if (what == "empty")   return (new Empty)->parse_self(p, env);
@@ -4708,15 +4882,8 @@ namespace ast {
       return (new VaArg)->parse_self(p, env);
     if (what == "__builtin_va_copy") 
       return (new GccBuiltIn("__builtin_va_copy", 2, VOID_T))->parse_self(p, env);
-    if (what == "c-assign") {
-      Exp * lhs = parse_exp(p->arg(1), env);
-      Exp * rhs = try_just_exp(SYN(p->str(), p->arg(0), SYN(p->arg(1)->str(), lhs), p->arg(2)), env, c);
-      if (!rhs) return 0;
-      BinOp * binop = dynamic_cast<BinOp *>(rhs);
-      StringBuf op;
-      op << binop->op << "=";
-      return new CompoundAssign(what, op.freeze(), lhs, binop, env);
-    }
+    if (what == "c-assign") 
+      return parse_c_assign(p, env, c);
     return 0;
     } catch (Error * err) {
       StringBuf buf = err->extra;
@@ -4799,6 +4966,8 @@ namespace ast {
     default:
       break;
     }
+    if (link_once)
+      f << " :once";
   }
   
   void TopLevelVarDecl::calc_deps_closure() const {  
@@ -5090,24 +5259,31 @@ namespace ast {
   OpMangle OP_MANGLE[] = {
     {"==", "eq"}, {"!=", "ne"}, {"<",  "lt"}, {">",  "gt"}, {"<=", "le"}, {">=", "ge"},
     {"+", "plus"}, {"-", "minus"}, {"*", "times"}, {"/", "div"}, {"%", "mod"},
-    {"<<", "lshift"}, {">>", "rshift"}, {"^", "xor"}, {"&", "and"}, {"|", "or"},
+    {"<<", "lshift"}, {">>", "rshift"}, {"^", "xor"}, {"&", "band"}, {"|", "bor"},
     {"+=", "aplus"}, {"-=", "aminus"}, {"*=", "atimes"}, {"/=", "adiv"}, {"%=", "amod"},
-    {"<<=", "alshift"}, {">>=", "arshift"}, {"^=", "axor"}, {"&=", "aand"}, {"|=", "aor"},
+    {"<<=", "alshift"}, {">>=", "arshift"}, {"^=", "axor"}, {"&=", "aband"}, {"|=", "abor"},
     {"[]", "array"}, {"()", "call"}};
   static unsigned OP_MANGLE_SIZE = sizeof(OP_MANGLE) / sizeof(OpMangle);
 
   void asm_name(const SymbolKey * key, OStream & o) {
     //printf("?%s\n", ~key->to_string());
-    if (key->ns == OPERATOR_NS) {
+    unsigned i;
+    for (i = 0; i != OP_MANGLE_SIZE; ++i) 
+      if (key->name == OP_MANGLE[i].op) break;
+    if (i != OP_MANGLE_SIZE/*key->ns == OPERATOR_NS*/) {
       //printf(stderr, "LIVE ONE\n");
-      unsigned i;
-      for (i = 0; i != OP_MANGLE_SIZE; ++i) 
-        if (key->name == OP_MANGLE[i].op) break;
-      assert(i != OP_MANGLE_SIZE);
+      //assert(i != OP_MANGLE_SIZE);
       o << "op$" << OP_MANGLE[i].name;
     } else {
       o << key->name;
     }
+  }
+
+  static const char * op_from_mangled(const char * name) {
+    unsigned i;
+    for (i = 0; i != OP_MANGLE_SIZE; ++i) 
+      if (strcmp(name,OP_MANGLE[i].name) == 0) return OP_MANGLE[i].op;
+    return NULL;
   }
 
   bool template_id(const Syntax * id, ast::Environ * env) {
@@ -5196,6 +5372,10 @@ extern "C" namespace macro_abi {
 
   int user_type_have_assign(const UserType * ut) {
     return ast::have_assign(ut);
+  }
+  
+  int user_type_can_have_assign(const UserType * ut) {
+    return ast::can_have_assign(ut);
   }
   
   int user_type_have_destructor(const UserType * ut) {

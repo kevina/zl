@@ -408,6 +408,35 @@ namespace ast {
     return o;
   }
 
+  struct kill_const {
+    CompileWriter * o;
+  };
+
+  static inline
+  kill_const operator<< (CompileWriter & o, kill_const k) {
+    k.o = &o;
+    return k;
+  }
+
+  template <typename T>
+  static inline
+  CompileWriter & operator<< (kill_const k, T v) {
+    return *k.o << v;
+  }
+  
+  static inline
+  CompileWriter & operator<< (kill_const k, const Type * v) {
+    switch (k.o->target_lang) {
+    case CompileWriter::ZLS:
+      *k.o << zls_kill_const_print_inst->to_string(*v);
+      break;
+    case CompileWriter::ZLE:
+      *k.o << zle_print_inst->to_string(*v);
+      break;
+    }
+    return *k.o;
+  }
+
   struct adj_indent {
     int adj;
     CompileWriter * o;
@@ -542,6 +571,7 @@ namespace ast {
   struct VarDeclaration : public Declaration, public BasicVar {
     VarDeclaration() {}
     StorageClass storage_class;
+    bool link_once;
     //VarSymbol * sym;
     void write_storage_class_c(CompileWriter & f) const;
     void write_storage_class(CompileWriter & f) const;
@@ -741,6 +771,7 @@ namespace ast {
       return ast::find_symbol<T>(k, syms.front, syms.back);
     }
     virtual bool named_outer() const {return true;}
+    virtual void assign_uniq_num(SymbolNode * cur) const;
   };
 
   //
@@ -763,6 +794,7 @@ namespace ast {
     const char * what() const {return "user_type";}
     using SimpleType::finalize;
     void compile(CompileWriter &, Phase) const;
+    virtual void assign_uniq_num(SymbolNode * cur) const;
   };
 
   //
@@ -796,7 +828,7 @@ namespace ast {
 
   void compile(TopLevelSymbolTable *, CompileWriter & cw);
 
-  Exp * cast_up(Exp * exp, const Type * type, Environ & env);
+  Exp * cast_up(Exp * exp, const UserType * type, Environ & env);
   Exp * cast_down(Exp * exp, const UserType * type, Environ & env);
 
   const Syntax * parse_syntax_c(const Syntax * p);
@@ -861,6 +893,8 @@ namespace ast {
       assert_num_args(p, 1);
       const FluidBinding * b = lookup_symbol<FluidBinding>(p->arg(0), ns, start, stop, strategy, gather);
       return lookup_symbol<T>(SymbolKey(b->rebind, ns), p->arg(0)->str(), start, stop, strategy, gather, cmp); // fixme: should I use NoOpGather here?
+    } else if (p->is_a("operator")) {
+      return lookup_symbol<T>(p->arg(0), ns ? ns : OPERATOR_NS, start, stop, strategy, gather, cmp);
     } else if (p->is_a("`")) {
       const InnerNS * ns = lookup_inner_ns(p, start);
       return lookup_symbol<T>(p->arg(0), ns, start, stop, strategy, gather, cmp);
@@ -975,6 +1009,16 @@ namespace ast {
     }
   }
 
+  template <typename T>
+  T * find_fancy_symbol(const Syntax * p, const InnerNS * ns, Environ & env)
+  {
+    try {
+      return lookup_fancy_symbol<T>(p, ns, env);
+    } catch (...) {
+      return NULL;
+    }
+  }
+
   //
   //
   //
@@ -1055,6 +1099,9 @@ namespace ast {
     assert(top_level_symbols);
     top_level_symbols->move_defn(defn);
   }
+
+  Exp * addrof(Exp * exp, Environ & env);
+  Exp * ptr_to_ref(Exp * exp, Environ & env);
 
   Exp * to_ref(Exp *, Environ &);
   Exp * from_ref(Exp *, Environ &);

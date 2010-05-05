@@ -78,9 +78,6 @@
 (smacro -> (exp id)
     (member (deref (mid exp)) (mid id)))
 
-(smacro ".[]" (x y)
-    (deref (plus (mid x) (mid y))))
-
 (smacro preinc (x)
     (c-assign plus (mid x) (n 1)))
 
@@ -103,7 +100,7 @@
 #           (stmt (sym ++) (id x))
 #           (stmt (id `x))))
 
-(make_inner_ns internal)
+#(make_inner_ns internal)
 (make_inner_ns non_virtual)
 
 #(macro h (x_h) () (times (literal 2) (mid x_h)))

@@ -8,6 +8,7 @@
   syntax_args;
   new_syntax_list;
   syntax_list_empty;
+  syntax_list_size;
   syntax_list_append;
   syntax_list_append_flag;
   syntax_list_append_all;
@@ -49,7 +50,9 @@
   user_type_have_default_constructor;
   user_type_have_copy_constructor;
   user_type_have_assign;
+  user_type_can_have_assign;
   user_type_have_destructor;
+  mangle_name;
   mangle_fun_parms;
   gdb_breakpoint;
   stash_ptr_in_syntax;

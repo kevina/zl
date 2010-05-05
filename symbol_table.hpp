@@ -136,6 +136,7 @@ namespace ast {
   extern const InnerNS * const CAST_NS;
   extern const InnerNS * const SPECIAL_NS;
   extern const InnerNS * const OPERATOR_NS;
+  extern const InnerNS * const INTERNAL_NS;
 
   struct SymbolKey : public SymbolName {
     const InnerNS * ns;
@@ -275,6 +276,8 @@ namespace ast {
     // of this symbol, than there is probably no need to assign a uniq
     // number...
     virtual bool named_outer() const {return false;}
+    // ok, so the const is a bit of a lie
+    virtual void assign_uniq_num(SymbolNode * cur) const;
   };
 
   struct FluidBinding : public TopLevelSymbol {

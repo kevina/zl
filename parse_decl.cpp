@@ -176,6 +176,7 @@ struct DeclWorking {
   bool try_type_name(const Syntax * p, Environ & env) {
     // doesn't make sense to have two types, so if we already have a
     // type, fail
+    //printf("TRY TYPE NAME: %s\n", ~p->to_string());
     if (base_type || type_symbol || inner_type) return false;
     const ast::TypeSymbol * ts = env.symbols.find<ast::TypeSymbol>(p);
     if (ts) {
@@ -381,7 +382,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
       decl = w.make_declaration(id, t);
     }
 
-    if (decl->str().source == p->str().source)
+    if (decl->str().source != p->str().source)
       decl->str_ = p->str();
     res.add_part(decl);
 
