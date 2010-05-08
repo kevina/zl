@@ -1,0 +1,15 @@
+
+__raw(link_once);
+
+extern int * foo();
+
+int x = 20;
+
+int main() {
+  int * x0 = foo();
+  int * x1 = &x;
+  if (x0 == x1)
+    return 0;
+  else
+    return 1;
+}

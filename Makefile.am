@@ -17,7 +17,7 @@ zl_LDFLAGS=-Wl,--export-dynamic,--version-script=zl.ld
 
 noinst_HEADERS=*.hpp
 
-noinst_DATA=prelude-fct.so
+noinst_DATA=prelude-fct.so libc++.o
 
 EXTRA_DIST = test/* zl.ld ops.in grammer.in grammer.ins \
   class-simple.zl class.zl prelude.zl class-simple.zlh  prelude.zlh
@@ -34,3 +34,6 @@ dist-hook:
 zlc: $(top_builddir)/config.status $(srcdir)/zlc.in
 	$(top_builddir)/config.status --file=$@
 	chmod +x $@
+
+libc++.o: zl prelude-fct.so libc++.cpp c++-include/*
+	./zlc -c -g -save-temps libc++.cpp > libc++.log

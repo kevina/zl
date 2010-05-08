@@ -43,7 +43,7 @@ namespace ast {
 
   void marks_ignored(String name) {
     fprintf(stderr, "WARNING: IGNORING MARKS ON \"%s\"\n", ~name);
-    abort();
+    //abort();
   }
 
   unsigned Mark::last_id = 0;

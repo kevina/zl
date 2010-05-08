@@ -1,0 +1,6 @@
+#ifndef ZL_VECTOR
+#define ZL_VECTOR
+
+#include "vector.zlh"
+
+#endif

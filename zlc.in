@@ -8,6 +8,7 @@ use strict;
 my $ZL = "@abs_top_srcdir@/zl";
 my $ZL_H = "@abs_top_srcdir@/zl_h.h";
 my $CPP_INCLUDE = "@abs_top_srcdir@/c++-include";
+my $CPP_LIB = "@abs_top_srcdir@/libc++.o";
 
 my $preprocess;
 my $lang;
@@ -19,6 +20,7 @@ my @zls_files;
 #my @zl_ops;
 my @temp_files;
 my $save_temps = 0;
+my $link = 1;
 
 sub arg_w_parm ($) {
     my ($arg) = @_;
@@ -49,6 +51,7 @@ while (@ARGV) {
         shift @ARGV;
     } elsif ($_ eq '-E') {
         $preprocess = 2;
+        $link = 0;
         shift @ARGV;
     } elsif ($p = arg_w_parm('x')) {
         $lang = $p;
@@ -60,9 +63,11 @@ while (@ARGV) {
         shift @ARGV;
     } elsif ($_ eq '-c') {
         push @zls_ops, $_;
+        $link = 0;
         shift @ARGV;
     } elsif ($_ eq '-S') {
         push @zls_ops, $_;
+        $link = 0;
         shift @ARGV;
     } elsif ($_ eq '-save-temps') {
         $save_temps = 1;
@@ -150,6 +155,8 @@ foreach (@files) {
     }
 }
 push @zls_ops, @final_zls_ops;
+
+push @zls_ops, $CPP_LIB if $link;
 
 #if ($preprocess <= 1) {
 system('zls', @zls_ops);

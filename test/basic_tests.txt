@@ -146,6 +146,14 @@ test160.cpp
 test161.cpp
 test162.cpp
 test163.cpp
+test164.cpp
+test165.cpp
+test166.cpp # FIXME: Maybe combine w/ test165.cpp
+test167.cpp # FIXME: Maybe combine w/ test165.cpp
+test168.cpp
+test169.sh
+test171.cpp zlc
+test172.cpp
 
 fix_size-0-t.zl # was 67
 fix_size-1-t.zl # was 95

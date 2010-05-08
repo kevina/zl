@@ -229,6 +229,7 @@ public:
     m = match(m, syntax _destructor, replace_context(syntax _destructor, context));
     m = match(m, syntax _assign, replace_context(syntax _assign, context));
     m = match(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
+    m = match(m, syntax _init, replace_context(syntax _init, context));
     m = match(m, syntax fields, replace_context(syntax fields, context));
     m = match(m, syntax this_type, replace_context(syntax this_type, context));
     m = match(m, syntax ptr, replace_context(syntax ptr, context));
@@ -344,18 +345,20 @@ public:
     builder->add(vtable);
     //builder->add(replace(raw_syntax (vtable_class _VTable), m, mark));
     builder->add(replace(
-                       syntax {void _vtable_init(_VTable * _vt) {$1;} },
+                       syntax {static void _vtable_init(_VTable * _vt) {$1;} },
                        match_local(m, vtable_i, 0),
                        mark));
     exports->append(replace(syntax _vtable_init, m, mark));
     
     if (parent_vtable) {
       builder->add(replace(
-                     syntax {__static_constructor void init() {parent_n::_vtable_init(&_vtable); _vtable_init(&_vtable);}},
-                     m, mark));
+                     syntax {static __static_constructor void _init() {/*printf("INIT %s %p%c", $1, &_vtable, 0x0A); */
+                                                                       parent_n::_vtable_init(&_vtable); _vtable_init(&_vtable);}},
+                     match_local(m, stringify(name), 0), 
+                     mark));
     } else {
       builder->add(replace(
-                     syntax {__static_constructor void init() {_vtable_init(&_vtable);}},
+                     syntax {static __static_constructor void _init() {_vtable_init(&_vtable);}},
                      m, mark));
     }
     
@@ -383,7 +386,7 @@ public:
     exports->append(replace(syntax _VTable, m, mark));
     exports->append(replace(syntax _VTable`outer, m, mark));
     
-    builder->add(replace(syntax {_VTable _vtable;}, m, mark));
+    builder->add(replace(syntax {static _VTable _vtable;}, m, mark));
   }
 
   SyntaxList * get_constructor_code() {
@@ -429,7 +432,8 @@ public:
     for (ConstructorCode * cur = constructor_code; cur; cur = cur->next) {
       Syntax * c = cur->name ? init_code.find(cur->name) : NULL;
       if (c) {
-        code->append(replace(raw_syntax(construct $1 $2 . $3), 
+        code->append(replace(raw_syntax(construct (kill_const (-> this $1))
+                                        $2 . $3), 
                              match_local(m0, cur->field, cur->type, c, 0), mark));
       } else {
         if (cur->code) code->append(cur->code);
@@ -647,6 +651,7 @@ public:
         vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) 0), m, mark));
       } else {
         vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) (` n internal)), m, mark));
+        //vtable_i->append(replace(syntax {printf("%p%c", _vt->fpn, 0xA);}, m, mark));
       }
     } else {
       //printf("OK HERE WE GO: %s %s\n", 
@@ -796,7 +801,7 @@ public:
     if (ut && ut->have_default_constructor()) {
       need_constructor = true;
       add_constructor_field(name, user_name, type, 
-        replace(raw_syntax(member (mid n) (call _constructor (.))), m0, mark));
+        replace(raw_syntax(member (kill_const (mid n)) (call _constructor (.))), m0, mark));
     } else {
       add_constructor_field(name, user_name, type, NULL);
     }
@@ -804,7 +809,7 @@ public:
     if (ut && ut->have_copy_constructor())
       need_copy_constructor = true;
     copy_constructor_code->append(
-      replace(raw_syntax(init-assign (mid n) (member other (mid n))), 
+      replace(raw_syntax(init-assign (kill_const (mid n)) (member other (mid n))), 
               m0, mark));
     
     if (ut && ut->have_assign())
@@ -816,7 +821,7 @@ public:
     if (ut && ut->have_destructor()) {
       need_destructor = true;
       destructor_code->append(
-        replace(raw_syntax(member (mid n) (call (` _destructor non_virtual) (.))), m0, mark));
+        replace(raw_syntax(member (kill_const (mid n)) (call (` _destructor non_virtual) (.))), m0, mark));
     }
   }
 

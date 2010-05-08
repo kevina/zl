@@ -479,6 +479,7 @@ struct SimpleMacro : public Macro {
     def = syn = p;
     assert_num_args(3);
     real_name = expand_binding(p->arg(0), e);
+    if (real_name.name == "+") real_name.ns = OPERATOR_NS; // FIXME: HACK!
     parms = flatten(p->arg(1));
     //printf("PARSING MAP %s\n%s\n", ~real_name.to_string(), ~p->to_string());
     //printf("MAP PARMS %s: %s\n", ~p->arg(0)->what().name, ~parms->to_string());
@@ -495,6 +496,8 @@ struct SimpleMacro : public Macro {
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ &) const {
+    //if (syn)
+    //  printf("EXPANDING MAP %s\n", ~syn->to_string());
     //printf("EXPANDING PARMS %s\n", ~p->to_string());
     using namespace macro_abi;
     using macro_abi::Syntax;
@@ -573,7 +576,9 @@ const Syntax * expand_macro(const Syntax * p, const ast::Symbol * sym,
        i != e; ++i)
     synb.add_part(SYN(*i));
   synb.set_flags(p->arg(1)->flags_begin(), p->arg(1)->flags_end());
-  return macro->expand(p, synb.build(), env);
+  const Syntax * res = synb.build();
+  //printf("EXPAND MACRO: %s %s\n", ~p->to_string(), ~res->to_string());
+  return macro->expand(p, res, env);
 }
 
 //
@@ -1444,7 +1449,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
         } 
       }
       if (TypeSymbol * t = env.symbols.find<TypeSymbol>(n->arg(0))) {
-        Syntax * res = SYN(SYN("anon"), SYN(t), a);
+        Syntax * res = SYN(SYN("anon"), SYN(t), SYN("."), a);
         return res;
       }
     }
@@ -1906,6 +1911,7 @@ extern "C" namespace macro_abi {
   
   const UserType * user_type_info(const Syntax * s, Environ * env) {
     // first see if we have a symbol name
+    s = expand_id(s, *env);
     const UserType * ut = dynamic_cast<const UserType *>(env->types.inst(s));
     // otherwise we have a type, so try to parse it
     if (ut) return ut;
@@ -2037,6 +2043,10 @@ extern "C" namespace macro_abi {
       mangle_print_inst->to_string(*parms->parms[i].type, buf);
     }
     return ~buf.freeze();
+  }
+
+  Syntax * stringify(Syntax * p) {
+    return SYN(SYN("s"), SYN(p->to_string()));
   }
 
 }

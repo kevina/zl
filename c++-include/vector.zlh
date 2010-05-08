@@ -1,0 +1,118 @@
+
+template vector;
+
+macro mk_vector (T,@_)
+  : (vector, data, 
+     begin, end, front, back, empty, size,
+     push_back, pop_back, reserve, resize, clear, erase, 
+     assign, append,
+     iterator, const_iterator, size_type,
+     operator [],
+     data_, end_, ensure_space) 
+{
+  __once vector<T>
+  class vector<T> {
+  public:
+    T * data_;
+    T * end_;
+    T * storage_end_;
+    T * data() const {return data_;}
+    typedef T * iterator;
+    typedef const T * const_iterator;
+    typedef size_t size_type;
+    iterator begin() const {return data_;}
+    iterator end()   const {return end_;}
+    bool empty() const {return data_ == end_;}
+    size_t size() const {return end_ - data_;}
+    size_t max_size() const {return (size_t)-1;}
+    size_t capacity() const {return storage_end_ - data_;}
+    T & front() const {return *data_;}
+    T & back() const {return *(end_-1);}
+    T & operator[](size_t n) const {return data_[n];}
+    vector<T>() : data_(NULL), end_(NULL), storage_end_(NULL) {}
+    vector<T>(size_t n) : data_(NULL), end_(NULL), storage_end_(NULL) {resize(n);}
+    vector<T>(const vector<T> & other) : data_(NULL), end_(NULL), storage_end_(NULL) {assign(other.data(), other.size());}
+    T & at(size_t i) const {return data_[i];}
+    //vector(size_t n, const T & t) : data_(NULL), end_(NULL), storage_end_(NULL) {insert(data_, n, t);}
+    void push_back(const T & el) {
+      ensure_space(1); 
+      __raw(construct (deref end_) T el); 
+      ++end_;
+    }
+    void pop_back() {
+      __raw(destroy (deref end_));
+      --end_;
+    }
+    void assign(const T * d, unsigned sz) {
+      clear();
+      ensure_space(sz);
+      for (unsigned i = 0; i != sz; ++i)
+        __raw(construct (.[] end_ i) T (.[] d i));
+      end_ += sz;
+    }
+    void append(const T * d, unsigned sz) {
+      ensure_space(sz);
+      for (unsigned i = 0; i != sz; ++i)
+        __raw(construct (.[] end_ i) T (.[] d i));
+      end_ += sz;
+    }
+    void ensure_space(size_t sz) {
+      size_t need = size() + sz;
+      if (capacity() >= need) return;
+      size_t new_capacity = capacity() * 2;
+      if (new_capacity < need) new_capacity = need;
+      reserve(new_capacity);
+    }
+    void reserve(size_t new_capacity) {
+      if (capacity() >= new_capacity) return;
+      T * new_data = malloc(sizeof(T) * new_capacity);
+      size_t sz = size();
+      for (size_t i = 0; i < size(); ++i)
+        __raw(construct (.[] new_data i) T (.[] data_ i));
+      if (data_)
+        free(data_);
+      data_ = new_data;
+      end_ = data_ + sz;
+      storage_end_ = data_ + new_capacity;
+    }
+    void resize(size_t sz) {
+      reserve(sz);
+      T * new_end = data_ + sz;
+      if (end_ < new_end) {
+        T * i = end_;
+        for (; i < new_end; ++i)
+          __raw(construct (deref i) T . (.));
+      } else if (end_ > new_end) {
+        destroy_range(new_end, end_);
+      }
+      end_ = new_end;
+    }
+    void destroy_range(T * i, T * last) {
+      for (; i < last; ++i)
+        __raw(destroy (deref i));
+    }
+    void copy_range(T * target, T * src, T * last) {
+      for (; src < last; ++src, ++target)
+        *target = *src;
+    }
+    void clear() {
+      destroy_range(data_, end_);
+      end_ = data_;
+    }
+    void erase(T * pos) {
+      copy_range(pos, pos + 1, end_);
+      __raw(destroy (deref end_));
+      --end_;
+    }
+    void erase(T * first, T * last) {
+      copy_range(first, last, end_);
+      size_t len = last - first;
+      destroy_range(end_ - len, end_);
+      end_ -= len;
+    }
+    ~vector<T>() {
+      destroy_range(data_, end_);
+    }
+  };
+}
+

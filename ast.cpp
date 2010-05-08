@@ -427,10 +427,11 @@ namespace ast {
         }
         goto finish;
       } else if (static_cast<const Symbol *>(this) == tl->value) {
-        fprintf(stderr, "tls mismatch %s\n", ~uniq_key);
+        //fprintf(stderr, "tls mismatch %s\n", ~uniq_key);
         throw error(NO_LOC, "tls mismatch %s\n", ~uniq_key);
       } else {
         fprintf(stderr, "TLS MISMATCH %s\n", ~uniq_key);
+        abort();
         throw error(NO_LOC, "TLS MISMATCH %s\n", ~uniq_key);
       }
       abort();
@@ -893,6 +894,8 @@ namespace ast {
   };
 
   Stmt * Block::parse_self(const Syntax * p, Environ & env0) {
+    //if (p)
+    //  printf("BLOCK PARSING %s\n", ~p->to_string());
     syn = p;
     BlockBuilder b(this, env0);
     parse_ast_nodes<StmtDeclPos>(p->args_begin(), p->args_end(), b.env, &b);
@@ -1122,7 +1125,7 @@ namespace ast {
             // elide the copy constructor if possible
             init_syn = SYN(parms[0]);
             goto with_init;
-          } 
+          }
           const Symbol * sym = resolve_call(SYN(id_str(),
                                                 SYN("::"), 
                                                 SYN<Symbol>(user_type->module), 
@@ -1131,7 +1134,9 @@ namespace ast {
           if (const Trivial * trivial = dynamic_cast<const Trivial *>(sym)) {
             assert(parms.size() <= 1);
             if (parms.size() == 0) {
-              throw unknown_error(init_syn);
+              Error * err = error(init_syn, "WARNING: Unimplemented case, variable may not be properly initialized.");
+              fprintf(stderr, "%s", ~err->message());
+              return;
             } else if (parms.size() == 1) {
               init_syn = SYN(parms[0]);
             }
@@ -1192,13 +1197,22 @@ namespace ast {
       }
       finish(this, wrap, wrap2, env);
     }
-    void construct(parts_iterator i, parts_iterator e, Environ & env) {
-      if (i < e) parse_init(i,e,env);
+    void handle_init(parts_iterator i, parts_iterator e, Environ & env) {
       const UserType * ut;
+      if (i < e) parse_init(i, e, env);
+      if (storage_class != SC_EXTERN && !init && !constructor && (ut = dynamic_cast<const UserType *>(type)))
+        constructor = try_constructor(ut, env);
+    }
+    virtual void handle_cleanup(Environ & env) {
+      const UserType * ut;
+      //assert(!cleanup);
       if (!cleanup && (ut = dynamic_cast<const UserType *>(type))) {
-        if (!init && !constructor) constructor = try_constructor(ut, env);
         add_cleanup(ut, env);
       }
+    }
+    void construct(parts_iterator i, parts_iterator e, Environ & env) {
+      handle_init(i, e, env);
+      handle_cleanup(env);
     }
     Stmt * finish_parse(Environ & env) {
       //fprintf(stderr, "SIZE OF VAR = %u\n", sizeof(Var));
@@ -1211,8 +1225,14 @@ namespace ast {
       return this;
     }
     Stmt * try_constructor(const UserType * ut, Environ & env) {
-      if (ut && have_default_constructor(ut)) {
-        return mk_constructor(mk_id(this, env), env);
+      if (ut) {
+        if (have_default_constructor(ut)) {
+          return mk_constructor(mk_id(this, env), env);
+        } else {
+          // FIXME: Check for other constructors other than the copy
+          // one and throw an error is any exist
+          return NULL;
+        }
       } else {
         return NULL;
       }
@@ -1352,6 +1372,8 @@ namespace ast {
   struct EExpTemp : public TempBase {
     EExpTemp() {lvalue = LV_EEXP;}
     bool is_temp() const {return true;}
+    void fix_up_init(Environ & env);
+    void handle_cleanup(Environ & env);
   };
 
   struct AnonTemp : public EExpTemp {
@@ -1359,39 +1381,46 @@ namespace ast {
   };
 
   struct NamedTemp : public EExpTemp {
+    NamedTemp() {}
+    NamedTemp(const Type * t) {type = t;}
     void add_to_sub_env(Environ & env) {
       env.temp_ip->add(this);
     }
-    void fix_up_init(Environ & env) {
-      Var::fix_up_init(env);
-      if (init && !init->ct_value_) {
-        constructor = mk_init(this, init, env)->as_stmt();
-        init = NULL;
-      } 
-    }
     Stmt * finish_parse(Environ & env);
   };
+  
+  void EExpTemp::fix_up_init(Environ & env) {
+    Var::fix_up_init(env);
+    if (init && !init->ct_value_) {
+      constructor = mk_init(this, init, env)->as_stmt();
+      init = NULL;
+    } 
+  }
+
+  void EExpTemp::handle_cleanup(Environ & env) {
+    Var::handle_cleanup(env);
+    if (!cleanup) return;
+    if (!cleanup->cleanup_flag)
+      cleanup->cleanup_flag = new CleanupFlag(this);
+    if (constructor) {
+      Block * b = dynamic_cast<Block *>(constructor);
+      if (!b) {
+        b = new Block;
+        b->stmts = constructor;
+      } 
+      Stmt * * ip;
+      ip = &b->stmts->next;
+      while (*ip != NULL)
+        ip = &b->stmts->next;
+      *ip = cleanup->cleanup_flag->as_stmt();
+      constructor = b;
+    } else {
+      constructor = cleanup->cleanup_flag->as_stmt();
+    }
+  }
 
   Stmt * NamedTemp::finish_parse(Environ & env) {
     Var::finish_parse(env);
-    if (cleanup && !cleanup->cleanup_flag) {
-      cleanup->cleanup_flag = new CleanupFlag(this);
-      if (constructor) {
-        Block * b = dynamic_cast<Block *>(constructor);
-        if (!b) {
-          b = new Block;
-          b->stmts = constructor;
-        } 
-        Stmt * * ip;
-        ip = &b->stmts->next;
-        while (*ip != NULL)
-          ip = &b->stmts->next;
-        *ip = cleanup->cleanup_flag->as_stmt();
-        constructor = b;
-      } else {
-        constructor = cleanup->cleanup_flag->as_stmt();
-      }
-    }
     if (constructor) {
       Stmt * ret = constructor;
       constructor = NULL;
@@ -1461,7 +1490,7 @@ namespace ast {
     const Syntax * name_p = p->arg(0);
     SymbolKey name = expand_binding(name_p, env);
     StorageClass storage_class = get_storage_class(p);
-    bool shadow = p->flag("__shadow");
+    bool shadow = p->flag("__shadow") || p->flag("shadow");
     //bool shadow = true;
     if (shadow && collect) throw unknown_error(p);
     Var * var;
@@ -2494,10 +2523,13 @@ namespace ast {
     String what = p->what().name;
     Exp * lhs = parse_exp(p->arg(1), env);
     if (lhs->type->effective->is(USER_C)) {
-      const char * op = op_from_mangled(p->arg(0)->what().name);
-      return parse_exp(SYN(SYN("call"),
-                           SYN(SYN("`"), SYN(op), SYN("operator")),
-                           SYN(SYN("."), SYN(lhs), p->arg(2))), env);
+      StringBuf op;
+      op << op_from_mangled(p->arg(0)->what().name) << "=";
+      return parse_exp(SYN(SYN("member"),
+                           SYN(lhs),
+                           SYN(SYN("call"),
+                               SYN(SYN("`"), SYN(op.freeze()), SYN("operator")),
+                               SYN(SYN("."), p->arg(2)))), env);
     } else {
       Exp * rhs = try_just_exp(SYN(p->str(), p->arg(0), SYN(p->arg(1)->str(), lhs), p->arg(2)), env, c);
       if (!rhs) return 0;
@@ -2590,11 +2622,11 @@ namespace ast {
       // init. in the place where the temp was defined
       if (tmp->init) {
         Stmt * init = mk_init(tmp, tmp->init, oenv)->as_stmt();
-        assert(!(tmp->cleanup && tmp->cleanup->cleanup_flag));
+        //assert(!(tmp->cleanup && tmp->cleanup->cleanup_flag));
         init->next = *tmp_ip;
         *tmp_ip = init;
       } else if (tmp->constructor) {
-        assert(!(tmp->cleanup && tmp->cleanup->cleanup_flag));
+        //assert(!(tmp->cleanup && tmp->cleanup->cleanup_flag));
         assert(tmp->constructor->next == NULL);
         tmp->constructor->next = *tmp_ip;
         *tmp_ip = tmp->constructor;
@@ -2677,7 +2709,8 @@ namespace ast {
     }
   }
 
-  Exp * make_temp(const Type * type, Environ & env, ExpContext c) {
+  Exp * parse_anon(const Syntax * p, Environ & env, ExpContext c) {
+    Type * type = env.types.inst(p->arg(0));
     bool use_res_loc = false;
     Var * temp = NULL;
 #ifndef NO_ELIDE
@@ -2686,27 +2719,25 @@ namespace ast {
     if (temp) use_res_loc = true;
 #endif
     if (!temp) temp = start_temp(type, env);
-    Stmt * constructor = temp->try_constructor(dynamic_cast<const UserType *>(type), env);
-    if (env.temp_ip->where == ExpInsrPoint::ExtendedExp) {
-      assert(!temp->cleanup || !use_res_loc);
-      if (constructor)
-        env.exp_ip->add(constructor);
-      else if (type->is(SCALAR_C))
-        env.exp_ip->add(mk_init(temp, mk_literal(0, env), env));
-      if (temp->cleanup)
-        env.exp_ip->add(temp->cleanup->cleanup_flag);
-    } else {
-      temp->constructor = constructor;
-    }
+    temp->handle_init(p->args_begin() + 1, p->args_end(), env);
+    if (!use_res_loc)
+      temp->handle_cleanup(env);
+    //Stmt * constructor = temp->try_constructor(dynamic_cast<const UserType *>(type), env);
+    //if (env.temp_ip->where == ExpInsrPoint::ExtendedExp) {
+    //  assert(!temp->cleanup || !use_res_loc);
+    //  if (constructor)
+    //    env.exp_ip->add(constructor);
+    //  else if (type->is(SCALAR_C))
+    //    env.exp_ip->add(mk_init(temp, mk_literal(0, env), env));
+    //  if (temp->cleanup)
+    //   env.exp_ip->add(temp->cleanup->cleanup_flag);
+    //} else {
+    //  temp->constructor = constructor;
+    //}
     if (use_res_loc)
       return noop();
     else
       return mk_id(temp, env);
-  }
-
-  Exp * parse_anon(const Syntax * p, Environ & env, ExpContext c) {
-    Type * t = env.types.inst(p->arg(0));
-    return make_temp(t, env, c);
   }
 
   //
@@ -3067,7 +3098,8 @@ namespace ast {
     //assert_num_args(p, 1);
     GatherMarks gather;
     bool same_scope = p->flag("same_scope");
-    const Module * m = lookup_symbol<Module>(p->arg(0), OUTER_NS, env.symbols.front, NULL, 
+    const Syntax * id = expand_id(p->arg(0), env);
+    const Module * m = lookup_symbol<Module>(id, OUTER_NS, env.symbols.front, NULL, 
                                              NormalStrategy, gather);
     if (p->num_args() == 1) {
       //printf("IMPORTING EVERTHING FROM %s\n", ~m->name());
@@ -3295,7 +3327,7 @@ namespace ast {
   };
 
   static void add_cast(Module * m, const Syntax * cast, const char * what, 
-                       UserType * from, UserType * to, Environ & env) {
+                       const UserType * from, const UserType * to, Environ & env) {
     UserCast * user_cast = new UserCast;
     user_cast->from = from;
     user_cast->to = to;
@@ -3307,13 +3339,13 @@ namespace ast {
   Stmt * parse_make_subtype(const Syntax * p, Environ & env) {
     //printf(">>%s\n", ~p->to_string());
     assert_num_args(p, 2, 3);
-    const Syntax * parent = p->arg(0);
+    const Syntax * parent = expand_id(p->arg(0), env);
     const Syntax * up_cast = p->arg(1);
     const Syntax * down_cast = p->num_args() > 2 ? p->arg(2) : NULL;
 
     // FIXME: Add check that we are in a user_type
     Module * m = dynamic_cast<Module *>(env.where);
-    UserType * parent_t = dynamic_cast<UserType *>(env.types.inst(parent));
+    const UserType * parent_t = dynamic_cast<const UserType *>(env.types.inst(parent)->root);
     UserType * child_t  = m->user_type; //dynamic_cast<UserType *>(env.types.inst(SymbolKey(m->name())));
     //printf("MAKE_SUBTYPE: %s %s\n", ~parent->to_string(), ~m->full_name());
     assert(!child_t->parent);
@@ -3633,6 +3665,21 @@ namespace ast {
     return res;
   }
 
+  Exp * parse_kill_const(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    Exp * exp = parse_exp(p->arg(0), env);
+    if (exp->type->read_only) {
+      exp = to_ref(exp, env);
+      const Reference * r = dynamic_cast<const Reference *>(exp->type);
+      const QualifiedType * q = dynamic_cast<const QualifiedType *>(r->subtype->root);
+      Type * new_type = env.types.inst(".ref", q->subtype);
+      //printf("OLD: %s  NEW: %s\n", ~exp->type->to_string(), ~new_type->to_string());
+      return from_ref(new Cast(exp, new_type), env);
+    } else {
+      return exp;
+    }
+  }
+
   //
   //
   //
@@ -3794,7 +3841,7 @@ namespace ast {
   Stmt * Fun::finish_parse(Environ & env0) {
     assert(syn->num_args() > 3);
 
-    if (!static_constructor && storage_class != SC_STATIC)
+    if (storage_class != SC_STATIC)
       link_once = env0.link_once;
 
     Environ env = env0.new_frame();
@@ -4085,8 +4132,9 @@ namespace ast {
         if (seen.size() == 1)
           throw seen[0].error;
         else
-          throw error(name, "No match for call to %s(%s)", 
-                      ~name->to_string(), parms_to_string(parms));
+          abort();
+          //throw error(name, "No match for call to %s(%s)", 
+          //            ~name->to_string(), parms_to_string(parms));
       } else if (candidates.size() == 1) {
         sym = candidates.front()->sym;
       } else if (candidates.size() > 1) {
@@ -4175,6 +4223,14 @@ namespace ast {
       TypeAlias * decl = new TypeAlias(of);
       decl->syn = p;
       add_simple_type(env.types, n, decl, env.where);
+      // FIXME NOW: Remove this hack, figure out why this causes problems
+      if (const UserType * ut = p->arg(1)->is_a("iostream") ? dynamic_cast<const UserType *>(of->root) : NULL) {
+        SymbolKey mn = n;
+        mn.ns = OUTER_NS;
+        //printf("ALIAS %s = %s\n", ~mn.to_string(), ~p->arg(1)->to_string());
+        assert(ut->module);
+        env.symbols.add(env.where, mn, ut->module, SymbolNode::ALIAS);
+      }
     }
     return empty_stmt();
   }
@@ -4819,6 +4875,8 @@ namespace ast {
   }
 
   Exp * try_just_exp(const Syntax * p, Environ & env, ExpContext c) {
+    //if (p)
+    //  printf("TRYING EXP: %s\n", ~p->to_string());
     try {
     if (Exp * exp = p->entity<Exp>()) return exp;
     String what = p->what().name;
@@ -4868,6 +4926,7 @@ namespace ast {
     if (what == "implicit_cast")     return parse_cast(p, env, TypeRelation::Implicit);
     if (what == "implicit_ptr_cast") return parse_implicit_ptr_cast(p, env);
     if (what == "reinterpret_cast")  return parse_cast(p, env, TypeRelation::Reinterpret);
+    if (what == "kill_const")        return parse_kill_const(p, env);
     if (what == ".")       return (new InitList)->parse_self(p, env);
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
     //if (what == "empty")   return (new Empty)->parse_self(p, env);
@@ -4963,8 +5022,7 @@ namespace ast {
       f << " :extern"; break;
     case SC_REGISTER: 
       f << " :register"; break;
-    default:
-      break;
+    default:;
     }
     if (link_once)
       f << " :once";
@@ -5289,8 +5347,8 @@ namespace ast {
   bool template_id(const Syntax * id, ast::Environ * env) {
     //printf("TEMPLATE_ID?: %s\n", ~id->to_string());
     if (!env) {
-      //abort();
       printf("TEMPLATE_ID: NO ENV\n");
+      abort();
       return false;
     }
     if (id->is_a("mid")) id = id->arg(0); // XXX: MAGA HACK!

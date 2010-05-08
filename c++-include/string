@@ -1,0 +1,71 @@
+#ifndef ZL_STRING
+#define ZL_STRING
+
+#include <string.h>
+#include <vector>
+
+mk_vector(char,);
+
+class string : public vector<char> {
+  const char * c_str() {
+    ensure_space(1);
+    *end_ = '\0';
+    return data_;
+  }
+  string() {}
+  string(const char * str) {assign(str, strlen(str));}
+  string(const string & other) {assign(other.data(), other.size());}
+  string & operator= (const string & str) {assign(str.begin(), str.size()); return *this;}
+  string & operator= (const char * str) {assign(str, strlen(str)); return *this;}
+  string & operator+= (const string & str) {append(str.begin(), str.size()); return *this;}
+  string & operator+= (const char * str) {append(str, strlen(str)); return *this;}
+  string & operator+= (char c) {push_back(c); return *this;}
+};
+
+
+macro operator+ (lhs, rhs) 
+  : typed_parms(const string &, const string &) 
+{
+  ({ string res;
+     res += lhs;
+     res += rhs;
+     res; });
+}
+
+macro operator+ (lhs, rhs) 
+  : typed_parms(const char *, const string &) 
+{
+  ({ string res;
+     res += lhs;
+     res += rhs;
+     res; });
+}
+
+macro operator+ (lhs, rhs) 
+  : typed_parms(const string &, const char *) 
+{
+  ({ string res;
+     res += lhs;
+     res += rhs;
+     res; });
+}
+
+macro operator+ (lhs, rhs) 
+  : typed_parms(char, const string &) 
+{
+  ({ string res;
+     res += lhs;
+     res += rhs;
+     res; });
+}
+
+macro operator+ (lhs, rhs) 
+  : typed_parms(const string &, char) 
+{
+  ({ string res;
+     res += lhs;
+     res += rhs;
+     res; });
+}
+
+#endif

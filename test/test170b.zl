@@ -1,0 +1,7 @@
+__raw(link_once);
+
+int x = 20;
+
+int * foo() {
+  return &x;
+}

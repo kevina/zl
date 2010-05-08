@@ -1,0 +1,20 @@
+#ifndef ZL_SSTREAM
+#define ZL_SSTREAM
+
+#include <iostream>
+#include <string>
+
+class ostringstream : public ostream {
+  string buf;
+  //const char * str () const {return buf.c_str();}
+  macro str (:this ths = this) :typed_parms() {({string res(ths->buf); res;});}
+  ostringstream() {}
+  ostringstream(const string & str, unsigned mode = 0) : buf(str) {}
+  ostringstream(const char * str, unsigned mode = 0) : buf(str) {}
+  void str (const string & s) {buf = s;}
+  void str (const char * s) {buf = s;}
+  void write(const char *, int len = -1);
+  void write_int(int i);
+};
+
+#endif

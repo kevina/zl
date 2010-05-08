@@ -644,7 +644,7 @@ namespace ast {
             (nu = dynamic_cast<const UserType *>(n_r->subtype->unqualified))) 
         {
           if (have_qualified->read_only && !n_r->subtype->read_only)
-            throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+            throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier <1>\n", 
                         ~have->to_string(), ~need->to_string());
           else if (hu->is(nu->category))
             return TC(PointerConv, ptr_to_ref(cast_up(addrof(exp, env), nu, env), env));
@@ -670,7 +670,7 @@ namespace ast {
       //         ~exp->type->unqualified->to_string(), 
       //         ~n_r->subtype->unqualified->to_string());
       if (have_qualified->read_only && !n_r->subtype->read_only)
-        throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+        throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier <2>\n", 
                     ~orig_exp->type->to_string(), ~type->to_string());
       if (check_only)
         return TypeConv(conv, NULL);
@@ -774,7 +774,7 @@ namespace ast {
           else
             return TC(PointerConv, exp);
         } else {
-          throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+          throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier <3>\n", 
                       ~have->to_string(), ~need->to_string());
         }
       } else if ((hu = dynamic_cast<const UserType *>(h_subtype->unqualified)) &&
@@ -784,7 +784,7 @@ namespace ast {
         //       ~h_subtype->to_string(), ~n_subtype->to_string(),
         //       ~hu->to_string(), ~nu->to_string());
         if (h_subtype->read_only && !n_subtype->read_only)
-          throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier\n", 
+          throw error(orig_exp->syn, "Conversion from \"%s\" to \"%s\" disregards const qualifier <4>\n", 
                       ~have->to_string(), ~need->to_string());
         else if (h_subtype->is(n_subtype->category))
           return TC(PointerConv, cast_up(exp, nu, env));
@@ -802,7 +802,6 @@ namespace ast {
     if (rule == Explicit) // FIXME: This isn't always legal
       return TC(Other,new Cast(exp, type));
 
-    if (i == 2538) abort();
     throw error(orig_exp->syn, "%d Mismatch Types expected \"%s\" but got \"%s\"", i,
                 ~type->to_string(), ~orig_exp->type->to_string());
   }

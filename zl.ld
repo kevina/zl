@@ -57,6 +57,7 @@
   gdb_breakpoint;
   stash_ptr_in_syntax;
   extract_ptr_from_syntax;
+  stringify;
   ct_malloc;
   ct_free;
 };

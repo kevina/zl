@@ -294,7 +294,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
 
   if (i != end && r && (*i)->is_a("()")) 
     try {
-      const Syntax * paran = reparse("TOKENS", (*i)->inner());
+      const Syntax * paran = reparse("TOKENS", (*i)->inner(), &env);
       const Syntax * parms = w.parse_fun_parms(paran, env);
       if (env.scope >= ast::LEXICAL) return NULL;
       const_cast<const Syntax * &>(*i) = parms;
