@@ -275,7 +275,7 @@ DeclWorking::DeclWorking(SyntaxBuilder & p)
 const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool field_pos)
 {
   SyntaxBuilder res;
-
+  
   //printf(">IN>%s\n", ~p->to_string());
 
   // make a local (shallow) copy of the args since we might need to

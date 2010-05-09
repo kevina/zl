@@ -808,11 +808,13 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   //printf("---\n");
   if (pattern->simple()) {
     add_match_var(m, pattern->what(), with);
-  } else {
+  } else if (!with->simple()) {
     //with = with->ensure_branch(); NOT NEEDED ANYMORE?
     bool ok = match_list(m, pattern, pattern->parts_begin(), pattern->parts_end(),
                          with, with->parts_begin() + shift, with->parts_end(), rt);
     if (!ok) return NULL;
+  } else {
+    return NULL;
   }
   //printf("MATCH RES:: ");
   //for (Match::const_iterator i = m->begin(), e = m->end(); i != e; ++i) {

@@ -263,7 +263,7 @@ namespace syntax_ns {
     Syntax * first_part() const {return this;}
     Syntax * part(unsigned i) const {return this;}
     parts_iterator parts_begin() const {return &(self = this);}
-    parts_iterator parts_end()   const {return &(self = this);}
+    parts_iterator parts_end()   const {return &(self = this) + 1;}
     flags_iterator flags_begin() const {return NULL;}
     flags_iterator flags_end()   const {return NULL;}
   protected:

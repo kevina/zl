@@ -431,8 +431,9 @@ namespace ast {
         throw error(NO_LOC, "tls mismatch %s\n", ~uniq_key);
       } else {
         fprintf(stderr, "TLS MISMATCH %s\n", ~uniq_key);
+        env.symbols.dump();
         abort();
-        throw error(NO_LOC, "TLS MISMATCH %s\n", ~uniq_key);
+        //throw error(NO_LOC, "TLS MISMATCH %s\n", ~uniq_key);
       }
       abort();
       //goto finish;
@@ -4223,8 +4224,7 @@ namespace ast {
       TypeAlias * decl = new TypeAlias(of);
       decl->syn = p;
       add_simple_type(env.types, n, decl, env.where);
-      // FIXME NOW: Remove this hack, figure out why this causes problems
-      if (const UserType * ut = p->arg(1)->is_a("iostream") ? dynamic_cast<const UserType *>(of->root) : NULL) {
+      if (const UserType * ut = dynamic_cast<const UserType *>(of->root)) {
         SymbolKey mn = n;
         mn.ns = OUTER_NS;
         //printf("ALIAS %s = %s\n", ~mn.to_string(), ~p->arg(1)->to_string());

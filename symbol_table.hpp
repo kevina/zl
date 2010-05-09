@@ -747,6 +747,7 @@ namespace ast {
 
   template <typename T>
   void assign_uniq_num(const T * sym, SymbolNode * cur, SymbolNode * stop = NULL) {
+    // FIXME: See assign_uniq_num<TopLevelSymbol> for model
     const T * t = NULL;
     // we need to compare the actual symbol name, since it may be
     // aliases as a different name

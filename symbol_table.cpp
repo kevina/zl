@@ -139,18 +139,19 @@ namespace ast {
     const TopLevelSymbol * t = NULL;
     // we need to compare the actual symbol name, since it may be
     // aliases as a different name
+    unsigned prev_num = 0;
     String name = sym->name();
     const InnerNS * ns = sym->tl_namespace();
     for (; cur != stop; cur = cur->next) {
-      if (cur->value && cur->value->name() == name && 
+      if (!cur->alias() && cur->value && 
+          cur->value->name() == name && 
           (t = dynamic_cast<const TopLevelSymbol *>(cur->value)) && 
-          t != sym && t->num != 0 && t->tl_namespace() == ns) 
-        break;
+          t != sym && t->num != NPOS && t->num > prev_num &&
+          t->tl_namespace() == ns) 
+        prev_num = t->num;
       t = NULL;
     }
-    unsigned num = 1;
-    assert(!t || t->num != NPOS);
-    if (t) num = t->num + 1;
+    unsigned num = prev_num + 1;
     assign_uniq_num(num, sym);
   }
 
