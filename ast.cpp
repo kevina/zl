@@ -4827,6 +4827,7 @@ namespace ast {
     if (what == "make_inner_ns") return parse_make_inner_ns(p, env);
     if (what == "make_user_type") return parse_make_user_type(p, env);
     if (what == "user_type")          return parse_user_type(p, env);
+    if (what == "associate_type")     return parse_finalize_user_type(p, env);
     if (what == "finalize_user_type") return parse_finalize_user_type(p, env);
     if (what == "make_subtype") return parse_make_subtype(p, env);
     if (what == "declare_user_type") return parse_declare_user_type(p, env, handle);

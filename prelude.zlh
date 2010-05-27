@@ -61,7 +61,7 @@ macro new_empty_mark() {new_mark_f(0);}
 
 struct UnmarkedSyntax;
 user_type UnmarkedSyntax {
-  finalize_user_type struct UnmarkedSyntax;
+  associate_type struct UnmarkedSyntax;
 }
 
 user_type Syntax;
@@ -76,7 +76,7 @@ __ct_callback Syntax * stash_ptr_in_syntax(void *);
 __ct_callback void * extract_ptr_from_syntax(Syntax *);
 struct Syntax;
 user_type Syntax {
-  finalize_user_type struct Syntax;
+  associate_type struct Syntax;
   macro _up_cast (x) {reinterpret_cast<UnmarkedSyntax *>(x);}
   macro _down_cast (x) {reinterpret_cast<Syntax *>(x);}
   make_subtype UnmarkedSyntax _up_cast _down_cast;
@@ -106,7 +106,7 @@ __ct_callback void syntax_list_reverse(SyntaxList *);
 __ct_callback void syntax_list_replace(SyntaxList *, size_t pos, Syntax * el);
 struct SyntaxList;
 user_type SyntaxList {
-  finalize_user_type struct SyntaxList;
+  associate_type struct SyntaxList;
   import Syntax;
   macro _up_cast (x) {reinterpret_cast<Syntax *>(x);}
   macro _down_cast (x) {reinterpret_cast<SyntaxList *>(x);}
@@ -126,7 +126,7 @@ __ct_callback Syntax * syntax_enum_next(SyntaxEnum *);
 __ct_callback SyntaxEnum * syntax_enum_clone(const SyntaxEnum *);
 struct SyntaxEnum;
 user_type SyntaxEnum {
-  finalize_user_type struct SyntaxEnum;
+  associate_type struct SyntaxEnum;
   export next;
   macro next(:this this) {syntax_enum_next(this);}
   macro clone(:this this) {syntax_enum_clone(this);}
@@ -142,7 +142,7 @@ __ct_callback Syntax * match_var(Match *, UnmarkedSyntax *);
 __ct_callback SyntaxEnum * match_varl(Match *, UnmarkedSyntax *);
 struct Match;
 user_type Match {
-  finalize_user_type struct Match;
+  associate_type struct Match;
   export var, varl;
   macro var(str, :this this) {match_var(this, str);}
   macro varl(str, :this this) {match_varl(this, str);}
@@ -186,14 +186,14 @@ __ct_callback bool user_type_have_destructor(const UserType *);
 
 //struct Symbol;
 //user_type Symbol {
-//  finalize_user_type struct UserType;
+//  associate_type struct UserType;
 //  macro name;
 //  macro uniq_name;
 //}
 
 struct UserType;
 user_type UserType {
-  finalize_user_type struct UserType;
+  associate_type struct UserType;
   export module;
   macro module(:this this) {user_type_module(this);}
   macro have_default_constructor(:this this) {user_type_have_default_constructor(this);}
@@ -205,7 +205,7 @@ user_type UserType {
 
 struct Module;
 user_type Module {
-  finalize_user_type struct Module; 
+  associate_type struct Module; 
   export symbols, have_symbol;
   macro symbols(:this this) {module_symbols(this);}
   macro have_symbol(sym, :this this) {module_have_symbol(this, sym);}
@@ -224,7 +224,7 @@ struct ModuleBuilder {
   Environ * env;
 };
 user_type ModuleBuilder {
-  finalize_user_type struct ModuleBuilder;
+  associate_type struct ModuleBuilder;
   macro module(:this this) {(*this)..module;}
   macro user_type(:this this) {(*this)..user_type;}
   macro env(:this this) {(*this)..env;}
@@ -233,7 +233,7 @@ user_type ModuleBuilder {
 }
 
 user_type UserTypeBuilder {
-  finalize_user_type struct ModuleBuilder;
+  associate_type struct ModuleBuilder;
   import ModuleBuilder;
   macro _up_cast (x) {reinterpret_cast<ModuleBuilder *>(x);}
   macro _down_cast (x) {reinterpret_cast<UserTypeBuilder *>(x);}
