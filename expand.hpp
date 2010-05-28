@@ -88,7 +88,7 @@ static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
 
 const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env = NULL,
                             bool match_complete_str = false, 
-                            ReplTable * match_complete_str = NULL, 
+                            ReplTable * = NULL, 
                             const Replacements * additional_repls = NULL);
 static inline const Syntax * reparse(String what, ReparseInfo p, Environ * env = NULL,
                                      ReplTable * r = NULL, 

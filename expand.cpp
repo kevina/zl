@@ -1998,7 +1998,7 @@ namespace syntax_ns {
 //
 
 struct PointerEntity {
-  typedef TypeInfo<PointerEntity> TypeInfo;
+  typedef ::TypeInfo<PointerEntity> TypeInfo;
 };
 
 extern "C" namespace macro_abi {
