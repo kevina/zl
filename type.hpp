@@ -199,7 +199,8 @@ namespace ast {
     enum CastType {Implicit, Explicit, Static, Reinterpret, Const, Dynamic};
     enum CheckOnlyType {CheckOnlyFalse, CheckOnly};
     virtual TypeConv resolve_to(Exp * exp, const Type * type, Environ & env, CastType rule = Implicit, CheckOnlyType = CheckOnlyFalse) const = 0;
-    virtual const Type * unify(int rule, const Type *, const Type *) const = 0;
+    enum UnifyRule {Default, Fancy};
+    virtual const Type * unify(int rule, const Type *, const Type *, Environ & env) const = 0;
     virtual void resolve_assign(Exp * &, Exp * &, Environ & env) const = 0;
     virtual Exp * to_effective(Exp * exp, Environ & env) const = 0;
     virtual Exp * def_arg_prom(Exp * exp, Environ & env) const = 0;

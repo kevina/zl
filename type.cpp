@@ -561,7 +561,7 @@ namespace ast {
 #endif
 
   const Type * TypeRelation::unify(int rule, Exp * & x, Exp * & y, Environ & env) {
-    const Type * t = unify(rule, x->type, y->type);
+    const Type * t = unify(rule, x->type, y->type, env);
     //printf("UNIFY %d to \"\%s\"\n", x->parse_->str().source->get_pos(x->parse_->str().begin).line, ~t->to_string());
     //if (t != xt) {x = new Cast(x, t);}
     //if (t != yt) {y = new Cast(y, t);}
@@ -576,7 +576,7 @@ namespace ast {
     Exp * to_effective(Exp * exp, Environ & env) const;
     Exp * def_arg_prom(Exp * exp, Environ & env) const;
     void resolve_assign(Exp * & lhs, Exp * & rhs, Environ & env) const;
-    const Type * unify(int rule, const Type *, const Type *) const;
+    const Type * unify(int rule, const Type *, const Type *, Environ & env) const;
   };
 
   static const Int * INT;
@@ -844,10 +844,14 @@ namespace ast {
     }
   }
 
-  const Type * C_TypeRelation::unify(int rule, const Type * x, const Type * y) const {
+  const Type * C_TypeRelation::unify(int rule, const Type * x0, const Type * y0, Environ & env) const {
+    // FIXME: The Fancy case needs a lot of work, it should conform to
+    // C++ handling of the conditional op., 5.16
+    
     // 6.3.1.8: Usual arithmetic conversions
-    x = x->effective->unqualified;
-    y = y->effective->unqualified;
+    const Type * x = x0->effective->unqualified;
+    const Type * y = y0->effective->unqualified;
+    if (rule == Default /* HACK! */) {
     {
       const Float * x0 = dynamic_cast<const Float *>(x);
       const Float * y0 = dynamic_cast<const Float *>(y); 
@@ -866,11 +870,39 @@ namespace ast {
       assert (u != s);
       if (u->rank >= s->rank) return u;
       if (s->min <= u->min && s->max >= u->max) return s;
-      abort(); // FIXME: From standard: Otherwise, both operands are
-               // converted to the unsigned integer type corresponding
-               // to the type of the operand with signed integer type.
+      if (rule != Fancy)
+        abort(); // FIXME: From standard: Otherwise, both operands are
+                 // converted to the unsigned integer type corresponding
+                 // to the type of the operand with signed integer type.
 
+    }}
+    assert(rule == Fancy);
+    // deal with pointer types
+    {
+      const Pointer * x_p = dynamic_cast<const Pointer *>(x);
+      const Pointer * y_p = dynamic_cast<const Pointer *>(y);
+      if (x_p && y_p) {
+        if (x_p->subtype->root == y_p->subtype->root)
+          return x0;
+        if (x_p->subtype->unqualified != y_p->subtype->unqualified)
+          return x0;
+        unsigned qualifiers = 0;
+        const QualifiedType * x_q = dynamic_cast<const QualifiedType *>(x_p->subtype->root);
+        const QualifiedType * y_q = dynamic_cast<const QualifiedType *>(y_p->subtype->root);
+        if (x_q && ! y_q) return x0;
+        if (y_q && ! x_q) return y0;
+        if (x_q) qualifiers |= x_q->qualifiers;
+        if (y_q) qualifiers |= y_q->qualifiers;
+        if (qualifiers) {
+          env.types.inst(".ptr", 
+                         env.types.inst(".qualified", 
+                                        TypeParm(qualifiers), 
+                                        TypeParm(x_p->subtype->unqualified)));
+        } else 
+          return x0;
+      }
     }
+    return x0;
   }
 
   TypeRelation * new_c_type_relation() {

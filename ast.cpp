@@ -1696,7 +1696,7 @@ namespace ast {
   }
 
   EIf * EIf::construct(Environ & env) {
-    type = if_true->type;
+    type = env.type_relation->unify(TypeRelation::Fancy, if_true, if_false, env);
     ct_value_ = eif_ct_value(this);
     return this;
   }
@@ -1709,7 +1709,11 @@ namespace ast {
     Exp * if_true = parse_exp(p->arg(1), wrap1.env);
     BranchInsrPointWrapper wrap2(env);
     Exp * if_false = parse_exp(p->arg(2), wrap2.env);
-    if_false = if_false->resolve_to(if_true->type, wrap2.env);
+    const Type * res_type = env.type_relation->unify(TypeRelation::Fancy, 
+                                                     if_true->type, if_false->type,
+                                                     env);
+    if_true = if_true->resolve_to(res_type, wrap1.env);
+    if_false = if_false->resolve_to(res_type, wrap2.env);
     if (wrap1.stmts || wrap2.stmts) {
       Var * v = start_temp(if_true->type, env);
       Stmt * s1 = wrap1.finish(v, if_true, env);
