@@ -20,7 +20,8 @@ noinst_HEADERS=*.hpp
 noinst_DATA=prelude-fct.so libc++.o
 
 EXTRA_DIST = test/* zl.ld ops.in grammer.in grammer.ins \
-  class-simple.zl class.zl prelude.zl class-simple.zlh  prelude.zlh
+  class-simple.zl class.zl prelude.zl class-simple.zlh  prelude.zlh zlc.in \
+  grammer.hint libc++.cpp c++-include/* zl_h.h prelude-c++.zlh
 
 class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl grammer.in
 	ulimit -s 1024; ./zl -C -P class-simple.zl > class-simple-fct.log
