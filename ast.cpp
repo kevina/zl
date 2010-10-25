@@ -3380,18 +3380,22 @@ namespace ast {
       const Syntax * arg1 = partly_expand(p->arg(1), OtherPos, env, EXPAND_NO_MACRO_CALL);
       const Syntax * call;
       if (arg1->is_a("call")) {
+        //printf("AND THE CALL WAS %s\n", ~p->to_string());
         assert_num_args(arg1, 2);
         const Syntax * n = expand_id(arg1->arg(0));
-        const Syntax * a = SYN(*arg1->arg(1), PARTS(), FLAGS(SYN(THIS, ptr_exp)));
+        const Syntax * this_flag = SYN(THIS, ptr_exp);
+        const Syntax * a = SYN(*arg1->arg(1), PARTS(), FLAGS(this_flag));
         const Symbol * sym;
         //if (n->is_a("::")) // FIXME: This is hack, and not quite right
         //  sym = lookup_symbol<Symbol>(n, DEFAULT_NS, env.symbols.front, NULL, StripMarks);
         //else
         //  sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms, NULL, StripMarks);
         if (!n->is_a("::"))
-          n = SYN(SYN("::"), SYN<Symbol>(t->module), n);
+          n = SYN(n->str(), SYN("::"), SYN<Symbol>(t->module), n);
+        n = SYN(n->str(), PARTS(ID, n), FLAGS(this_flag));
         //call = SYN(p->str(), arg1->part(0), SYN(ID, SYN(n->str(), sym)), a);
         call = SYN(p->str(), arg1->part(0), n, a);
+        //printf("AND THE CALL IS %s\n", ~call->to_string());
       } else {
         const Syntax * n = expand_id(arg1);
         const Symbol * sym = lookup_symbol<Symbol>(n, DEFAULT_NS, t->module->syms.front, t->module->syms.back, StripMarks);
