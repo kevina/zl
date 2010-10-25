@@ -16,6 +16,9 @@ macro offsetof(TYPE, MEMBER) {(size_t) &(reinterpret_cast<TYPE *>(0))->MEMBER;}
 extern "C" void *memcpy(void *dest, const void *src, size_t n);
 extern "C" void *memmove(void *dest, const void *src, size_t n);
 
+// libc hacks
+typedef long long int64_t;
+
 // If compiling for compile time these will point to ct_malloc and
 // ct_free, otherwise they will point to malloc and free.
 extern "C" void * zl_malloc(size_t);

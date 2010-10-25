@@ -3832,6 +3832,15 @@ namespace ast {
     parms = expand_fun_parms(p->arg(1), env);
 
     ret_type = parse_type(p->arg(2), env);
+    const UserType * ut;
+    if ((ut = dynamic_cast<const UserType *>(ret_type->unqualified)) && 
+        have_copy_constructor(ut)) 
+    {
+      Error * err = error(p, "WARNING: Returning user types with copy constructor unsupported, "
+                          "using function will lead to very bad things.");
+      fprintf(stderr, "%s", ~err->message());
+    }
+      
     type = env.function_sym()->inst(env.types, this);
 
     body = 0;
