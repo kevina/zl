@@ -3,6 +3,20 @@
 #include "environ.hpp"
 
 namespace ast {
+
+  Overloadable Overloadable::AS_ID(Overloadable::SELF);
+
+  void Overloadable::to_string(StringBuf & buf) const {
+    if (data == &AS_ID) {
+      buf << "as id";
+    } else if (const Tuple * t = as_tuple()) {
+      buf << "with parms: ";
+      t->to_string(buf);
+    } else {
+      buf << "<nil>";
+    }
+  }
+
   
   unsigned InnerNS::Tag::last_order_num = 0;
 

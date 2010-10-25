@@ -515,11 +515,11 @@ public:
     // FIXME: handle flags
     if (is_static) {
       builder->add(replace(raw_syntax(var (` (mid n) internal) (mid t) (mid @rest)), m, mark));
-      builder->add(replace(syntax {macro n () {n`internal;}}, m, mark));
+      builder->add(replace(syntax {macro n () :id {n`internal;}}, m, mark));
     } else {
       struct_b->append(replace(raw_syntax((mid t) (mid n)), m, mark));
       // FIXME: (name *)(this) may cast away const
-      builder->add(replace(syntax {macro n (:this ths = this) {(*(name *)(ths))..n;}}, m, mark));
+      builder->add(replace(syntax {macro n (:this ths = this) :id {(*(name *)(ths))..n;}}, m, mark));
     }
   }
 

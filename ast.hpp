@@ -617,7 +617,7 @@ namespace ast {
     mutable bool is_macro;
     Tuple * parms;
     bool overload;
-    const Tuple * overloadable() const {return overload ? parms : NULL;}
+    Overloadable overloadable() const {return overload ? parms : NULL;}
     const Type * ret_type;
     Block * body;
     bool inline_;
@@ -915,73 +915,108 @@ namespace ast {
     }
   }
 
+  static inline bool overload_compatible(Overloadable need, Overloadable cur) 
+  {
+    if (!need) return true;
+    const Tuple * tuple = need.as_tuple();
+    if (tuple) {
+      const Tuple * have = cur.as_tuple();
+      if (!have) return false;
+      if (tuple->parms.size() != have->parms.size()) return false;
+      for (unsigned i = 0; i != tuple->parms.size(); ++i)
+        if (!(tuple->parms[i].type->root == have->parms[i].type->root
+              || (   is_ptr_fun(tuple->parms[i].type) 
+                     && is_ptr_fun(have->parms[i].type))))
+          return false;
+    } else {
+      if (!cur.can_be_id()) return false;
+    }
+    return true;
+  }
+
   //
   //
   //
   template <typename T>
-  T * find_overloaded_symbol(const Tuple * to_find, const Syntax * id,
+  T * find_overloaded_symbol(Overloadable to_find, const Syntax * id,
                              Symbol * sym, Environ * env) 
   {
     if (!sym)
       sym = env->symbols.find<Symbol>(id);
     const OverloadedSymbol * cur = dynamic_cast<const OverloadedSymbol *>(sym);
+    //printf("??? %p\n", cur);
     if (!cur) {
-      if (T * s = dynamic_cast<T *>(sym))
-        return s;
-      else
-        throw unknown_error(id);
+      if (T * s = dynamic_cast<T *>(sym)) {
+        if (overload_compatible(to_find, s->overloadable()))
+          return s;
+        else
+          return NULL;
+      } else {
+        return NULL;
+      }
+      //throw unknown_error(id);
     }
     Vector<Symbol *> syms;
     while (cur) {
-      //IOUT.printf("FOS: %s %p\n", ~cur->name(), cur->sym);
-      if (to_find) {
-        const Tuple * have = cur->sym->overloadable();
-        assert(have);
-        if (to_find->parms.size() != have->parms.size()) goto next;
-        for (unsigned i = 0; i != to_find->parms.size(); ++i)
-          if (to_find->parms[i].type->root != have->parms[i].type->root) goto next;
-      }
-      syms.push_back(cur->sym);
-    next:
+      if (overload_compatible(to_find, cur->sym->overloadable()))
+        syms.push_back(cur->sym);
       cur = cur->next;
     }
     if (syms.size() == 0)
       return NULL;
-    if (syms.size() > 1)
-      throw error(id, "Multiple matches for type with parms %s", ~to_find->to_string());
+    if (syms.size() > 1) {
+      //for (unsigned i = 0; i != syms.size(); ++i)
+      //  printf("MULTI MATCH: %s\n", ~syms[i]->overloadable().to_string());
+      throw error(id, "%p Multiple matches for overloaded symbol %s", &to_find, ~to_find.to_string());
+    }
     T * s = dynamic_cast<T *>(syms.front());
     if (!s) 
-      abort();
+      return NULL;
+      //abort();
     //throw unknown_error(id);
     return s;
   }
-
+  
   template <typename T>
-  inline const T * find_overloaded_symbol(const Tuple * to_find, const Syntax * id,
+  inline const T * find_overloaded_symbol(Overloadable to_find, const Syntax * id,
                                           const Symbol * sym, Environ * env) 
   {
     return find_overloaded_symbol<T>(to_find, id, const_cast<Symbol *>(sym), env);
   }
 
   template <typename T>
-  inline T * lookup_overloaded_symbol(const Tuple * parms, const Syntax * id,
+  inline const T * find_overloaded_symbol(Overloadable to_find, const Syntax * id,
+                                          Environ * env) 
+  {
+    return find_overloaded_symbol<T>(to_find, id, static_cast<Symbol *>(NULL), env);
+  }
+
+  template <typename T>
+  inline T * lookup_overloaded_symbol(Overloadable parms, const Syntax * id,
                                       Symbol * sym, Environ * env) 
   {
     T * s = find_overloaded_symbol<T>(parms, id, sym, env);
     if (!s) 
-      throw error(id, "Cannot find a match for type with parms %s", ~parms->to_string());
+      if (parms.as_tuple()) {
+        if (sym->name() == "write")
+          abort();
+        throw error(id, "Cannot find a match for fun with parms %s<1>", ~parms.as_tuple()->to_string());
+      } else {
+        throw error(id, "Cannot find a match for overloaded symbol.");
+      }
+        
     return s;
   }
 
   template <typename T>
-  inline const T * lookup_overloaded_symbol(const Tuple * to_find, const Syntax * id,
+  inline const T * lookup_overloaded_symbol(Overloadable to_find, const Syntax * id,
                                             const Symbol * sym, Environ * env) 
   {
     return lookup_overloaded_symbol<T>(to_find, id, const_cast<Symbol *>(sym), env);
   }
 
   template <typename T>
-  inline T * lookup_overloaded_symbol(const Tuple * to_find, const Syntax * id, Environ * env) 
+  inline T * lookup_overloaded_symbol(Overloadable to_find, const Syntax * id, Environ * env) 
   {
     return lookup_overloaded_symbol<T>(to_find, id, (Symbol *)NULL, env);
   }
@@ -990,18 +1025,21 @@ namespace ast {
   T * lookup_fancy_symbol(const Syntax * p, const InnerNS * ns, Environ & env)
   {
     p = expand_id(p, env);
-    if (!p->is_a("fun")) return lookup_symbol<T>(p, ns, env.symbols.front);
-    const Syntax * q = p->arg(0);
-    T * sym = lookup_symbol<T>(q, ns, env.symbols.front);
+    //if (!p->is_a("fun")) return lookup_symbol<T>(p, ns, env.symbols.front);
+    const Syntax * q = p;
+    if (q->is_a("fun")) q = q->arg(0);
+    Symbol * sym = lookup_symbol<Symbol>(q, ns, env.symbols.front);
     OverloadedSymbol * over = dynamic_cast<OverloadedSymbol *>(sym);
     if (over) {
-      const Tuple * parms = expand_fun_parms(p->arg(1), env);
-      return lookup_overloaded_symbol<T>(parms, q, over, &env);
+      Overloadable ol;
+      if (p->is_a("fun"))
+          ol = expand_fun_parms(p->arg(1), env);
+      return lookup_overloaded_symbol<T>(ol, q, over, &env);
     } else {
       if (T * s = dynamic_cast<T *>(sym)) {
         return s;
       } else {
-        throw error(p, "Identifier \"%s\" is of the wrong type (expected %s got %s).", 
+        throw error(p, "Identifier \"%s\" is of the wrong type (expected %s got %s).<0>", 
                     ~p->to_string(),
                     abi::__cxa_demangle(typeid(const T).name(), NULL, NULL, NULL), 
                     abi::__cxa_demangle(typeid(*sym).name(), NULL, NULL, NULL));

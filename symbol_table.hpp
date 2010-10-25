@@ -173,6 +173,22 @@ namespace ast {
   // defined in ast.cpp
   void asm_name(const SymbolKey * key, OStream &);
 
+  struct Overloadable {
+    static Overloadable AS_ID;
+    const void * data;
+    operator bool() const {return data != NULL;}
+    const class Tuple * as_tuple() const {return data == &AS_ID ? NULL : static_cast<const class Tuple *>(data);}
+    operator const class Tuple * () const {return as_tuple();}
+    bool as_id() const {return data == &AS_ID;}
+    bool can_be_id() const {return data == NULL || data == &AS_ID;}
+    Overloadable(const Tuple * d = NULL) : data(d) {}
+    void to_string(StringBuf & buf) const;
+    String to_string() const {StringBuf buf; to_string(buf); return buf.freeze();}
+  private:
+    enum Self {SELF};
+    Overloadable(Self) {data = this;}
+  };
+
   struct Symbol : public gc {
     typedef ::TypeInfo<Symbol> TypeInfo;
     const SymbolKey * key;
@@ -192,7 +208,7 @@ namespace ast {
       }
     }
     virtual const InnerNS * tl_namespace() const {return DEFAULT_NS;}
-    virtual const class Tuple * overloadable() const {return NULL;}
+    virtual Overloadable overloadable() const {return NULL;}
     virtual bool is_template() const {return false;}
     virtual SymbolNode * add_to_env(const SymbolKey & k, Environ &, bool shadow_ok);
     virtual void make_unique(SymbolNode * self, SymbolNode * stop = NULL) const {}

@@ -982,7 +982,7 @@ namespace ast {
   struct Trivial : public Symbol {
     Trivial(const Type * t) : parms(dynamic_cast<const Tuple *>(t)) {}
     const Tuple * parms;
-    const Tuple * overloadable() const {return parms;}
+    Overloadable overloadable() const {return parms;}
   };
 
   struct NoParmsCmp {

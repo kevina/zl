@@ -851,6 +851,12 @@ namespace ast {
   TypeRelation * new_c_type_relation();
   void create_c_types(TypeSymbolTable types);
 
+  static inline bool is_ptr_fun(const Type * t) {
+    const Pointer * ptr = dynamic_cast<const Pointer *>(t->root);
+    if (!ptr) return false;
+    return (ptr->subtype->is(FUN_C));
+  }
+
   extern Type * VOID_T; // FIXME: Hack
 
 }

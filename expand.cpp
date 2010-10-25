@@ -410,9 +410,9 @@ struct Macro : public Declaration, public Symbol {
   SymbolKey real_name;
   static const Syntax * macro_call;
   static const Syntax * macro_def;
-  const Tuple * typed_parms;
-  Macro() : typed_parms() {}
-  const class Tuple * overloadable() const {return typed_parms;}
+  Overloadable overloadable_;
+  Macro() {}
+  Overloadable overloadable() const {return overloadable_;}
   struct MacroInfo {
     const Syntax * orig_call;
     const Syntax * orig_def;
@@ -489,7 +489,11 @@ struct SimpleMacro : public Macro {
     const Syntax * typed_parms_syn = p->flag("typed-parms");
     if (typed_parms_syn) {
       //printf("TYPED PARMS = %s\n", ~typed_parms_syn->to_string());
-      typed_parms = expand_fun_parms(typed_parms_syn->arg(0), e); 
+      overloadable_ = expand_fun_parms(typed_parms_syn->arg(0), e); 
+    }
+    const Syntax * id_macro = p->flag("id");
+    if (id_macro) {
+      overloadable_ = Overloadable::AS_ID;
     }
     ChangeSrc<SyntaxSourceInfo> cs(p->arg(2));
     repl = new_syntax(cs,*p->arg(2));
@@ -1421,23 +1425,33 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   } else if (Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
     return partly_expand(n, pos, env, flags);
   } else if (what == "id") {
+    //printf("EXPANDING ID %s\n", ~p->to_string());
     p = expand_id(p, env);
     if (!(flags & EXPAND_NO_ID_MACRO_CALL)) { 
       // NOTE: ID macros can have flags, since there is no parameter list
-    //       they are passed in as flags as (id <id> :(flag1 val1))
+      //       they are passed in as flags as (id <id> :(flag1 val1))
       assert_num_args(p, 1);
       const Syntax * n = p;
-      const Macro * m = env.symbols.find<Macro>(n->arg(0));
-      if (m && !m->overloadable()) { // id macro
+      const Macro * m = ast::find_overloaded_symbol<Macro>(Overloadable::AS_ID, n->arg(0), &env);
+      if (m) { // id macro
+        //printf("ID MACRO HIT %s\n", ~n->arg(0)->to_string());
         Syntax * a = SYN(PARTS(SYN(".")), FLAGS(p->flags_begin(), p->flags_end()));
         p = m->expand(p, a, env);
+        //printf("ID MACRO HIT res: %s\n", ~p->to_string());
         return partly_expand(p, pos, env, flags);
+      } else {
+        //if (n->arg(0)->what().name == "data_") {
+        //printf("ID MACRO FAILED %s\n", ~n->arg(0)->to_string());
+          //abort();
+          //}
       }
     }
   } else if (what == "call") {
     assert_num_args(p, 2);
+    //printf("EXPANDING CALL %s\n", ~p->to_string());
     const Syntax * n = partly_expand(p->arg(0), OtherPos, env, flags | EXPAND_NO_ID_MACRO_CALL);
     const Syntax * a = p->arg(1);
+    //printf("expanding call name: %s\n", ~n->to_string());
     if (a->is_a("()")) a = reparse("SPLIT", a->inner(), &env);
     if (n && n->is_a("id")) {
       if (!(flags & EXPAND_NO_FUN_MACRO_CALL)) {
@@ -1484,6 +1498,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     p = e_parse_exp(p, env, "seq");
     return partly_expand(p, pos, env, flags);
   } else if (what == "<@") {
+    //printf("GOT A <@: %s\n", ~p->to_string());
     if (p->num_args() < 2) {
       throw error(p, "<@ requires 2 or more args\n");
     } else if (p->num_args() == 2) {
