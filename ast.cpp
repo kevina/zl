@@ -608,10 +608,12 @@ namespace ast {
     Case() {}
     const char * what() const {return "case";}
     Exp * exp; 
+    int val;
     Case * parse_self(const Syntax * p, Environ & env) {
       syn = p;
       if (p->num_args() == 1) {
         exp = parse_exp(p->arg(0), env);
+        val = exp->ct_value<int>();
       } else /* default */ {
         exp = NULL;
       }
@@ -626,7 +628,7 @@ namespace ast {
     }
     void compile(CompileWriter & o) {
       if (exp)
-        o << adj_indent(-2) << indent << "(case " << exp << ")\n";
+        o << adj_indent(-2) << indent << "(case " << val << ")\n";
       else
         o << adj_indent(-2) << indent << "(case)\n";
     }
