@@ -1795,6 +1795,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
     deps.merge(deps[i]->deps());
   }
   deps.insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("ct_malloc"), NULL));
+  deps.insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("ct_malloc_atomic"), NULL));
   deps.insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("ct_free"), NULL));
 
   //printf("COMPILE FOR CT DEPS: %d\n", deps.size());
@@ -1849,12 +1850,20 @@ void compile_for_ct(Deps & deps, Environ & env) {
 
 struct Syntaxes {const char * str; const Syntax * syn;};
 
+// HACK
+StringObj * (*to_external_name)(const ast::Symbol * sym) = 0;
+
 void load_macro_lib(ParmString lib, Environ & env) {
   printf("LOADING: %s\n", lib.str());
   void * lh = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
   if (!lh) {
     fprintf(stderr, "ERROR: %s\n", dlerror());
     abort();
+  }
+  void * to_external_name_0 = dlsym(lh, "to_external_name");
+  if (to_external_name_0) {
+    printf("FOUND ALT MANGLER!\n");
+    to_external_name = (StringObj * (*)(const ast::Symbol *))to_external_name_0;
   }
   unsigned macro_funs_size = *(unsigned *)dlsym(lh, "_macro_funs_size");
   if (macro_funs_size > 0) {
@@ -1885,10 +1894,11 @@ void load_macro_lib(ParmString lib, Environ & env) {
       init_ct_var(*i, p, env);
     }
   }
-  unsigned syntaxes_size = *(unsigned *)dlsym(lh, "_syntaxes_size");
-  if (syntaxes_size > 0) {
+  
+  unsigned * syntaxes_size = (unsigned *)dlsym(lh, "_syntaxes_size");
+  if (syntaxes_size && *syntaxes_size > 0) {
     Syntaxes * i = (Syntaxes *)dlsym(lh, "_syntaxes");
-    Syntaxes * e = i + syntaxes_size;
+    Syntaxes * e = i + *syntaxes_size;
     for (; i != e; ++i) {
       i->syn = parse_syntax_c(parse_str("SYNTAX", SourceStr(i->str, i->str+strlen(i->str))));
     }
@@ -2074,6 +2084,10 @@ extern "C" {
 
   void * ct_malloc(size_t size) {
     return GC_MALLOC(size);
+  }
+
+  void * ct_malloc_atomic(size_t size) {
+    return GC_MALLOC_ATOMIC(size);
   }
 
   void ct_free(void * ptr) {

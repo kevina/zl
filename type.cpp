@@ -511,8 +511,8 @@ namespace ast {
     if (p->flag("restrict")) qualifiers |= QualifiedType::RESTRICT;
     if (qualifiers) {
       Vector<TypeParm> q_parms;
-      q_parms.push_back(TypeParm(qualifiers));
       q_parms.push_back(TypeParm(inst_type));
+      q_parms.push_back(TypeParm(qualifiers));
       return types.find(".qualified")->inst(q_parms);
     } else {
       return inst_type;
@@ -896,8 +896,8 @@ namespace ast {
         if (qualifiers) {
           env.types.inst(".ptr", 
                          env.types.inst(".qualified", 
-                                        TypeParm(qualifiers), 
-                                        TypeParm(x_p->subtype->unqualified)));
+                                        TypeParm(x_p->subtype->unqualified),
+                                        TypeParm(qualifiers)));
         } else 
           return x0;
       }
@@ -977,7 +977,7 @@ namespace ast {
   }
 
   Type * TypeSymbolTable::ct_const(const Type * t) {
-    return inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(t));
+    return inst(".qualified", TypeParm(t), TypeParm(QualifiedType::CONST));
   }
 
 }
@@ -1019,3 +1019,85 @@ namespace ast {
 
 }
 
+extern "C" namespace macro_abi {
+  using namespace ast;
+  typedef Function FunType;
+
+  const Type * symbol_to_type(const Symbol * sym) {
+    abort(); // this doesn't necessary make sense due to the fact that
+             // a type is not really a symbol, we are only pretending
+             // it is for the macro API
+  }
+
+  const Symbol * type_to_symbol(const Type * type) {
+    return type->type_symbol;
+  }
+
+  const Type * type_root(const Type * type) {
+    type = type->root;
+    for (;;) { // loop while something changed
+      if (const ZeroT * t = dynamic_cast<const ZeroT *>(type)) {
+        type = t->of;
+      } else if (const WrapperTypeInst * t = dynamic_cast<const WrapperTypeInst *>(type)) {
+        type = t->of;
+      } else {
+        break;
+      }
+    }
+    return type;
+  }
+
+  const Type * type_subtype(const Type * type) {
+    if (type->num_parms() == 0) return NULL;
+    TypeParm p = type->parm(0);
+    if (!p.is_type()) return NULL;
+    return p.as_type;
+  }
+  
+  int type_qualifiers(const Type * type) {
+    const QualifiedType * t = dynamic_cast<const QualifiedType *>(type);
+    if (!t) return 0;
+    return t->qualifiers;
+  }
+
+  const char * type_tag(const Type * type) {
+    return type->tag();
+  }
+
+  const bool type_is_scalar(const Type * type) {
+    return type->is(SCALAR_C);
+  }
+  
+  const bool type_is_qualified(const Type * type) {
+    return dynamic_cast<const QualifiedType *>(type);
+  }
+
+  const bool type_is_pointer(const Type * type) {
+    return dynamic_cast<const Pointer *>(type);
+  }
+
+  const bool type_is_reference(const Type * type) {
+    return dynamic_cast<const Reference *>(type);
+  }
+
+  const bool type_is_array(const Type * type) {
+    return dynamic_cast<const Array *>(type);
+  }
+
+  const bool type_is_fun(const Type * type) {
+    return dynamic_cast<const Function *>(type);
+  }
+
+  const Type * fun_type_ret_type(const FunType * type) {
+    return type->ret;
+  }
+
+  unsigned fun_type_num_parms(const FunType * type) {
+    return type->parms->num_parms();
+  }
+
+  const Type * fun_type_parm_type(const FunType * type, unsigned num) {
+    return type->parms->parm(num).is_type() ? type->parms->parm(num).as_type : NULL;
+  }
+
+}

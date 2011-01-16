@@ -131,6 +131,9 @@ static inline bool operator==(SubStr x, const char * y) {
                               // otherwise strncmp will return
                               // non-zero
 }
+static inline bool operator!=(SubStr x, const char * y) {
+  return !operator==(x, y);
+}
 
 struct Pos {
   unsigned line;

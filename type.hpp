@@ -683,7 +683,7 @@ namespace ast {
       if (q & CONST) read_only = true;
     }
     unsigned num_parms() const {return 2;}
-    TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(qualifiers) : TypeParm(subtype);}
+    TypeParm parm(unsigned i) const {return i == 0 ? TypeParm(subtype) : TypeParm(qualifiers);}
     const Type * find_unqualified() const {return subtype;}
     unsigned size() const {return subtype->size();}
     unsigned align() const {return subtype->align();}
@@ -693,10 +693,10 @@ namespace ast {
   public:
     ParmTypeInst * inst_p(Vector<TypeParm> & p) const {
       assert(p.size() == 2);
-      assert(p[0].what == TypeParm::INT);
-      assert(p[1].what == TypeParm::TYPE);
-      unsigned qualifiers = p[0].as_int;
-      const Type * subtype = p[1].as_type;
+      assert(p[0].what == TypeParm::TYPE);
+      assert(p[1].what == TypeParm::INT);
+      const Type * subtype = p[0].as_type;
+      unsigned qualifiers = p[1].as_int;
       if (const QualifiedType * t = dynamic_cast<const QualifiedType *>(subtype)) {
         qualifiers |= t->qualifiers;
         subtype = t->subtype;
@@ -705,8 +705,8 @@ namespace ast {
     }
     unsigned required_parms() const {return 2;}
     TypeParm::What parmt(unsigned i) const {
-      if (i == 0) return TypeParm::INT;
-      if (i == 1) return TypeParm::TYPE;
+      if (i == 0) return TypeParm::TYPE;
+      if (i == 1) return TypeParm::INT;
       else return TypeParm::NONE;
     }
   };

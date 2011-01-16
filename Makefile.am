@@ -13,11 +13,12 @@ zl_LDADD=
 #zl_LDADD+= /home/kevina/gc6.8/gc.a 
 zl_LDADD+= -lgc
 zl_LDADD+= -ldl
+zl_DEPENDENCIES = zl.ld
 zl_LDFLAGS=-Wl,--export-dynamic,--version-script=zl.ld
 
 noinst_HEADERS=*.hpp
 
-noinst_DATA=prelude-fct.so libc++.o
+noinst_DATA=prelude-fct.so mangle-fct.so libc++.o
 
 EXTRA_DIST = test/* zl.ld ops.in grammer.in grammer.ins \
   class-simple.zl class.zl prelude.zl class-simple.zlh  prelude.zlh zlc.in \
@@ -25,9 +26,19 @@ EXTRA_DIST = test/* zl.ld ops.in grammer.in grammer.ins \
 
 class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl grammer.in
 	ulimit -s 1024; ./zl -C -P class-simple.zl > class-simple-fct.log
+#	zls -g -fexceptions -shared -fpic -o class-simple-fct.so class-simple.zls
 
 prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in
 	ulimit -s 1024; ./zl -C -P prelude.zl > prelude-fct.log
+#	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls
+
+mangle-fct.so: zl zlc prelude.zlh mangle.zlp string_buf-zl.hpp string_buf-zl.cpp
+	./zlc -E mangle.zlp
+	ulimit -s 1024; ./zl -C -P mangle.i > mangle-fct.log
+#	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls mangle.zls
+
+
+
 
 dist-hook:
 	cp -p $(srcdir)/distextra/* $(distdir)

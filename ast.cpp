@@ -758,6 +758,9 @@ namespace ast {
       if (un == "zl_malloc") {
         env.deps->insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("malloc"), NULL));
         assert(env.deps->back());
+      } else if (un == "zl_malloc_atmoic") {
+        env.deps->insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("malloc"), NULL));
+        assert(env.deps->back());
       } else if (un == "zl_free") {
         env.deps->insert(find_overloaded_symbol<TopLevelVarDecl>(NULL, NULL, env.find_tls("free"), NULL));
         assert(env.deps->back());
@@ -803,6 +806,8 @@ namespace ast {
     String n = uniq_name();
     if (n == "zl_malloc")
       n = o.for_macro_sep_c || o.for_compile_time() ? "ct_malloc" : "malloc";
+    else if (n == "zl_malloc_atomic")
+      n = o.for_macro_sep_c || o.for_compile_time() ? "ct_malloc_atomic" : "malloc";
     else if (n == "zl_free")
       n = o.for_macro_sep_c || o.for_compile_time() ? "ct_free" : "free";
     o << n;
@@ -2802,7 +2807,7 @@ namespace ast {
     const Type * parms_empty = 
       env.types.inst(".");
     const Type * ref_type = 
-      env.types.inst(".ref", env.types.inst(".qualified", TypeParm(QualifiedType::CONST), TypeParm(user_type)));
+      env.types.inst(".ref", env.types.inst(".qualified", TypeParm(user_type), TypeParm(QualifiedType::CONST)));
     const Type * parms_self = 
       env.types.inst(".", TypeParm(ref_type));
 
@@ -3510,16 +3515,18 @@ namespace ast {
       return;
     }
     clock_t start = clock();
-    printf("IMPORTING: %s\n", ~file_name);
-    SourceFile * code = new_source_file(file_name);
     bool env_interface_orig = env.interface;
-    try {
-      env.interface = true;
-      assert(!env.collect);
-      parse_stmts(SourceStr(code, code->begin(), code->end()), env);
-    } catch (...) {
-      env.interface = env_interface_orig;
-      throw;
+    if (SubStr(file_name.end()-12,file_name.end()) != "/prelude.zlh") {
+      printf("IMPORTING: %s\n", ~file_name);
+      SourceFile * code = new_source_file(file_name);
+      try {
+        env.interface = true;
+        assert(!env.collect);
+        parse_stmts(SourceStr(code, code->begin(), code->end()), env);
+      } catch (...) {
+        env.interface = env_interface_orig;
+        throw;
+      }
     }
     clock_t parse_done = clock();
     env.interface = env_interface_orig;
@@ -3565,7 +3572,7 @@ namespace ast {
     //printf("CAST UP: %s -> %s\n", ~from_base->to_string(), ~type->to_string());
     //const Type * to_base = from_base->parent;
     const Type * to_qualified = from_qualified
-      ? env.types.inst(".qualified", TypeParm(from_qualified->qualifiers), TypeParm(from_base->parent))
+      ? env.types.inst(".qualified", TypeParm(from_base->parent), TypeParm(from_qualified->qualifiers))
       : from_base->parent;
     assert(to_qualified); // FIXME: Maybe Error Message
     const Type * to_ptr = env.types.inst(".ptr", to_qualified);
@@ -3590,7 +3597,7 @@ namespace ast {
     const Type * parent = type->parent;
     assert(parent); 
     const Type * to_qualified = from_qualified
-      ? env.types.inst(".qualified", TypeParm(from_qualified->qualifiers), TypeParm(type))
+      ? env.types.inst(".qualified", TypeParm(type), TypeParm(from_qualified->qualifiers))
       : type;
     const Type * to_ptr = env.types.inst(".ptr", to_qualified);
     NoOpGather gather;
@@ -3667,7 +3674,7 @@ namespace ast {
     const Pointer * from = dynamic_cast<const Pointer *>(exp->type->effective);
     if (!from) throw unknown_error(p);
     if (const QualifiedType * q = dynamic_cast<const QualifiedType *>(from->subtype)) {
-      type = env.types.inst(".qualified", TypeParm(q->qualifiers), TypeParm(type));
+      type = env.types.inst(".qualified", TypeParm(type), TypeParm(q->qualifiers));
     }
     type = env.types.inst(".ptr", type);
     Exp * res = env.type_relation->resolve_to(exp, type, env, TypeRelation::Implicit);
@@ -3787,6 +3794,7 @@ namespace ast {
     }
   }
 
+
   bool Fun::uniq_name(OStream & o) const {
     StringBuf buf;
     TopLevelVarDecl::uniq_name(buf);
@@ -3795,7 +3803,13 @@ namespace ast {
         mangle_print_inst->to_string(*parms->parms[i].type, buf);
       }
     }
-    o << buf.freeze();
+    String n = buf.freeze();
+    o << n;
+    if (to_external_name && overload && mangle) {
+      StringObj * res = to_external_name(this);
+      printf(">=%s\n>-%s\n", ~n, res->str);
+      assert(strcmp(~n, res->str) == 0);
+    }
     return num != NPOS;
   }
   
@@ -4401,8 +4415,8 @@ namespace ast {
     decl->body = NULL;
     if (p->num_args() > 1) {
       Vector<TypeParm> q_parms;
-      q_parms.push_back(TypeParm(QualifiedType::CONST));
       q_parms.push_back(TypeParm(decl));
+      q_parms.push_back(TypeParm(QualifiedType::CONST));
       const Type * t = env.types.find(".qualified")->inst(q_parms);
       int val = 0;
       const Syntax * arg1;
@@ -5477,6 +5491,17 @@ extern "C" namespace macro_abi {
   ModuleBuilderBase * new_user_type_builder(Syntax * name, Environ * env) {
     //printf("CREATING NEW USER TYPE BUILDER for \"%s\" in %s env\n", ~name->to_string(), env->special() ? "SPECIAL" : "NORMAL");
     return new UserTypeBuilder(name, *env);
+  }
+
+  const Function * symbol_to_fun_type(const Symbol * sym) {
+    const Fun * fun = dynamic_cast<const Fun *>(sym);
+    if (!fun) return NULL;
+    return dynamic_cast<const Function *>(fun->type);
+  }
+
+  const bool type_is_user(const Type * type)
+  {
+    return dynamic_cast<const UserType *>(type);
   }
 
 }

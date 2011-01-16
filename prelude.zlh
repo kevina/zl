@@ -22,6 +22,7 @@ typedef long long int64_t;
 // If compiling for compile time these will point to ct_malloc and
 // ct_free, otherwise they will point to malloc and free.
 extern "C" void * zl_malloc(size_t);
+extern "C" void * zl_malloc_atomic(size_t);
 extern "C" void zl_free(void *);
 
 // Use these (or zl_ variants) when allocating memory in a macro so
@@ -29,6 +30,7 @@ extern "C" void zl_free(void *);
 // important if the memory contains pointers to other objects.
 // ct_free is optional.
 __ct_callback void * ct_malloc(size_t);
+__ct_callback void * ct_malloc_atomic(size_t);
 __ct_callback void ct_free(void *);
 
 //
@@ -173,6 +175,8 @@ __ct_callback const char * syntax_to_string(UnmarkedSyntax *);
 __ct_callback void dump_syntax(UnmarkedSyntax *);
 
 user_type Symbol;
+user_type Type;
+user_type FunType;
 user_type UserType;
 user_type Module;
 
@@ -187,12 +191,82 @@ __ct_callback bool user_type_have_assign(const UserType *);
 __ct_callback bool user_type_can_have_assign(const UserType *);
 __ct_callback bool user_type_have_destructor(const UserType *);
 
-//struct Symbol;
-//user_type Symbol {
-//  associate_type struct UserType;
-//  macro name;
-//  macro uniq_name;
-//}
+__ct_callback unsigned symbol_num(const Symbol *);
+__ct_callback Symbol * symbol_where(const Symbol *);
+__ct_callback const char * symbol_name(const Symbol *);
+__ct_callback const char * symbol_uniq_name(const Symbol *);
+__ct_callback Type * symbol_to_type(const Symbol *);
+__ct_callback FunType * symbol_to_fun_type(const Symbol *);
+//__ct_callback Type * symbol_to_module(const Symbol *);
+//__ct_callback Type * symbol_to_variable(const Symbol *);
+struct Symbol;
+user_type Symbol {
+  associate_type struct Symbol;
+  macro num(:this this) {symbol_num(this);}
+  macro where(:this this) {symbol_where(this);}
+  macro name(:this this) {symbol_name(this);}
+  macro uniq_name(:this this) {symbol_uniq_name(this);}
+  macro to_type(:this this) {symbol_to_type(this);}
+  macro to_fun_type(:this this) {symbol_to_fun_type(this);}
+}
+
+static const int TypeQualifier_CONST    = 1;
+static const int TypeQualifier_VOLATILE = 2;
+static const int TypeQualifier_RESTRICT = 4;
+
+__ct_callback Symbol * type_to_symbol(const Type *);
+
+__ct_callback Type * type_root(const Type *);
+__ct_callback Type * type_subtype(const Type *);
+__ct_callback int type_qualifiers(const Type *);
+__ct_callback const char * type_tag(const Type *);
+
+__ct_callback const bool type_is_scalar(const Type *);
+__ct_callback const bool type_is_qualified(const Type *);
+__ct_callback const bool type_is_pointer(const Type *);
+__ct_callback const bool type_is_reference(const Type *);
+__ct_callback const bool type_is_array(const Type *);
+__ct_callback const bool type_is_fun(const Type *);
+__ct_callback const bool type_is_user(const Type *);
+
+struct Type;
+user_type Type {
+  associate_type struct Type;
+  import Symbol;
+  macro _up_cast (x) {type_to_symbol(x);}
+  macro _down_cast (x) {abort();}
+  make_subtype Symbol _up_cast _down_cast;
+
+  associate_type struct Type;
+  macro root(:this this) {type_root(this);}
+  macro subtype(:this this) {type_subtype(this);}
+  macro qualifiers(:this this) {type_qualifiers(this);}
+  macro tag(:this this) {type_tag(this);}
+  macro is_scalar(:this this) {type_is_scalar(this);}
+  macro is_qualified(:this this) {type_is_qualified(this);}
+  macro is_pointer(:this this) {type_is_pointer(this);}
+  macro is_reference(:this this) {type_is_reference(this);}
+  macro is_array(:this this) {type_is_array(this);}
+  macro is_fun(:this this) {type_is_fun(this);}
+  macro is_user(:this this) {type_is_user(this);}
+}
+
+
+__ct_callback Type * fun_type_ret_type(const FunType *);
+__ct_callback unsigned fun_type_num_parms(const FunType *);
+__ct_callback Type * fun_type_parm_type(const FunType *, unsigned num);
+struct FunType;
+user_type FunType {
+  associate_type struct FunType;
+  import Type;
+  macro _up_cast (x) {fun_type_to_type(x);}
+  macro _down_cast (x) {abort();}
+  make_subtype Type _up_cast _down_cast;
+
+  macro ret_type(:this this) {fun_type_ret_type(this);}
+  macro num_parms(:this this) {fun_type_num_parms(this);}
+  macro parm_type(:this this, num) {fun_type_parm_type(this, num);}
+}
 
 struct UserType;
 user_type UserType {

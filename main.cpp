@@ -128,6 +128,10 @@ int main(int argc, const char *argv[])
       } else if (load_prelude) {
         load_macro_lib(SOURCE_PREFIX "prelude-fct.so", env);
       }
+      if (load_prelude) {
+        SourceFile * prelude_extra = new_source_file(SOURCE_PREFIX "prelude-extra.zlh");
+        ast::parse_stmts(SourceStr(prelude_extra, prelude_extra->begin(), prelude_extra->end()), env);
+      }
       if (cpp_mode) {
         SourceFile * prelude_cpp = new_source_file(SOURCE_PREFIX "prelude-c++.zlh");
         ast::parse_stmts(SourceStr(prelude_cpp, prelude_cpp->begin(), prelude_cpp->end()), env);

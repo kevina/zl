@@ -169,5 +169,32 @@ namespace ast {
     assign_uniq_num(num, sym);
   }
 
+}
+
+extern "C" namespace macro_abi {
+  using namespace ast;
+
+  unsigned symbol_num(const Symbol * sym) {
+    if (const TopLevelSymbol * tl_sym = dynamic_cast<const TopLevelSymbol *>(sym)) {
+      return tl_sym->num;
+    } else {
+      return 0;
+    }
+  }
+
+  Symbol * symbol_where(const Symbol * sym) {
+    const TopLevelSymbol * tl_sym = dynamic_cast<const TopLevelSymbol *>(sym);
+    if (!tl_sym) return NULL;
+    return tl_sym->where;
+  }
+
+  const char * symbol_name(const Symbol * sym) {
+    return sym->name();
+  }
+
+  const char * symbol_uniq_name(const Symbol * sym) {
+    return sym->uniq_name();
+  }
 
 }
+

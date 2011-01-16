@@ -21,6 +21,7 @@ my @zls_files;
 my @temp_files;
 my $save_temps = 0;
 my $link = 1;
+my $compile = 1;
 
 sub arg_w_parm ($) {
     my ($arg) = @_;
@@ -50,7 +51,9 @@ while (@ARGV) {
         $preprocess = 1; #$preprocess == 0;
         shift @ARGV;
     } elsif ($_ eq '-E') {
+        print "EEEEE\n";
         $preprocess = 2;
+        $compile = 0;
         $link = 0;
         shift @ARGV;
     } elsif ($p = arg_w_parm('x')) {
@@ -118,7 +121,7 @@ my @final_zls_ops = @zls_ops;
 
 my %ext_map = qw(c c i c ii c++ 
                  cc c++ cp c++ cxx c++ cpp c++ CPP c++ c++ c++ C c++
-                 zl zl zls zls);
+                 zl zl zls zls zlp c++);
 
 foreach (@files) {
     my ($zls_ops, $file) = @$_;
@@ -140,7 +143,7 @@ foreach (@files) {
                @local_cpp_ops, @cpp_ops, $orig_file, '-o', $file);
         die "FAILED: zls -E ...\n" unless $? == 0;
     }
-    #next if $preprocess > 1;
+    next unless $compile;
     my @zl_ops;
     push @zl_ops, '-xc' if $l eq 'c';
     push @zl_ops, '-xc++' if $l eq 'c++';
@@ -154,14 +157,12 @@ foreach (@files) {
         push @zls_ops, @$zls_ops, $file;
     }
 }
-push @zls_ops, @final_zls_ops;
-
-push @zls_ops, $CPP_LIB if $link;
-
-#if ($preprocess <= 1) {
-system('zls', @zls_ops);
-die "FAILED: zls @zls_ops\n" unless $? == 0;
-#}
+if ($compile) {
+    push @zls_ops, @final_zls_ops;
+    push @zls_ops, $CPP_LIB if $link;
+    system('zls', @zls_ops);
+    die "FAILED: zls @zls_ops\n" unless $? == 0;
+}
 
 unlink @temp_files unless $save_temps;
 
