@@ -67,6 +67,7 @@
   symbol_uniq_name;
   symbol_to_type;
   symbol_to_fun_type;
+  symbol_get_prop;
   type_to_symbol;
   type_root;
   type_subtype;

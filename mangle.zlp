@@ -6,18 +6,21 @@ include_file "prelude-c++.zlh";
 
 #include "string_buf-zl.hpp"
 
+struct TypeMangle {
+  const char * type;
+  const char * name;
+};
+TypeMangle TYPE_MANGLE[] = {
+  {"void","v"}, {"wchar_t", "w"}, {"bool", "b"}, {"char","c"}, 
+  {"signed-char","a"}, {"unsigned-char","h"}, 
+  {"short","s"}, {"unsigned-short","t"}, 
+  {"int","i"}, {"unsigned-int","j"}, 
+  {"long","l"}, {"unsigned-long","m"}, 
+  {"long-long","x"}, {"unsigned-long-long","y"}, 
+  {"float","f"}, {"double","d"}, {"long-double","e"}};
+static unsigned TYPE_MANGLE_SIZE = sizeof(TYPE_MANGLE) / sizeof(TypeMangle);
+
 static void encode_type(const Type * type0, StringBuf & buf) const {
-  // $s: "struct X"
-  // $e: "enum X"
-  // $c: "class X" (unused)
-  // $u: "union X"
-  // $b: <built in type with spaces replaced with _> (
-  // $_: <type>
-  // $C: "const X"
-  // $v: "volatile X"
-  // $r: "restrict R"
-  // $P: "* x" 
-  // $R: "& x"
   Type * type = type0->root();
   Type * subtype = type->subtype();
   if (!subtype) {
@@ -26,28 +29,30 @@ static void encode_type(const Type * type0, StringBuf & buf) const {
       buf << "$" << tag[0]; // $s, $e, $c, or $u
       buf << type->uniq_name();
     } else {
-      StringBuf tmp;
-      tmp << type->uniq_name();
-      bool dash = false;
-      for (unsigned i = 0; i != tmp.size(); ++i) {
-        if (tmp[i] == '-') {tmp[i] = '_'; dash = true;}
+      const char * name = type->uniq_name();
+      unsigned i;
+      for (i = 0; i != TYPE_MANGLE_SIZE; ++i) 
+        if (strcmp(name, TYPE_MANGLE[i].type) == 0) break;
+      if (i != TYPE_MANGLE_SIZE) {
+        buf << TYPE_MANGLE[i].name;
+      } else {
+        buf.printf("%d%s", strlen(name), name);
       }
-      buf << (dash ? "$b" : "$_") << tmp.freeze()->str;
     }
   } else if (type->is_qualified()) {
     int qualifiers = type->qualifiers();
-    if (qualifiers & TypeQualifier_CONST)    buf += "$C";
-    if (qualifiers & TypeQualifier_VOLATILE) buf += "$v";
-    if (qualifiers & TypeQualifier_RESTRICT) buf += "$r";
+    if (qualifiers & TypeQualifier_RESTRICT) buf += "r";
+    if (qualifiers & TypeQualifier_VOLATILE) buf += "V";
+    if (qualifiers & TypeQualifier_CONST)    buf += "K";
     encode_type(subtype, buf);
   } else if (type->is_pointer()) {
-    buf += "$P";
+    buf += "P";
     encode_type(subtype, buf);
   } else if (type->is_reference()) {
-    buf += "$R";
+    buf += "R";
     encode_type(subtype, buf);
   } else {
-    buf += "$U";
+    buf += "?";
   }
 }
 
@@ -58,11 +63,11 @@ struct OpMangle {
 
 OpMangle OP_MANGLE[] = {
   {"==", "eq"}, {"!=", "ne"}, {"<",  "lt"}, {">",  "gt"}, {"<=", "le"}, {">=", "ge"},
-  {"+", "plus"}, {"-", "minus"}, {"*", "times"}, {"/", "div"}, {"%", "mod"},
-  {"<<", "lshift"}, {">>", "rshift"}, {"^", "xor"}, {"&", "band"}, {"|", "bor"},
-  {"+=", "aplus"}, {"-=", "aminus"}, {"*=", "atimes"}, {"/=", "adiv"}, {"%=", "amod"},
-  {"<<=", "alshift"}, {">>=", "arshift"}, {"^=", "axor"}, {"&=", "aband"}, {"|=", "abor"},
-  {"[]", "array"}, {"()", "call"}};
+  {"+", "pl"}, {"-", "mi"}, {"*", "ml"}, {"/", "dv"}, {"%", "rm"},
+  {"<<", "ls"}, {">>", "rs"}, {"^", "eo"}, {"&", "an"}, {"|", "or"},
+  {"+=", "pL"}, {"-=", "mI"}, {"*=", "mL"}, {"/=", "dV"}, {"%=", "rM"},
+  {"<<=", "lS"}, {">>=", "rS"}, {"^=", "eO"}, {"&=", "aN"}, {"|=", "oR"},
+  {"[]", "ix"}, {"()", "cl"}};
 static unsigned OP_MANGLE_SIZE = sizeof(OP_MANGLE) / sizeof(OpMangle);
 
 static void asm_name(const char * name, StringBuf & o) {
@@ -73,59 +78,66 @@ static void asm_name(const char * name, StringBuf & o) {
   if (i != OP_MANGLE_SIZE/*key->ns == OPERATOR_NS*/) {
     //printf(stderr, "LIVE ONE\n");
     //assert(i != OP_MANGLE_SIZE);
-    o << "op$" << OP_MANGLE[i].name;
+    o << OP_MANGLE[i].name;
   } else {
-    o << name;
+    o.printf("%d%s", strlen(name), name);
   }
 }
 
-static void uniq_name0(Symbol * sym, StringBuf & o) const {
-  unsigned num = sym->num();
-  Symbol * where = sym->where();
-  if (where) {
-    uniq_name0(where, o);
-    o << "$";
-  }
-  o << sym->name();
-  if (num != 0)
-    o.printf("$$%u", num);
-}
-
-static bool uniq_name(Symbol * sym, StringBuf & o) const {
+static bool uniq_name0(Symbol * sym, StringBuf & o) const {
   const char * name = sym->name();
   unsigned num = sym->num();
   Symbol * where = sym->where();
   if (num == 0 && where) {
     uniq_name0(where, o);
-    o << "$";
   }
   if (num == 0) {
     asm_name(name, o);
-    if (where) 
-      o << "$";
   } else {
-    asm_name(name, o);
-    o.printf("$$%u", num);
+    StringBuf tmp;
+    asm_name(name, tmp);
+    StringObj * tmps = tmp.freeze();
+    o.printf("%d%s", tmps->size, tmps->str);
   }
   return num != NPOS;
 }
 
-static void encode_parms(FunType * funt, StringBuf & buf) const {
+
+static bool uniq_name(Symbol * sym, StringBuf & o) const {
+  const char * name = sym->name();
+  unsigned num = sym->num();
+  Symbol * where = sym->where();
+  bool nested_name = num == 0 && where;
+  if (nested_name)
+    o << "N";
+  uniq_name0(sym, o);
+  if (nested_name)
+    o << "E";
+  return num != NPOS;
+}
+
+static void encode_parms(Symbol * sym, FunType * funt, StringBuf & buf) const {
   unsigned num_parms = funt->num_parms();
-  for (unsigned i = 0; i != num_parms; ++i) {
+  unsigned start = 0;
+  if (sym->get_prop(syntax w_this)) start = 1;
+  for (unsigned i = start; i < num_parms; ++i) {
     Type * pt = funt->parm_type(i);
     if (pt)
       encode_type(pt, buf);
-    else; // A "..." parm
+    else // A "..."
+      buf << "z";
   }
+  if (num_parms - start == 0)
+    buf << "v";
 }
 
 extern "C" StringObj * to_external_name(Symbol * sym) {
   StringBuf buf;
+  buf << "_Z";
   uniq_name(sym, buf);
   FunType * funt = sym->to_fun_type();
   if (funt)
-    encode_parms(funt, buf);
+    encode_parms(sym, funt, buf);
   return buf.freeze();
 }
 

@@ -81,6 +81,7 @@ struct SubStr {
     : begin(0), end(0) {}
   SubStr(const char * b, const char * e) : begin(b), end(e) {}
   SubStr(String s) : begin(s.pbegin()), end(s.pend()) {}
+  SubStr(String s, unsigned len) : begin(s.pbegin()), end(s.pbegin() + len) {}
   //explicit SubStr(const string & s) : begin(s.c_str()), end(begin + s.size()) {}
   void clear() {begin = end = 0;}
   void assign(const char * b, const char * e) {begin = b; end = e;}

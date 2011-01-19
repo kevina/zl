@@ -1487,6 +1487,19 @@ namespace ast {
     return SC_NONE;
   }
 
+  static void add_props(Symbol * sym, const Syntax * p) {
+    flags_iterator i = p->flags_begin(), e = p->flags_end();
+    for (; i != e; ++i) {
+      String name = (*i)->what().name;
+      if (SubStr(name, 5) == "prop_") {
+        const char * prop_name = ~name + 5;
+        Syntax * value = new_syntax(PARTS((*i)->parts_begin() + 1, (*i)->parts_end()));
+        printf("NOW ADDING PROP: %s %s\n", prop_name, ~value->to_string());
+        sym->add_prop(prop_name, value);                                    
+      }
+    }
+  }
+
   static void make_static_if_marked(StorageClass & storage_class, const SymbolKey & name) {
     if ((storage_class == SC_NONE || storage_class == SC_EXTERN) && name.marks)
       storage_class = SC_STATIC;
@@ -1518,6 +1531,7 @@ namespace ast {
       //v->num = env.scope >= LEXICAL || storage_class == SC_STATIC ? NPOS : 0;
       //v->num = storage_class == SC_STATIC ? NPOS : 0;
       v->deps_closed = false;
+      add_props(v, p);
       var = v;
       res = empty_stmt();
     }
@@ -3808,7 +3822,7 @@ namespace ast {
     if (to_external_name && overload && mangle) {
       StringObj * res = to_external_name(this);
       printf(">=%s\n>-%s\n", ~n, res->str);
-      assert(strcmp(~n, res->str) == 0);
+      //assert(strcmp(~n, res->str) == 0);
     }
     return num != NPOS;
   }
@@ -3834,6 +3848,8 @@ namespace ast {
     if (p->flag("__need_snapshot")) {
       env_ss = *env0.top_level_environ;
     }
+
+    add_props(this, p);
 
     // FIXME: is this necessary/correct for a new frame to be created
     //        to expand/parse the _paramaters_.  Of cource is needed for

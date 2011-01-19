@@ -602,16 +602,12 @@ public:
       macro_parms->append_flag(replace(raw_syntax(this (reparse ths this)), m, mark));
     SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     
-    if (!collect && m->var(syntax body)) {
-      builder->add(mk_method_defn(m, ptr_self, true, virtual_override, 
-                                  this_type, m->varl(syntax parms)));
-    } else {
-      builder->add(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret)),
-                           match_local(m, new_parms, 0), mark));
-      if (collect) {
-        collect->virtual_override = virtual_override;
-        collect->this_type = this_type;
-      }
+    bool w_body = !collect && m->var(syntax body);
+    builder->add(mk_method_defn(m, ptr_self, is_static, true, virtual_override, 
+                                this_type, m->varl(syntax parms), w_body));
+    if (collect) {
+      collect->virtual_override = virtual_override;
+      collect->this_type = this_type;
     }
     
     Syntax * call_nv = mk_call(replace(syntax n`internal, m, mark),
@@ -731,38 +727,34 @@ public:
     
     // FIXME: handle flags
 
-    if (m->var(syntax body)) {
-      builder->add(mk_method_defn(m, determine_ptr_self(p), inline_, collect->virtual_override, 
-                                  collect->this_type, m->varl(syntax parms)));
-    } else {
-      SyntaxList * new_parms = mk_method_parms(collect->this_type, m->varl(syntax parms));
-      builder->add(replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret)),
-                           match_local(m, new_parms, 0), mark));
-    }
+    builder->add(mk_method_defn(m, determine_ptr_self(p), false, inline_, collect->virtual_override, 
+                                collect->this_type, m->varl(syntax parms), m->var(syntax body)));
     
     return NULL;
   }
 
-  Syntax * mk_method_defn(Match * m, Syntax * ptr_self, 
-                          bool inline_, bool virtual_override, 
-                          Syntax * this_type, SyntaxEnum * parms) {
+  Syntax * mk_method_defn(Match * m, Syntax * ptr_self,
+                          bool static_, bool inline_, bool virtual_override, 
+                          Syntax * this_type, SyntaxEnum * parms,
+                          bool w_body) {
     SyntaxList * new_parms = mk_method_parms(this_type, parms);
-    Syntax * body;
-    if (virtual_override) {
-      body = 
-        replace(raw_syntax(block (var :__shadow (fluid this) $1 (cast (.ptr (:const name)) this)) 
-                             body), match_local(m, ptr_self, 0), mark);
-    } else {
-      body = m->var(syntax body);
+    SyntaxList * body = new_syntax_list();
+    if (w_body) {
+      Syntax * body0;
+      if (virtual_override) {
+        body0 =
+          replace(raw_syntax(block (var :__shadow (fluid this) $1 (cast (.ptr (:const name)) this)) 
+                              body), match_local(m, ptr_self, 0), mark);
+      } else {
+        body0 = m->var(syntax body);
+      }
+      body->append(mk_method_body(this_type, body0));
     }
-    body = mk_method_body(this_type, body);
-    if (inline_)
-      return replace(raw_syntax (:inline 
-                                 fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid $2)),
-                     match_local(m, new_parms, body, 0), mark);
-    else
-      return replace(raw_syntax (fun (` (mid n) internal) (.(mid $1)) (mid ret) (mid $2)),
-                     match_local(m, new_parms, body, 0), mark);
+    SyntaxList * flags = new_syntax_list();
+    if (inline_)  flags->append_flag(replace(syntax inline, NULL, mark));
+    if (!static_) flags->append_flag(replace(syntax prop_w_this, NULL, mark));
+    return replace(raw_syntax (@$1 fun (` n internal) (. $2) ret @$3),
+                   match_local(m, flags, new_parms, body, 0), mark);
   }
 
   virtual Syntax * mk_method_body(Syntax * this_type, Syntax * body) {
@@ -846,8 +838,8 @@ public:
       m = match(m, syntax n, replace(syntax _destructor, m, mark));
       m = match(m, syntax ret, replace(raw_syntax(.ptr void), m, mark));
       m = match(m, syntax body, replace(raw_syntax(block body $1 (return this)), match_local(m, destructor_code, 0), mark));
-      return mk_method_defn(m, determine_ptr_self(NULL), false, destructor_collect.virtual_override, 
-                            destructor_collect.this_type, m->varl(syntax parms));
+      return mk_method_defn(m, determine_ptr_self(NULL), false, false, destructor_collect.virtual_override, 
+                            destructor_collect.this_type, m->varl(syntax parms), true);
     }
 
     // FIXME: handle flags
@@ -863,8 +855,8 @@ public:
 
     SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     
-    return mk_method_defn(m, ptr_self, false, virtual_override, 
-                          this_type, m->varl(syntax parms));
+    return mk_method_defn(m, ptr_self, false, false, virtual_override, 
+                          this_type, m->varl(syntax parms), true);
   }
 };
 

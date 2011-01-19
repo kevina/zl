@@ -197,6 +197,7 @@ __ct_callback const char * symbol_name(const Symbol *);
 __ct_callback const char * symbol_uniq_name(const Symbol *);
 __ct_callback Type * symbol_to_type(const Symbol *);
 __ct_callback FunType * symbol_to_fun_type(const Symbol *);
+__ct_callback Syntax * symbol_get_prop(const Symbol *, UnmarkedSyntax * prop);
 //__ct_callback Type * symbol_to_module(const Symbol *);
 //__ct_callback Type * symbol_to_variable(const Symbol *);
 struct Symbol;
@@ -208,6 +209,7 @@ user_type Symbol {
   macro uniq_name(:this this) {symbol_uniq_name(this);}
   macro to_type(:this this) {symbol_to_type(this);}
   macro to_fun_type(:this this) {symbol_to_fun_type(this);}
+  macro get_prop(:this this, prop) {symbol_get_prop(this, prop);}
 }
 
 static const int TypeQualifier_CONST    = 1;

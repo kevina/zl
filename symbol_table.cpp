@@ -196,5 +196,10 @@ extern "C" namespace macro_abi {
     return sym->uniq_name();
   }
 
+  Syntax * symbol_get_prop(const Symbol * sym, const Syntax * prop) {
+    if (prop->is_a("id")) prop = prop->arg(0);
+    return sym->get_prop(*prop);
+  }
+
 }
 
