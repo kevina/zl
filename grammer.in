@@ -41,7 +41,7 @@ STMT : "statement" =
     / <empty> ("using"/"friend") TOKEN+ ";"
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
-    / <extern> "extern" {STRING} ({BRACEL} / {STMT})
+    / <extern> "extern" {STRING} (:<abi> {STRING})? ({BRACEL} / {STMT})
     / <once> "__once" {ID} ({BRACEL} / {STMT})
     / <stmt>   ({TOKEN_}+ {PARAN} {"const"}? {INIT_LIST}? {BRACE} / {TOKEN}+ ";")
 #   / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")

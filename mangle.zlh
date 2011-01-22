@@ -1,2 +1,4 @@
 
-extern "C" struct StringObj * to_external_name(Symbol * sym);
+
+
+

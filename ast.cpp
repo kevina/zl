@@ -322,6 +322,9 @@ namespace ast {
     }
   };
 
+  inline OverloadedVar::OverloadedVar(VarSymbol * s, const OverloadedSymbol * n)
+    : OverloadedSymbol(s, n) {ct_value = s->ct_value;}
+
   static SymbolNode * handle_overloaded_symbol(Symbol * sym, const SymbolKey & k, Environ & env, bool shadow_ok) {
     if (sym->overloadable()) {
       //IOUT.printf("FOUND ONE %s (%s) %p\n", ~k.to_string(), env.where ? ~env.where->name() : "", sym);
@@ -332,8 +335,9 @@ namespace ast {
       }
       //if (prev)
       //  IOUT.printf("... AND A PREV %p %p\n", prev, prev0);
-      OverloadedSymbol * over = dynamic_cast<VarSymbol *>(sym) 
-        ? new OverloadedVar(sym, prev)
+      VarSymbol * var_sym = dynamic_cast<VarSymbol *>(sym);
+      OverloadedSymbol * over = var_sym
+        ? new OverloadedVar(var_sym, prev)
         : new OverloadedSymbol(sym, prev);
       return env.add(k, over, shadow_ok);
     } else {
@@ -830,6 +834,7 @@ namespace ast {
       type = VOID_T;
       ct_value_ = &ct_nval;
       for (unsigned i = 0; i != parts.size(); ++i) {
+        assert(parts[i]->ct_value_);
         if (!parts[i]->ct_value_) ct_value_ = NULL;
       }
       return this;
@@ -3187,10 +3192,25 @@ namespace ast {
     const Syntax * val = p->arg(0);
     if (!val->simple() && val->is_a("s")) val = val->arg(0);
     bool mangle_save = env.mangle;
-    if (val->eq("C")) env.mangle = false;
-    else throw error(p->arg(0), "Unknown extern type \"%s\"\n", ~val->to_string());
+    MangleFun mangler_save = env.mangler;
+    if (val->eq("C")) {
+      env.mangle = false;
+    } else if (val->eq("C++")) {
+      const Syntax * mangler_name = p->flag("abi");
+      if (mangler_name) {
+        fprintf(stderr, "WILL USE ABI %s\n", ~mangler_name->arg(0)->to_string());
+        MangleFun mangler = get_mangler(mangler_name->arg(0)->to_string());
+        if (!mangler) {
+          abort(); // FIXME: Error message;
+        }
+        env.mangler = mangler;
+      }
+    } else {
+      throw error(p->arg(0), "Unknown extern type \"%s\"\n", ~val->to_string());
+    }
     parse_stmts(p->args_begin() + 1, p->args_end(), env);
     env.mangle = mangle_save;
+    env.mangler = mangler_save;
     return empty_stmt();
   }
 
@@ -3810,25 +3830,28 @@ namespace ast {
 
 
   bool Fun::uniq_name(OStream & o) const {
-    StringBuf buf;
-    TopLevelVarDecl::uniq_name(buf);
-    if (overload && mangle) {
-      for (unsigned i = 0; i != parms->parms.size(); ++i) {
-        mangle_print_inst->to_string(*parms->parms[i].type, buf);
+    //assert(strcmp(~n, res->str) == 0);
+    if (mangler && overload && mangle) {
+      StringObj * res = mangler(this);
+      o << res->str;
+    } else {
+      StringBuf buf;
+      TopLevelVarDecl::uniq_name(buf);
+      if (overload && mangle) {
+        for (unsigned i = 0; i != parms->parms.size(); ++i) {
+          mangle_print_inst->to_string(*parms->parms[i].type, buf);
+        }
       }
-    }
-    String n = buf.freeze();
-    o << n;
-    if (to_external_name && overload && mangle) {
-      StringObj * res = to_external_name(this);
-      printf(">=%s\n>-%s\n", ~n, res->str);
-      //assert(strcmp(~n, res->str) == 0);
+      String n = buf.freeze();
+      o << n;
     }
     return num != NPOS;
   }
   
   AST * Fun::parse_forward_i(const Syntax * p, Environ & env0, Collect * collect) {
     syn = p;
+
+    ct_value = &ct_nval;
 
     //printf("PARSING FLAGS OF %s\n", ~p->to_string());
     inline_ = false;
@@ -3844,6 +3867,8 @@ namespace ast {
 
     mangle = !ct_callback && env0.mangle;
     if (env0.where == NULL && p->arg(0)->eq("main")) mangle = false;
+    if (mangle && env0.mangler)
+      mangler = env0.mangler;
 
     if (p->flag("__need_snapshot")) {
       env_ss = *env0.top_level_environ;

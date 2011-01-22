@@ -546,8 +546,7 @@ namespace ast {
   typedef BasicVar VarSymbol;
 
   struct OverloadedVar : public VarSymbol, public OverloadedSymbol {
-    OverloadedVar(Symbol * s, const OverloadedSymbol * n)
-      : OverloadedSymbol(s, n) {}
+    inline OverloadedVar(VarSymbol * s, const OverloadedSymbol * n);
   };
 
   static inline

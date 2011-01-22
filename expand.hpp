@@ -176,9 +176,4 @@ const Syntax * handle_unparsed_scope_op(parts_iterator & i,
 const Syntax * expand_macro(const Syntax *, const ast::Symbol *, 
                             const Vector<ast::Exp *> &, Environ & env);
 
-// HACK
-extern StringObj * (*to_external_name)(const ast::Symbol * sym);
-
-
-
 #endif

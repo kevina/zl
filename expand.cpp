@@ -1850,8 +1850,15 @@ void compile_for_ct(Deps & deps, Environ & env) {
 
 struct Syntaxes {const char * str; const Syntax * syn;};
 
-// HACK
-StringObj * (*to_external_name)(const ast::Symbol * sym) = 0;
+Vector<Mangler> ast::manglers;
+MangleFun ast::get_mangler(String name) {
+  MangleFun res = NULL;
+  Vector<Mangler>::iterator i = ast::manglers.begin(), e = ast::manglers.end();
+  for (; i != e; ++i) {
+    if (i->abi_name == name) res = i->mangler;
+  }
+  return res;
+}
 
 void load_macro_lib(ParmString lib, Environ & env) {
   printf("LOADING: %s\n", lib.str());
@@ -1860,10 +1867,15 @@ void load_macro_lib(ParmString lib, Environ & env) {
     fprintf(stderr, "ERROR: %s\n", dlerror());
     abort();
   }
-  void * to_external_name_0 = dlsym(lh, "to_external_name");
-  if (to_external_name_0) {
-    printf("FOUND ALT MANGLER!\n");
-    to_external_name = (StringObj * (*)(const ast::Symbol *))to_external_name_0;
+  void * manglers_size_0 = dlsym(lh, "_manglers_size");
+  if (manglers_size_0) {
+    unsigned manglers_size = *(unsigned *)manglers_size_0;
+    Mangler * i = (Mangler *)dlsym(lh, "_manglers");
+    Mangler * e = i + manglers_size;
+    for (; i != e; ++i) {
+      //printf(stderr, "FOUND ALT MANGLER %s!\n", i->abi_name);
+      ast::manglers.push_back(*i);
+    }
   }
   unsigned macro_funs_size = *(unsigned *)dlsym(lh, "_macro_funs_size");
   if (macro_funs_size > 0) {

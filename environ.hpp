@@ -1,5 +1,6 @@
 #include "symbol_table.hpp"
 #include "type.hpp"
+#include "mangler.hpp"
 #include "gc.hpp"
 
 #ifndef ENVIRON_HPP
@@ -115,6 +116,7 @@ namespace ast {
     InsrPoint * exp_ip;
     Collect * collect; // if set don't parse declaration body,
                        // instead store it here to be parsed latter
+    MangleFun mangler;
     bool true_top_level;
     bool interface;
     bool mangle;
@@ -127,7 +129,7 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct(), temp_ip(), exp_ip(), collect(),
+        deps(), for_ct(), temp_ip(), exp_ip(), collect(), mangler(),
         true_top_level(false), interface(false), mangle(true), link_once(false)
       {
         if (s == TOPLEVEL) {
@@ -150,7 +152,7 @@ namespace ast {
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
         deps(other.deps), for_ct(other.for_ct), 
         stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), 
-        collect(other.collect),
+        collect(other.collect), mangler(other.mangler),
         true_top_level(other.true_top_level), interface(other.interface), 
         mangle(other.mangle), link_once(other.link_once) {}
     Environ new_scope() const {
@@ -223,6 +225,11 @@ namespace ast {
     }
   private:
   };
+
+  // Yeah, a bit of a hack should't really be global....
+  // anyway defined in expand.cpp
+  extern Vector<Mangler> manglers;
+  MangleFun get_mangler(String name);
 
   inline void CollectAction::doit(Environ & e) {
     // fix up local env so it is no longer temp.

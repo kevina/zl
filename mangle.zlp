@@ -5,6 +5,7 @@ include_file "prelude-c++.zlh";
 #include <stdio.h>
 
 #include "string_buf-zl.hpp"
+#include "mangler.hpp"
 
 struct TypeMangle {
   const char * type;
@@ -140,5 +141,8 @@ extern "C" StringObj * to_external_name(Symbol * sym) {
     encode_parms(sym, funt, buf);
   return buf.freeze();
 }
+
+unsigned _manglers_size = 1;
+Mangler _manglers[1] = {{"gcc", to_external_name}};
 
 #include "string_buf-zl.cpp"

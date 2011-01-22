@@ -13,6 +13,7 @@
 #include "type_info.hpp"
 #include "source_str.hpp"
 #include "syntax-f.hpp"
+#include "mangler.hpp"
 
 struct Error;
 struct SourceStr;
@@ -238,9 +239,10 @@ namespace ast {
   };
 
   struct TopLevelSymbol : virtual public Symbol {
-    TopLevelSymbol() : num(), mangle(true), where(), props() {}
+    TopLevelSymbol() : num(), mangle(true), mangler(), where(), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
     bool mangle;
+    MangleFun mangler;
     TopLevelSymbol * where;   // NULL if global
     Props props;
     using Symbol::uniq_name;
