@@ -4207,9 +4207,9 @@ namespace ast {
         if (seen.size() == 1)
           throw seen[0].error;
         else
-          abort();
-          //throw error(name, "No match for call to %s(%s)", 
-          //            ~name->to_string(), parms_to_string(parms));
+          //abort();
+          throw error(name, "No match for call to %s(%s)", 
+                      ~name->to_string(), parms_to_string(parms));
       } else if (candidates.size() == 1) {
         sym = candidates.front()->sym;
       } else if (candidates.size() > 1) {

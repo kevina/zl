@@ -58,8 +58,8 @@ public:
       reserve_i(s);
     }
 
-    char * begin() {return begin_;}
-    char * end() {return end_;}
+    char * begin() const {return begin_;}
+    char * end() const {return end_;}
 
     char * pbegin() {return begin_;}
     char * pend() {return end_;}
@@ -131,6 +131,11 @@ public:
       end_ += sz;
       return *this;
     }
+    StringBuf & append(char * d, char * e)
+    {
+      append(d, e - d);
+      return *this;
+    }
     StringBuf & append(const void * d, const void * e)
     {
       append(d, (const char *)e - (const char *)d);
@@ -184,7 +189,7 @@ public:
     //
     //
 
-    ~StringBuf() {if (d) zl_free(d);}
+  ~StringBuf() {/*if (d) zl_free(d);*/}
 
   //void swap(StringBuf & other) {
   //    std::swap(d, other.d);
@@ -305,6 +310,11 @@ public:
     }
 
 };
+
+StringBuf & operator << (StringBuf & buf, const StringBuf & str) {
+  buf.append(str.begin(), str.end());
+  return buf;
+}
 
 StringBuf & operator << (StringBuf & buf, const char * str) {
   buf.append(str);
