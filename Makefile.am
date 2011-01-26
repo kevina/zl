@@ -37,8 +37,8 @@ mangle-fct.so: zl zlc prelude.zlh mangle.zlp string_buf-zl.hpp string_buf-zl.cpp
 	ulimit -s 1024; ./zl -C -P mangle.i > mangle-fct.log
 #	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls mangle.zls
 
-
-
+class-gcc_abi-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in
+	ulimit -s 1024; ./zl -C -P class-gcc_abi.zl > class-gcc_abi-fct.log
 
 dist-hook:
 	cp -p $(srcdir)/distextra/* $(distdir)

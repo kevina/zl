@@ -216,13 +216,15 @@ OpMangle OP_MANGLE[] = {
   {"+=", "pL"}, {"-=", "mI"}, {"*=", "mL"}, {"/=", "dV"}, {"%=", "rM"},
   {"<<=", "lS"}, {">>=", "rS"}, {"^=", "eO"}, {"&=", "aN"}, {"|=", "oR"},
   {"[]", "ix"}, {"()", "cl"}, {"_assign", "aS"},
-  {"_constructor", "C1"}, {"_destructor", "D1"}};
+  {"_constructor", "C1"}, {"_destructor", "D1"},
+  {"_base_constructor", "C2"}, {"_base_destructor", "D2"}};
 static unsigned OP_MANGLE_SIZE = sizeof(OP_MANGLE) / sizeof(OpMangle);
 
 static const char * get_op_name(const char * name) {
   for (unsigned i = 0; i != OP_MANGLE_SIZE; ++i) 
-    if (strcmp(name, OP_MANGLE[i].op) == 0)
-      return OP_MANGLE[i].op;
+    if (strcmp(name, OP_MANGLE[i].op) == 0) {
+      return OP_MANGLE[i].name;
+    }
   return NULL;
 }
 

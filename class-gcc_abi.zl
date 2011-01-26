@@ -1,0 +1,59 @@
+import_file "class.zl";
+
+.class ParseClassGccABI : public ParseClass {
+
+  virtual void init() {
+    ParseClass::init`non_virtual();
+    m = match(m, syntax _base_constructor, replace_context(syntax _base_constructor, context));
+    m = match(m, syntax _base_destructor, replace_context(syntax _base_destructor, context));
+  }
+  
+  virtual Syntax * parse_class_fun(Syntax * p, struct Collect * collect) {
+    Syntax * err;
+    err = ParseClass::parse_class_fun`non_virtual(p, collect);
+    if (err) return err;
+    // now we need to see if we are parsing a constructor or
+    // destructor, if so we need to rename it to _base_constructor and
+    // emit another copy to confirm to the gcc abi which expects it;
+    __shadow Match * m = match_args(m, raw_syntax (n @rest), p);
+    Syntax * name = expand_id(m->var(syntax n), lenv);
+    Syntax * again = NULL;
+    if (name->eq(syntax _constructor)) {
+      again = replace(raw_syntax(fun _base_constructor @rest), m, mark);
+    } else if (name->eq(syntax _destructor)) {
+      again = replace(raw_syntax(fun _base_destructor @rest), m, mark);
+    }
+    if (again) {
+      //printf("YEP DUP\n");
+      err = ParseClass::parse_class_fun`non_virtual(again, collect);
+      //printf("---\n");
+      return err;
+    } else {
+      //printf("??: %s\n", syntax_to_string(name));
+    }
+    return NULL;
+  }
+  
+  virtual Syntax * finish_class_fun(Syntax * p, Collect * collect, bool inline_) {
+    Syntax * err;
+    err = ParseClass::finish_class_fun`non_virtual(p, collect, inline_);
+    if (err) return err;
+    __shadow Match * m = match_args(m, raw_syntax (n @rest), p);
+    Syntax * name = expand_id(m->var(syntax n), lenv);
+    Syntax * again = NULL;
+    if (name->eq(syntax _destructor)) {
+      again = replace(raw_syntax(fun _base_destructor @rest), m, mark);
+      err = ParseClass::finish_class_fun`non_virtual(again, collect, inline_);
+      return err;
+    }
+    return NULL;
+  }
+  
+};
+
+Syntax * parse_class_gcc_abi(Syntax * p, Environ * env) {
+  ParseClassGccABI * pc = new ParseClassGccABI;
+  return pc->parse(p, env, new_mark());
+}
+
+make_syntax_macro class parse_class_gcc_abi :w_snapshot;
