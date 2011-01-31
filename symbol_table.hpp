@@ -13,7 +13,7 @@
 #include "type_info.hpp"
 #include "source_str.hpp"
 #include "syntax-f.hpp"
-#include "mangler.hpp"
+#include "abi_info.hpp"
 
 struct Error;
 struct SourceStr;

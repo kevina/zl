@@ -18,7 +18,7 @@ zl_LDFLAGS=-Wl,--export-dynamic,--version-script=zl.ld
 
 noinst_HEADERS=*.hpp
 
-noinst_DATA=prelude-fct.so mangle-fct.so libc++.o
+noinst_DATA=prelude-fct.so mangle-fct.so libc++.o class-gcc_abi-fct.so
 
 EXTRA_DIST = test/* zl.ld ops.in grammer.in grammer.ins \
   class-simple.zl class.zl prelude.zl class-simple.zlh  prelude.zlh zlc.in \
@@ -28,7 +28,11 @@ class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl 
 	ulimit -s 1024; ./zl -C -P class-simple.zl > class-simple-fct.log
 #	zls -g -fexceptions -shared -fpic -o class-simple-fct.so class-simple.zls
 
-prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in
+abi_info.zlh: zl zlc abi_info.hpp
+	./zlc -E abi_info.hpp
+	mv abi_info.i abi_info.zlh
+
+prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in abi_info.zlh
 	ulimit -s 1024; ./zl -C -P prelude.zl > prelude-fct.log
 #	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls
 
@@ -37,7 +41,7 @@ mangle-fct.so: zl zlc prelude.zlh mangle.zlp string_buf-zl.hpp string_buf-zl.cpp
 	ulimit -s 1024; ./zl -C -P mangle.i > mangle-fct.log
 #	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls mangle.zls
 
-class-gcc_abi-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in
+class-gcc_abi-fct.so: zl class-gcc_abi.zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in
 	ulimit -s 1024; ./zl -C -P class-gcc_abi.zl > class-gcc_abi-fct.log
 
 dist-hook:

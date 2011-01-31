@@ -8,7 +8,7 @@ include_file "prelude-c++.zlh";
 #include <string.h>
 
 #include "string_buf-zl.hpp"
-#include "mangler.hpp"
+#include "abi_info.hpp"
 
 //
 // For compression it is necessary to keep track of both the
@@ -298,7 +298,7 @@ extern "C" StringObj * to_external_name(Symbol * sym) {
   return dual.zipped.freeze();
 }
 
-unsigned _manglers_size = 1;
-Mangler _manglers[1] = {{"gcc", to_external_name}};
+unsigned _abi_list_size = 1;
+AbiInfo _abi_list[1] = {{"gcc", to_external_name, NULL}};
 
 #include "string_buf-zl.cpp"

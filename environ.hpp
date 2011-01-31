@@ -1,6 +1,6 @@
 #include "symbol_table.hpp"
 #include "type.hpp"
-#include "mangler.hpp"
+#include "abi_info.hpp"
 #include "gc.hpp"
 
 #ifndef ENVIRON_HPP
@@ -90,6 +90,12 @@ namespace ast {
 
   void add_ast_primitives(Environ &);
 
+  // Yeah, a bit of a hack should't really be global....
+  // anyway defined in expand.cpp
+  extern Vector<AbiInfo> abi_list;
+  extern AbiInfo DEFAULT_ABI_INFO;
+  AbiInfo * get_abi_info(String name);
+
   struct Environ : public gc {
     TypeRelation * type_relation;
     bool special() const {return !top_level_symbols;}
@@ -116,7 +122,7 @@ namespace ast {
     InsrPoint * exp_ip;
     Collect * collect; // if set don't parse declaration body,
                        // instead store it here to be parsed latter
-    MangleFun mangler;
+    AbiInfo * abi_info;
     bool true_top_level;
     bool interface;
     bool mangle;
@@ -129,7 +135,7 @@ namespace ast {
     Environ(Scope s = TOPLEVEL) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct(), temp_ip(), exp_ip(), collect(), mangler(),
+        deps(), for_ct(), temp_ip(), exp_ip(), collect(), abi_info(&DEFAULT_ABI_INFO),
         true_top_level(false), interface(false), mangle(true), link_once(false)
       {
         if (s == TOPLEVEL) {
@@ -152,7 +158,7 @@ namespace ast {
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
         deps(other.deps), for_ct(other.for_ct), 
         stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), 
-        collect(other.collect), mangler(other.mangler),
+        collect(other.collect), abi_info(other.abi_info),
         true_top_level(other.true_top_level), interface(other.interface), 
         mangle(other.mangle), link_once(other.link_once) {}
     Environ new_scope() const {
@@ -225,11 +231,6 @@ namespace ast {
     }
   private:
   };
-
-  // Yeah, a bit of a hack should't really be global....
-  // anyway defined in expand.cpp
-  extern Vector<Mangler> manglers;
-  MangleFun get_mangler(String name);
 
   inline void CollectAction::doit(Environ & e) {
     // fix up local env so it is no longer temp.

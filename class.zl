@@ -1,3 +1,4 @@
+include_file "abi_info.zlh";
 import_file "class-simple.zlh";
 
 /* 
@@ -861,9 +862,20 @@ public:
   }
 };
 
-Syntax * parse_class(Syntax * p, Environ * env) {
+extern "C"
+Syntax * default_parse_class(Syntax * p, Environ * env) {
   ParseClass * pc = new ParseClass;
   return pc->parse(p, env, NULL);
+}
+
+Syntax * parse_class(Syntax * p, Environ * env) {
+  AbiInfo * inf = environ_get_abi_info(env);
+  if (inf->parse_class) {
+    Syntax * (*fun)(Syntax *, Environ *) = inf->parse_class;
+    return fun(p, env);
+  } else {
+    return default_parse_class(p, env);
+  }
 }
 
 Syntax * parse_memberdecl(Syntax * p, Environ * env) {
@@ -883,5 +895,4 @@ Syntax * parse_memberdecl(Syntax * p, Environ * env) {
     return defn;
   }
 }
-
 

@@ -51,9 +51,13 @@ import_file "class.zl";
   
 };
 
+extern "C"
 Syntax * parse_class_gcc_abi(Syntax * p, Environ * env) {
   ParseClassGccABI * pc = new ParseClassGccABI;
-  return pc->parse(p, env, new_mark());
+  return pc->parse(p, env, NULL);
 }
 
-make_syntax_macro class parse_class_gcc_abi :w_snapshot;
+unsigned _abi_list_size = 1;
+AbiInfo _abi_list[1] = {{"gcc", NULL, parse_class_gcc_abi}};
+
+

@@ -1850,15 +1850,21 @@ void compile_for_ct(Deps & deps, Environ & env) {
 
 struct Syntaxes {const char * str; const Syntax * syn;};
 
-Vector<Mangler> ast::manglers;
-MangleFun ast::get_mangler(String name) {
-  MangleFun res = NULL;
-  Vector<Mangler>::iterator i = ast::manglers.begin(), e = ast::manglers.end();
+AbiInfo ast::DEFAULT_ABI_INFO = {"default", NULL, NULL};
+
+Vector<AbiInfo> ast::abi_list;
+AbiInfo * ast::get_abi_info(String name) {
+  AbiInfo * res = NULL;
+  Vector<AbiInfo>::iterator i = ast::abi_list.begin(), e = ast::abi_list.end();
   for (; i != e; ++i) {
-    if (i->abi_name == name) res = i->mangler;
+    if (i->abi_name == name) res = &*i;
   }
   return res;
 }
+extern "C" AbiInfo * environ_get_abi_info(const Environ * env) {
+  return env->abi_info;
+}
+
 
 void load_macro_lib(ParmString lib, Environ & env) {
   printf("LOADING: %s\n", lib.str());
@@ -1867,14 +1873,26 @@ void load_macro_lib(ParmString lib, Environ & env) {
     fprintf(stderr, "ERROR: %s\n", dlerror());
     abort();
   }
-  void * manglers_size_0 = dlsym(lh, "_manglers_size");
-  if (manglers_size_0) {
-    unsigned manglers_size = *(unsigned *)manglers_size_0;
-    Mangler * i = (Mangler *)dlsym(lh, "_manglers");
-    Mangler * e = i + manglers_size;
+  void * abi_list_size_0 = dlsym(lh, "_abi_list_size");
+  if (abi_list_size_0) {
+    unsigned abi_list_size = *(unsigned *)abi_list_size_0;
+    AbiInfo * i = (AbiInfo *)dlsym(lh, "_abi_list");
+    AbiInfo * e = i + abi_list_size;
     for (; i != e; ++i) {
       //printf(stderr, "FOUND ALT MANGLER %s!\n", i->abi_name);
-      ast::manglers.push_back(*i);
+      AbiInfo * existing = ast::get_abi_info(i->abi_name);
+      if (existing) {
+        if (i->mangler) {
+          assert(!existing->mangler); // FIXME: Error message
+          existing->mangler = i->mangler;
+        }
+        if (i->parse_class) {
+          assert(!existing->parse_class); // FIXME: Error message
+          existing->parse_class = i->parse_class;
+        }
+      } else {
+        ast::abi_list.push_back(*i);
+      }
     }
   }
   unsigned macro_funs_size = *(unsigned *)dlsym(lh, "_macro_funs_size");

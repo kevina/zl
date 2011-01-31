@@ -1,2 +1,3 @@
 
 import_file "mangle.zlh";
+import_file "class-gcc_abi.zlh";

@@ -3192,25 +3192,25 @@ namespace ast {
     const Syntax * val = p->arg(0);
     if (!val->simple() && val->is_a("s")) val = val->arg(0);
     bool mangle_save = env.mangle;
-    MangleFun mangler_save = env.mangler;
+    AbiInfo * abi_info_save = env.abi_info;
     if (val->eq("C")) {
       env.mangle = false;
     } else if (val->eq("C++")) {
-      const Syntax * mangler_name = p->flag("abi");
-      if (mangler_name) {
-        fprintf(stderr, "WILL USE ABI %s\n", ~mangler_name->arg(0)->to_string());
-        MangleFun mangler = get_mangler(mangler_name->arg(0)->to_string());
-        if (!mangler) {
+      const Syntax * abi_info_name = p->flag("abi");
+      if (abi_info_name) {
+        fprintf(stderr, "WILL USE ABI %s\n", ~abi_info_name->arg(0)->to_string());
+        AbiInfo * abi_info = get_abi_info(abi_info_name->arg(0)->to_string());
+        if (!abi_info) {
           abort(); // FIXME: Error message;
         }
-        env.mangler = mangler;
+        env.abi_info = abi_info;
       }
     } else {
       throw error(p->arg(0), "Unknown extern type \"%s\"\n", ~val->to_string());
     }
     parse_stmts(p->args_begin() + 1, p->args_end(), env);
     env.mangle = mangle_save;
-    env.mangler = mangler_save;
+    env.abi_info = abi_info_save;
     return empty_stmt();
   }
 
@@ -3867,8 +3867,8 @@ namespace ast {
 
     mangle = !ct_callback && env0.mangle;
     if (env0.where == NULL && p->arg(0)->eq("main")) mangle = false;
-    if (mangle && env0.mangler)
-      mangler = env0.mangler;
+    if (mangle && env0.abi_info->mangler)
+      mangler = env0.abi_info->mangler;
 
     if (p->flag("__need_snapshot")) {
       env_ss = *env0.top_level_environ;

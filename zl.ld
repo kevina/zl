@@ -83,4 +83,5 @@
   fun_type_ret_type;
   fun_type_num_parms;
   fun_type_parm_type;
+  environ_get_abi_info;
 };
