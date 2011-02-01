@@ -916,6 +916,7 @@ namespace ast {
 
   static inline bool overload_compatible(Overloadable need, Overloadable cur) 
   {
+    //printf("?oc?%s <vs> %s\n", ~need.to_string(), ~cur.to_string());
     if (!need) return true;
     const Tuple * tuple = need.as_tuple();
     if (tuple) {

@@ -525,7 +525,7 @@ public:
   }
 
   virtual Syntax * parse_class_fun(Syntax * p, struct Collect * collect) {
-    printf("parse_class_fun: %s\n", syntax_to_string(p));
+    //printf("parse_class_fun: %s\n", syntax_to_string(p));
     __shadow Match * m = match_args(m, raw_syntax (n parms0 ret @ body :static @rest), p);
     m = match_args(m, raw_syntax (@parms), m->var(syntax parms0));
     //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
@@ -723,7 +723,7 @@ public:
   // this is used to finalize the a class fun code, only used for the
   // destructor for now
   virtual Syntax * finish_class_fun(Syntax * p, Collect * collect, bool inline_) {
-    //printf("parse_class_fun: %s\n", syntax_to_string(p));
+    //printf("finish_class_fun: %s\n", syntax_to_string(p));
     __shadow Match * m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
     m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
     

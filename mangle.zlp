@@ -72,15 +72,15 @@ int Zipper::reg(const char * s, const char * e) {
   }
   unsigned len = e - s;
   unsigned i = 0;
-  printf("REG::%.*s\n", len, s);
+  //printf("REG::%.*s\n", len, s);
   for (; i != seen_sz; ++i) {
-    printf("....: %s %d\n", seen[i].str, i);
+    //printf("....: %s %d\n", seen[i].str, i);
     if (len == seen[i].len && memcmp(s, seen[i].str, len) == 0) {
-      printf(".YES %d\n", i);
+      //printf(".YES %d\n", i);
       return i;
     }
   }
-  printf(".NO\n");
+  //printf(".NO\n");
   assert(i < 64);
   seen[i].str = s;
   seen[i].len = len;
@@ -217,7 +217,8 @@ OpMangle OP_MANGLE[] = {
   {"<<=", "lS"}, {">>=", "rS"}, {"^=", "eO"}, {"&=", "aN"}, {"|=", "oR"},
   {"[]", "ix"}, {"()", "cl"}, {"_assign", "aS"},
   {"_constructor", "C1"}, {"_destructor", "D1"},
-  {"_base_constructor", "C2"}, {"_base_destructor", "D2"}};
+  {"_base_constructor", "C2"}, {"_base_destructor", "D2"},
+  {"_deleting_destructor", "D0"}};
 static unsigned OP_MANGLE_SIZE = sizeof(OP_MANGLE) / sizeof(OpMangle);
 
 static const char * get_op_name(const char * name) {

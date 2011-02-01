@@ -30,6 +30,8 @@
 
 namespace ast {
 
+  void breakpoint() {}
+
   struct Var;
 
   struct ExpContext {
@@ -418,7 +420,8 @@ namespace ast {
     SymbolKey uniq_key = uniq_name();
     if (old_uniq_name_.defined() && old_uniq_name_ != uniq_name_) 
       fprintf(stderr, "Warning: uniq_name changed from %s to %s\n", ~old_uniq_name_, ~uniq_name_);
-    //printf("FINISH_ADD_TO_ENV %p: %s\n", env.where, ~uniq_key.name);
+    //printf("FINISH_ADD_TO_ENV: %s\n", ~uniq_key.name);
+    //printf("FINISH_ADD_TO_ENV %p: x%s\n", env.where, ~uniq_key.name);
     uniq_key.ns = tl_namespace();
     SymbolNode * tl = find_symbol_node(uniq_key, *env.top_level_symbols->front);
     //printf("1> %s %s %s\n", ~k.to_string(), ~uniq_key.to_string(),  typeid(*this).name());
@@ -435,7 +438,7 @@ namespace ast {
         throw error(NO_LOC, "tls mismatch %s\n", ~uniq_key);
       } else {
         fprintf(stderr, "TLS MISMATCH %s\n", ~uniq_key);
-        env.symbols.dump();
+        //env.symbols.dump();
         abort();
         //throw error(NO_LOC, "TLS MISMATCH %s\n", ~uniq_key);
       }
@@ -1499,7 +1502,7 @@ namespace ast {
       if (SubStr(name, 5) == "prop_") {
         const char * prop_name = ~name + 5;
         Syntax * value = new_syntax(PARTS((*i)->parts_begin() + 1, (*i)->parts_end()));
-        printf("NOW ADDING PROP: %s %s\n", prop_name, ~value->to_string());
+        //printf("NOW ADDING PROP: %s %s\n", prop_name, ~value->to_string());
         sym->add_prop(prop_name, value);                                    
       }
     }
@@ -2314,6 +2317,48 @@ namespace ast {
     Exp * d = try_destructor(exp, env);
     if (d) return d;
     else return (new AddrOf(exp))->construct(env);
+  }
+
+  static Exp * parse_new(const Syntax * p, Environ & env) {
+    //fprintf(stderr, "NEW: %s\n", ~p->to_string());
+    assert_num_args(p, 1, INT_MAX);
+    //// This code is currently unused, and also needs fixing before it
+    //// gets used...:
+    //Type * type = parse_type(p->arg(0), env);
+    //const UserType * ut = dynamic_cast<const UserType *>(type->unqualified);
+    //const Symbol * allocating_constructor = NULL;
+    //if (ut) 
+    //  allocating_constructor = find_symbol<Symbol>("_allocating_constructor", 
+    //                                               ut->module->syms.front, ut->module->syms.back,
+    //                                               ThisScope);
+    //if (allocating_constructor) {
+    //  // FIXME: check to make sire p->arg(1) == "."
+    //  return parse_exp(SYN(SYN("call"),
+    //                       SYN(allocating_constructor),
+    //                       p->arg(2)), env);
+    //} else {
+    return parse_exp(SYN(SYN(".new"), PARTS(p->args_begin(), p->args_end())), env);
+    //}
+  }
+
+  static Exp * parse_delete(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    Exp * exp = parse_exp(p->arg(0), env);
+    const PointerLike * ptr = dynamic_cast<const PointerLike *>(exp->type->unqualified);
+    const UserType * ut = ptr ? dynamic_cast<const UserType *>(ptr->subtype->unqualified) : NULL;
+    const Symbol * deleting_destructor = NULL;
+    if (ut) 
+      deleting_destructor = find_symbol<Symbol>("_deleting_destructor", 
+                                                ut->module->syms.front, ut->module->syms.back,
+                                                ThisScope);
+    if (deleting_destructor) {
+      return parse_exp(SYN(SYN("call"),
+                           SYN(ID, SYN(deleting_destructor)),
+                           SYN(SYN("."), PARTS(), FLAGS(SYN(SYN("this"), SYN(exp))))),
+                       env);
+    } else {
+      return parse_exp(SYN(SYN(".delete"), SYN(exp)), env);
+    }
   }
 
   struct CompoundAssign : public BinOp {
@@ -3768,6 +3813,8 @@ namespace ast {
     } else {
       name = expand_binding(p->arg(0), env);
     }
+    //printf("FUn:: %s\n", ~name.to_string());
+    if (name.to_string() == "_destructor`internal") breakpoint();
     
     Fun * f = NULL;
     Symbol * s = find_symbol<Symbol>(name, env.symbols.front, env.symbols.back, ThisScope);
@@ -3779,6 +3826,8 @@ namespace ast {
       const Tuple * parms = expand_fun_parms(p->arg(1), env);
       f = const_cast<Fun *>(find_overloaded_symbol<Fun>(parms, p->arg(0), s, &env));
     }
+    //if (f)
+    //  printf("really found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
     //if (s)
     //  printf("found somthing: %s %s %p %s\n", ~p->arg(0)->to_string(), ~name, s, ~s->name());
     //if (s)
@@ -4157,8 +4206,6 @@ namespace ast {
     }
     return better;
   }
-
-  void breakpoint() {}
 
   const char * parms_to_string(const Vector<Exp *> & parms) {
     StringBuf buf;
@@ -4965,6 +5012,8 @@ namespace ast {
     if (what == "init-assign") return parse_init_assign(p, env);
     if (what == "construct")   return parse_construct(p, env);
     if (what == "destroy")     return parse_destroy(p, env);
+    if (what == "new")         return parse_new(p, env);
+    if (what == "delete")      return parse_delete(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
     if (what == "lshift")  return (new LeftShift)->parse_self(p, env);

@@ -40,13 +40,13 @@ __ct_callback void ct_free(void *);
 macro true() {1;}
 macro false() {0;}
 
-__raw(smacro new (type @rest)
+__raw(smacro .new (type @rest)
         (eblock 
           (var tmp (.ptr type) (call zl_malloc (. (sizeof (.type type)))))
           (construct (deref tmp) type  @rest)
           tmp));
 
-__raw(smacro delete (exp)
+__raw(smacro .delete (exp)
         (eblock (var tmp (.ptr void))
           (assign tmp (destroy (deref exp)))
           (call zl_free (. tmp))));
