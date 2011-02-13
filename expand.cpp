@@ -1850,7 +1850,7 @@ void compile_for_ct(Deps & deps, Environ & env) {
 
 struct Syntaxes {const char * str; const Syntax * syn;};
 
-AbiInfo ast::DEFAULT_ABI_INFO = {"default", NULL, NULL};
+AbiInfo ast::DEFAULT_ABI_INFO = {"default", NULL, NULL, NULL, NULL};
 
 Vector<AbiInfo> ast::abi_list;
 AbiInfo * ast::get_abi_info(String name) {
@@ -1881,6 +1881,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
     for (; i != e; ++i) {
       //printf(stderr, "FOUND ALT MANGLER %s!\n", i->abi_name);
       AbiInfo * existing = ast::get_abi_info(i->abi_name);
+      bool find_module = false;
       if (existing) {
         if (i->mangler) {
           assert(!existing->mangler); // FIXME: Error message
@@ -1890,8 +1891,20 @@ void load_macro_lib(ParmString lib, Environ & env) {
           assert(!existing->parse_class); // FIXME: Error message
           existing->parse_class = i->parse_class;
         }
+        if (i->module_name) {
+          assert(!existing->module_name);
+          existing->module_name = i->module_name;
+          find_module = true;
+        }
       } else {
         ast::abi_list.push_back(*i);
+        existing = &ast::abi_list.back();
+      }
+      if (find_module) {
+        printf("*** LOOKING FOR MODULE: %s\n", existing->module_name);
+        existing->module = find_symbol<Module>(SymbolKey(existing->module_name, OUTER_NS), 
+                                               env.symbols.front);
+        printf("*** RES: %p\n", existing->module);
       }
     }
   }

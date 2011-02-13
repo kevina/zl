@@ -1,0 +1,22 @@
+
+extern "C" void * _Znwj(unsigned ); // operator new(unsigned)
+extern "C" void _ZdlPv(void *);     // operator delete(void *);
+
+module gcc_abi_info {
+//   macro alloc(type, size) {
+//     ({printf("GCC ALLOC\n");
+//       zl_malloc(size);});
+//   }
+
+//   macro free(type, ptr) {
+//     ({printf("GCC FREE\n");
+//       zl_free(ptr);});
+//   }
+  macro alloc(type, size) {
+    _Znwj(size);
+  }
+
+  macro free(type, ptr) {
+    _ZdlPv(ptr);
+  }
+}

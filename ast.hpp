@@ -779,12 +779,14 @@ namespace ast {
 
   class UserType : public TypeDeclaration, public SimpleType {
   public:
-    UserType() : SimpleType(USER_C), parent(), type(), module(), lt_sizeof_(NULL), defined() {}
+    UserType() : SimpleType(USER_C), parent(), type(), module(), lt_sizeof_(NULL),
+                 abi_info(&DEFAULT_ABI_INFO), defined() {}
     const Type * parent;
     const Type * type;
     Module * module;
     Exp * lt_sizeof_;
     Exp * lt_sizeof() const {return lt_sizeof_;}
+    AbiInfo * abi_info;
     bool defined;
     unsigned size() const {return type ? type->size() : NPOS;}
     unsigned align() const {return type ? type->align() : NPOS;}

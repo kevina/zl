@@ -42,16 +42,23 @@ macro false() {0;}
 
 __raw(smacro .new (type @rest)
         (eblock 
-          (var tmp (.ptr type) (call zl_malloc (. (sizeof (.type type)))))
+          (var tmp (.ptr type) (alloc type (sizeof (.type type))))
           (construct (deref tmp) type  @rest)
           tmp));
 
 __raw(smacro .delete (exp)
         (eblock (var tmp (.ptr void))
           (assign tmp (destroy (deref exp)))
-          (call zl_free (. tmp))));
+         (free (.typeof (deref exp)) tmp)));
+
+__raw(smacro default_alloc (type size) 
+      (call zl_malloc (. size)));
+
+__raw(smacro default_free (type ptr) 
+      (call zl_free (. ptr)));
 
 __raw(.struct .dummy (char whocares));
+
 
 //
 // Macro ABI

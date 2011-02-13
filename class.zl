@@ -326,7 +326,7 @@ public:
       parse_class_fun(destrtr, &destructor_collect);
   }
 
-  void create_vtable() {
+  virtual void create_vtable() {
 
     SyntaxList * flags = new_syntax_list();
     if (parent_vtable) // inherit parent vtable if one
@@ -353,13 +353,14 @@ public:
     
     if (parent_vtable) {
       builder->add(replace(
-                     syntax {static __static_constructor void _init() {/*printf("INIT %s %p%c", $1, &_vtable, 0x0A); */
+                     syntax {static __static_constructor void _init() {/*printf("INIT %s %p%c", $1, &_vtable, 0x0A);*/
                                                                        parent_n::_vtable_init(&_vtable); _vtable_init(&_vtable);}},
                      match_local(m, stringify(name), 0), 
                      mark));
     } else {
       builder->add(replace(
-                     syntax {static __static_constructor void _init() {_vtable_init(&_vtable);}},
+                     syntax {static __static_constructor void _init() {/*printf("INIT BASE VTABLE%c", 0x0A);*/ 
+                                                                       _vtable_init(&_vtable);}},
                      m, mark));
     }
     

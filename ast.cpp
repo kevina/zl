@@ -2341,6 +2341,53 @@ namespace ast {
     //}
   }
 
+  static Exp * parse_alloc_free(const Syntax * p, 
+                                const char * per_class_name, 
+                                const char * per_abi_name, 
+                                const char * default_name,
+                                Environ & env) 
+  {
+    assert_num_args(p, 2);
+    Type * type = parse_type(p->arg(0), env);
+    const UserType * ut = dynamic_cast<const UserType *>(type->unqualified);
+    Symbol * sym = NULL;
+    if (ut)
+      sym = find_symbol<Symbol>(per_class_name, 
+                                ut->module->syms.front, ut->module->syms.back,
+                                ThisScope);
+    if (sym) {
+      return parse_exp(SYN(SYN("call"),
+                           SYN(ID, SYN(sym)),
+                           SYN(SYN("."), p->arg(1))),
+                       env);
+    }
+    AbiInfo * abi_info;
+    if (ut)
+      abi_info = ut->abi_info;
+    else
+      abi_info = env.abi_info;
+    if (abi_info->module) {
+      sym = find_symbol<Symbol>(per_abi_name, 
+                                abi_info->module->syms.front, 
+                                abi_info->module->syms.back,
+                                ThisScope);
+      if (sym) {
+        return parse_exp(SYN(SYN("call"),
+                             SYN(ID, SYN(sym)),
+                             SYN(SYN("."), SYN(type), p->arg(1))), env);
+      }
+    }
+    return parse_exp(SYN(SYN(default_name), SYN(type), p->arg(1)), env);
+  }
+
+  static Exp * parse_alloc(const Syntax * p, Environ & env) {
+    return parse_alloc_free(p, "_new", "alloc", "default_alloc", env);
+  }
+
+  static Exp * parse_free(const Syntax * p, Environ & env) {
+    return parse_alloc_free(p, "_delete", "free", "default_free", env);
+  }
+  
   static Exp * parse_delete(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     Exp * exp = parse_exp(p->arg(0), env);
@@ -3308,6 +3355,7 @@ namespace ast {
         //printf("HUMM %p %p %d\n", node, node->value, node->flags & SymbolNode::PUSH_TO_OUTER_SCOPE);
       }
       s->category = new TypeCategory(s->full_name(), USER_C);
+      s->abi_info = env.abi_info;
     }
     return s;
   }
@@ -5014,6 +5062,8 @@ namespace ast {
     if (what == "destroy")     return parse_destroy(p, env);
     if (what == "new")         return parse_new(p, env);
     if (what == "delete")      return parse_delete(p, env);
+    if (what == "alloc")       return parse_alloc(p, env);
+    if (what == "free")        return parse_free(p, env);
     if (what == "plus")    return (new Plus)->parse_self(p, env);
     if (what == "minus")   return (new Minus)->parse_self(p, env);
     if (what == "lshift")  return (new LeftShift)->parse_self(p, env);
