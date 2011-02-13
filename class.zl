@@ -736,10 +736,11 @@ public:
     return NULL;
   }
 
-  Syntax * mk_method_defn(Match * m, Syntax * ptr_self,
-                          bool static_, bool inline_, bool virtual_override, 
-                          Syntax * this_type, SyntaxEnum * parms,
-                          bool w_body) {
+  virtual Syntax * mk_method_defn(Match * m, Syntax * ptr_self,
+                                  bool static_, bool inline_, bool virtual_override, 
+                                  Syntax * this_type, SyntaxEnum * parms,
+                                  bool w_body) {
+    //printf("mk_method_defn: %s %s\n", syntax_to_string(name), syntax_to_string(m->var(syntax n)));
     SyntaxList * new_parms = mk_method_parms(this_type, parms);
     SyntaxList * body = new_syntax_list();
     if (w_body) {

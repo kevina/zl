@@ -816,8 +816,7 @@ namespace ast {
   void parse_stmts(const Syntax * p, Environ & env);
   void parse_stmts(SourceStr str, Environ & env);
 
-  Stmt * parse_top_level(const Syntax * p, Environ & env);
-  Stmt * parse_top_level_first_pass(const Syntax * p, Environ & env, Collect & collect);
+  void parse_top_level(const Syntax * p, Environ & env);
   Stmt * parse_member(const Syntax * p, Environ & env);
   Stmt * parse_stmt(const Syntax * p, Environ & env);
   Stmt * parse_stmt_decl(const Syntax * p, Environ & env);

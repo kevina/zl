@@ -4863,8 +4863,8 @@ namespace ast {
     //throw error (p, "Expected top level expression.");
   }
 
-  Stmt * parse_top_level(const Syntax * p, Environ & env) {
-    return Parse<TopLevel>(env)(p);
+  void parse_top_level(const Syntax * p, Environ & env) {
+    parse_ast_node<TopLevel,void>(p, env, NULL);
   }
 
   template <>
