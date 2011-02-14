@@ -87,22 +87,30 @@ import_file "class.zl";
     return res;
   }
 
-  virtual void create_vtable() {
-//     if (!parent_vtable) {
-//       SyntaxList * tmp;
-//       tmp = new_syntax_list();
-//       tmp->append(replace(raw_syntax(var _offset_to_top (long)), m, mark));
-//       tmp->append(replace(raw_syntax(var _typeinfo (.ptr (void))), m, mark));
-//       tmp->append_all(vtable_b->elements());
-//       vtable_b = tmp;
-//       tmp = new_syntax_list();
-//       tmp->append(replace(raw_syntax(assign (-> _vt _offset_to_top) 0), m, mark));
-//       tmp->append(replace(raw_syntax(assign (-> _vt _typeinfo) 0), m, mark));
-//       tmp->append_all(vtable_i->elements());
-//       vtable_i = tmp;
-//     }
+  void create_vtable() {
     ParseClass::create_vtable`non_virtual();
+
+    UnmarkedSyntax * wrapper = syntax {
+      user_type _VTable_Wrapper {
+        __raw(.struct _Data 
+              ((long) _offset_to_top)
+              ((.ptr (void)) _typeinfo)
+              ((_VTable) _vtable));
+        associate_type struct _Data;
+        macro _up_cast (x) {&(*x).._vtable;}
+        make_subtype _VTable _up_cast;
+        macro _constructor(:this this) :typed_parms () {({(*this).._offset_to_top = 0; (*this).._typeinfo = 0;});}
+      }
+    };
+
+    builder->add(replace(wrapper, m, mark));
+    builder->add(replace(syntax {static _VTable_Wrapper _vtable;}, m, mark));
   }
+
+  void add_static_vtable() {
+    // do nothing vtable added in overridden create_vtable above
+  }
+
 };
 
 extern "C"

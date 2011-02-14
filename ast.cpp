@@ -3550,8 +3550,19 @@ namespace ast {
     return to;
   }
 
+  struct ChangeType : public Exp {
+    ChangeType(Exp * e, const Type * new_type) : exp(e) 
+      {type = new_type; lvalue = e->lvalue; ct_value_ = e->ct_value_;}
+    const char * what() const {return "change_type";}
+    Exp * exp;
+    void compile_prep(CompileEnviron & e) {exp->compile_prep(e);}
+    void finalize(FinalizeEnviron & e) {exp->finalize(e);}
+    void compile(CompileWriter & f) {exp->compile(f);}
+  };
+
   Exp * parse_imember_access(const Syntax * p, Environ & env) {
     assert_num_args(p, 2);
+    //printf("PIA: %s\n", ~p->to_string());
     Exp * exp = parse_exp(p->arg(0), env);
     exp = exp->to_effective(env);
     //printf("::"); p->arg(1)->print(); printf("\n");
@@ -3561,10 +3572,9 @@ namespace ast {
     if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
     // FIXME: Should't change the type of an exp as it can cause
     //   problems when p->arg(0) is an entity
-    exp->type = change_unqualified(exp->type, t->type); 
-    Syntax * res = SYN(SYN("member"),
-                              SYN(exp),
-                              p->arg(1));
+    const Type * struct_type = change_unqualified(exp->type, t->type); 
+    exp = new ChangeType(exp, struct_type);
+    Syntax * res = SYN(SYN("member"), SYN(exp), p->arg(1));
     return (new MemberAccess)->parse_self(res, env);
   };
 

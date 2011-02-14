@@ -388,6 +388,10 @@ public:
     exports->append(replace(syntax _VTable, m, mark));
     exports->append(replace(syntax _VTable`outer, m, mark));
     
+    add_static_vtable();
+  }
+
+  virtual void add_static_vtable() {
     builder->add(replace(syntax {static _VTable _vtable;}, m, mark));
   }
 
