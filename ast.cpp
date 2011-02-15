@@ -3570,8 +3570,6 @@ namespace ast {
     assert(t);
     if (!t) throw error(p->arg(0), "Expected user type but got ??");
     if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
-    // FIXME: Should't change the type of an exp as it can cause
-    //   problems when p->arg(0) is an entity
     const Type * struct_type = change_unqualified(exp->type, t->type); 
     exp = new ChangeType(exp, struct_type);
     Syntax * res = SYN(SYN("member"), SYN(exp), p->arg(1));

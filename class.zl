@@ -344,25 +344,20 @@ public:
     // create init function
     //   and add init code
     builder->add(vtable);
+    SyntaxList * parent_init = new_syntax_list();
+    if (parent_vtable)
+      parent_init->append(replace(syntax {parent_n::_vtable_init(_vt);}, m, mark));
     //builder->add(replace(raw_syntax (vtable_class _VTable), m, mark));
     builder->add(replace(
-                       syntax {static void _vtable_init(_VTable * _vt) {$1;} },
-                       match_local(m, vtable_i, 0),
+                       syntax {static void _vtable_init(_VTable * _vt) {$1; $2;}},
+                       match_local(m, parent_init, vtable_i, 0),
                        mark));
     exports->append(replace(syntax _vtable_init, m, mark));
     
-    if (parent_vtable) {
-      builder->add(replace(
-                     syntax {static __static_constructor void _init() {/*printf("INIT %s %p%c", $1, &_vtable, 0x0A);*/
-                                                                       parent_n::_vtable_init(&_vtable); _vtable_init(&_vtable);}},
-                     match_local(m, stringify(name), 0), 
-                     mark));
-    } else {
-      builder->add(replace(
+    builder->add(replace(
                      syntax {static __static_constructor void _init() {/*printf("INIT BASE VTABLE%c", 0x0A);*/ 
                                                                        _vtable_init(&_vtable);}},
                      m, mark));
-    }
     
     //printf("Adding _vptr\n");
     if (parent_vtable) {
