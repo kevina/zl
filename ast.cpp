@@ -912,7 +912,7 @@ namespace ast {
         if (!env.exp_ip)
           env.stmt_ip = &ip;
         else
-          assert(env.exp_ip == env.stmt_ip);
+          assert(!env.stmt_ip || env.exp_ip == env.stmt_ip);
       }
     void push_back(Stmt * cur) {
       env.add_stmt(cur);
@@ -2409,10 +2409,8 @@ namespace ast {
                                                 ut->module->syms.front, ut->module->syms.back,
                                                 ThisScope);
     if (deleting_destructor) {
-      return parse_exp(SYN(SYN("call"),
-                           SYN(ID, SYN(deleting_destructor)),
-                           SYN(SYN("."), PARTS(), FLAGS(SYN(SYN("this"), SYN(exp))))),
-                       env);
+      return parse_exp(SYN(SYN(".delete2"), SYN(exp), SYN(exp->type), 
+                           SYN(ID, SYN(deleting_destructor))), env);
     } else {
       return parse_exp(SYN(SYN(".delete"), SYN(exp)), env);
     }
@@ -3289,6 +3287,17 @@ namespace ast {
   //
   //
 
+  void parse_stmts_wrap_abi(SourceStr str, const char * abi_name, Environ & env) {
+    AbiInfo * abi_info_save = env.abi_info;
+    AbiInfo * abi_info = get_abi_info(abi_name);
+    if (!abi_info) {
+      abort(); // FIXME: Error message;
+    }
+    env.abi_info = abi_info;
+    parse_stmts(str, env);
+    env.abi_info = abi_info_save;
+  }
+
   Stmt * parse_extern(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, NPOS);
     const Syntax * val = p->arg(0);
@@ -3297,6 +3306,7 @@ namespace ast {
     AbiInfo * abi_info_save = env.abi_info;
     if (val->eq("C")) {
       env.mangle = false;
+      env.abi_info = &DEFAULT_ABI_INFO;
     } else if (val->eq("C++")) {
       const Syntax * abi_info_name = p->flag("abi");
       if (abi_info_name) {
@@ -4097,7 +4107,8 @@ namespace ast {
     f << "(fun " << uniq_name();
     f << " " << parms;
     f << " " << ret_type;
-    write_storage_class(f);
+    if (!inline_) // HACK "static inline" is not handled correctly by zls
+      write_storage_class(f);
     if (inline_) 
       f << " :inline";
     if (static_constructor)

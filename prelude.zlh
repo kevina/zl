@@ -51,6 +51,13 @@ __raw(smacro .delete (exp)
           (assign tmp (destroy (deref exp)))
          (free (.typeof (deref exp)) tmp)));
 
+__raw(smacro .delete2 (exp type method) 
+      (eblock 
+       (var to_del type exp)
+       (if to_del
+        (call method (. :(this to_del))))
+       (cast (void) 0)));
+
 __raw(smacro default_alloc (type size) 
       (call zl_malloc (. size)));
 

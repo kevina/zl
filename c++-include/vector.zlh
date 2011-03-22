@@ -58,19 +58,25 @@ macro mk_vector (T,@_)
     }
     void ensure_space(size_t sz) {
       size_t need = size() + sz;
+      //printf("?1? %u %u\n", capacity(), need);
       if (capacity() >= need) return;
       size_t new_capacity = capacity() * 2;
       if (new_capacity < need) new_capacity = need;
+      //printf("?2? %u %u\n", new_capacity, need);
       reserve(new_capacity);
+      //printf("?3? %u %u %u\n", capacity(), need);
     }
     void reserve(size_t new_capacity) {
       if (capacity() >= new_capacity) return;
+      //printf("?R1? %u %u\n", new_capacity, sizeof(T) * new_capacity);
       T * new_data = malloc(sizeof(T) * new_capacity);
+      //printf("?R2?\n");
       size_t sz = size();
       for (size_t i = 0; i < size(); ++i)
         __raw(construct (.[] new_data i) T (.[] data_ i));
       if (data_)
         free(data_);
+      //printf("?R3?\n");
       data_ = new_data;
       end_ = data_ + sz;
       storage_end_ = data_ + new_capacity;

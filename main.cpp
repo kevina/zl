@@ -56,6 +56,7 @@ int main(int argc, const char *argv[])
     bool zls_mode = false;
     bool c_mode = false;
     bool cpp_mode = false;
+    bool gcc_abi = false;
     bool for_ct = false;
     bool load_prelude = true;
     if (argc > offset && strcmp(argv[offset], "-d") == 0) {
@@ -76,6 +77,11 @@ int main(int argc, const char *argv[])
     }
     if (argc > offset && strcmp(argv[offset], "-xc++") == 0) {
       cpp_mode = true;
+      offset++;
+    }
+    if (argc > offset && strcmp(argv[offset], "-xg++") == 0) {
+      cpp_mode = true;
+      gcc_abi = true;
       offset++;
     }
     if (argc > offset && strcmp(argv[offset], "-P") == 0) {
@@ -141,7 +147,11 @@ int main(int argc, const char *argv[])
         //ast::include_file(SOURCE_PREFIX "test/class-this_reg.zlh", env);
       if (c_mode)
         env.mangle = false;
-      ast::parse_stmts(SourceStr(code, code->begin(), code->end()), env);
+      if (gcc_abi) {
+        ast::parse_stmts_wrap_abi(SourceStr(code, code->begin(), code->end()), "gcc", env);
+      } else {
+        ast::parse_stmts(SourceStr(code, code->begin(), code->end()), env);
+      }
     }
     ast::CompileWriter out;
     out.open(output_fn, "w");
