@@ -3923,6 +3923,7 @@ namespace ast {
     if (env.parse_def() && !env.collect) {
       Collect collect;
       Stmt * f = parse_fun_forward(p, env, &collect);
+      //printf("PF:: %s %s %p\n", ~p->arg(0)->to_string(), ~p->arg(1)->to_string(), f);
       if (!collect.second_pass.empty()) {
         // FIXME: Make sure it is a CollectParseDef
         collect.second_pass[0]->doit(env);

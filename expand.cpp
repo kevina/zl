@@ -600,6 +600,9 @@ struct SimpleSyntaxEnum : public SyntaxEnum {
     ++i;
     return res;
   }
+  SyntaxEnum * clone() const {
+    return new SimpleSyntaxEnum(*this);
+  }
 };
 
 extern "C" namespace macro_abi {
@@ -667,6 +670,7 @@ extern "C" namespace macro_abi {
   }
 
   void syntax_list_append_flag(SyntaxList * l, const Syntax * p) {
+    if (!p) return;
     l->add_flag(p);
   }
 
@@ -686,6 +690,10 @@ extern "C" namespace macro_abi {
 
   const Syntax * syntax_enum_next(SyntaxEnum * e) {
     return e->next();
+  }
+
+  SyntaxEnum * syntax_enum_clone(SyntaxEnum * e) {
+    return e->clone();
   }
 
 }
@@ -1572,6 +1580,9 @@ struct PartlyExpandSyntaxEnum : public SyntaxEnum {
     }
     return res;
   }
+  SyntaxEnum * clone() const {
+    return new PartlyExpandSyntaxEnum(*this);
+  }
 };
 
 SyntaxEnum * partly_expand_list(const Syntax * p, Position pos, Environ & env) {
@@ -2009,6 +2020,9 @@ extern "C" namespace macro_abi {
       Syntax * res = SYN(new SymbolKeyEntity(cur->key));
       cur = cur->next;
       return res;
+    }
+    SyntaxEnum * clone() const {
+      return new ModuleSymbolsEnum(*this);
     }
     ModuleSymbolsEnum(SymbolNode * c, SymbolNode * s) : cur(c), stop(s) {}
   };

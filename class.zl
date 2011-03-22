@@ -318,7 +318,8 @@ public:
     Syntax * destrtr = NULL;
 
     if (destructor) {
-      destrtr = destructor;
+      //destrtr = destructor;
+      return;
     } else if (need_destructor) {
       destrtr = partly_expand(replace(syntax{void * _destructor();}, m, mark), FieldPos, lenv);
     }
@@ -547,7 +548,7 @@ public:
       //printf("DESTRUCTOR\n");
       // change the return type to "void *", the body will get fixed up later
       destructor = replace(raw_syntax(fun _destructor (. @parms) (.ptr void) body @rest), m, mark);
-      return NULL;
+      return parse_class_fun(destructor, &destructor_collect);
     }
 
     // FIXME: handle flags

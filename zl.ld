@@ -15,6 +15,7 @@
   syntax_list_reverse;
   syntax_list_replace;
   syntax_enum_next;
+  syntax_enum_clone;
   match_f;
   match_args_f;
   match_local;

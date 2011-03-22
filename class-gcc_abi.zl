@@ -5,6 +5,7 @@ import_file "class.zl";
   Collect base_destructor_collect;
   Collect deleting_destructor_collect;
   bool need_deleting_destructor;
+  bool in_parse_class_fun;
 
   virtual void init() {
     ParseClass::init`non_virtual();
@@ -17,20 +18,22 @@ import_file "class.zl";
     deleting_destructor_collect.virtual_override = false;
     deleting_destructor_collect.this_type = NULL;
     need_deleting_destructor = false;
+    in_parse_class_fun = false;
   }
   
   virtual Syntax * parse_class_fun(Syntax * p, struct Collect * collect) {
-    Syntax * err;
+    in_parse_class_fun = true;
+    Syntax * err = NULL;
     printf("MAYBE: %s %s\n", syntax_to_string(this->name), syntax_to_string(p));
     err = ParseClass::parse_class_fun`non_virtual(p, collect);
-    if (err) return err;
+    if (err) goto finish;
     // Now we need to see if we are parsing a constructor or
     // destructor, if so we need to rename it to _base_* and
     // emit another copy to confirm to the gcc abi which expects it.
     // We also need to possible emit a deleting destructor.
     // The second copy of the destructor, however, is not virtual, so we
     // we need to pull that out.
-    __shadow Match * m = match_args(m, raw_syntax (n @ :virtual @rest), p);
+    __shadow Match * m = match_args(m, raw_syntax (n @ :virtual :pure_virtual @rest), p);
     Syntax * name = expand_id(m->var(syntax n), lenv);
     Syntax * again = NULL;
     if (name->eq(syntax _constructor)) {
@@ -44,11 +47,19 @@ import_file "class.zl";
       again = replace(raw_syntax(fun _base_destructor @rest), m, mark);
       printf("AGAIN: %s %s\n", syntax_to_string(this->name), syntax_to_string(again));
       err = ParseClass::parse_class_fun`non_virtual(again, &base_destructor_collect);
-      if (err) return err;
-      if (!need_deleting_destructor) return NULL;
-      again = replace(raw_syntax(fun _deleting_destructor (.) (void) :virtual), m, mark);
+      if (err) goto finish;
+      if (!need_deleting_destructor) goto finish;
+      SyntaxList * vflags = new_syntax_list();
+      if (p->flag(syntax virtual)) printf("V FLAG: %s\n", syntax_to_string(p->flag(syntax virtual)));
+      if (p->flag(syntax pure_virtual)) printf("PV FLAG: %s\n", syntax_to_string(p->flag(syntax pure_virtual)));
+      vflags->append_flag(p->flag(syntax virtual));
+      vflags->append_flag(p->flag(syntax pure_virtual));
+      printf("VFLAGS: %s\n", syntax_to_string(vflags));
+      again = replace(raw_syntax(fun _deleting_destructor (.) (void) @$1), match_local(m, vflags, 0), mark);
       err = ParseClass::parse_class_fun`non_virtual(again, &deleting_destructor_collect);
     }
+  finish:
+    in_parse_class_fun = false;
     return err;
   }
 
@@ -56,31 +67,43 @@ import_file "class.zl";
                                   bool static_, bool inline_, bool virtual_override, 
                                   Syntax * this_type, SyntaxEnum * parms,
                                   bool w_body) {
+    //printf(">1>%s<<\n", syntax_to_string(parms));
+    SyntaxEnum * parms_copy = parms->clone();
     Syntax * res = 
       ParseClass::mk_method_defn`non_virtual(m,ptr_self,static_,inline_,virtual_override,
-                                             this_type, parms, w_body);
-    if (!w_body) return res;
+                                             this_type, parms_copy, w_body);
+    if (!w_body || in_parse_class_fun) return res;
     Syntax * name = expand_id(m->var(syntax n), lenv);
-    if (name->eq(syntax _destructor)) {
+    if (name->eq(syntax _constructor)) {
       SyntaxList * r = new_syntax_list();
       r->append(res);
-
       // now create base constructor body
+      m = match(m, syntax n, replace(syntax _base_constructor, m, mark));
+      //printf(">2>%s<<\n", syntax_to_string(parms));
+      res = ParseClass::mk_method_defn`non_virtual(m,ptr_self,static_,inline_,false,
+                                                   this_type, parms, w_body);
+      r->append(res);
+      return r;
+    } else if (name->eq(syntax _destructor)) {
+      SyntaxList * r = new_syntax_list();
+      r->append(res);
+     
+      // now create base destructor body
       m = match(m, syntax n, replace(syntax _base_destructor, m, mark));
       res = ParseClass::mk_method_defn`non_virtual(m,ptr_self,static_,inline_,base_destructor_collect.virtual_override,
                                                    base_destructor_collect.this_type, parms, w_body);
       r->append(res);
-
+      
       // now create deleting constructor body if needed
       if (!need_deleting_destructor) return r;
       Syntax * p;
       p = replace(syntax {void _deleting_destructor() {void * ptr = _destructor`non_virtual(); __raw(free (name) ptr);}}, 
-                     m, mark);
+                  m, mark);
       p = partly_expand(p, FieldPos, lenv);
       m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
       m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
       res = mk_method_defn(m, ptr_self, false, inline_, deleting_destructor_collect.virtual_override, 
-                         deleting_destructor_collect.this_type, m->varl(syntax parms), m->var(syntax body));
+                           deleting_destructor_collect.this_type, m->varl(syntax parms), m->var(syntax body));
       r->append(res);
       return r;
     }
