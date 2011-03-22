@@ -737,6 +737,8 @@ namespace ast {
       f << syn->arg(i)->as_string();
     f << "\")";
   }
+
+  static void escape(OStream & o, char c);
   
   CharC * CharC::parse_self(const Syntax * p, Environ & env) {
     syn = p;
@@ -746,14 +748,22 @@ namespace ast {
     type = env.types.ct_const(type);
     StringBuf res;
     parse_common::unescape(orig, orig.end(), res, '\'');
-    if (res.size() == 1) 
+    if (res.size() == 1) {
+      value = res[0];
       ct_value_ = new CT_Value<CT_Type<char>::type>(res[0]);
-    else
+    } else {
+      value = '\0';
       ct_value_ = &ct_nval;
+    }
     return this;
   }
   void CharC::compile(CompileWriter & f) {
-    f << "(c \"" << orig << "\")"; // FIXME: Not right
+    f << "(c \"";
+    if (value)
+      escape(f, value);
+    else
+      f << orig; // FIXME: Not right
+    f << "\")"; 
   }
 
   Id * Id::construct(Environ & env) {
@@ -5226,19 +5236,23 @@ namespace ast {
   // __compile__
   //
 
+  static void escape(OStream & out, char c) {
+    switch (c) {
+    case '\a': out.put("\\a"); break;
+    case '\b': out.put("\\b"); break;
+    case '\f': out.put("\\f"); break;
+    case '\n': out.put("\\n"); break;
+    case '\t': out.put("\\t"); break;
+    case '\v': out.put("\\v"); break;
+    case '\"': out.put("\\\""); break;
+    case '\x00' - '\x1f': out.printf("\\x%.2x", c); break;
+    default: out.put(c);
+    }
+  }
+
   void escape(OStream & out, SourceStr str) {
     for (const char * i = str.begin; i != str.end; ++i) {
-      switch (*i) {
-      case '\a': out.put("\\a"); break;
-      case '\b': out.put("\\b"); break;
-      case '\f': out.put("\\f"); break;
-      case '\n': out.put("\\n"); break;
-      case '\t': out.put("\\t"); break;
-      case '\v': out.put("\\v"); break;
-      case '\"': out.put("\\\""); break;
-      case '\x00' - '\x1f': out.printf("\\x%.2x", *i); break;
-      default: out.put(*i);
-      }
+      escape(out, *i);
     }
   }
   

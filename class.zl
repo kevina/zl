@@ -554,6 +554,7 @@ public:
     // FIXME: handle flags
     bool is_static = p->flag(syntax static);
     bool is_virtual = p->flag(syntax virtual);
+    bool is_inline = p->flag(syntax inline); // FIXME: do something with this
 
     m = create_vtable_entry_name(m);
     bool virtual_override = determine_virtual_override(m);
@@ -848,6 +849,7 @@ public:
 
     // FIXME: handle flags
     bool is_static = p->flag(syntax static);
+    bool is_inline = p->flag(syntax inline);
 
     if (get_symbol_prop(replace(raw_syntax(fun (:: name n) parms0), m, mark), syntax is_static, env))
       is_static = true;
@@ -859,7 +861,7 @@ public:
 
     SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     
-    return mk_method_defn(m, ptr_self, false, false, virtual_override, 
+    return mk_method_defn(m, ptr_self, false, is_inline, virtual_override, 
                           this_type, m->varl(syntax parms), true);
   }
 };

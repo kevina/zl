@@ -272,7 +272,7 @@ namespace ast {
     const char * what() const {return "c";}
     //AST * part(unsigned i);
     String orig;
-    //char value; // unused at the moment
+    char value;
     CharC * parse_self(const Syntax * p, Environ &);
     void compile(CompileWriter & f);
   };
