@@ -135,6 +135,7 @@ TypeMangle TYPE_MANGLE[] = {
   {"int","i"}, {"unsigned-int","j"}, 
   {"long","l"}, {"unsigned-long","m"}, 
   {"long-long","x"}, {"unsigned-long-long","y"}, 
+  {"bool","b"},
   {"float","f"}, {"double","d"}, {"long-double","e"}};
 static unsigned TYPE_MANGLE_SIZE = sizeof(TYPE_MANGLE) / sizeof(TypeMangle);
 

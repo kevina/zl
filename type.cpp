@@ -172,7 +172,11 @@ namespace ast {
       if (const char * tag = type->tag()) {
         buf << tag << " ";
       }
-      buf << type->type_symbol->uniq_name();
+      String uniq_name = type->type_symbol->uniq_name();
+      if (zls_mode && uniq_name == "bool")
+        buf << "int"; // HACK: zls does not have a bool type
+      else
+        buf << uniq_name;
     } else if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
       buf << ".";
       for (unsigned i = 0; i < t->parms.size();) {
@@ -938,6 +942,8 @@ namespace ast {
     add_c_int(types, "unsigned-long");
     add_c_int(types, "unsigned-long-long");
 
+    add_c_int(types, "bool");
+
     types.add_alias("unsigned", types.find("unsigned-int"));
 
     types.add_alias("wchar_t", types.find("long"));
@@ -1000,7 +1006,8 @@ namespace ast {
     {"long", ".int32"},
     {"unsigned-long", ".uint32"},
     {"long-long", ".int64"},
-    {"unsigned-long-long", ".uint64"}
+    {"unsigned-long-long", ".uint64"},
+    {"bool", ".int32"} // expected to be the same type as "int"
   };
   const IntMap * int_map_end = int_map + sizeof(int_map)/sizeof(IntMap);
   
