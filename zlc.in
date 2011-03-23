@@ -22,6 +22,7 @@ my @temp_files;
 my $save_temps = 0;
 my $link = 1;
 my $compile = 1;
+my $gcc_abi = 0;
 
 sub arg_w_parm ($) {
     my ($arg) = @_;
@@ -74,6 +75,12 @@ while (@ARGV) {
         shift @ARGV;
     } elsif ($_ eq '-save-temps') {
         $save_temps = 1;
+        shift @ARGV;
+    } elsif ($_ eq '-gcc-abi') {
+        $gcc_abi = 1;
+        shift @ARGV;
+    } elsif ($_ eq '-shared') {
+        push @zls_ops, $_;
         shift @ARGV;
     } elsif (/^-g(.*)/) {
         push @zls_ops, $_;
@@ -146,7 +153,8 @@ foreach (@files) {
     next unless $compile;
     my @zl_ops;
     push @zl_ops, '-xc' if $l eq 'c';
-    push @zl_ops, '-xc++' if $l eq 'c++';
+    push @zl_ops, '-xc++' if $l eq 'c++' && !$gcc_abi;
+    push @zl_ops, '-xg++' if $l eq 'c++' && $gcc_abi;
     if ($l ne 'zls' && $l ne 'obj') {
         system($ZL, @zl_ops, $file);
         die "FAILED: $ZL @zl_ops $file\n" unless $? == 0;
