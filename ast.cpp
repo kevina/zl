@@ -4417,7 +4417,7 @@ namespace ast {
     Type * of = parse_type(p->arg(1), env);
     if (env.symbols.exists_this_scope(n)) {
       Type * old = env.types.inst(n);
-      if (of->root != old->root)
+      if (of->root != old->root && old->type_symbol->uniq_name() != "bool")
         throw error(p, "Conflicting typedefs.");
     } else {
       TypeAlias * decl = new TypeAlias(of);
@@ -5389,6 +5389,9 @@ namespace ast {
 
     sep(cw, "type decls");
 
+    if (cw.target_lang == CompileWriter::ZLS)
+      cw << "(talias bool (int))\n";
+    
     for (TypesItr i = types.begin(), e = types.end(); i != e; ++i) {
       (*i)->compile(cw, Declaration::Forward);
     }

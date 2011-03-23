@@ -172,11 +172,7 @@ namespace ast {
       if (const char * tag = type->tag()) {
         buf << tag << " ";
       }
-      String uniq_name = type->type_symbol->uniq_name();
-      if (zls_mode && uniq_name == "bool")
-        buf << "int"; // HACK: zls does not have a bool type
-      else
-        buf << uniq_name;
+      buf << type->type_symbol->uniq_name();
     } else if (const Tuple * t = dynamic_cast<const Tuple *>(type)) {
       buf << ".";
       for (unsigned i = 0; i < t->parms.size();) {
