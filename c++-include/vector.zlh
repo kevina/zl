@@ -118,6 +118,8 @@ macro mk_vector (T,@_)
     }
     ~vector<T>() {
       destroy_range(data_, end_);
+      if (data_)
+        free(data_);
     }
   };
 }

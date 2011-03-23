@@ -94,6 +94,9 @@ while (@ARGV) {
     } elsif (/^-O(.*)/) {
         push @zls_ops, $_;
         shift @ARGV;
+    } elsif (/^-Wl(.*)/) {
+        push @zls_ops, $_;
+        shift @ARGV;
     } elsif (/^-W(.*)/) {
         # ignore for now
         shift @ARGV;

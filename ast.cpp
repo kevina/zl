@@ -912,7 +912,9 @@ namespace ast {
         if (!env.exp_ip)
           env.stmt_ip = &ip;
         else
-          assert(!env.stmt_ip || env.exp_ip == env.stmt_ip);
+          // FIXME: is this test right, am I doing the right thing,
+          // etc, etc.
+          assert(!env.stmt_ip || env.exp_ip == env.stmt_ip); 
       }
     void push_back(Stmt * cur) {
       env.add_stmt(cur);
@@ -930,7 +932,6 @@ namespace ast {
       stmts = empty_stmt();
     return this;
   }
-
   
   //
   //
@@ -4608,7 +4609,8 @@ namespace ast {
         sym->ct_value = &decl->members.back().ct_value;
         env.add_internal(n, sym);
       }
-      env.add_defn(decl);
+      if (!env.special())
+        env.add_defn(decl);
     }
     decl->Int::finalize();
     return empty_stmt();

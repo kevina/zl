@@ -51,8 +51,8 @@ __raw(smacro .delete (exp) (eblock
             (free (.typeof (deref to_del)) (destroy (deref to_del))))
          (cast (void) 0)));
 
-__raw(smacro .delete2 (exp type method) (eblock 
-         (var to_del type exp)
+__raw(smacro .delete2 (exp ptr_type method) (eblock 
+         (var to_del ptr_type exp)
          (if to_del
              (call method (. :(this to_del))))
          (cast (void) 0)));
