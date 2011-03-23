@@ -45,17 +45,17 @@ __raw(smacro .new (type @rest)
           (construct (deref tmp) type  @rest)
           tmp));
 
-__raw(smacro .delete (exp)
-        (eblock (var tmp (.ptr void))
-          (assign tmp (destroy (deref exp)))
-         (free (.typeof (deref exp)) tmp)));
+__raw(smacro .delete (exp) (eblock 
+         (var to_del (.typeof exp) exp)
+         (if to_del
+            (free (.typeof (deref to_del)) (destroy (deref to_del))))
+         (cast (void) 0)));
 
-__raw(smacro .delete2 (exp type method) 
-      (eblock 
-       (var to_del type exp)
-       (if to_del
-        (call method (. :(this to_del))))
-       (cast (void) 0)));
+__raw(smacro .delete2 (exp type method) (eblock 
+         (var to_del type exp)
+         (if to_del
+             (call method (. :(this to_del))))
+         (cast (void) 0)));
 
 __raw(smacro default_alloc (type size) 
       (call zl_malloc (. size)));
