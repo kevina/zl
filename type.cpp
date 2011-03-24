@@ -243,10 +243,10 @@ namespace ast {
     if (sz == 0) {
       if (const char * tag = type->tag()) {
         buf << "$" << tag[0]; // $s, $e, $c, or $u
-        buf << type->type_symbol->uniq_name();
+        type->type_symbol->uniq_name(buf, true);
       } else {
         StringBuf tmp;
-        tmp << type->type_symbol->uniq_name();
+        type->type_symbol->uniq_name(tmp, true);
         bool dash = false;
         for (unsigned i = 0; i != tmp.size(); ++i) {
           if (tmp[i] == '-') {tmp[i] = '_'; dash = true;}

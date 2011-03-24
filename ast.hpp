@@ -630,7 +630,7 @@ namespace ast {
     // internal method, should only be called by parse_fun_forward
     AST * parse_forward_i(const Syntax * p, Environ &, Collect *);
     using TopLevelVarDecl::uniq_name;
-    bool uniq_name(OStream & o) const;
+    bool uniq_name(OStream & o, bool) const;
   };
 
   //
@@ -909,6 +909,8 @@ namespace ast {
       //for (unsigned i = 1; i < last; ++i) {
       //  m = lookup_symbol<Module>(p->arg(1), OUTER_NS, m->syms, NULL, StripMarks);
       //}
+      //printf("DUMPING MODULE %s\n", ~p->arg(0)->to_string());
+      //m->syms.dump_this_scope();
       return lookup_symbol<T>(p->arg(last), ns, m->syms.front, m->syms.back, StripMarks, gather, cmp);
     } else {
       //p->print(); printf("?\n");

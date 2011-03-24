@@ -80,7 +80,7 @@ namespace ast {
   struct TypeSymbolTable {
     Environ * env;
     TypeSymbolTable(Environ * s) : env(s) {}
-    inline TypeSymbol * find(const SymbolKey & k);
+    inline TypeSymbol * find(const SymbolKey & k); // defined in environ.hpp
     inline TypeSymbol * find(const Syntax * p, const InnerNS * ns);
     Type * inst(SymbolKey n, Vector<TypeParm> &);
     Type * inst(const Syntax * n, const InnerNS * ns, Vector<TypeParm> &);

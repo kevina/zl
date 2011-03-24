@@ -188,6 +188,12 @@ extern "C" namespace macro_abi {
     return tl_sym->where;
   }
 
+  bool symbol_asm_hidden(const Symbol * sym) {
+    const TopLevelSymbol * tl_sym = dynamic_cast<const TopLevelSymbol *>(sym);
+    if (!tl_sym) return false;
+    return tl_sym->asm_hidden;
+  }
+
   const char * symbol_name(const Symbol * sym) {
     return sym->name();
   }

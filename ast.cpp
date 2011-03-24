@@ -550,7 +550,7 @@ namespace ast {
   struct NormalLabel : public Label {
     mutable unsigned num;
     NormalLabel() : num() {}
-    bool uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o, bool) const {
       o.printf("%s$$%u", ~name(), num);
       return num != NPOS;
     }
@@ -571,7 +571,7 @@ namespace ast {
     mutable unsigned num;
     LocalLabel() : num() {}
     using Label::uniq_name;
-    bool uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o, bool) const {
       o.printf("%s$%u", ~name(), num);
       return num != NPOS;
     }
@@ -955,7 +955,7 @@ namespace ast {
     OtherVar() : num() {}
     OtherVar(const Type * t, bool mangle) : BasicVar(t), num(mangle ? NPOS : 0) {}
     mutable unsigned num; // 0 to avoid renaming, NPOS needs uniq num
-    bool uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o, bool) const {
       if (num == 0)
         o << name();
       else
@@ -1362,7 +1362,7 @@ namespace ast {
       if (cleanup)
         f << cleanup;
     }
-    bool uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o, bool) const {
       o.printf("%s$%u", ~name(), num);
       return true;
     }
@@ -1379,7 +1379,7 @@ namespace ast {
   static unsigned last_temp_num = 0;
 
   struct TempBase : public AutoVar {
-    bool uniq_name(OStream & o) const {
+    bool uniq_name(OStream & o, bool) const {
       o.printf("%s$t%u", ~name(), num);
       return true;
     }
@@ -3130,6 +3130,8 @@ namespace ast {
   Stmt * parse_module(const Syntax * p, Environ & env) {
     assert_num_args(p, 1, 2);
     ModuleBuilder * m = new ModuleBuilder(p->arg(0), env);
+    if (p->flag("asm_hidden"))
+      m->module->asm_hidden = true;
     if (p->num_args() > 1)
       m->parse_body(p->arg(1));
     return empty_stmt();
@@ -3956,14 +3958,14 @@ namespace ast {
   }
 
 
-  bool Fun::uniq_name(OStream & o) const {
+  bool Fun::uniq_name(OStream & o, bool) const {
     //assert(strcmp(~n, res->str) == 0);
     if (mangler && overload && mangle) {
       StringObj * res = mangler(this);
       o << res->str;
     } else {
       StringBuf buf;
-      TopLevelVarDecl::uniq_name(buf);
+      TopLevelVarDecl::uniq_name(buf, true);
       if (overload && mangle) {
         for (unsigned i = 0; i != parms->parms.size(); ++i) {
           mangle_print_inst->to_string(*parms->parms[i].type, buf);

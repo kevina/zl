@@ -241,7 +241,7 @@ static void uniq_name0(Symbol * sym, DualStringBuf & dual, Zipper & zipper, unsi
   unsigned num = sym->num();
   Symbol * where = sym->where();
   bool nested = false;
-  if (num == 0 && where) {
+  if (num == 0 && where && !where->asm_hidden()) {
     nested = true;
     if (top) {
       dual << 'N';

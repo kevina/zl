@@ -64,6 +64,7 @@
   ct_free;
   symbol_num;
   symbol_where;
+  symbol_asm_hidden;
   symbol_name;
   symbol_uniq_name;
   symbol_to_type;

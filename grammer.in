@@ -67,7 +67,7 @@ MAKE_MACRO  =
     <%> ({"make_macro"/"make_syntax_macro"}) {ID} {ID}? {:<> ':'{"w_snapshot"}}? ";";
 
 MODULE = 
-    <%> {"module"/"user_type"} {ID} ({<{...}> {BRACEL} } / ";");
+    <%> {"module"/"user_type"} {ID} (:<asm_hidden> ":" "asm_hidden")? ({<{...}> {BRACEL} } / ";");
 
 IMPORT = 
     <import> "import" {ID} ";";

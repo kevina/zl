@@ -200,7 +200,7 @@ namespace ast {
       if (uniq_name_.defined())
         return uniq_name_;
       StringBuf buf;
-      bool cache = uniq_name(buf);
+      bool cache = uniq_name(buf, false);
       if (cache) {
         uniq_name_ = buf.freeze();
         return uniq_name_;
@@ -217,8 +217,7 @@ namespace ast {
     virtual SourceStr source_str() const {return SourceStr();}
     virtual void add_prop(SymbolName n, const Syntax * s) {abort();}
     virtual const Syntax * get_prop(SymbolName n) const {abort();}
-  protected:
-    virtual bool uniq_name(OStream & o) const {
+    virtual bool uniq_name(OStream & o, bool for_external) const {
       asm_name(key, o);
       return true;
     }
@@ -239,25 +238,26 @@ namespace ast {
   };
 
   struct TopLevelSymbol : virtual public Symbol {
-    TopLevelSymbol() : num(), mangle(true), mangler(), where(), props() {}
+    TopLevelSymbol() : num(), mangle(true), asm_hidden(), mangler(), where(), props() {}
     mutable unsigned num;     // 0 to avoid renaming, NPOS needs uniq num
     bool mangle;
+    bool asm_hidden; // don't use when mangling
     MangleFun mangler;
     TopLevelSymbol * where;   // NULL if global
     Props props;
     using Symbol::uniq_name;
-    void uniq_name0(OStream & o) const {
-      if (mangle && where) {
-        where->uniq_name0(o);
+    void uniq_name0(OStream & o, bool for_external) const {
+      if (mangle && where && (!for_external || !where->asm_hidden)) {
+        where->uniq_name0(o, for_external);
         o << "$";
       }
       o << name();
       if (num != 0)
         o.printf("$$%u", num);
     }
-    bool uniq_name(OStream & o) const {
-      if (num == 0 && mangle && where) {
-        where->uniq_name0(o);
+    bool uniq_name(OStream & o, bool for_external) const {
+      if (num == 0 && mangle && where && (!for_external || !where->asm_hidden)) {
+        where->uniq_name0(o,for_external);
         o << "$";
       }
       if (num == 0) {

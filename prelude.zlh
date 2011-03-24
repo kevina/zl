@@ -206,6 +206,7 @@ __ct_callback bool user_type_have_destructor(const UserType *);
 
 __ct_callback unsigned symbol_num(const Symbol *);
 __ct_callback Symbol * symbol_where(const Symbol *);
+__ct_callback bool symbol_asm_hidden(const Symbol *);
 __ct_callback const char * symbol_name(const Symbol *);
 __ct_callback const char * symbol_uniq_name(const Symbol *);
 __ct_callback Type * symbol_to_type(const Symbol *);
@@ -218,6 +219,7 @@ user_type Symbol {
   associate_type struct Symbol;
   macro num(:this this) {symbol_num(this);}
   macro where(:this this) {symbol_where(this);}
+  macro asm_hidden(:this this) {symbol_asm_hidden(this);}
   macro name(:this this) {symbol_name(this);}
   macro uniq_name(:this this) {symbol_uniq_name(this);}
   macro to_type(:this this) {symbol_to_type(this);}
