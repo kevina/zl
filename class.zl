@@ -120,6 +120,10 @@ public:
 
   virtual Syntax * parse(Syntax * p_, Environ * e_, Mark * m_) {
 
+    //printf("CLASS = \n");
+    //dump_syntax(p_);
+    //printf("--------\n");
+
     class_s = p_;
     env = e_;
     mark = m_ ? m_ : new_mark(prelude_envss);
@@ -248,6 +252,7 @@ public:
     parent_m = parent->module;
     parent_vtable_n = replace(syntax parent_n::_VTable, m, mark);
     parent_vtable = user_type_info(parent_vtable_n, env);
+    if (parent_vtable == parent) parent_vtable = NULL;
   }
 
   virtual void import_parent() {
