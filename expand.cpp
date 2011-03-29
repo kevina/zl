@@ -1395,6 +1395,23 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   //COUT << "\n";
   //p->print();
   //printf("\n////\n");
+
+  if (what == "class") { // XXX: A Bit of a hack, there needs to be a
+                         // better way to handle "class Module::X {...}", 
+                         // that is defining a class outside the module.
+    if (p->arg(0)->is_a("::")) {
+      SyntaxBuilder tmp;
+      tmp.add_part(p->part(0));
+      tmp.add_part(p->arg(0)->arg(1));
+      tmp.add_parts(p->args_begin() + 1, p->args_end());
+      tmp.set_flags(p->flags_begin(), p->flags_end());
+      return partly_expand(SYN(SYN("memberdecl"), 
+                               partly_expand(p->arg(0)->arg(0), NoPos, env, flags), 
+                               tmp.build(p->str())),
+                           pos, env, flags);
+    }
+  }
+
   if (p->simple() && pos == NoPos) {
     return p;
   } if (p->simple() && asc_isdigit(what.name[0])) {
@@ -1912,10 +1929,10 @@ void load_macro_lib(ParmString lib, Environ & env) {
         existing = &ast::abi_list.back();
       }
       if (find_module) {
-        printf("*** LOOKING FOR MODULE: %s\n", existing->module_name);
+        //printf("*** LOOKING FOR MODULE: %s\n", existing->module_name);
         existing->module = find_symbol<Module>(SymbolKey(existing->module_name, OUTER_NS), 
                                                env.symbols.front);
-        printf("*** RES: %p\n", existing->module);
+        //printf("*** RES: %p\n", existing->module);
       }
     }
   }
@@ -2099,9 +2116,17 @@ extern "C" namespace macro_abi {
     return SYN(p->str(), res);
   }
 
+  static Syntax * prep_id(const Syntax * p, Environ * env) {
+    if (p->what() == "parm") 
+      p = reparse("ID", p->outer(), env);
+    if (p->what() == "id")
+      p = p->arg(0);
+    return p;
+  }
+
   const Syntax * get_symbol_prop(const Syntax * sym, const Syntax * prop, Environ * env) {
-    if (sym->is_a("id")) sym = sym->arg(0);
-    if (prop->is_a("id")) prop = prop->arg(0);
+    sym = prep_id(sym, env);
+    prop = prep_id(prop, env);
     return lookup_fancy_symbol<Symbol>(sym, NULL, *env)->get_prop(*prop);
   }
 

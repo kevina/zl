@@ -466,6 +466,8 @@ namespace ast {
         cur = k.marks->mark->env;
         gather.stripped_mark(k.marks->mark); 
         k.marks = k.marks->prev;
+        stop = NULL; // FIXME: Is this right, how do we handle the
+                     // case when stop is not null.
         return find_symbol_p1(k, cur, stop, strategy, gather, cmp);
       } else if (strategy == StripMarks && k.marks) {
         gather.stripped_mark(k.marks->mark); 

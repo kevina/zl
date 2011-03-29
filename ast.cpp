@@ -1525,6 +1525,7 @@ namespace ast {
   }
   
   static Stmt * parse_var(const Syntax * p, Environ & env) {
+    //printf("PARSE_VAR %s\n", ~p->to_string());
     assert_num_args(p,2,4);
     Collect * collect = env.collect;
     const Syntax * name_p = p->arg(0);
@@ -3313,8 +3314,9 @@ namespace ast {
     } else if (val->eq("C++")) {
       const Syntax * abi_info_name = p->flag("abi");
       if (abi_info_name) {
-        fprintf(stderr, "WILL USE ABI %s\n", ~abi_info_name->arg(0)->to_string());
-        AbiInfo * abi_info = get_abi_info(abi_info_name->arg(0)->to_string());
+        
+        //fprintf(stderr, "WILL USE ABI %s\n", ~abi_info_name->arg(0)->to_string());
+        AbiInfo * abi_info = get_abi_info(abi_info_name->arg(0)->what().name);
         if (!abi_info) {
           abort(); // FIXME: Error message;
         }
