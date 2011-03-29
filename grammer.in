@@ -41,7 +41,7 @@ STMT : "statement" =
     / <empty> ("using"/"friend") TOKEN+ ";"
     / <raw> "__raw" {PARAN} ";"
     / <noop>   ";"
-    / <extern> "extern" {STRING} (:<abi> {STRING})? ({BRACEL} / {STMT})
+    / <extern> "extern" {STRING_L} (:<abi> ({STRING}/":"{STRING_L}))? ({BRACEL} / {STMT})
     / <once> "__once" {ID} ({BRACEL} / {STMT})
     / <stmt>   ({TOKEN_}+ {PARAN} {"const"}? {INIT_LIST}? {BRACE} / {TOKEN}+ ";")
 #   / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
@@ -211,6 +211,8 @@ TEMPLATE_CALL =
 
 NUM : "number" = 
     {[\d]+('.'[\d]+)?} SPACING;
+
+STRING_L = <<mid>> {MID} / {STRING};
 
 STRING = '"' {('\\'_/[^"])*} '"' SPACING;
 
