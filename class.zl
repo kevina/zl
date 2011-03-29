@@ -135,6 +135,11 @@ public:
       return replace(raw_syntax (<@ (declare_user_type name) (.type name)), m, mark);
     }
 
+    if (name->part(0)->eq(syntax ::)) {
+      Match * m0 = match(0, raw_syntax (what (pattern (:: module name)) @rest), p_);
+      return replace(raw_syntax(memberdecl module (what name @rest)), m0, mark);
+    }
+
     init();
 
     builder->add(replace(
@@ -142,8 +147,14 @@ public:
                    match_local(m, Syntax::stash_ptr(this), 0),
                    mark));
     builder->add(replace(
+                   raw_syntax(add_prop syntax_obj $1),
+                   match_local(m, p_, 0),
+                   mark));
+    builder->add(replace(
                    syntax {make_macro memberdecl`syntax parse_memberdecl;}, 
                    m, mark));
+
+
                  
     if (parent) {
       import_parent();
@@ -238,6 +249,7 @@ public:
     m = match(m, syntax fields, replace_context(syntax fields, context));
     m = match(m, syntax this_type, replace_context(syntax this_type, context));
     m = match(m, syntax ptr, replace_context(syntax ptr, context));
+    m = match(m, syntax syntax_obj, replace_context(syntax syntax_obj, context));
     m = match(m, syntax is_method, replace_context(syntax is_method, context));
     m = match(m, syntax is_static, replace_context(syntax is_static, context));
     m = match(m, syntax memberdecl, replace_context(syntax memberdecl, context));
