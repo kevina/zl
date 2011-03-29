@@ -135,7 +135,7 @@ my %ext_map = qw(c c i c ii c++
 
 foreach (@files) {
     my ($zls_ops, $file) = @$_;
-    my ($base, $ext) = $file =~ /^(.+?)(?:\.(.+))?$/;
+    my ($base, $ext) = $file =~ /^(.+?)(?:\.([^.]+))?$/;
     my $l = $lang;
     if (!defined $l) {
         $l = $ext_map{$ext};
@@ -159,6 +159,7 @@ foreach (@files) {
     push @zl_ops, '-xc++' if $l eq 'c++' && !$gcc_abi;
     push @zl_ops, '-xg++' if $l eq 'c++' && $gcc_abi;
     if ($l ne 'zls' && $l ne 'obj') {
+        #print "$ZL @zl_ops $file\n";
         system($ZL, @zl_ops, $file);
         die "FAILED: $ZL @zl_ops $file\n" unless $? == 0;
         unlink $file unless $orig_file eq $file || $save_temps;
