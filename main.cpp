@@ -134,7 +134,7 @@ int main(int argc, const char *argv[])
       } else if (load_prelude) {
         load_macro_lib(SOURCE_PREFIX "prelude-fct.so", env);
       }
-      if (load_prelude) {
+      if (load_prelude && !debug_mode /* debug mode doesn't work with new abi stuff yet */ ) {
         SourceFile * prelude_extra = new_source_file(SOURCE_PREFIX "prelude-extra.zlh");
         ast::parse_stmts(SourceStr(prelude_extra, prelude_extra->begin(), prelude_extra->end()), env);
       }
@@ -169,7 +169,7 @@ int main(int argc, const char *argv[])
     if (for_ct) {
       out.close();
       StringBuf buf;
-      buf.printf("zls -g -fexceptions -shared -fpic -o %s-fct.so %s", ~base_name, ~output_fn);
+      buf.printf("zls -O -g -fexceptions -shared -fpic -o %s-fct.so %s", ~base_name, ~output_fn);
       String line = buf.freeze();
       printf("%s\n", ~line);
       int res = system(~line);
