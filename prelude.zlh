@@ -36,8 +36,8 @@ __ct_callback void ct_free(void *);
 // language support
 //
 
-macro true() {1;}
-macro false() {0;}
+macro true() {(bool)1;}
+macro false() {(bool)0;}
 
 __raw(smacro .new (type @rest)
         (eblock 
