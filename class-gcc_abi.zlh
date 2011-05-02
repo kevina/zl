@@ -1,4 +1,3 @@
-
 extern "C" void * _Znwj(unsigned ); // operator new(unsigned)
 extern "C" void _ZdlPv(void *);     // operator delete(void *);
 

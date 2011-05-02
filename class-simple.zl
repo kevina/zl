@@ -37,6 +37,7 @@
   }
  */
 
+include_file "macro_api.zlh";
 include_file "class-simple.zlh";
 
 static void parse_class_var(Syntax * p, Match * m, Mark * mark,

@@ -2,6 +2,7 @@
 #define ABIINFO__HPP
 
 #ifdef __zl
+include_file "macro_api.zlh";
 #define SYMBOL Symbol
 #define ENVIRON Environ
 #define SYNTAX Syntax

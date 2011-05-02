@@ -3639,13 +3639,8 @@ namespace ast {
     String file_id = get_file_id(file_name);
     ImportedFile * imf = env.symbols.find<ImportedFile>(file_id);
     if (imf) {
-      if (imf->included) {
-        fprintf(stderr, "Error: Trying to include file which is already imported: %s\n", ~file_name);
-        abort();
-      } else {
-        printf("SKIPPING (already included): %s\n", ~file_name);
-        return;
-      }
+      printf("SKIPPING (already included): %s\n", ~file_name);
+      return;
     }
     clock_t start = clock();
     printf("INCLUDING: %s\n", ~file_name);
@@ -3671,8 +3666,13 @@ namespace ast {
     String file_id = get_file_id(file_name);
     ImportedFile * imf = env.symbols.find<ImportedFile>(file_id);
     if (imf) {
-      printf("SKIPPING (already imported): %s\n", ~file_name);
-      return;
+      if (imf->included) {
+        fprintf(stderr, "Error: Trying to import a file which is already included: %s\n", ~file_name);
+        abort();
+      } else {
+        printf("SKIPPING (already imported): %s\n", ~file_name);
+        return;
+      }
     }
     clock_t start = clock();
     bool env_interface_orig = env.interface;
