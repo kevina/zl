@@ -1105,9 +1105,11 @@ namespace ast {
   inline void TopLevelSymbolTable::add_defn(Stmt * stmt) {
     //IOUT.printf("ADD DEFN %s: %p %p\n", ~stmt->desc(), this, stmt);
     //IOUT.printf("add defn in %p %p\n", first, last);
+    // Check to make sure stmt not already in env.
     for (Stmt * cur = first; cur; cur = cur->next) {
-      assert(cur != stmt);
+      assert(cur != stmt); 
     }
+    // Not add it
     if (last) {
       last->next = stmt;
       last = stmt;
