@@ -31,7 +31,7 @@ class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl 
 #	zls -g -fexceptions -shared -fpic -o class-simple-fct.so class-simple.zls
 
 abi_info.zlh: zl zlc abi_info.hpp
-	./zlc -E abi_info.hpp
+	./zlc -E abi_info.hpp -o abi_info.i
 	mv abi_info.i abi_info.zlh
 
 prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in abi_info.zlh
@@ -39,7 +39,7 @@ prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.i
 #	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls
 
 mangle-fct.so: zl zlc prelude.zlh mangle.zlp string_buf-zl.hpp string_buf-zl.cpp
-	./zlc -E mangle.zlp
+	./zlc -E mangle.zlp -o mangle.i
 	ulimit -s 1024; ./zl -C -P mangle.i > mangle-fct.log
 #	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls mangle.zls
 
