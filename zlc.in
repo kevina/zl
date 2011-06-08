@@ -149,7 +149,7 @@ foreach (@files) {
         if ($l eq 'c++');
     if ($pp) {
         $file = "$base.i";
-        $file = $output if $preprocess == 2 && defined $output;
+        $file = $output if defined $preprocess && $preprocess == 2 && defined $output;
         system('zls', '-E', '-include', $ZL_H, '-x', 'c', '-D', '__zl=1',
                @local_cpp_ops, @cpp_ops, $orig_file, '-o', $file);
         die "FAILED: zls -E ...\n" unless $? == 0;

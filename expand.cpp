@@ -2100,7 +2100,8 @@ struct PointerEntity {
   typedef ::TypeInfo<PointerEntity> TypeInfo;
 };
 
-extern "C" namespace macro_abi {
+extern "C" { // brace so gcc doesn't complain about that static function
+namespace macro_abi {
 
   size_t ct_value(const Syntax * p, Environ * env) {
     Exp * ast = parse_exp(p, *env);
@@ -2158,7 +2159,7 @@ extern "C" namespace macro_abi {
     return SYN(SYN("s"), SYN(p->to_string()));
   }
 
-}
+}}
 
 extern "C" void gdb_breakpoint() {}
 
