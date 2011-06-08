@@ -51,6 +51,7 @@ namespace ast {
   };
 
   template <> struct CT_Value<CT_NVal> : public CT_Value_Base {
+    CT_Value() {}
     bool nval() const;
     void to_string(OStream & o) const;
     void compile_c(CompileWriter &, Exp *) const;
