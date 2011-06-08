@@ -16,6 +16,7 @@ STMT : "statement" =
     / <while> "while" "(" {EXP} ")" {STMT}
     / <do>    "do" {STMT} "while" "(" {EXP} ")" ";"
     / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<n 1>} ";" {<eblock> {EXP}/<noop>} ")" {STMT}
+    / <foreach> "foreach" "(" {ID} "in" {EXP} ")" {STMT} # added for foreach testcase
     / <break>    "break" ";"
     / <continue> "continue" ";"
     / <return>   "return" {EXP}? ";"
