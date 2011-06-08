@@ -1,7 +1,7 @@
 AUTOMAKE_OPTIONS = foreign
 
 #CXX=/opt/gcc-4.4-zl/bin/g++
-AM_CXXFLAGS = -Wall -Wno-sign-compare -Wno-unused 
+AM_CXXFLAGS = -Wall -Wno-sign-compare -Wno-unused
 AM_CXXFLAGS += -I/usr/include/gc
 #AM_CXXFLAGS += -I/home/kevina/gc6.8/include 
 #AM_CXXFLAGS += -DNO_GC
@@ -22,9 +22,13 @@ noinst_DATA=prelude-fct.so mangle-fct.so libc++.o class-gcc_abi-fct.so
 
 CLEANFILES=${noinst_DATA}
 
-EXTRA_DIST = test/* zl.ld ops.in grammer.in grammer.ins \
-  class-simple.zl class.zl prelude.zl class-simple.zlh  prelude.zlh zlc.in \
-  grammer.hint libc++.cpp c++-include/* zl_h.h prelude-c++.zlh
+EXTRA_DIST = test/* \
+  zl.ld ops.in zlc.in grammer.in grammer.ins grammer.hint \
+  libc++.cpp c++-include/* zl_h.h string_buf-zl.cpp string_buf-zl.hpp \
+  abi_info.zlh class-gcc_abi.zl class-gcc_abi.zlh \
+  class-simple.zl class-simple.zlh class.zl macro_api.zlh mangle.zlh \
+  prelude-c++.zlh prelude-extra.zlh prelude.zl prelude.zlh \
+  mangle-orig-abi.zlp mangle.zlp
 
 class-simple-fct.so: zl prelude.zlh prelude.zl class-simple.zlh class-simple.zl grammer.in
 	ulimit -s 1024; ./zl -C -P class-simple.zl > class-simple-fct.log
@@ -47,6 +51,7 @@ class-gcc_abi-fct.so: zl class-gcc_abi.zl class-simple-fct.so prelude.zlh prelud
 	ulimit -s 1024; ./zl -C -P class-gcc_abi.zl > class-gcc_abi-fct.log
 
 dist-hook:
+	$(MAKE) -C test clean
 	cp -p $(srcdir)/distextra/* $(distdir)
 
 zlc: $(top_builddir)/config.status $(srcdir)/zlc.in

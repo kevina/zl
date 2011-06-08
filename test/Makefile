@@ -13,5 +13,6 @@ test: all
 	./basic_tests
 
 clean:
-	rm -f *.out *.zls *.log *.s *.so *~ core *.o
+	rm -f *.out *.zls *.log *.s *.so *~ core *.o \
+              basic_tests.res new_abi-t1-c.zl new_abi-t2-c.zl
 
