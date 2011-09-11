@@ -1,8 +1,8 @@
 Syntax * parse_myclass(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, raw_syntax 
-      (name @ (pattern ({...} @body)) 
-        :(fix_size fix_size) @rest), p);
+  Match * m = match_args
+      (0, raw_syntax(name @ (pattern ({...} @body))
+                       :(fix_size fix_size) @rest), p);
   Syntax * body = match_var(m, syntax body);
   Syntax * fix_size_s = match_var(m, syntax fix_size);
 
@@ -10,27 +10,30 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
 
   size_t fix_size = ct_value(fix_size_s, env);
 
-  m = match(m, syntax dummy_decl, 
+  m = match(m, syntax dummy_decl,
             replace(syntax {char dummy;}, NULL, mark));
-  Syntax * tmp_class = replace(raw_syntax 
+  Syntax * tmp_class = replace(raw_syntax
       (class name ({...} @body dummy_decl) @rest),
-                       m, mark);
+                               m, mark);
   Environ * lenv = temp_environ(env);
   pre_parse(tmp_class, lenv);
-  size_t size = ct_value(replace(syntax 
-      (offsetof(name, dummy)), m, mark), lenv);
-  
+  size_t size = ct_value
+      (replace(syntax(offsetof(name, dummy)), m, mark),
+       lenv);
+
   if (size == fix_size)
-    return replace(raw_syntax 
-        (class name ({...} @body) @rest), m, mark);
+    return replace(raw_syntax
+                     (class name ({...} @body) @rest),
+                   m, mark);
   else if (size < fix_size) {
     char buf[32];
-    snprintf(buf, 32, "{char d[%u];}", fix_size-size);
-    m = match(m, syntax buf, 
+    snprintf(buf, 32, "{char d[%u];}", fix_size - size);
+    m = match(m, syntax buf,
             replace(string_to_syntax(buf), NULL, mark));
-    return replace(raw_syntax 
-        (class name ({...} @body buf) @rest), m, mark);}
-  else 
+    return replace(raw_syntax
+                    (class name ({...} @body buf) @rest),
+                   m, mark);
+  } else
     return error(p,"Size of class larger than fix_size");
 }
 make_syntax_macro class parse_myclass;
