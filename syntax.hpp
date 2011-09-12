@@ -905,27 +905,27 @@ namespace syntax_ns {
 
   static inline PartsArray<1> mk_pt_flg(Syntax * a) 
   {
-    PartsArray<1> val = {a};
+    PartsArray<1> val = {{a}};
     return val;
   }
 
   static inline PartsArray<2> mk_pt_flg(Syntax * a, Syntax * b) 
   {
-    PartsArray<2> val = {a, b};
+    PartsArray<2> val = {{a, b}};
     return val;
   }
 
   static inline PartsArray<3> mk_pt_flg(Syntax * a, Syntax * b, 
                                       Syntax * c) 
   {
-    PartsArray<3> val = {a, b, c};
+    PartsArray<3> val = {{a, b, c}};
     return val;
   }
 
   static inline PartsArray<4> mk_pt_flg(Syntax * a, Syntax * b, 
                                         Syntax * c, Syntax * d) 
   {
-    PartsArray<4> val = {a, b, c, d};
+    PartsArray<4> val = {{a, b, c, d}};
     return val;
   }
   

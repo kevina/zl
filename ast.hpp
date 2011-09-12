@@ -1000,7 +1000,7 @@ namespace ast {
                                       Symbol * sym, Environ * env) 
   {
     T * s = find_overloaded_symbol<T>(parms, id, sym, env);
-    if (!s) 
+    if (!s) {
       if (parms.as_tuple()) {
         if (sym->name() == "write")
           abort();
@@ -1008,6 +1008,7 @@ namespace ast {
       } else {
         throw error(id, "Cannot find a match for overloaded symbol.");
       }
+    }
         
     return s;
   }
