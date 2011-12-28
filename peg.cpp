@@ -783,6 +783,8 @@ protected:
 public:
   Syntax * gather(SourceStr str, SynBuilder & in);
   void add_part(Syntax * syn, SynBuilder * res) {
+    if (collapse) // yeah, a bit of a hack
+      syn = syn->part(0);
     if (capture_as_flag)
       res->add_flag(syn);
     else
@@ -790,7 +792,7 @@ public:
   }
   GatherParts(String n, bool caf = false)
     : name(!n.empty() ? SYN(n) : 0), 
-      capture_as_flag(caf) 
+      capture_as_flag(caf), collapse(false)
     {parse_name();}
 private:
   void parse_name() {
@@ -799,6 +801,10 @@ private:
     if (strcmp(s, "%") == 0) {
       // special case, a single "%" is the same as not having a name
       name = NULL;
+      return;
+    } else if (strcmp(s, "=") == 0) {
+      name = NULL;
+      collapse = true;
       return;
     }
     const char * e = first_space(s);
@@ -847,6 +853,7 @@ protected:
   const Syntax * name;
   Vector<Parm> parms;
   bool capture_as_flag;
+  bool collapse;
 };
 
 Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
@@ -854,7 +861,7 @@ Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
   Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
   if (i->start == NPOS) {
     res2.add_part(i->name);
-    } else {
+  } else {
     res2.add_part(in.part(i->start));
   }
   ++i;

@@ -4691,9 +4691,12 @@ namespace ast {
       syn = p->part(1);
       //fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
     } else if (what == "raw_syntax") {
-      using namespace parse_parse;
-      Res r = parse(p->part(1)->str());
-      syn = r.parse;
+      syn = p->part(1);
+      //fprintf(stdout, "rsyn %s<<\n", ~p->part(1)->to_string());
+      //using namespace parse_parse;
+      //Res r = parse(p->part(1)->str());
+      //syn = r.parse;
+      //syn = reparse("SEXP_FULL", p->part(1)->outer());
       //fprintf(stdout, "RSYN %s<<\n", ~syn->to_string());
     } else {
       abort();
