@@ -95,7 +95,7 @@ void SyntaxBase::sample_w_loc(OStream & o, unsigned max_len, unsigned syn_len) c
   if (!str().empty())
     str().sample_w_loc(o, max_len);
   else
-    o.printf("a %s", ~what().name);
+    o.printf("a %s", ~what(SPECIAL_OK).name);
   if (syn_len > 0) {
     o << ": ";
     StringBuf buf;
@@ -284,8 +284,8 @@ void Syntax::print() const {
 }
 
 void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
-  SymbolName what_ = what();
   if (simple()) {
+    SymbolName what_ = what();
     assert(what_.defined());
     if (what_.empty()) 
       o.printf("\"\"");
@@ -296,8 +296,9 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
     as_syn_entity()->desc(o);
     o << ")";
   } else if (is_reparse()) {
-    o.printf("(%s ...)", ~escape(what().to_string(g)));
+    o.printf("(%s ...)", ~escape(rwhat().to_string(g)));
   } else if (have_parts()) {
+    SymbolName what_ = what();
     o.printf("(");
       char sep = ' ';
     if (what_ == "{...}" || what_ == "@")

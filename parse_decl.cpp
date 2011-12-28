@@ -292,7 +292,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
   //if (i != end)
   //  printf("<>%d %s\n", i - args.pbegin(), ~(*i)->to_string());
 
-  if (i != end && r && (*i)->is_a("()")) 
+  if (i != end && r && (*i)->is_reparse("()")) 
     try {
       const Syntax * paran = reparse("TOKENS", (*i)->inner(), &env);
       const Syntax * parms = w.parse_fun_parms(paran, env);
@@ -302,7 +302,7 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
       --i;
     } catch (...) {}
 
-  if (i + 3 < end && i[0]->eq("::") && i[1]->eq("~") && i[3]->is_a("()"))
+  if (i + 3 < end && i[0]->eq("::") && i[1]->eq("~") && i[3]->is_reparse("()"))
     try {
       // so we have a destructor defined outside the class
       const Syntax * paran = reparse("TOKENS", i[3]->inner());
@@ -369,12 +369,12 @@ const Syntax * ParseDeclImpl::parse_decl(const Syntax * p, Environ & env, bool f
       ++i;
       const Syntax * init = w.parse_init_exp(i, end);
       decl = w.make_declaration(id, t, init);
-    } else if (i != end && (*i)->is_a("()")) {
+    } else if (i != end && (*i)->is_reparse("()")) {
       // we are calling a constructor
       const Syntax * init = *i;
       ++i;
       decl = w.make_declaration(id, t, SYN("."), init);
-    } else if (i != end && (*i)->is_a("{}")) {
+    } else if (i != end && (*i)->is_reparse("{}")) {
       const Syntax * body = *i;
       ++i;
       decl = w.make_function(id, t, body);
@@ -561,7 +561,7 @@ const Syntax * DeclWorking::parse_struct_union_body(const Syntax * p0, Environ &
 
     const Syntax * p = args.front();
     args.pop_front();
-    if (p->is_a("@{}"))
+    if (p->is_reparse("@{}"))
       p = reparse("STMTS", p->inner(), &env);
     if (p->is_a("@")) {
       args.insert(args.begin(), p->args_begin(), p->args_end());
@@ -799,7 +799,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
   } else if ((p = try_id(*i))) {
     id = p;
     ++i;
-  } else if (mode != StopAtParen && (*i)->is_a("()")) {
+  } else if (mode != StopAtParen && (*i)->is_reparse("()")) {
     outer = reparse("TOKENS", (*i)->inner());
     ++i;
   } else
@@ -809,7 +809,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
 
   if (stop || i == end) {
     // do nothing
-  } else if (mode != StopAtParen && (*i)->is_a("()")) {
+  } else if (mode != StopAtParen && (*i)->is_reparse("()")) {
     try {
       t = make_function_type(t, reparse("TOKENS", (*i)->inner(), &env), env);
       ++i;
@@ -833,7 +833,7 @@ const Syntax * DeclWorking::parse_outer_type_info(const Syntax * & id,
     if (i != end && (*i)->eq("throw")) {
       // ignore throw spec. for now
       ++i;
-      if (i == end || !(*i)->is_a("()")) 
+      if (i == end || !(*i)->is_reparse("()")) 
         throw error(*i, "Expected \"(\"");
       ++i;
     } 
@@ -861,7 +861,7 @@ const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
 {
   if (parms->is_a(".")) return parms;
   SyntaxBuilder ps(SYN("."));
-  //printf("MAKE FUNCTION TYPE: %s\n", ~parms->to_string());
+  //printf("PARSE FUN PARMS: %s\n", ~parms->to_string());
   parts_iterator i = parms->args_begin();
   parts_iterator end = parms->args_end();
   if (i != end) for (;;) {
@@ -899,6 +899,7 @@ const Syntax * DeclWorking::parse_fun_parms(const Syntax * parms,
     ++i;
   }
   const Syntax * res = ps.build();
+  //printf("parse fun parms: %s\n", ~res->to_string());
   if (res->num_args() == 1
       && res->arg(0)->num_parts() == 1
       && res->arg(0)->part(0)->num_parts() == 1
@@ -956,7 +957,7 @@ const Syntax * DeclWorking::try_arrays(parts_iterator & i,
                                       const Syntax * t) 
 {
   Vector<const Syntax *> stack;
-  while (i != end && (*i)->is_a("[]")) {
+  while (i != end && (*i)->is_reparse("[]")) {
     stack.push_back(reparse("ARRAY_SIZE", (*i)->inner()));
     ++i;
   }

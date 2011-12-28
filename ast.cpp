@@ -210,10 +210,10 @@ namespace ast {
   void parse_ast_node(const Syntax * p, Environ & env, C * container) {
     Parse<POS> prs(env);
     p = prs.partly_expand(p, EXPAND_NO_BLOCK_LIST);
-    if (p->is_a("@")) {
-      parse_ast_nodes<POS>(p->args_begin(), p->args_end(), env, container);
-    } else if (p->is_a("@{}")) {
+    if (p->is_reparse("@{}")) {
       reparse_ast_nodes<POS>(p->inner(), env, container);
+    } else if (p->is_a("@")) {
+      parse_ast_nodes<POS>(p->args_begin(), p->args_end(), env, container);
     } else {
       finish_parse(p, prs, container);
     }
@@ -3804,7 +3804,7 @@ namespace ast {
   Exp * parse_cast(const Syntax * p, Environ & env, TypeRelation::CastType ctype) {
     assert_num_args(p, 2);
     const Syntax * t = p->arg(0);
-    if (t->is_a("<>")) {
+    if (t->is_reparse("<>")) {
       t = reparse("TOKENS", t->inner(), &env);
       t = parse_decl_->parse_type(t, env);
     } else if (t->is_a(".type")) {
@@ -4921,7 +4921,6 @@ namespace ast {
   }
 
   const Syntax * pre_parse_decl(const Syntax * p, Environ & env) {
-    String what = p->what().name;
     //fprintf(stderr, "PRE PARSING %s\n", ~p->to_string());
     assert(env.special());
     DeclHandle * handle = NULL;

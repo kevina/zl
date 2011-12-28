@@ -170,7 +170,7 @@ struct Ops {
     if (p->simple())
       res = i_lookup_types(res, OpKey(p->what(), Symbol), p);
     else 
-      res = i_lookup_types(res, OpKey(p->what(), Category), p);
+      res = i_lookup_types(res, OpKey(p->what(SPECIAL_OK), Category), p);
     if (res == 0) 
       res = Op::Other;
     return res;
@@ -194,7 +194,7 @@ struct Ops {
     if (p->simple())
       op = i_lookup(OpKey(p->what(), Symbol), type, p);
     else
-      op = i_lookup(OpKey(p->what(), Category), type, p);
+      op = i_lookup(OpKey(p->what(SPECIAL_OK), Category), type, p);
     if (op == 0)
       op = &generic;
     return op;
@@ -218,7 +218,7 @@ struct Ops {
     if (p->simple())
       res = i_try_special(OpKey(p->what(), Symbol), i, e);
     else
-      res = i_try_special(OpKey(p->what(), Category), i, e);
+      res = i_try_special(OpKey(p->what(SPECIAL_OK), Category), i, e);
     return res;
   }
 };

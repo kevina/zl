@@ -808,7 +808,7 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   ReplTable * rt 
     = new ReplTable(mark, 
                     new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
-  if (pattern->is_a("()")) {
+  if (pattern->is_reparse()) {
     //printf("YES!\n");
     pattern = reparse("MATCH_LIST", pattern->inner());
   } else {
@@ -909,7 +909,7 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
   //rparms->macro_call = Macro::macro_call;
   //rparms->macro_def = Macro::macro_def;
   const Syntax * res;
-  if (p->is_a("{}")) {
+  if (p->is_reparse("{}")) {
     //res = reparse("STMTS", p->inner(), NULL, rparms);
     //if (res->num_args() == 1)
     //  res = res->arg(0);
@@ -1026,6 +1026,11 @@ static const Syntax * replace(const Syntax * p,
     //if (res)
     //  printf("ok 2: %s\n", ~res->to_string());
     return res;
+  } else if (p->is_reparse()) {
+    Syntax * res = 
+      reparse_replace(p->what_part(), p, r);
+    //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
+    return res;
   } else if (p->is_a("mid")/* && r->have(*p->arg(0))*/) {
     const Syntax * res = try_mid(p->arg(0), p, r, rs, splice_r);
     if (!res) goto def;
@@ -1033,11 +1038,6 @@ static const Syntax * replace(const Syntax * p,
   } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f")) {
     ChangeSrc<ExpandSourceInfo> ci(r);
     return SYN(ci, *p);
-  } else if (p->is_reparse()) {
-    Syntax * res = 
-      reparse_replace(p->part(0), p, r);
-    //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
-    return res;
   } else {
   def:
     SyntaxBuilder res;
@@ -1073,7 +1073,7 @@ static const Syntax * replace(const Syntax * p,
 static const Syntax * reparse_replace(const Syntax * new_name, 
                                       const Syntax * p, ReplTable * r)
 {
-  return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->part(0))),
+  return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->what_part())),
                            combine_repl(p->repl, r),
                            p->as_reparse()->cache,
                            r->expand_source_info_str(p->outer().str),
@@ -1103,7 +1103,7 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
 
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
-      if (repl->is_a("parm") || repl->is_a("()")) {
+      if (repl->is_reparse("parm") || repl->is_reparse("()")) { // FIXME: Just check for is_reparse()?
         if (repl->repl) {
           for (Replacements::const_iterator i = repl->repl->begin(), e = repl->repl->end(); 
                i != e; ++i) 
@@ -1219,7 +1219,7 @@ static const Syntax * handle_paran(parts_iterator & i,
                                    Environ & env) 
 {
   const Syntax * p = *i;
-  if (!p->is_a("()")) return NULL;
+  if (!p->is_reparse("()")) return NULL;
   ++i;
   //printf("handle_paran: %s\n", ~p->to_string());
   try {
@@ -1280,9 +1280,9 @@ static Syntax * handle_operator_fun_id(const Syntax * p,
 {
   assert(i != e); // FIXME: error message
   const Syntax * o = *i;
-  if (o->is_a("[]") || o->is_a("()")) {
+  if (o->is_reparse("[]") || o->is_reparse("()")) {
     ++i;
-    return SYN(p, o->part(0));
+    return SYN(p, o->what_part());
   }
   const Syntax * type = parse_decl_->parse_type(i, e, env);
   if (type) {
@@ -1389,13 +1389,53 @@ static const Syntax * try_syntax_macro_or_primitive(const SymbolName & what,
 const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsigned flags) {
   if (p->have_entity()) return p;
   //printf("\n>expand>%s//\n", ~p->part(0)->to_string());
-  SymbolName what = p->what();
   //printf("\n>expand>%s//\n", ~what);
   //p->str().sample_w_loc(COUT);
   //COUT << "\n";
   //p->print();
   //printf("\n////\n");
+  
+  if (p->is_reparse()) {
 
+    SymbolName what = p->as_reparse()->rwhat();
+
+    if (what == "sexp") {
+      return partly_expand(reparse("SEXP", p->outer(), &env), pos, env, flags);
+    } else if (what == "{}") {
+      if (pos == ExpPos)
+        return partly_expand(reparse("INIT", p->inner(), &env), pos, env, flags);
+      else
+        return partly_expand(reparse("BLOCK", p->outer(), &env), pos, env, flags);
+    } else if (what == "@{}" && !(flags & EXPAND_NO_BLOCK_LIST)) {
+      ReparseInfo r = p->inner();
+      const Syntax * p0 = reparse_prod("STMTE", r, &env);
+      if (r.str.empty()) {
+        const_cast<Syntax *>(p0)->str_ = p->str();
+        return partly_expand(p0, pos, env, flags);
+      } else {
+        p0 = partly_expand(p0, pos, env, flags);
+        ReparseSyntax * p1 = p->as_reparse()->clone();
+        p1->inner_.begin = r.str.begin;
+        return SYN(SYN("@"), p0, p1);
+      }
+    } else if (what == "()") {
+      return partly_expand(reparse("PARAN_EXP", p->outer(), &env), pos, env, flags);
+    } else if (what == "[]") {
+      return partly_expand(reparse("EXP", p->inner(), &env), pos, env, flags);
+    } else if (what == "parm") {
+      //abort();
+      if (pos == NoPos)
+        return partly_expand(reparse("ID", p->outer(), &env), pos, env, flags);
+      else if (pos & ExpPos)
+        return partly_expand(reparse("EXP", p->outer(), &env), pos, env, flags);
+      else
+        return partly_expand(reparse("STMT", p->outer(), &env), pos, env, flags);
+    } else {
+      return p;
+    }
+  }
+
+  SymbolName what = p->what();
   if (what == "class") { // XXX: A Bit of a hack, there needs to be a
                          // better way to handle "class Module::X {...}", 
                          // that is defining a class outside the module.
@@ -1418,35 +1458,6 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     return SYN(p->str(), NUM, p);
   } else if (is_raw_id(p)) {
     return partly_expand(SYN(p->str(), ID, p), pos, env, flags);
-  } else if (what == "{}") {
-    if (pos == ExpPos)
-      return partly_expand(reparse("INIT", p->inner(), &env), pos, env, flags);
-    else
-      return partly_expand(reparse("BLOCK", p->outer(), &env), pos, env, flags);
-  } else if (what == "@{}" && !(flags & EXPAND_NO_BLOCK_LIST)) {
-    ReparseInfo r = p->inner();
-    const Syntax * p0 = reparse_prod("STMTE", r, &env);
-    if (r.str.empty()) {
-      const_cast<Syntax *>(p0)->str_ = p->str();
-      return partly_expand(p0, pos, env, flags);
-    } else {
-      p0 = partly_expand(p0, pos, env, flags);
-      ReparseSyntax * p1 = p->as_reparse()->clone();
-      p1->inner_.begin = r.str.begin;
-      return SYN(SYN("@"), p0, p1);
-    }
-  } else if (what == "()") {
-    return partly_expand(reparse("PARAN_EXP", p->outer(), &env), pos, env, flags);
-  } else if (what == "[]") {
-    return partly_expand(reparse("EXP", p->inner(), &env), pos, env, flags);
-  } else if (what == "parm") {
-    //abort();
-    if (pos == NoPos)
-      return partly_expand(reparse("ID", p->outer(), &env), pos, env, flags);
-    else if (pos & ExpPos)
-      return partly_expand(reparse("EXP", p->outer(), &env), pos, env, flags);
-    else
-      return partly_expand(reparse("STMT", p->outer(), &env), pos, env, flags);
   } else if (Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
     return partly_expand(n, pos, env, flags);
   } else if (what == "id") {
@@ -1477,7 +1488,7 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     const Syntax * n = partly_expand(p->arg(0), OtherPos, env, flags | EXPAND_NO_ID_MACRO_CALL);
     const Syntax * a = p->arg(1);
     //printf("expanding call name: %s\n", ~n->to_string());
-    if (a->is_a("()")) a = reparse("SPLIT", a->inner(), &env);
+    if (a->is_reparse("()")) a = reparse("SPLIT", a->inner(), &env);
     if (n && n->is_a("id")) {
       if (!(flags & EXPAND_NO_FUN_MACRO_CALL)) {
         const Macro * m = env.symbols.find<Macro>(n->arg(0));
@@ -1542,14 +1553,24 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
 
 const Syntax * limited_expand(const Syntax * p, Environ & env) {
   if (p->have_entity()) return p;
+  
+  if (p->is_reparse()) {
+    SymbolName what = p->as_reparse()->rwhat();
+    if (what == "parm") {
+      return limited_expand(reparse("PARM_", p->outer(), &env), env);
+    } else if (what == "sexp") {
+      return limited_expand(reparse("SEXP", p->outer(), &env), env);
+    } else {
+      return p;
+    }
+  }
+
   SymbolName what = p->what();
   p = expand_id(p, env);
   if (p->simple()) {
     return p;
   } else if (const Syntax * n = try_syntax_macro_or_primitive(what, p, env)) {
     return limited_expand(n, env);
-  } else if (what == "parm") {
-    return limited_expand(reparse("PARM_", p->outer(), &env), env);
   } else if (what == "(...)") {
     const Syntax * type = parse_decl_->parse_type(p, env);
     if (type) return SYN(p->str(), SYN(".type"), type);
@@ -1631,6 +1652,8 @@ extern "C" namespace macro_abi {
 
 SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   //printf("EB::"); p->print(); printf("\n");
+  if (p->is_reparse("sexp"))
+    p = reparse("SEXP", p->outer(), &env);
   if (p->simple()) {
     return SymbolKey(*p, ns);
   } else if (p->is_a("fluid")) {

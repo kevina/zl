@@ -1025,9 +1025,8 @@ public:
     assert(res.num_parts() == 1);
     ReparseSyntax * syn = const_cast<ReparseSyntax *>(res.part(0)->as_reparse());
     syn->str_ = syn->outer_ = SourceStr(str, r);
-    syn->parts_[0] = name;
+    syn->what_ = name;
     syn->cache = env.cache.data;
-    syn->finalize();
     parts->add_part(syn);
     return r;
   }

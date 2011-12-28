@@ -377,7 +377,7 @@ namespace ast {
     for (int i = 0; i != sz; ++i) {
       const Syntax * p0 = start[i];
       SymbolKey n;
-      if (in_tuple && !p0->part(0)->simple()) { // HACK!
+      if (in_tuple && !p0->first_part_simple()) { // HACK!
 	if (p0->num_parts() > 1)
 	  n = expand_binding(p0->part(1), env);
 	p0 = p0->part(0);

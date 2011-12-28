@@ -58,7 +58,8 @@ namespace syntax_ns {
   // Class inheritance:
   //   SyntaxBase <= <NumPartsInlined> <= NoParts <= Leaf*
   //                                              <= SynEntity*
-  //              <= SemiMutable <= <NumPartsInlined> <= PartsInlined* <= Reparse*
+  //                                              <= Reparse*
+  //              <= SemiMutable <= <NumPartsInlined> <= PartsInlined* 
   //                             <= [1] <= PartsSeparate* <= [2] <= Expandable*
   // Notes:
   //   Classes without a * are considered abstract
@@ -113,7 +114,7 @@ namespace syntax_ns {
   static const unsigned IS_LEAF = IS_NO_PARTS | SIMPLE;
   static const unsigned IS_SYN_ENTITY  = (0x1 << EXTRA_INFO_SHIFT) | IS_NO_PARTS;
   static const unsigned IS_PARTS_INLINED = NUM_PARTS_INLINED | PARTS_INLINED;
-  static const unsigned IS_REPARSE     = (0x2 << EXTRA_INFO_SHIFT) | IS_PARTS_INLINED;
+  static const unsigned IS_REPARSE     = (0x2 << EXTRA_INFO_SHIFT) | IS_NO_PARTS;
   static const unsigned IS_PARTS_SEPARATE = PARTS_SEPARATE;
   static const unsigned    PARTS_SEPARATE_MASK = PARTS_LAYOUT_MASK;
   static const unsigned IS_EXPANDABLE = IS_PARTS_SEPARATE | EXPANDABLE;
@@ -123,6 +124,8 @@ namespace syntax_ns {
   static const unsigned LEAF_TI = 1 | IS_LEAF | FIRST_PART_SIMPLE;
   static const unsigned SYN_ENTITY_TI = 1 | IS_SYN_ENTITY;
   static const unsigned REPARSE_TI = 1 | IS_REPARSE;
+
+  static const bool SPECIAL_OK = true;
 
   typedef Syntax * const * parts_iterator;
   typedef Syntax * const * flags_iterator;
@@ -156,6 +159,7 @@ namespace syntax_ns {
     bool have_entity() const {return (type_inf & TYPE_ID_MASK) == IS_SYN_ENTITY;}
 
     bool is_reparse() const {return (type_inf & TYPE_ID_MASK) == IS_REPARSE;}
+    inline bool is_reparse(const char *) const;
 
     inline const NoParts * as_no_parts() const;
     inline const PartsInlined * as_parts_inlined() const;
@@ -182,7 +186,8 @@ namespace syntax_ns {
     inline parts_iterator parts_end() const;
     inline flags_iterator flags_begin() const;
     inline flags_iterator flags_end() const;
-    inline const SymbolName & what() const;
+    inline const SymbolName & what(bool special_ok = false) const;
+    inline const SymbolName * what_if_normal() const;
 
     template <typename T> inline T * entity() const;
 
@@ -201,6 +206,8 @@ namespace syntax_ns {
     inline const SourceStr & str() const;
 
     // Note: these are only valid for Reparse type
+    inline const SymbolName & rwhat() const;
+    inline const Syntax * what_part() const;
     inline ReparseInfo inner() const;
     inline ReparseInfo outer() const;
 
@@ -260,12 +267,12 @@ namespace syntax_ns {
   struct NoParts : public SyntaxBase {
     mutable Syntax * self; // hack see parts_begin()
 
-    Syntax * first_part() const {return this;}
-    Syntax * part(unsigned i) const {return this;}
-    parts_iterator parts_begin() const {return &(self = this);}
-    parts_iterator parts_end()   const {return &(self = this) + 1;}
-    flags_iterator flags_begin() const {return NULL;}
-    flags_iterator flags_end()   const {return NULL;}
+    Syntax * first_part() const {assert(!is_reparse()); return this;}
+    Syntax * part(unsigned i) const {assert(!is_reparse()); return this;}
+    parts_iterator parts_begin() const {assert(!is_reparse()); return &(self = this);}
+    parts_iterator parts_end()   const {assert(!is_reparse()); return &(self = this) + 1;}
+    flags_iterator flags_begin() const {assert(!is_reparse()); return NULL;}
+    flags_iterator flags_end()   const {assert(!is_reparse()); return NULL;}
   protected:
     NoParts(unsigned tinf, const SourceStr & str = SourceStr())
       : SyntaxBase(tinf, str) {}
@@ -645,19 +652,29 @@ namespace syntax_ns {
     SynEntity * clone() const {return new SynEntity(*this);}
   };
 
-  struct Reparse : public PartsInlined {
+  struct Reparse : public NoParts {
+    Syntax * what_;
     SourceStr outer_;
     SourceStr inner_;
     void * cache;
+    //Syntax * real;
+    const SymbolName & rwhat() const {return what_->what();}
+    const Syntax * what_part() const {return what_;}
+    String desc() const {return rwhat().name;}
     ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, cache);}
     ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, cache);}
-    Reparse(const SourceStr & str) : PartsInlined(REPARSE_TI),  inner_(str), cache() {}
+    Reparse(const SourceStr & str) : NoParts(REPARSE_TI), what_(), inner_(str), cache() {}
     Reparse(const Syntax * p, const Replacements * r, void * c, const SourceStr & o, const SourceStr & i)
-      : PartsInlined(REPARSE_TI, o), outer_(o), inner_(i), cache(c) {repl = r; parts_[0] = p; finalize();}
+      : NoParts(REPARSE_TI, o), what_(p), outer_(o), inner_(i), cache(c) {repl = r;}
     Reparse(const Reparse & other) 
-      : PartsInlined(other), outer_(other.outer_), inner_(other.inner_), 
-        cache(other.cache) {parts_[0] = other.parts_[0];}
+      : NoParts(other), what_(other.what_), outer_(other.outer_), inner_(other.inner_), 
+        cache(other.cache) {}
     Reparse * clone() const {return new Reparse(*this);}
+    //void instantiate() {
+    //  if (real) return;
+    //  else do_instantiate();
+    // }
+    //void do_instantiate();
   };
   
   extern SymbolName UNKNOWN_WHAT;
@@ -755,14 +772,28 @@ namespace syntax_ns {
     else return as_no_parts()->flags_end();
   }
 
-  inline const SymbolName & SyntaxBase::what() const {
-    if (simple()) return as_leaf()->what_;
+  inline const SymbolName * SyntaxBase::what_if_normal() const {
+    if (simple()) return &as_leaf()->what_;
     if (first_part_simple()) {
-      if (parts_inlined()) return as_parts_inlined()->first_part()->as_leaf()->what_;
-      else return as_parts_separate()->first_part()->as_leaf()->what_;
+      if (parts_inlined()) return &as_parts_inlined()->first_part()->as_leaf()->what_;
+      else return &as_parts_separate()->first_part()->as_leaf()->what_;
+    } else if (have_parts()) {
+      return &UNKNOWN_WHAT;
     }
-    if (have_entity()) return SynEntity::WHAT;
-    else return UNKNOWN_WHAT;
+    return NULL;
+  }
+
+  inline const SymbolName & SyntaxBase::what(bool special_ok) const {
+    const SymbolName * w = what_if_normal();
+    if (w) return *w;
+    if (special_ok) {
+      if (have_entity()) return SynEntity::WHAT;
+      if (is_reparse()) return as_reparse()->rwhat();
+      return UNKNOWN_WHAT;
+    } else {
+      fprintf(stderr, "Attempting to take symbol name of special syntax object, which is a %s\n", ~what(SPECIAL_OK).name);
+      abort();
+    }
   }
 
   template <typename T> 
@@ -799,6 +830,8 @@ namespace syntax_ns {
     return str_;
   }
 
+  inline const SymbolName & SyntaxBase::rwhat() const {return as_reparse()->rwhat();}
+  inline Syntax * SyntaxBase::what_part() const {return as_reparse()->what_part();}
   inline ReparseInfo SyntaxBase::inner() const {return as_reparse()->inner();}
   inline ReparseInfo SyntaxBase::outer() const {return as_reparse()->outer();}
   
@@ -816,15 +849,22 @@ namespace syntax_ns {
   inline bool SyntaxBase::ne(const char * n1, const char * n2) const {return !eq(n1,n2);}
   inline bool SyntaxBase::ne(const char * n1, const char * n2, const char * n3) const 
     {return !eq(n1,n2,n3);}
-  inline bool SyntaxBase::is_a(const char * n) const {return what().name == n;}
-  inline bool SyntaxBase::is_a(String n) const {return what().name == n;}
-  inline bool SyntaxBase::is_a(SymbolName n) const {return what() == n;}
+  inline bool SyntaxBase::is_a(const char * n) const {return what(SPECIAL_OK).name == n;}
+  inline bool SyntaxBase::is_a(String n) const {return what(SPECIAL_OK).name == n;}
+  inline bool SyntaxBase::is_a(SymbolName n) const {return what(SPECIAL_OK) == n;}
   inline bool SyntaxBase::is_a(const char * n, const char * p) const {return what().name == n && num_args() > 0 && arg(0)->is_a(p);}
 
   inline bool SyntaxBase::operator==(const char * str) const {
     //printf("%s %d == %s\n", ~p.what(), p.simple(), str);
     if (!first_part_simple()) return false;
     return what().name == str;
+  }
+
+  inline bool SyntaxBase::is_reparse(const char * n) const {
+    if ((type_inf & TYPE_ID_MASK) == IS_REPARSE)
+      return as_reparse()->rwhat().name == n;
+    else
+      return false;
   }
   
   //
@@ -1325,5 +1365,6 @@ using syntax_ns::ReparseSyntax;
 using syntax_ns::ReparseInfo;
 using syntax_ns::new_syntax;
 using syntax_ns::mk_pt_flg;
+using syntax_ns::SPECIAL_OK;
 
 #endif
