@@ -659,7 +659,7 @@ namespace syntax_ns {
     Syntax * what_;
     SourceStr outer_;
     SourceStr inner_;
-    void * cache;
+    mutable void * cache;
     mutable Syntax * real;
     const SymbolName & rwhat() const {return what_->what();}
     const Syntax * what_part() const {return what_;}
@@ -673,14 +673,14 @@ namespace syntax_ns {
       : SyntaxBase(other), what_(other.what_), outer_(other.outer_), inner_(other.inner_), 
         cache(other.cache), real(other.real) {}
     Reparse * clone() const {return new Reparse(*this);}
-    Syntax * instantiate(bool no_through = false) const {
-      return NULL;
+    Syntax * instantiate(bool no_throw = false) const {
+      if (!real) do_instantiate(no_throw);
+      return real;
     }
     Syntax * instantiate_no_throw() const {
       return instantiate(true);
     }
-    
-    //void do_instantiate();
+    void do_instantiate(bool no_throw) const {if (!no_throw) abort();}
   };
   
   extern SymbolName UNKNOWN_WHAT;
