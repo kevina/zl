@@ -58,7 +58,7 @@ namespace syntax_ns {
   // Class inheritance:
   //   SyntaxBase <= <NumPartsInlined> <= NoParts <= Leaf*
   //                                              <= SynEntity*
-  //                                              <= Reparse*
+  //              <= <NoParts> <= Reparse*
   //              <= SemiMutable <= <NumPartsInlined> <= PartsInlined* 
   //                             <= [1] <= PartsSeparate* <= [2] <= Expandable*
   // Notes:
@@ -66,6 +66,8 @@ namespace syntax_ns {
   //   [1] = ExternParts<...>
   //   [2] = MutableHooks <= PartsExpandable<...> <= MutableExternParts<...> 
   //   <NumPartsInlined> is not a real type
+  //   Reparse does not inherit from the NoParts class but logically it has
+  //     no parts.  It has special behavior when it is destructured.
   
   // type info layout (16 bits max):
   //   4: num parts
@@ -168,6 +170,7 @@ namespace syntax_ns {
     inline const Leaf * as_leaf() const;
     inline const SynEntity * as_syn_entity() const;
     inline const Reparse * as_reparse() const;
+    inline const Reparse * maybe_reparse() const;
 
     inline PartsInlined * as_parts_inlined();
     inline PartsSeparate * as_parts_separate();
@@ -267,12 +270,12 @@ namespace syntax_ns {
   struct NoParts : public SyntaxBase {
     mutable Syntax * self; // hack see parts_begin()
 
-    Syntax * first_part() const {assert(!is_reparse()); return this;}
-    Syntax * part(unsigned i) const {assert(!is_reparse()); return this;}
-    parts_iterator parts_begin() const {assert(!is_reparse()); return &(self = this);}
-    parts_iterator parts_end()   const {assert(!is_reparse()); return &(self = this) + 1;}
-    flags_iterator flags_begin() const {assert(!is_reparse()); return NULL;}
-    flags_iterator flags_end()   const {assert(!is_reparse()); return NULL;}
+    Syntax * first_part() const {return this;}
+    Syntax * part(unsigned i) const {return this;}
+    parts_iterator parts_begin() const {return &(self = this);}
+    parts_iterator parts_end()   const {return &(self = this) + 1;}
+    flags_iterator flags_begin() const {return NULL;}
+    flags_iterator flags_end()   const {return NULL;}
   protected:
     NoParts(unsigned tinf, const SourceStr & str = SourceStr())
       : SyntaxBase(tinf, str) {}
@@ -652,34 +655,38 @@ namespace syntax_ns {
     SynEntity * clone() const {return new SynEntity(*this);}
   };
 
-  struct Reparse : public NoParts {
+  struct Reparse : public SyntaxBase {
     Syntax * what_;
     SourceStr outer_;
     SourceStr inner_;
     void * cache;
-    //Syntax * real;
+    mutable Syntax * real;
     const SymbolName & rwhat() const {return what_->what();}
     const Syntax * what_part() const {return what_;}
     String desc() const {return rwhat().name;}
     ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, cache);}
     ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, cache);}
-    Reparse(const SourceStr & str) : NoParts(REPARSE_TI), what_(), inner_(str), cache() {}
+    Reparse(const SourceStr & str) : SyntaxBase(REPARSE_TI), what_(), inner_(str), cache(), real() {}
     Reparse(const Syntax * p, const Replacements * r, void * c, const SourceStr & o, const SourceStr & i)
-      : NoParts(REPARSE_TI, o), what_(p), outer_(o), inner_(i), cache(c) {repl = r;}
+      : SyntaxBase(REPARSE_TI, o), what_(p), outer_(o), inner_(i), cache(c), real() {repl = r;}
     Reparse(const Reparse & other) 
-      : NoParts(other), what_(other.what_), outer_(other.outer_), inner_(other.inner_), 
-        cache(other.cache) {}
+      : SyntaxBase(other), what_(other.what_), outer_(other.outer_), inner_(other.inner_), 
+        cache(other.cache), real(other.real) {}
     Reparse * clone() const {return new Reparse(*this);}
-    //void instantiate() {
-    //  if (real) return;
-    //  else do_instantiate();
-    // }
+    Syntax * instantiate(bool no_through = false) const {
+      return NULL;
+    }
+    Syntax * instantiate_no_throw() const {
+      return instantiate(true);
+    }
+    
     //void do_instantiate();
   };
   
   extern SymbolName UNKNOWN_WHAT;
 
   inline const NoParts * SyntaxBase::as_no_parts() const {
+    assert(!is_reparse());
     return static_cast<const NoParts *>(this);
   }
   inline const PartsInlined * SyntaxBase::as_parts_inlined() const {
@@ -700,6 +707,12 @@ namespace syntax_ns {
   inline const Reparse * SyntaxBase::as_reparse() const {
     assert(is_reparse());
     return static_cast<const Reparse *>(this);
+  }
+  inline const Reparse * SyntaxBase::maybe_reparse() const {
+    if (is_reparse())
+      return static_cast<const Reparse *>(this);
+    else
+      return NULL;
   }
 
   inline PartsInlined * SyntaxBase::as_parts_inlined() {
@@ -731,45 +744,54 @@ namespace syntax_ns {
 
   inline unsigned SyntaxBase::num_parts() const {
     if (num_parts_inlined()) return type_inf & NUM_PARTS_MASK;
-    else return as_parts_separate()->num_parts();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->num_parts();
+    return as_parts_separate()->num_parts();
   }
   inline unsigned SyntaxBase::num_flags() const {
     if (num_parts_inlined()) return (type_inf & NUM_FLAGS_MASK) >> NUM_FLAGS_SHIFT;
-    else return as_parts_separate()->num_flags();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->num_flags();
+    return as_parts_separate()->num_flags();
   }
   inline bool SyntaxBase::have_flags() const {
     if (num_parts_inlined()) return type_inf & NUM_FLAGS_MASK;
-    else return as_parts_separate()->have_flags();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->have_flags();
+    return as_parts_separate()->have_flags();
   }
   inline Syntax * SyntaxBase::first_part() const {
     if (parts_inlined()) return as_parts_inlined()->first_part();
     if (parts_separate()) return as_parts_separate()->first_part();
-    else return as_no_parts()->first_part();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->first_part();
+    return as_no_parts()->first_part();
   }
   inline Syntax * SyntaxBase::part(unsigned i) const {
     if (parts_inlined()) return as_parts_inlined()->part(i);
     if (parts_separate()) return as_parts_separate()->part(i);
-    else return as_no_parts()->part(i);
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->part(i);
+    return as_no_parts()->part(i);
   }
   inline parts_iterator SyntaxBase::parts_begin() const {
     if (parts_inlined()) return as_parts_inlined()->parts_begin();
     if (parts_separate()) return as_parts_separate()->parts_begin();
-    else return as_no_parts()->parts_begin();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->parts_begin();
+    return as_no_parts()->parts_begin();
   }
   inline parts_iterator SyntaxBase::parts_end() const {
     if (parts_inlined()) return as_parts_inlined()->parts_end();
     if (parts_separate()) return as_parts_separate()->parts_end();
-    else return as_no_parts()->parts_end();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->parts_end(); 
+    return as_no_parts()->parts_end();
   }
   inline flags_iterator SyntaxBase::flags_begin() const {
     if (parts_inlined()) return as_parts_inlined()->flags_begin();
     if (parts_separate()) return as_parts_separate()->flags_begin();
-    else return as_no_parts()->flags_begin();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->flags_begin(); 
+    return as_no_parts()->flags_begin();
   }
   inline flags_iterator SyntaxBase::flags_end() const {
     if (parts_inlined()) return as_parts_inlined()->flags_end();
     if (parts_separate()) return as_parts_separate()->flags_end();
-    else return as_no_parts()->flags_end();
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->flags_end();
+    return as_no_parts()->flags_end();
   }
 
   inline const SymbolName * SyntaxBase::what_if_normal() const {
@@ -777,6 +799,10 @@ namespace syntax_ns {
     if (first_part_simple()) {
       if (parts_inlined()) return &as_parts_inlined()->first_part()->as_leaf()->what_;
       else return &as_parts_separate()->first_part()->as_leaf()->what_;
+    } else if (const Reparse * r = maybe_reparse()) {
+      if (r->instantiate_no_throw())
+        return r->real->what_if_normal();
+      return NULL;
     } else if (have_parts()) {
       return &UNKNOWN_WHAT;
     }
