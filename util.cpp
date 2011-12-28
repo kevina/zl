@@ -43,7 +43,7 @@ char * pos_to_str(Pos p, char * buf) {
   if (p.line == UINT_MAX)
     strcpy(buf, "<somewhere>");
   else
-    snprintf(buf, 24, "%uc%u", p.line, p.col);
+    snprintf(buf, 24, "%u:%u", p.line, p.col);
   return buf;
 }
 
@@ -84,7 +84,7 @@ Pos SourceFile::get_pos(const char * s) const {
   }
   Vector<const char *>::const_iterator i = lower_bound(lines_.begin(), lines_.end(), s);
   if (*i != s) --i;
-  return Pos(i - lines_.begin() + 1, s - *i);
+  return Pos(i - lines_.begin() + 1, s - *i + 1);
 }
 
 String add_dir_if_needed(String file, const SourceInfo * included_from) {
