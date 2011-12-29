@@ -1507,13 +1507,6 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
     }
     Syntax * res = SYN(p->str(), PARTS(p->part(0), p->arg(0), a));
     p = res;
-  } else if (what == "raw") {
-    ReparseInfo ri = p->arg(0)->outer();
-    ReplToApply ria(ri.repl);
-    parse_parse::Res r = parse_parse::parse(ri.str);
-    const Syntax * res = ria.apply(r.parse);
-    const_cast<Syntax *>(res)->str_ = p->str();
-    return partly_expand(res, pos, env, flags);
   } else if (what == "stmt") {
     assert_pos(p, pos, TopLevel|FieldPos|StmtPos|StmtDeclPos);
     //printf("TRYING STMT PARSE on %s\n", ~p->sample_w_loc()); 

@@ -40,7 +40,7 @@ STMT : "statement" =
     / <add_prop> "add_prop" {BASIC_ID} {SYNTAX_P} ";"
     / <template> "template" {ID} ";"
     / <empty> ("using"/"friend") TOKEN+ ";"
-    / <raw> "__raw" {PARAN} ";"
+    / "__raw" {SEXP} ";"
     / <noop>   ";"
     / <extern> "extern" {STRING_L} (:<abi> ({STRING}/":"{STRING_L}))? ({BRACEL} / {STMT})
     / <once> "__once" {ID} ({BRACEL} / {STMT})
@@ -226,7 +226,7 @@ MID =
     {RAW_ID} / {'[]'} SPACING;
 
 RAW = 
-  <raw> "__raw" {PARAN};
+  "__raw" {SEXP_R};
 
 TEMPLATE_CALL =
   <%> {"implicit_cast"/"implicit_ptr_cast"/"reinterpret_cast"} {ANGLE} {PARAN};
