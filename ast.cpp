@@ -258,8 +258,8 @@ namespace ast {
   void parse_stmts(SourceStr str, Environ & env) {
     parse_prod("SPACING", str);
     while (!str.empty()) {
-      const Syntax * p = parse_prod("STMT", str, &env);
-      parse_stmt_part(p, env);
+      const Syntax * p = parse_prod("STMT", str, &env); 
+     parse_stmt_part(p, env);
     }
   }
 

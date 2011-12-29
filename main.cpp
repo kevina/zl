@@ -23,10 +23,12 @@ void parse_maps(ast::Environ & env) {
   SourceFile * code = new_source_file(SOURCE_PREFIX "grammer.ins");
   const char * s = code->begin();
   try {
-    while (s != code->end()) {
-      parse_parse::Res r = parse_parse::parse(SourceStr(code, s, code->end()));
-      read_macro(r.parse, env);
-      s = r.end;
+    SourceStr str(code, s, code->end());
+    parse_prod("S_SPACING", str, &env);
+    while (!str.empty()) {
+      const Syntax * p = parse_prod("SEXP", str, &env);
+      parse_prod("S_SPACING", str, &env); 
+      read_macro(p, env);
     }
   } catch (Error * err) {
     fprintf(stderr, "%s\n", err->message().c_str());

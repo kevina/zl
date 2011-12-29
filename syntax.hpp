@@ -143,7 +143,7 @@ namespace syntax_ns {
     void dump_type_info();
 
     bool simple() const {return type_inf & SIMPLE;}
-    bool first_part_simple() const {return type_inf & FIRST_PART_SIMPLE;}
+    inline bool first_part_simple() const;
 
     bool no_parts() const {return (type_inf & NO_PARTS_MASK) == IS_NO_PARTS;}
     bool have_parts() const {return !no_parts();}
@@ -228,7 +228,7 @@ namespace syntax_ns {
     inline bool is_a(String n) const;
     inline bool is_a(SymbolName n) const;
     inline bool is_a(const char * n, const char * p) const;
-    inline bool operator==(const char * str) const;
+    inline bool operator==(const char * str) const {return is_a(str);}
 
     void sample_w_loc(OStream & o, unsigned max_len = 20, unsigned syn_len = 0) const;
     String sample_w_loc(unsigned max_len = 20, unsigned syn_lan = 0) const;
@@ -680,7 +680,7 @@ namespace syntax_ns {
     Syntax * instantiate_no_throw() const {
       return instantiate(true);
     }
-    void do_instantiate(bool no_throw) const {if (!no_throw) abort();}
+    void do_instantiate(bool no_throw) const;
   };
   
   extern SymbolName UNKNOWN_WHAT;
@@ -742,67 +742,72 @@ namespace syntax_ns {
     abort();
   }
 
+  inline bool SyntaxBase::first_part_simple() const {
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->first_part_simple();
+    return type_inf & FIRST_PART_SIMPLE;
+  }
+
   inline unsigned SyntaxBase::num_parts() const {
-    if (num_parts_inlined()) return type_inf & NUM_PARTS_MASK;
     if (const Reparse * r = maybe_reparse()) return r->instantiate()->num_parts();
+    if (num_parts_inlined()) return type_inf & NUM_PARTS_MASK;
     return as_parts_separate()->num_parts();
   }
   inline unsigned SyntaxBase::num_flags() const {
-    if (num_parts_inlined()) return (type_inf & NUM_FLAGS_MASK) >> NUM_FLAGS_SHIFT;
     if (const Reparse * r = maybe_reparse()) return r->instantiate()->num_flags();
+    if (num_parts_inlined()) return (type_inf & NUM_FLAGS_MASK) >> NUM_FLAGS_SHIFT;
     return as_parts_separate()->num_flags();
   }
   inline bool SyntaxBase::have_flags() const {
-    if (num_parts_inlined()) return type_inf & NUM_FLAGS_MASK;
     if (const Reparse * r = maybe_reparse()) return r->instantiate()->have_flags();
+    if (num_parts_inlined()) return type_inf & NUM_FLAGS_MASK;
     return as_parts_separate()->have_flags();
   }
   inline Syntax * SyntaxBase::first_part() const {
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->first_part();
     if (parts_inlined()) return as_parts_inlined()->first_part();
     if (parts_separate()) return as_parts_separate()->first_part();
-    if (const Reparse * r = maybe_reparse()) return r->instantiate()->first_part();
     return as_no_parts()->first_part();
   }
   inline Syntax * SyntaxBase::part(unsigned i) const {
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->part(i);
     if (parts_inlined()) return as_parts_inlined()->part(i);
     if (parts_separate()) return as_parts_separate()->part(i);
-    if (const Reparse * r = maybe_reparse()) return r->instantiate()->part(i);
     return as_no_parts()->part(i);
   }
   inline parts_iterator SyntaxBase::parts_begin() const {
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->parts_begin();
     if (parts_inlined()) return as_parts_inlined()->parts_begin();
     if (parts_separate()) return as_parts_separate()->parts_begin();
-    if (const Reparse * r = maybe_reparse()) return r->instantiate()->parts_begin();
     return as_no_parts()->parts_begin();
   }
   inline parts_iterator SyntaxBase::parts_end() const {
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->parts_end(); 
     if (parts_inlined()) return as_parts_inlined()->parts_end();
     if (parts_separate()) return as_parts_separate()->parts_end();
-    if (const Reparse * r = maybe_reparse()) return r->instantiate()->parts_end(); 
     return as_no_parts()->parts_end();
   }
   inline flags_iterator SyntaxBase::flags_begin() const {
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->flags_begin(); 
     if (parts_inlined()) return as_parts_inlined()->flags_begin();
     if (parts_separate()) return as_parts_separate()->flags_begin();
-    if (const Reparse * r = maybe_reparse()) return r->instantiate()->flags_begin(); 
     return as_no_parts()->flags_begin();
   }
   inline flags_iterator SyntaxBase::flags_end() const {
+    if (const Reparse * r = maybe_reparse()) return r->instantiate()->flags_end();
     if (parts_inlined()) return as_parts_inlined()->flags_end();
     if (parts_separate()) return as_parts_separate()->flags_end();
-    if (const Reparse * r = maybe_reparse()) return r->instantiate()->flags_end();
     return as_no_parts()->flags_end();
   }
 
   inline const SymbolName * SyntaxBase::what_if_normal() const {
     if (simple()) return &as_leaf()->what_;
-    if (first_part_simple()) {
+    if (const Reparse * r = maybe_reparse()) {
+      if (Syntax * r2 = r->instantiate_no_throw())
+        return r2->what_if_normal();
+      return NULL;
+    } else if (first_part_simple()) {
       if (parts_inlined()) return &as_parts_inlined()->first_part()->as_leaf()->what_;
       else return &as_parts_separate()->first_part()->as_leaf()->what_;
-    } else if (const Reparse * r = maybe_reparse()) {
-      if (r->instantiate_no_throw())
-        return r->real->what_if_normal();
-      return NULL;
     } else if (have_parts()) {
       return &UNKNOWN_WHAT;
     }
@@ -879,12 +884,6 @@ namespace syntax_ns {
   inline bool SyntaxBase::is_a(String n) const {return what(SPECIAL_OK).name == n;}
   inline bool SyntaxBase::is_a(SymbolName n) const {return what(SPECIAL_OK) == n;}
   inline bool SyntaxBase::is_a(const char * n, const char * p) const {return what().name == n && num_args() > 0 && arg(0)->is_a(p);}
-
-  inline bool SyntaxBase::operator==(const char * str) const {
-    //printf("%s %d == %s\n", ~p.what(), p.simple(), str);
-    if (!first_part_simple()) return false;
-    return what().name == str;
-  }
 
   inline bool SyntaxBase::is_reparse(const char * n) const {
     if ((type_inf & TYPE_ID_MASK) == IS_REPARSE)
@@ -1392,5 +1391,12 @@ using syntax_ns::ReparseInfo;
 using syntax_ns::new_syntax;
 using syntax_ns::mk_pt_flg;
 using syntax_ns::SPECIAL_OK;
+
+static inline Syntax * instantiate(Syntax * syn) {
+  if (const ReparseSyntax * r = syn->maybe_reparse())
+    return r->instantiate_no_throw();
+  else
+    return NULL;
+}
 
 #endif

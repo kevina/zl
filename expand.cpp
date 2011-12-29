@@ -808,7 +808,7 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   ReplTable * rt 
     = new ReplTable(mark, 
                     new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
-  if (pattern->is_reparse()) {
+  if (pattern->is_reparse("()")) {
     //printf("YES!\n");
     pattern = reparse("MATCH_LIST", pattern->inner());
   } else {
@@ -1103,7 +1103,7 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
 
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
-      if (repl->is_reparse("parm") || repl->is_reparse("()")) { // FIXME: Just check for is_reparse()?
+      if ((repl->is_reparse("parm") || repl->is_reparse("()")) && what != "NONE") { // FIXME: Just check for is_reparse()?
         if (repl->repl) {
           for (Replacements::const_iterator i = repl->repl->begin(), e = repl->repl->end(); 
                i != e; ++i) 
@@ -1399,8 +1399,8 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
 
     SymbolName what = p->as_reparse()->rwhat();
 
-    if (what == "sexp") {
-      return partly_expand(reparse("SEXP", p->outer(), &env), pos, env, flags);
+    if (Syntax * r = p->as_reparse()->instantiate_no_throw()) {
+      return partly_expand(r, pos, env, flags);
     } else if (what == "{}") {
       if (pos == ExpPos)
         return partly_expand(reparse("INIT", p->inner(), &env), pos, env, flags);
@@ -1555,11 +1555,11 @@ const Syntax * limited_expand(const Syntax * p, Environ & env) {
   if (p->have_entity()) return p;
   
   if (p->is_reparse()) {
+    if (Syntax * r = p->as_reparse()->instantiate_no_throw())
+      return limited_expand(r, env);      
     SymbolName what = p->as_reparse()->rwhat();
     if (what == "parm") {
       return limited_expand(reparse("PARM_", p->outer(), &env), env);
-    } else if (what == "sexp") {
-      return limited_expand(reparse("SEXP", p->outer(), &env), env);
     } else {
       return p;
     }
@@ -1652,8 +1652,8 @@ extern "C" namespace macro_abi {
 
 SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   //printf("EB::"); p->print(); printf("\n");
-  if (p->is_reparse("sexp"))
-    p = reparse("SEXP", p->outer(), &env);
+  if (Syntax * r = instantiate(p))
+    p = r;
   if (p->simple()) {
     return SymbolKey(*p, ns);
   } else if (p->is_a("fluid")) {
@@ -1718,12 +1718,15 @@ void assert_num_args(const Syntax * p, unsigned min, unsigned max) {
 
 static void expand_fun_parms(const Syntax * args, Environ & env, SyntaxBuilder & res, 
                              unsigned & num_required,  bool required = true) {
+  //printf("EXPAND_FUN_PARMS: %s %d\n", ~args->to_string(), args->num_parts());
   for (unsigned i = 0; i != args->num_args(); ++i) {
     const Syntax * p = args->arg(i);
     if (p->is_a("@") && !p->simple()) {
       expand_fun_parms(p, env, res, num_required, required);
     } else {
-      if (p->is_reparse())
+      if (Syntax * r = instantiate(p))
+        p = r;
+      else if (p->is_reparse("(...)"))
         p = reparse("TOKENS", p->inner(), &env);
       //printf("FUN_PARM: %s\n", ~p->to_string());
       if (p->eq("@")) {

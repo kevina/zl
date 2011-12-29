@@ -142,7 +142,7 @@ TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 
 SYNTAX = 
     <syntax> "syntax" {SYNTAX_P}?
-  / <raw_syntax> "raw_syntax" {SEXP_FULL};
+  / <raw_syntax> "raw_syntax" {SEXP_R};
 
 SYNTAX_P =
   <<mid>> {MID} / {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
@@ -175,7 +175,7 @@ PARAN  = <<reparse ()>>  "(" {RAW_TOKENS} ")";
 BRACK  = <<reparse []>>  "[" {RAW_TOKENS} "]";
 ANGLE  = <<reparse \<\>>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
 
-SEXP_R = <<reparse sexp SEXP>> '(' {SEXP_PART*} ')';
+SEXP_R = <<reparse sexp>> '(' {SEXP_PART*} ')';
 SEXP_PART = S_WSPACE / S_ID / SEXP_R;
 S_WSPACE = ([\s]+ / '#' [^\n]* [\n])+;
 S_ID = '"' {('\\'_/[^"])*} '"' / {('\\'_ / [^\s\(\)\#\"])+};
@@ -183,18 +183,18 @@ S_ID = '"' {('\\'_/[^"])*} '"' / {('\\'_ / [^\s\(\)\#\"])+};
 S_SPACING = S_WSPACE?;
 
 SEXP = <> '(' S_SPACING {SPART}* ')';
-SPART = ({S_FLAG} / {S_MID} / <<mid SPART>> {S_ID} / {S_ID} / {SEXP_R}) S_SPACING;
+SPART = ({S_FLAG} / {S_MID} / <<mid NONE>> {S_ID} / {S_ID} / {SEXP_R}) S_SPACING;
 S_FLAG = :<=> ':' ({SEXP} / !':'{S_ID});
 
 # PROD TO FULLY PARSE SEXP
 SEXP_FULL = <> '(' S_SPACING {SPART_FULL}* ')';
-SPART_FULL = ({S_FLAG_FULL} / {S_MID} / <<mid SPART>> {S_ID} / {S_ID} / {SEXP_FULL}) S_SPACING;
+SPART_FULL = ({S_FLAG_FULL} / {S_MID} / <<mid NONE>> {S_ID} / {S_ID} / {SEXP_FULL}) S_SPACING;
 S_FLAG_FULL = :<=> ':' ({SEXP_FULL} / !':'{S_ID});
 
 S_MID = <mid> '(' S_SPACING 'mid' S_SPACING ({S_ID} S_SPACING)+ ')';
 
 TOKENS_SEXP = <> {SPART}*;
-MATCH_LIST_SEXP = <> {SPART_FULL}*;
+TOKENS_SEXP_FULL = <> {SPART_FULL}*;
 
 # RAW_ID and CONST is not strictly needed but it will make reparsing
 # the string more efficient

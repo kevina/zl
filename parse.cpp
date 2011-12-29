@@ -296,7 +296,13 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
     as_syn_entity()->desc(o);
     o << ")";
   } else if (is_reparse()) {
-    o.printf("(%s ...)", ~escape(rwhat().to_string(g)));
+    Syntax * r = as_reparse()->real;
+    if (r) {
+      //o.printf("=");
+      r->to_string(o,f,g);
+    } else {
+      o.printf("(%s ...)", ~escape(rwhat().to_string(g)));
+    }
   } else if (have_parts()) {
     SymbolName what_ = what();
     o.printf("(");
@@ -378,6 +384,16 @@ void SynEntity::desc(OStream & o) const {
     break;
   default: 
     o << WHAT;
+  }
+}
+
+void ReparseSyntax::do_instantiate(bool no_throw) const {
+  if (rwhat().name == "sexp") {
+    reparse_sexp(this);
+    //printf("REPARSEd sexp = %s\n", ~real->to_string());
+    assert(!real->simple());
+  } else if (!no_throw) {
+    abort();
   }
 }
 

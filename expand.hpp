@@ -98,6 +98,13 @@ static inline const Syntax * reparse(String what, ReparseInfo p, Environ * env =
   const_cast<Syntax *>(res)->str_ = p.orig->str();
   return res;
 }
+static inline const Syntax * reparse_sexp(const ReparseSyntax * s) {
+  assert(!s->real);
+  Syntax * res = reparse("SEXP", s->outer());
+  s->cache = NULL;
+  s->real = res;
+  return res;
+}
 
 ast::Stmt * parse_map(const Syntax * p, Environ & env);
 ast::Stmt * parse_macro(const Syntax * p, Environ & env);
