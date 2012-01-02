@@ -356,7 +356,7 @@ void compile_for_ct(Deps & deps, Environ & env);
 
 // see prelude.zlh
 
-// the slightly diffrent C++ version
+// the slightly different C++ version
 typedef ReplTable::Table Match;
 extern "C" namespace macro_abi {
   typedef const Marks Context;
@@ -1003,6 +1003,10 @@ static const Syntax * replace(const Syntax * p,
                               ReplTable * r, const Replacements * rs, 
                               bool allow_plain_mids, bool * splice_r) 
 {
+  // FIXME: This is a major hack.  In fact with sexp being reparsed
+  // now allow_plain_mids should not even be needed, yet things fail
+  // without the hack.  Figure out why and then eliminate
+  // allow_plain_mids.
   allow_plain_mids = true;
   // FIXME: Do I need to handle the case where the entity is a symbol name?
   static unsigned seq=0;
@@ -1075,7 +1079,7 @@ static const Syntax * reparse_replace(const Syntax * new_name,
 {
   return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->what_part())),
                            combine_repl(p->repl, r),
-                           p->as_reparse()->cache,
+                           p->as_reparse()->cache, p->as_reparse()->parse_as,
                            r->expand_source_info_str(p->outer().str),
                            r->expand_source_info_str(p->inner().str));
 }
@@ -1100,7 +1104,7 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     ChangeSrc<SplitSourceInfo> cs(repl, r->outer_si ? r->outer_si : new ReplaceSourceInfo(r->expand_si,mid));
     const Syntax * orig_repl = repl;
     repl = SYN(cs, *repl);
-
+    
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
       if ((repl->is_reparse("parm") || repl->is_reparse("()")) && what != "NONE") { // FIXME: Just check for is_reparse()?

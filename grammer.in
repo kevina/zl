@@ -175,7 +175,7 @@ PARAN  = <<reparse ()>>  "(" {RAW_TOKENS} ")";
 BRACK  = <<reparse []>>  "[" {RAW_TOKENS} "]";
 ANGLE  = <<reparse \<\>>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
 
-SEXP_R = <<reparse sexp>> '(' {SEXP_PART*} ')';
+SEXP_R = <<reparse sexp SEXP>> '(' {SEXP_PART*} ')';
 SEXP_PART = S_WSPACE / S_ID / SEXP_R;
 S_WSPACE = ([\s]+ / '#' [^\n]* [\n])+;
 S_ID = '"' {('\\'_/[^"])*} '"' / {('\\'_ / [^\s\(\)\#\"])+};

@@ -296,7 +296,7 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
     as_syn_entity()->desc(o);
     o << ")";
   } else if (is_reparse()) {
-    Syntax * r = as_reparse()->real;
+    Syntax * r = as_reparse()->cached_val;
     if (r) {
       //o.printf("=");
       r->to_string(o,f,g);
@@ -388,10 +388,12 @@ void SynEntity::desc(OStream & o) const {
 }
 
 void ReparseSyntax::do_instantiate(bool no_throw) const {
-  if (rwhat().name == "sexp") {
-    reparse_sexp(this);
-    //printf("REPARSEd sexp = %s\n", ~real->to_string());
-    assert(!real->simple());
+  if (rwhat().name == "sexp")
+    assert(parse_as);
+  if (parse_as.defined()) {
+    printf("reparsing as %s\n", ~parse_as);
+    cached_val = reparse(parse_as, outer());
+    assert(!cached_val->simple());
   } else if (!no_throw) {
     abort();
   }
@@ -500,7 +502,7 @@ namespace parse_common {
     const char * start = str;
     ++str;
     val.begin = str;
-    while (*str != close && str != end) {
+    while (str != end && *str != close) {
       if (*str == '\\') {
         ++str;
         if (str == end)

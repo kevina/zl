@@ -69,6 +69,7 @@ public:
   operator const char * () const {return d->str;}
   const char * c_str() const {return d->str;}
   const char * operator~() const {return d->str;}
+  const StringObj * data_obj () const {return d;}
 };
 
 inline ParmString::ParmString(String s) 
@@ -146,7 +147,6 @@ char * pos_to_str(Pos p, char * buf);
 
 class OStream;
 class SourceFile;
-
 #define PURE __attribute__ ((pure))
 
 //

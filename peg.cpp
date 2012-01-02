@@ -1027,20 +1027,23 @@ public:
     syn->str_ = syn->outer_ = SourceStr(str, r);
     syn->what_ = name;
     syn->cache = env.cache.data;
+    syn->parse_as = parse_as;
+    //printf("ro: %s %s\n", ~syn->rwhat().name, syn->parse_as ? ~String(syn->parse_as) : NULL);
     parts->add_part(syn);
     return r;
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
     return prod->match_f(str, errs, env);
   }
-  ReparseOuter(const char * s, const char * e, Prod * p, String n)
-    : Prod(s,e), prod(p), name(SYN(n)) 
+  ReparseOuter(const char * s, const char * e, Prod * p, String n, String pa)
+    : Prod(s,e), prod(p), name(SYN(n)), parse_as(pa)
     {
       capture_type = ExplicitCapture;
       name = SYN(parse_common::unescape(n.begin(), n.end(), '"')); // FIXME: Add source info
+      printf("RO: %s %s\n", ~n, ~parse_as);
     }
   ReparseOuter(const ReparseOuter & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)), name(o.name) {}
+    : Prod(o), prod(o.prod->clone(p)), name(o.name), parse_as(o.parse_as) {}
   virtual Prod * clone(Prod * p) {return new ReparseOuter(*this, p);}
   const ProdProps & calc_props() {
     const ProdProps & r = prod->props();
@@ -1052,6 +1055,7 @@ public:
 private:
   Prod * prod;
   const Syntax * name;
+  String parse_as;
 };
 
 // similar to std::equal but will also keep track of the last
@@ -1867,8 +1871,8 @@ namespace ParsePeg {
     bool capture_as_flag = false;
     bool named_capture = false;
     SubStr name;
-    SubStr special;
-    SubStr special_arg;
+    static const unsigned MAX_PARTS = 3;
+    SubStr special[MAX_PARTS];
     enum SpecialType {SP_NONE, SP_NAME_LATER, SP_MID, SP_REPARSE, SP_TID} sp = SP_NONE;
     if (*str == ':') {
       capture_as_flag = true;
@@ -1881,29 +1885,34 @@ namespace ParsePeg {
       if (str2 != end && *str2 == '<') {
         str = str2;
         ++str;
-        str = spacing(str, end);
-        special.begin = str;
-        while (str != end && *str != '>' && !asc_isspace(*str))
-          ++str;
-        special.end = str;
-        if (str == end) throw error(str, "Unterminated >");
-        if (asc_isspace(*str)) {
+        unsigned i = 0;
+        while (*str != '>') {
+          if (i >= MAX_PARTS) throw error(str, "Too many parts in << >>");
           str = spacing(str, end);
-          str = quote('>', str-1, end, special_arg);
+          special[i].begin = str;
+          while (str != end && *str != '>' && !asc_isspace(*str)) {
+            if (*str == '\\') {
+              ++str;
+              if (str == end)
+                throw error(str, "Unexpected end of string");
+            }
+            ++str;
+          }
+          special[i].end = str;
           if (str == end) throw error(str, "Unterminated >");
-        } else {
-          ++str;
+          ++i;
         }
-        if (special == "") {
+        ++str;
+        if (special[0] == "") {
           sp = SP_NAME_LATER;
-        } else if (special == "mid") {
-          name = special;
+        } else if (special[0] == "mid") {
+          name = special[0];
           sp = SP_MID;
-        } else if (special == "reparse") {
-          name = special_arg;
+        } else if (special[0] == "reparse") {
+          name = special[1];
           sp = SP_REPARSE;
-        } else if (special == "tid") {
-          name = special;
+        } else if (special[0] == "tid") {
+          name = special[0];
           sp = SP_TID;
         }
         else
@@ -1940,9 +1949,9 @@ namespace ParsePeg {
     if (sp == SP_NAME_LATER)
       return Res(new PlaceHolderCapture(start, str, prod));
     else if (sp == SP_MID)
-      return Res(new S_MId(start, str, prod, String(special_arg)));
+      return Res(new S_MId(start, str, prod, String(special[1])));
     else if (sp == SP_REPARSE)
-      return Res(new ReparseOuter(start, str, prod.prod, name));
+      return Res(new ReparseOuter(start, str, prod.prod, name, special[2] ? String(special[2]) : String()));
     else if (sp == SP_TID) 
       return Res(new S_TId(start, str, prod, name));
     if (named_capture)
@@ -2175,7 +2184,7 @@ Error * ParseErrors::to_error(const SourceInfo * source, const SourceFile * gram
       if (i == size()) break;
       buf.printf(" or ");
     }
-    return error(source, front()->pos, ~buf.freeze());
+    return error(source, front()->pos, "%s", ~buf.freeze());
   }
 }
 
