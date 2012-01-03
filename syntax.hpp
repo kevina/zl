@@ -142,9 +142,10 @@ namespace syntax_ns {
 
     void dump_type_info();
 
-    bool simple() const {return type_inf & SIMPLE;}
+    inline bool simple() const;
     inline bool first_part_simple() const;
 
+    bool is_leaf() const {return type_inf & SIMPLE;}
     bool no_parts() const {return (type_inf & NO_PARTS_MASK) == IS_NO_PARTS;}
     bool have_parts() const {return !no_parts();}
     bool num_parts_inlined() const {return type_inf & NUM_PARTS_INLINED;}
@@ -416,16 +417,16 @@ namespace syntax_ns {
     mutable_flags_iterator flags_begin()       {return flags_;}
     flags_iterator         flags_end()   const {return flags_end_;}
     mutable_flags_iterator flags_end()         {return flags_end_;}
-
+    
     unsigned alloc_size() const {return flags_end_ - parts_;}
   };
-
+  
   // "T" must inherate from Entity, it must also define add_part_hook
   // and add_parts_hook, and insure_space
   template <class T>
   struct MutableExternParts : public T {
     MutableExternParts(unsigned tinf = 0, const SourceStr & str = SourceStr()) : T(tinf, str) {}
-
+    
     using T::parts_;
     using T::parts_end_;
     using T::flags_;
@@ -737,10 +738,19 @@ namespace syntax_ns {
     if (is_parts_inlined()) return as_parts_inlined()->clone();
     if (is_parts_separate()) return as_parts_separate()->clone();
     if (expandable()) return as_expandable()->clone();
-    if (simple()) return as_leaf()->clone();
+    if (is_leaf()) return as_leaf()->clone();
     if (have_entity()) return as_syn_entity()->clone();
     if (is_reparse()) return as_reparse()->clone();
     abort();
+  }
+
+  inline bool SyntaxBase::simple() const {
+    if (const Reparse * r = maybe_reparse()) {
+      const Syntax * p = r->instantiate_no_throw();
+      if (p) return p->simple();
+      else {printf("NOT SIMPLE YET REPARSE %s\n", ~to_string()); return false;}
+    }
+    return type_inf & SIMPLE;
   }
 
   inline bool SyntaxBase::first_part_simple() const {
@@ -801,7 +811,7 @@ namespace syntax_ns {
   }
 
   inline const SymbolName * SyntaxBase::what_if_normal() const {
-    if (simple()) return &as_leaf()->what_;
+    if (is_leaf()) return &as_leaf()->what_;
     if (const Reparse * r = maybe_reparse()) {
       if (Syntax * r2 = r->instantiate_no_throw())
         return r2->what_if_normal();

@@ -284,7 +284,7 @@ void Syntax::print() const {
 }
 
 void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
-  if (simple()) {
+  if (is_leaf()) {
     SymbolName what_ = what();
     assert(what_.defined());
     if (what_.empty()) 
@@ -298,7 +298,7 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
   } else if (is_reparse()) {
     Syntax * r = as_reparse()->cached_val;
     if (r) {
-      //o.printf("=");
+      o.printf("=");
       r->to_string(o,f,g);
     } else {
       o.printf("(%s ...)", ~escape(rwhat().to_string(g)));
@@ -393,7 +393,6 @@ void ReparseSyntax::do_instantiate(bool no_throw) const {
   if (parse_as.defined()) {
     printf("reparsing as %s\n", ~parse_as);
     cached_val = reparse(parse_as, outer());
-    assert(!cached_val->simple());
   } else if (!no_throw) {
     abort();
   }

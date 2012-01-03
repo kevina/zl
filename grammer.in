@@ -145,8 +145,14 @@ SYNTAX =
   / <raw_syntax> "raw_syntax" {SEXP_R};
 
 SYNTAX_P =
-  <<mid>> {MID} / {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
-#  <<mid>> {MID} / {ID} / {BRACE} / <parm> "(" {RAW_TOKEN*} ")"; # / {BRACK};
+  <<reparse id MID_ID>> {ID} / <<reparse syn MID_SYM>> {SYM} / {BRACE} / {PARAN}; # / {BRACK};
+#   {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
+
+MID_ID = 
+  <<mid NONE>> {MID} EOF / {ID};
+
+MID_SYM = 
+  <<mid NONE>> {MID} EOF / {SYM};
 
 SYNTAX_STR =
   ({SYNTAX_P} / <<reparse parm>> {RAW_TOKEN+}) EOF;

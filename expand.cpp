@@ -319,10 +319,10 @@ void ReplTable::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
 //
 
 bool Replacements::anywhere(String s0) const {
-  //const char * s = ~s0;
-  //if (*s == '@') ++s;
+  const char * s = ~s0;
+  if (*s == '@') ++s;
   for (const_iterator i = begin(), e = end(); i != e; ++i)
-    if ((*i)->have(s0)) return true;
+    if ((*i)->have(s)) return true;
   return false;
 }
 
@@ -1008,6 +1008,7 @@ static const Syntax * replace(const Syntax * p,
   // without the hack.  Figure out why and then eliminate
   // allow_plain_mids.
   allow_plain_mids = true;
+  //allow_plain_mids = false;
   // FIXME: Do I need to handle the case where the entity is a symbol name?
   static unsigned seq=0;
   unsigned seql = seq++;
@@ -1017,6 +1018,11 @@ static const Syntax * replace(const Syntax * p,
   SymbolName mid;
   if (p->have_entity()) {
     return p;
+  } else if (p->is_reparse()) {
+    Syntax * res = 
+      reparse_replace(p->what_part(), p, r);
+    //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
+    return res;
   } else if (p->simple()) {
     //mid = *p;
     //goto try_mid;
@@ -1024,16 +1030,12 @@ static const Syntax * replace(const Syntax * p,
     //printf("MARK %s\n", ~p->what());
     const Syntax * res = NULL;
     if (allow_plain_mids) res = try_mid(p, SYN(SYN("mid"), p), r, rs, splice_r);
-    //if (res)
-    //  printf("ok 1: %s\n", ~res->to_string());
+    if (res) {
+      fprintf(stderr, "*** APM NEEDED: %s -> %s\n", ~p->to_string(), ~res->to_string());
+      printf("*** APM NEEDED: %s -> %s\n", ~p->to_string(), ~res->to_string());
+      //abort();
+    }
     if (!res) res = SYN(p, r->mark, r->expand_source_info(p));
-    //if (res)
-    //  printf("ok 2: %s\n", ~res->to_string());
-    return res;
-  } else if (p->is_reparse()) {
-    Syntax * res = 
-      reparse_replace(p->what_part(), p, r);
-    //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
     return res;
   } else if (p->is_a("mid")/* && r->have(*p->arg(0))*/) {
     const Syntax * res = try_mid(p->arg(0), p, r, rs, splice_r);
@@ -1401,11 +1403,12 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
   
   if (p->is_reparse()) {
 
+    if (Syntax * r = p->as_reparse()->instantiate_no_throw())
+      return partly_expand(r, pos, env, flags);
+
     SymbolName what = p->as_reparse()->rwhat();
 
-    if (Syntax * r = p->as_reparse()->instantiate_no_throw()) {
-      return partly_expand(r, pos, env, flags);
-    } else if (what == "{}") {
+    if (what == "{}") {
       if (pos == ExpPos)
         return partly_expand(reparse("INIT", p->inner(), &env), pos, env, flags);
       else
