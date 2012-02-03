@@ -165,6 +165,8 @@ user_type Match {
   macro varl(str, :this this) {match_varl(this, str);}
 }
 
+__ct_callback Syntax * make_mid(Syntax *);
+
 __ct_callback Syntax * replace(UnmarkedSyntax *, Match *, Mark *);
 
 typedef struct Context Context;

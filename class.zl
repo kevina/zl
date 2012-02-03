@@ -610,7 +610,7 @@ public:
           macro_parms->append(replace(raw_syntax(reparse $1), match_local(m0, arg, NULL), mark));
         }
         typed_parms->append(parm);
-        call_parms->append(arg);
+        call_parms->append(make_mid(arg));
       } else if (parm->eq(syntax ...)) {
         macro_parms->append(replace(raw_syntax (reparse @varargs), NULL, mark));
         typed_parms->append(parm);

@@ -21,6 +21,7 @@
   match_local;
   match_var;
   match_varl;
+  make_mid;
   replace;
   empty_context;
   get_context;

@@ -229,7 +229,7 @@ ID =
   <fluid> "fluid" {ID} / {ID_W_INNER};
 
 MID = 
-    {RAW_ID} / {'[]'} SPACING;
+    {RAW_ID} / {SYM} / {'[]'} SPACING;
 
 RAW = 
   "__raw" {SEXP_R};

@@ -402,7 +402,7 @@ const Syntax * flatten(const Syntax * p) {
 } 
 
 static const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs, 
-                              bool allow_plain_mids, bool * splice);
+                              bool * splice);
 static const Syntax * reparse_replace(const Syntax * new_name, 
                                       const Syntax * p, ReplTable * r);
 
@@ -728,7 +728,7 @@ bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl, ReplTable 
     } else if (p->is_a("reparse")) {
       if (!repl) {
         if (p->num_args() > 1) {
-          repl = replace(p->arg(1), rt, NULL, false, NULL);
+          repl = replace(p->arg(1), rt, NULL, NULL);
           //printf("REPL = %s\n" , ~repl->to_string());
         }
       }
@@ -915,7 +915,7 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
     //  res = res->arg(0);
     res = reparse_replace(SYN("@{}"), p, rparms);
   } else {
-    res = replace(p, rparms, NULL, true, NULL);
+    res = replace(p, rparms, NULL, NULL);
   }
   rparms->expand_si->outer_ip = res;
   // fixme: why am i doing this? commented it out for now
@@ -947,7 +947,7 @@ struct ReplToApply {
            i != e; ++i) 
       {
         combined_repls.erase(combined_repls.begin());
-        res = replace(res, *i, &combined_repls, false, NULL);
+        res = replace(res, *i, &combined_repls, NULL);
       }
     }
     return res;
@@ -1001,14 +1001,8 @@ static const Syntax * try_mid(const Syntax * mid_p, const Syntax * p, ReplTable 
 
 static const Syntax * replace(const Syntax * p, 
                               ReplTable * r, const Replacements * rs, 
-                              bool allow_plain_mids, bool * splice_r) 
+                              bool * splice_r) 
 {
-  // FIXME: This is a major hack.  In fact with sexp being reparsed
-  // now allow_plain_mids should not even be needed, yet things fail
-  // without the hack.  Figure out why and then eliminate
-  // allow_plain_mids.
-  allow_plain_mids = true;
-  //allow_plain_mids = false;
   // FIXME: Do I need to handle the case where the entity is a symbol name?
   static unsigned seq=0;
   unsigned seql = seq++;
@@ -1024,19 +1018,14 @@ static const Syntax * replace(const Syntax * p,
     //printf("REPLACE RES %d: %s %s\n", seql, ~res->sample_w_loc(), ~res->to_string());
     return res;
   } else if (p->simple()) {
-    //mid = *p;
-    //goto try_mid;
-    //return p;
-    //printf("MARK %s\n", ~p->what());
-    const Syntax * res = NULL;
-    if (allow_plain_mids) res = try_mid(p, SYN(SYN("mid"), p), r, rs, splice_r);
-    if (res) {
-      fprintf(stderr, "*** APM NEEDED: %s -> %s\n", ~p->to_string(), ~res->to_string());
-      printf("*** APM NEEDED: %s -> %s\n", ~p->to_string(), ~res->to_string());
-      //abort();
-    }
-    if (!res) res = SYN(p, r->mark, r->expand_source_info(p));
-    return res;
+    //if (try_mid(p, SYN(SYN("mid"), p), r, rs, splice_r) {
+    //  fprintf(stderr, "*** APM NEEDED: %s -> %s\n", ~p->to_string(), ~res->to_string());
+    //  printf("*** APM NEEDED: %s -> %s\n", ~p->to_string(), ~res->to_string());
+    //  CERR.write(error(p->str(), "NOTE: var info")->message());
+    //  CERR.write(error(res->str(), "NOTE: repl info")->message());
+    //  abort();
+    //}
+    return SYN(p, r->mark, r->expand_source_info(p));
   } else if (p->is_a("mid")/* && r->have(*p->arg(0))*/) {
     const Syntax * res = try_mid(p->arg(0), p, r, rs, splice_r);
     if (!res) goto def;
@@ -1053,7 +1042,7 @@ static const Syntax * replace(const Syntax * p,
       //static int x = 0;
       //++x;
       //printf("<<%d %s\n", x, ~p->part(i)->to_string());
-      const Syntax * q = replace(p->part(i), r, rs, allow_plain_mids, &splice);
+      const Syntax * q = replace(p->part(i), r, rs, &splice);
       if (splice) {
         //printf("??%d %s\n", x, ~q->to_string());
         if (q->simple() || !q->is_a("@")) throw unknown_error(q);
@@ -1068,7 +1057,7 @@ static const Syntax * replace(const Syntax * p,
       const Syntax * q = *i;
       SyntaxBuilder r0(q->part(0)); // FIXME: I think I need to do more with first part
       if (q->num_args() > 0) // FIXME: Can there me more than one arg?
-        r0.add_part(replace(q->arg(0), r, rs, allow_plain_mids, NULL));
+        r0.add_part(replace(q->arg(0), r, rs, NULL));
       res.add_flag(r0.build());
     }
     //printf("REPLACE Res %d: %s\n", seql, ~res->to_string());
@@ -2128,6 +2117,10 @@ struct PointerEntity {
 
 extern "C" { // brace so gcc doesn't complain about that static function
 namespace macro_abi {
+
+  Syntax * make_mid(Syntax * p) {
+    return SYN(SYN("mid"), p);
+  }
 
   size_t ct_value(const Syntax * p, Environ * env) {
     Exp * ast = parse_exp(p, *env);
