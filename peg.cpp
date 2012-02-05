@@ -82,22 +82,6 @@ struct ParseErrors : public Vector<const ParseError *> {
   void print(const SourceInfo * file, const SourceFile * grammer);
 };
 
-// Some cached productions are persistent between parses, which saves
-// time, when reparsing.  However, in order to use the cached result
-// two condations need to hold:
-//   1) The end of the string being parsed is past the last character
-//      read (for any reason) of the cached result
-///  2) If the cached result read past the end of the string, the end of the 
-//      new string being parsed string is at the same position of the
-//      cached result.
-// To make sure (1) holds, we keep track of the last character read
-// with "read_to".  It is important that this is really the last
-// character read and not one-past as with a typical end pointer,
-// otherwise we couldn't tell the difference between reading the last
-// character, and reading past the end of the string.  (2) is a
-// special case.  For (2) we set read_to to NULL and store the current
-// end-of-string position in str_end.
-
 typedef const char * MatchRes;
 
 typedef SyntaxBuilderBase SynBuilder;
@@ -370,8 +354,6 @@ public:
     finalized = true;
     prod.finalize();
   }
-  virtual void clear_cache() {}
-  virtual int cache_size() {return -1;}
 public:
   ProdProps props_obj;
   bool finalized;
@@ -405,10 +387,6 @@ struct Cache {
     pprintf("NamedProd CLEAR\n");
     run_id++;
     data = p;
-    //normal.clear();
-    //normal.~NormalData();
-    //new (&normal) NormalData;
-    //persistent = p;
   }
   struct LookupRes {
     Res & res;
@@ -434,8 +412,6 @@ struct Cache {
   }
 };
 
-//Cache cache;
-
 struct MatchEnviron {
   //bool in_repl;
   const Replacements * mids;
@@ -452,8 +428,6 @@ public:
   MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env);
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env);
   CachedProd(String n) : NamedProd(n), first_char_(-3) {/*cs = (char *) GC_MALLOC(256);*/}
-  //void clear_cache() {lookup.clear();}
-  //int cache_size() {return lookup.size();}
   void finalize() {
     if (finalized) return;
     finalized = true;
@@ -467,8 +441,6 @@ public:
     //}
   }
 private:
-  //typedef hash_multimap<const char *, Res, hash<void *> > Lookup;
-  //Lookup lookup;
   int first_char_;
   //CharSet cs;
 };
@@ -525,8 +497,6 @@ namespace ParsePeg {
     Vector< Sym<NamedProd> > unresolved_syms;
     Vector< Sym<TokenProd> > token_syms;
     Vector<TokenRule>        token_rules;
-
-    void clear_cache();
 
     void top(const char * str, const char * end);
 
@@ -634,9 +604,6 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts, MatchEnviron & env
     //assert(r0.errors.empty());
     //r = &(*((lookup.insert(str, r0)).first)).second;
     if (!r0.res.empty()) assert(!r->res.empty());
-    // XXX: MEGA HACK!
-    //if (name == "SPACING")
-    //  r->read_to = str.begin - 1;
   } else {
     if (r->end != FAIL)
       pprintf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
@@ -660,18 +627,6 @@ const char * CachedProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron
   } else {
     return r.res.end;
   }
-}
-
-void ParsePeg::Parse::clear_cache() {
-  //run_id++;
-  //cache->data.dump_stats();
-  //global_cache.data.clear();
-  //hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
-  //for (; i != e; ++i) {
-  //  //printf("NamedProd %s SIZE: %d\n", ~i->second->name, i->second->cache_size());
-  //  if (!i->second->persistent())
-  //    i->second->clear_cache();
-  //}
 }
 
 class AlwaysTrue : public Prod {
@@ -1177,20 +1132,13 @@ public:
 class Repeat : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
-    const char * read_to = NULL;
     bool matched = false;
     for (;;) {
       if (end_with_) {
         MatchRes r = end_with_->match(str, NULL, env);
-#if 0
-        read_to = std::max(read_to, r.read_to);
-#endif
         if (r) break;
       }
       MatchRes r = prod.match(str, parts, env);
-#if 0
-      read_to = std::max(read_to, r.read_to);
-#endif
       if (!r) break;
       str.begin = r;
       matched = true;
@@ -1262,9 +1210,9 @@ public:
     if (dont_match_empty && r == str.begin)
       r = FAIL;
     if (r) {
-      return MatchRes(invert ? FAIL : str /*, r.read_to*/);
+      return MatchRes(invert ? FAIL : str);
     } else {
-      return MatchRes(invert ? str : FAIL /*, r.read_to*/);
+      return MatchRes(invert ? str : FAIL);
     }
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
@@ -1320,12 +1268,8 @@ public:
       orig_parts_sz = res->num_parts(), orig_flags_sz = res->num_flags();
     Vector<ProdWrap>::iterator 
       i = prods.begin(), e = prods.end();
-    const char * read_to = NULL;
     while (i != e) {
       MatchRes r = i->match(str, res, env);
-#if 0
-      read_to = std::max(read_to, r.read_to);
-#endif
       if (!r) {
         if (res) res->truncate_parts(orig_parts_sz), res->truncate_flags(orig_flags_sz);
         return FAIL;
@@ -1383,7 +1327,6 @@ private:
 class Choice : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
-    const char * read_to = NULL;
     if (jump_table) {
       //printf("using jump table\n");
       ProdWrap * i;
@@ -1607,7 +1550,7 @@ public:
       if (res) res->add_part(p);
       return r;
     } else {
-      return MatchRes(FAIL /*, r.read_to*/);
+      return MatchRes(FAIL);
     }
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
