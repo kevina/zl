@@ -748,7 +748,7 @@ namespace syntax_ns {
     if (const Reparse * r = maybe_reparse()) {
       const Syntax * p = r->instantiate_no_throw();
       if (p) return p->simple();
-      else {printf("NOT SIMPLE YET REPARSE %s\n", ~to_string()); return false;}
+      else {/*printf("NOT SIMPLE YET REPARSE %s\n", ~to_string());*/ return false;}
     }
     return type_inf & SIMPLE;
   }

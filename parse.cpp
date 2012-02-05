@@ -391,7 +391,7 @@ void ReparseSyntax::do_instantiate(bool no_throw) const {
   if (rwhat().name == "sexp")
     assert(parse_as);
   if (parse_as.defined()) {
-    printf("reparsing as %s\n", ~parse_as);
+    //printf("reparsing as %s\n", ~parse_as);
     cached_val = reparse(parse_as, outer());
   } else if (!no_throw) {
     abort();
