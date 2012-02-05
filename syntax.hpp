@@ -138,7 +138,7 @@ namespace syntax_ns {
   struct SyntaxBase {
     unsigned type_inf; // "type_info" a reserved word
     mutable SourceStr str_;
-    const Replacements * repl;
+    const Replacements * repl; // FIXME: Why is this here?
 
     void dump_type_info();
 
@@ -1158,9 +1158,9 @@ namespace syntax_ns {
 
 #define SYN new_syntax
 
-  // This can be used when the number of parts and the maxium number
-  // of flags is known ahead of time.  It is sligtly more effecent since
-  // it directly populates the syntax object
+  // SyntaxBuilderDirect can be used when the number of parts and the
+  // maxium number of flags is known ahead of time.  It is sligtly
+  // more effecent since it directly populates the syntax object
 
   struct NoOpHooks : public ExternParts<DummyBase> {
     NoOpHooks(unsigned tinf = PARTS_SEPARATE) : ExternParts<DummyBase>(tinf) {}
