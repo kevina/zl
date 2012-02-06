@@ -380,7 +380,7 @@ bool operator==(const CacheKey & x, const CacheKey & y) {
 
 struct Cache {
   typedef CacheKey Key;
-  typedef tiny_hash<hash_map<Key,Res>,4,32> Data;
+  typedef tiny_hash<hash_map<Key,Res>,2,32> Data;
   Data * data;
   Cache() : data() {}
   void reset(Data * p) {
@@ -974,6 +974,8 @@ public:
   MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return prod->match(str, NULL, env); 
+    Cache::Data * orig_cache = env.cache.data;
+    env.cache.data = new Cache::Data;
     SyntaxBuilderN<2> res;
     MatchRes r = prod->match(str, &res, env);
     if (!r) return r;
@@ -985,6 +987,7 @@ public:
     syn->parse_as = parse_as;
     //printf("ro: %s %s\n", ~syn->rwhat().name, syn->parse_as ? ~String(syn->parse_as) : NULL);
     parts->add_part(syn);
+    env.cache.data = orig_cache;
     return r;
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
