@@ -112,10 +112,11 @@ struct ProdPropsBase {
   unsigned char what; // PP_*
   unsigned char first_char_high; // 0 none, 1 some, 2 all
   bool first_char_eof;
-  bool persistent;
+  static const unsigned char USES_MID = 1;
+  unsigned char uses_special; // bit mask 0 = mid, other = reserved
   ProdPropsBase() 
     : what(PP_NORMAL), first_char_high(0), first_char_eof(false), 
-      persistent(true) {}
+      uses_special(0) {}
   void reset() {
     what = PP_NORMAL;
     first_char.reset();
@@ -140,7 +141,7 @@ struct ProdProps : public ProdPropsBase {
   bool no_deps_but(unsigned d) const {return deps <= d;}
   void clear_deps() {deps = 0;}
   void merge_info(const ProdProps & o) { 
-    persistent &= o.persistent;
+    uses_special |= o.uses_special;
     deps = std::max(deps, o.deps);
   }
   void invert_char_info() {
@@ -171,7 +172,7 @@ static bool operator==(const ProdProps & x, const ProdProps & y) {
   return x.first_char == y.first_char && 
     x.first_char_high == y.first_char_high && 
     x.first_char_eof == y.first_char_eof &&
-    x.persistent == y.persistent &&
+    x.uses_special == y.uses_special &&
     x.deps == y.deps;
 }
 
@@ -348,7 +349,7 @@ public:
     }
   }
   String d_name() const {return name;}
-  bool persistent() const {return props_obj.persistent;}
+  bool persistent() const {return ! (props_obj.uses_special & props_obj.USES_MID);}
   void finalize() {
     if (finalized) return;
     finalized = true;
@@ -1586,7 +1587,7 @@ public:
   virtual Prod * clone(Prod * p) {return new S_MId(*this, p);}
   const ProdProps & calc_props() {
     props_obj = prod->props(); 
-    props_obj.persistent = false; 
+    props_obj.uses_special |= props_obj.USES_MID;
     set_props(props_obj);
     return props_obj;
   }
