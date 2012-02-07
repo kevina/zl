@@ -362,10 +362,11 @@ public:
 
 unsigned run_id = 1; // persistent prod always have a run_id of 0
 
+struct CachedProd;
 struct CacheKey {
-  Prod * prod;
+  CachedProd * prod;
   const char * str;
-  CacheKey(Prod * p, const char * s) : prod(p), str(s) {}
+  CacheKey(CachedProd * p, const char * s) : prod(p), str(s) {}
 };
 
 template <> struct hash<CacheKey>   {
@@ -393,23 +394,7 @@ struct Cache {
     bool exists;
     LookupRes(Res & r, bool e) : res(r), exists(e) {}
   };
-  LookupRes lookup(NamedProd * prod, SourceStr str) {
-    pair<Data::value_type *, bool> 
-      cached = data->insert(Key(prod, str.begin));
-    Res & r = cached.first->second;
-    unsigned run_id = prod->persistent() ? 0 : ::run_id;
-    if (cached.second) {
-      r.run_id = run_id;
-      return LookupRes(r, false);
-    } else if (r.run_id == run_id) {
-        return LookupRes(r, true);
-    } else {
-      r.~Res();
-      new (&r) Res;
-      r.run_id = run_id;
-      return LookupRes(r, false);
-    }
-  }
+  inline LookupRes lookup(CachedProd * prod, SourceStr str);
 };
 
 struct MatchEnviron {
@@ -444,6 +429,25 @@ private:
   int first_char_;
   //CharSet cs;
 };
+
+Cache::LookupRes Cache::lookup(CachedProd * prod, SourceStr str) {
+  pair<Data::value_type *, bool> 
+    cached = data->insert(Key(prod, str.begin));
+  Res & r = cached.first->second;
+  unsigned run_id = prod->persistent() ? 0 : ::run_id;
+  if (cached.second) {
+    r.run_id = run_id;
+    return LookupRes(r, false);
+  } else if (r.run_id == run_id) {
+    return LookupRes(r, true);
+  } else {
+    r.~Res();
+    new (&r) Res;
+    r.run_id = run_id;
+    return LookupRes(r, false);
+  }
+}
+
 
 class TokenProd : public SymProd {
 public:
