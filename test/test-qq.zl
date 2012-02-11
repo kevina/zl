@@ -1,4 +1,8 @@
 
+fluid_binding mark;
+fluid_binding repl;
+macro fluid repl() {NULL;}
+
 Syntax * mm(Syntax * in, Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_args(0, syntax (pattern, with), in);
@@ -18,35 +22,36 @@ Syntax * mm(Syntax * in, Environ * env) {
                            match_local(m, aq, aq),
                            mark));
   }
-  UnmarkedSyntax * res = syntax {
-    Match * m = match_args(NULL, syntax_d $1, with);
+  UnmarkedSyntax * res = syntax {({
+    Match * m = match_args(repl, syntax_d $1, with);
     $2;
-  };
+    m;
+  });};
   return replace(res, match_local(m, pattern, assign, NULL), mark);  
 }
 
 make_macro mm;
 
 Syntax * qq(Syntax * in, Environ * env) {
-  Mark * mark = new_mark();
-  Match * m = match_args(0, syntax (pattern, mark), in);
+  Mark * outer_mark = new_mark();
+  Match * m = match_args(0, syntax (pattern,@rest), in);
   SyntaxList * aqs = gather_antiquotes(m->var(syntax pattern));
   UnmarkedSyntax * res = syntax {
-    replace(syntax pattern, match_antiquotes(NULL, syntax_d $1, $2, NULL), mark);
+    replace(syntax pattern, match_antiquotes(repl, syntax_d $1, $2, NULL), mark);
   };
-  return replace(res, match_local(m, aqs, aqs, NULL), mark);
+  return replace(res, match_local(m, aqs, aqs, NULL), outer_mark);
 }
 
 make_macro qq;
 
 Syntax * test(Syntax * in, Environ * env) {
-  Mark * mark = new_mark;
+  Mark * fluid mark = new_mark;
   //Match * m = match_args(NULL, syntax(A,B), in);
   //Syntax * a = m->var(syntax A);
   //Syntax * b = m->var(syntax B);
   Syntax *a, *b;
   mm(syntax ($a,$b), in);
-  return qq((1 + $a + $b), mark);
+  return qq((1 + $a + $b),);
 }
 
 make_macro test;
