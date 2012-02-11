@@ -1588,7 +1588,9 @@ public:
     if (!arg->simple() && arg->is_a("antiquote"))
       arg = arg->arg(0);
     if (env.mids && env.mids->anywhere(*arg) > 0) {
-      Syntax * p = SYN(r0->str(), r0->part(0), arg, SYN(in_named_prod));
+      Syntax * p = in_named_prod == "-" 
+        ? SYN(r0->str(), r0->part(0), arg)
+        : SYN(r0->str(), r0->part(0), arg, SYN(in_named_prod));
       //printf("MATCH MID %s\n", ~p->to_string());
       if (res) res->add_part(p);
       return r;

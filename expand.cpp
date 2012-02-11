@@ -1169,7 +1169,7 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
-      if ((repl->is_reparse("parm") || repl->is_reparse("()")) && what != "NONE") { // FIXME: Just check for is_reparse()?
+      if (repl->is_reparse("parm") || repl->is_reparse("()")) { // FIXME: Just check for is_reparse()?
         if (repl->repl) {
           for (Replacements::const_iterator i = repl->repl->begin(), e = repl->repl->end(); 
                i != e; ++i) 

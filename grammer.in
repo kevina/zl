@@ -144,17 +144,17 @@ TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 SYNTAX = 
     <syntax> "syntax" {SYNTAX_P}?
   / <raw_syntax> "raw_syntax" {SEXP_R}
-  / <syntax> "syntax_d" (<<mid NONE>> {MID});
+  / <syntax> "syntax_d" (<<mid ->> {MID});
 
 SYNTAX_P =
   <<reparse id MID_ID>> {ID} / <<reparse sym MID_SYM>> {SYM} / {ID} / {BRACE} / {PARAN}; # / {BRACK};
 #   {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
 
 MID_ID = 
-  <<mid NONE>> {MID} EOF / {ID};
+  <<mid ->> {MID} EOF / {ID};
 
 MID_SYM = 
-  <<mid NONE>> {SYM} EOF / {SYM};
+  <<mid ->> {SYM} EOF / {SYM};
 
 SYNTAX_STR =
   ({SYNTAX_P} / <<reparse parm>> {RAW_TOKEN+}) EOF;
@@ -188,7 +188,7 @@ SEXP_PART = S_WSPACE / ANTIQUOTE / S_ID / SEXP_R;
 S_WSPACE = ([\s]+ / '#' [^\n]* [\n])+;
 S_ID = '"' {('\\'_/[^"])*} '"' / {('\\'_ / [^\s\(\)\#\"])+};
 
-S_MID = <<mid NONE>> {ANTIQUOTE} / <<mid NONE>> {S_ID};
+S_MID = <<mid ->> {ANTIQUOTE} / <<mid ->> {S_ID};
 
 S_SPACING = S_WSPACE?;
 
