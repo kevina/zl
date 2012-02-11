@@ -4848,20 +4848,7 @@ namespace ast {
     assert_num_args(p, 1);
     const Syntax * syn;
     String what = p->part(0)->what().name;
-    if (what == "syntax") {
-      syn = p->part(1);
-      //fprintf(stdout, "SYN %s<<\n", ~syn->to_string());
-    } else if (what == "raw_syntax") {
-      syn = p->part(1);
-      //fprintf(stdout, "rsyn %s<<\n", ~p->part(1)->to_string());
-      //using namespace parse_parse;
-      //Res r = parse(p->part(1)->str());
-      //syn = r.parse;
-      //syn = reparse("SEXP_FULL", p->part(1)->outer());
-      //fprintf(stdout, "RSYN %s<<\n", ~syn->to_string());
-    } else {
-      abort();
-    }
+    syn = p->part(1);
     ChangeSrc<SyntaxSourceInfo> cs(syn);
     syn = SYN(cs, *syn);
     SyntaxC::keep_me.push_back(syn);
