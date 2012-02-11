@@ -390,6 +390,7 @@ void ReparseSyntax::do_instantiate(bool no_throw) const {
     //printf("reparsing as %s\n", ~parse_as);
     cached_val = reparse(parse_as, outer());
   } else if (!no_throw) {
+    fprintf(stderr, "Can Inst %s\n", ~sample_w_loc());
     abort();
   }
 }

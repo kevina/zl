@@ -8,7 +8,7 @@ TOP = <top> SPACING {STMT}+;
 #
 
 STMT : "statement" = 
-      <<mid PARM>> {RAW_ID} ";"
+      <<mid PARM>> {MID} ";"
     / <lcstmt> {CASE_LABEL} ":" {STMT}
     / <lstmt> {ID} ":" {STMT}
     / <if>    "if" "(" {EXP} ")" {STMT} ("else" {STMT})?
@@ -59,7 +59,7 @@ CASE_EXP = <exp> (!":" {TOKEN})+;
 
 MACRO =
   <macro> "macro" {FANCY_ID} "(" {MATCH_LIST} ")" 
-          (:<typed-parms> ":" "typed_parms" "(" ((<.> (<<mid TOKENS>> {RAW_ID})) / {TOKENS}) ")")?
+          (:<typed-parms> ":" "typed_parms" "(" ((<.> (<<mid TOKENS>> {MID})) / {TOKENS}) ")")?
           (:<id> ":" "id")?
           (:<free> ":" "(" {ID_LIST} ")" /) {BRACE}
   / <smacro> "smacro" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE} ;
@@ -86,14 +86,14 @@ ID_LIST =
 MATCH_LIST =
   <> ({MATCH} ("," {MATCH})*)?;
 
-MATCH = <<mid>> {RAW_ID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
+MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <reparse> {ID} ("=" {SPLIT_PARM})? ;
 
 #
 # C Token
 #
 
 TOKEN_ : "token'" =  
-         <<mid PARM>> ({RAW_ID} !("`" / "::" / "<") / {SYM} / {'[]'} SPACING)
+         <<mid PARM>> ({MID} !("`" / "::" / "<") / {SYM} / {'[]'} SPACING)
          / {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
          / {RAW} / {TEMPLATE_CALL} 
          / {BRACK} / {CONST}
@@ -102,7 +102,7 @@ TOKEN_ : "token'" =
 TOKEN : "token" = {TOKEN_} 
       / {PARAN} / {BRACE};
 
-TEMPLATE_PARM = <<mid>> {RAW_ID} / <(...)> (!('>'/',') {TOKEN})+;
+TEMPLATE_PARM = <<mid>> {MID} / <(...)> (!('>'/',') {TOKEN})+;
 TEMPLATE_PARMS = <\<\>> ({TEMPLATE_PARM} ("," {TEMPLATE_PARM})*) / ;
 TEMPLATE_ID = <<tid>> {BASIC_ID} '<' SPACING {TEMPLATE_PARMS} '>' SPACING;
 
@@ -143,14 +143,15 @@ TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 
 SYNTAX = 
     <syntax> "syntax" {SYNTAX_P}?
-  / <raw_syntax> "raw_syntax" {SEXP_R};
+  / <raw_syntax> "raw_syntax" {SEXP_R}
+  / <syntax> "syntax_d" (<<mid NONE>> {MID});
 
 SYNTAX_P =
   <<reparse id MID_ID>> {ID} / <<reparse sym MID_SYM>> {SYM} / {ID} / {BRACE} / {PARAN}; # / {BRACK};
 #   {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
 
 MID_ID = 
-  <<mid NONE>> {RAW_ID} EOF / {ID};
+  <<mid NONE>> {MID} EOF / {ID};
 
 MID_SYM = 
   <<mid NONE>> {SYM} EOF / {SYM};
@@ -164,7 +165,7 @@ SYNTAX_STR =
 
 EXP = <exp> {TOKEN}+;
 
-INIT = <<mid>> {RAW_ID} / <init> {TOKEN}+;
+INIT = <<mid>> {MID} / <init> {TOKEN}+;
 
 BLOCK = <block> {BRACEL};
 
@@ -183,29 +184,31 @@ BRACK  = <<reparse []>>  "[" {RAW_TOKENS} "]";
 ANGLE  = <<reparse \<\>>> '<' {(ANGLE / !'>' RAW_TOKEN)*} '>';
 
 SEXP_R = <<reparse sexp SEXP>> '(' {SEXP_PART*} ')';
-SEXP_PART = S_WSPACE / S_ID / SEXP_R;
+SEXP_PART = S_WSPACE / ANTIQUOTE / S_ID / SEXP_R;
 S_WSPACE = ([\s]+ / '#' [^\n]* [\n])+;
 S_ID = '"' {('\\'_/[^"])*} '"' / {('\\'_ / [^\s\(\)\#\"])+};
+
+S_MID = <<mid NONE>> {ANTIQUOTE} / <<mid NONE>> {S_ID};
 
 S_SPACING = S_WSPACE?;
 
 SEXP = <> '(' S_SPACING {SPART}* ')';
-SPART = ({S_FLAG} / {S_MID} / <<mid NONE>> {S_ID} / {S_ID} / {SEXP_R}) S_SPACING;
+SPART = ({S_FLAG} / {S_LIT_MID} / {S_MID} / {S_ID} / {SEXP_R}) S_SPACING;
 S_FLAG = :<=> ':' ({SEXP} / !':'{S_ID});
 
 # PROD TO FULLY PARSE SEXP
 SEXP_FULL = <> '(' S_SPACING {SPART_FULL}* ')';
-SPART_FULL = ({S_FLAG_FULL} / {S_MID} / <<mid NONE>> {S_ID} / {S_ID} / {SEXP_FULL}) S_SPACING;
+SPART_FULL = ({S_FLAG_FULL} / {S_LIT_MID} / {S_MID} / {S_ID} / {SEXP_FULL}) S_SPACING;
 S_FLAG_FULL = :<=> ':' ({SEXP_FULL} / !':'{S_ID});
 
-S_MID = <mid> '(' S_SPACING 'mid' S_SPACING ({S_ID} S_SPACING)+ ')';
+S_LIT_MID = <mid> '(' S_SPACING 'mid' S_SPACING ({S_ID} S_SPACING)+ ')';
 
 TOKENS_SEXP = <> {SPART}*;
 TOKENS_SEXP_FULL = <> {SPART_FULL}*;
 
 # RAW_ID and CONST is not strictly needed but it will make reparsing
 # the string more efficient
-RAW_TOKEN = STRING / CHAR / BRACE / PARAN / BRACK / RAW_ID / CONST / WHITE_SPACE / [^\)\]\}];
+RAW_TOKEN = ANTIQUOTE / STRING / CHAR / BRACE / PARAN / BRACK / RAW_ID / CONST / WHITE_SPACE / [^\)\]\}];
 
 #
 # Lex Like Tokens
@@ -215,7 +218,7 @@ RAW_ID : "identifier" =
   {[@$\a_][$\a_\d]*} SPACING;
 
 BASIC_ID : "identifier" =
-  <<mid>> {RAW_ID} / {RAW_ID};
+  <<mid>> {MID} / {RAW_ID};
 
 ID_W_TEMPLATE = 
   {TEMPLATE_ID} / {BASIC_ID};
@@ -238,7 +241,7 @@ TEMPLATE_CALL =
 NUM : "number" = 
     {[\d]+('.'[\d]+)?} SPACING;
 
-STRING_L = <<mid>> {RAW_ID} / {STRING};
+STRING_L = <<mid>> {MID} / {STRING};
 
 STRING = '"' {('\\'_/[^"])*} '"' SPACING;
 
@@ -264,6 +267,21 @@ COMMENT =
     '//' [^\n]* [\n]
   / '#' [^\n]* [\n]
   / '/*' _* . '*/';
+
+#
+# 
+#
+
+MID = {ANTIQUOTE} / {RAW_ID};
+
+#
+# Antiquotes
+#
+
+SID = [\a_][\a_\d]*;
+
+ANTIQUOTE = 
+  <<antiquote>> '$' ({PARAN} / <<reparse parm>> {SID} SPACING);
 
 #
 # Special tokens

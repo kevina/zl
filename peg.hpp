@@ -22,7 +22,7 @@ const Syntax * parse_prod(String what, SourceStr & str,
 static inline const Syntax * parse_str(String what, SourceStr str, 
                                        ast::Environ * env = NULL,
                                        const Replacements * repls = NULL, 
-                                       void * cache = NULL) 
+                                       void * cache = NULL)
 {
   return parse_prod(what, str, env, repls, cache, true);
 }

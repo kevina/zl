@@ -87,4 +87,8 @@
   fun_type_num_parms;
   fun_type_parm_type;
   environ_get_abi_info;
+  gather_antiquotes;
+  match_antiquotes;
+  match_aq_var;
+  mark_antiquotes;
 };

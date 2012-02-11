@@ -226,7 +226,10 @@ struct ReplTable {
     return NULL;
   }
   bool have(SymbolName n) const {
-    return lookup(n);
+    for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
+      if (i->first == n) return true;
+    }
+    return false;
   }
   const Syntax * lookup(String n) const {
     for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
@@ -241,10 +244,16 @@ struct ReplTable {
     return NULL;
   }
   bool have(String n) const {
-    return lookup(n);
+    for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
+      if (i->first.name == n) return true;
+    }
+    return false;
   }
   bool have(const char * n) const {
-    return lookup(n);
+    for (Table::const_iterator i = table.begin(); i != table.end(); ++i) {
+      if (i->first.name == n) return true;
+    }
+    return false;
   }
   const Syntax * lookup(const Syntax & n) const {
     return lookup(static_cast<const SymbolName &>(n));
@@ -259,6 +268,7 @@ struct ReplTable {
   ExpandSourceInfo * expand_si;
   ChangeSrc<SplitSourceInfo> ci;
   const SourceInfo * outer_si;
+  bool no_repl;
   const SourceInfo * expand_source_info(const SourceInfo * s) {
     return ci(s);
   }
@@ -278,7 +288,7 @@ struct ReplTable {
     return buf.freeze();
   }
   ReplTable(const ast::Mark * m, ExpandSourceInfo * e)
-    : mark(m), expand_si(e), ci(NULL, e), outer_si(NULL) {}
+    : mark(m), expand_si(e), ci(NULL, e), outer_si(NULL), no_repl(false) {}
 };
 
 void ReplTable::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
@@ -717,7 +727,9 @@ bool match_list(Match * m,
 bool match_prep(Match * m, const Syntax * & p, const Syntax * & repl, ReplTable * rt) {
   //printf("match_prep <<: %s %s\n", ~p->to_string(), repl ? ~repl->to_string() : "<null>");
   if (p->num_args() > 0) {
-    if (p->is_a("pattern")) {
+    if (p->is_a("mid")) {
+      p = p->arg(0);
+    } else if (p->is_a("pattern")) {
       if (!repl) return true;
       p = p->arg(0);
       assert(p->what().name == repl->what().name);
@@ -892,6 +904,64 @@ extern "C" namespace macro_abi {
       m->insert(m->end(), orig_m->begin(), orig_m->end());
     return m;
   }
+
+  Match * match_antiquotes(Match * orig_m, Syntax * aqs, ...) {
+    Match * m = new Match;
+    assert(aqs->is_a("@"));
+    parts_iterator i = aqs->args_begin(), e = aqs->args_end();
+    va_list parms;
+    va_start(parms, aqs);
+    Syntax * val = va_arg(parms, const Syntax *);
+    char buf[16];
+    for (; i != e; ++i) {
+      Syntax * p = *i;
+      assert(p->is_reparse());
+      snprintf(buf, 16, "$0x%lx", (unsigned long)p->outer().str.begin);
+      add_match_var(m, buf, val);
+      if (val)
+        val = va_arg(parms, const Syntax *);
+    }
+    assert(val == NULL);
+    va_end(parms);
+    if (orig_m) 
+      m->insert(m->end(), orig_m->begin(), orig_m->end());
+    return m;
+  }
+
+  const Syntax * match_aq_var(Match * m, UnmarkedSyntax * n) {
+    assert(n->is_reparse());
+    char buf[16];
+    snprintf(buf, 16, "$0x%lx", (unsigned long)n->outer().str.begin);
+    Match::const_iterator i = m->begin(), e = m->end();
+    for (; i != e; ++i) {
+      if (i->first == buf) {
+        return i->second;
+      }
+    }
+    return NULL;
+  }
+
+  const Syntax * mark_antiquotes(Syntax * pattern, Syntax * aqs) {
+    ReplTable * rt = new ReplTable(NULL, NULL);
+    rt->no_repl = true;
+    assert(aqs->is_a("@"));
+    parts_iterator i = aqs->args_begin(), e = aqs->args_end();
+    char buf[16];
+    for (; i != e; ++i) {
+      Syntax * p = *i;
+      assert(p->is_reparse());
+      snprintf(buf, 16, "$0x%lx", (unsigned long)p->outer().str.begin);
+      rt->insert(buf, NULL);
+    }
+    assert(pattern->is_reparse());
+    //return reparse_replace(pattern->what_part(), pattern, rt);
+    Syntax * p = pattern; ReplTable * r = rt;
+    return new ReparseSyntax(p->what_part(),
+                             combine_repl(p->repl, r),
+                             p->as_reparse()->cache, p->as_reparse()->parse_as,
+                             r->expand_source_info_str(p->outer().str),
+                             r->expand_source_info_str(p->inner().str));
+  }  
 }
 
 //
@@ -947,7 +1017,8 @@ struct ReplToApply {
            i != e; ++i) 
       {
         combined_repls.erase(combined_repls.begin());
-        res = replace(res, *i, &combined_repls, NULL);
+        if (!(*i)->no_repl)
+          res = replace(res, *i, &combined_repls, NULL);
       }
     }
     return res;

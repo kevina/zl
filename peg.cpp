@@ -86,14 +86,14 @@ typedef const char * MatchRes;
 
 typedef SyntaxBuilderBase SynBuilder;
 
+static const char * FAIL = 0;
+
 struct Res {
   const char * end;
   unsigned run_id;
   SyntaxBuilderN<2> res;
+  Res() : end(FAIL /* to avoid infinite recursion when matching */) {}
 };
-
-
-static const char * FAIL = 0;
 
 //class Prod {
 //  virtual ~Prod() = 0;
@@ -113,6 +113,7 @@ struct ProdPropsBase {
   unsigned char first_char_high; // 0 none, 1 some, 2 all
   bool first_char_eof;
   static const unsigned char USES_MID = 1;
+  static const unsigned char USES_ANTIQUOTE = 2;
   unsigned char uses_special; // bit mask 0 = mid, other = reserved
   ProdPropsBase() 
     : what(PP_NORMAL), first_char_high(0), first_char_eof(false), 
@@ -212,6 +213,14 @@ struct MatchEnviron;
 class Prod {
 public:
   virtual MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) = 0;
+  // used when doing a "parse walk"
+  void match_check(SourceStr str, Res & res, MatchEnviron & env) {
+    MatchRes r = match(str, NULL, env);
+    assert(r == res.end);
+  }
+  virtual void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+    match_check(str,res,env);
+  }
   // FIXME: explain match_f: ...
   virtual const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) = 0;
   virtual Prod * clone(Prod * = 0) = 0; // the paramater is the new
@@ -267,6 +276,10 @@ struct ProdWrap {
   //void operator=(const Prod * p) {prod = p; get_capture_from_prod();}
   MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
     return prod->match(str, capture ? parts : NULL, env);}
+  void match_check(SourceStr str, Res & res, MatchEnviron & env) {
+    prod->match_check(str, res, env);}
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+    prod->match_anyway(str, res, env);}
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
     return prod->match_f(str, errs, env);}
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
@@ -350,6 +363,7 @@ public:
   }
   String d_name() const {return name;}
   bool persistent() const {return ! (props_obj.uses_special & props_obj.USES_MID);}
+  bool w_antiquote() const {return props_obj.uses_special & props_obj.USES_ANTIQUOTE;}
   void finalize() {
     if (finalized) return;
     finalized = true;
@@ -382,7 +396,10 @@ bool operator==(const CacheKey & x, const CacheKey & y) {
 
 struct Cache {
   typedef CacheKey Key;
-  typedef tiny_hash<hash_map<Key,Res>,2,32> Data;
+  struct Data : public tiny_hash<hash_map<Key,Res>,2,32> {
+    CachedProd * origin;
+    Data() : origin(NULL) {}
+  };
   Data * data;
   Cache() : data() {}
   void reset(Data * p) {
@@ -398,12 +415,15 @@ struct Cache {
   inline LookupRes lookup(CachedProd * prod, SourceStr str);
 };
 
+typedef MutableSyntax AntiQuoteList;
+
 struct MatchEnviron {
   //bool in_repl;
   const Replacements * mids;
   Cache cache;
   ast::Environ * ast_env;
-  MatchEnviron() : mids(), ast_env() {}
+  MatchEnviron() : mids(), ast_env(), antiquotes(false) {}
+  AntiQuoteList * antiquotes;
   //MatchEnviron() : in_repl(false) {}
 };
 
@@ -411,7 +431,13 @@ struct MatchEnviron {
 class CachedProd : public NamedProd {
   // named productions are memorized
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env);
+  MatchRes match_i(SourceStr str, SynBuilder * parts, Res * given_res, MatchEnviron & env);
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+    return match_i(str, parts, NULL, env);
+  }
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+    match_i(str, NULL, &res, env);
+  }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env);
   CachedProd(String n) : NamedProd(n), first_char_(-3) {/*cs = (char *) GC_MALLOC(256);*/}
   void finalize() {
@@ -448,7 +474,6 @@ Cache::LookupRes Cache::lookup(CachedProd * prod, SourceStr str) {
     return LookupRes(r, false);
   }
 }
-
 
 class TokenProd : public SymProd {
 public:
@@ -576,7 +601,8 @@ const char * SymProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & 
   }
 }
 
-MatchRes CachedProd::match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+// if given_res is defined than don't use cache for _this_ production
+MatchRes CachedProd::match_i(SourceStr str, SynBuilder * parts, Res * given_res, MatchEnviron & env) {
   //printf("%*cMATCH %s\n", indent_level, ' ', ~name);
   if (first_char_ >= 0 && 
       (str.begin == str.end || first_char_ != *str.begin)) {
@@ -586,34 +612,31 @@ MatchRes CachedProd::match(SourceStr str, SynBuilder * parts, MatchEnviron & env
     //printf("%s fast fail on '%c'\n", ~name, str.begin < str.end ? *str.begin : '\0');
     return FAIL;
   }
-  //if (cs[(unsigned char)*str.begin]) abort();
-  //if (prod.first_char() >= 0)
-  //  printf("%s COULD FAST FAIL ON '%c'\n", ~name, prod.first_char());
-  Cache::LookupRes lookup_res = env.cache.lookup(this, str);
-  Res * r = &lookup_res.res;
-  if (!lookup_res.exists) {
-    r->end = FAIL; // to avoid infinite recursion
-    Res & r0 = *r;
-    //Res r0;
-    pprintf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
-    //if (prod->capture_type.is_none())
-    //  printf("NP: %s: %d %d\n", ~name, (bool)parts, (CaptureType::Type)prod->capture_type);
+  bool is_cached = false;
+  Res * r = given_res;
+  if (!given_res) {
+    Cache::LookupRes lookup_res = env.cache.lookup(this, str);
+    is_cached = lookup_res.exists;
+    r = &lookup_res.res;
+  } 
+  if (!is_cached) {
+    if (!given_res)
+      pprintf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
     indent_level++;
-    r->end = prod.match(str, &r0.res, env);
-    indent_level--;
-    //if (!r0) {
-    //  assert(r0.res.empty());
-    //  errs.add(r0.errors);
-    //  return r0;
-    //}
-    //assert(r0.errors.empty());
-    //r = &(*((lookup.insert(str, r0)).first)).second;
-    if (!r0.res.empty()) assert(!r->res.empty());
-  } else {
-    if (r->end != FAIL)
-      pprintf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
+    if (!given_res)
+      r->end = prod.match(str, &r->res, env);
     else
-      pprintf("%*cNamedProd HIT %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
+      prod.match_anyway(str, *given_res, env);
+    indent_level--;
+    if (const ReparseSyntax * p = r->res.part_as_reparse()) {
+      static_cast<Cache::Data *>(p->cache)->origin = this;
+    }
+  } else if (r->end != FAIL) {
+    pprintf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
+    if (env.antiquotes && w_antiquote())
+      prod.match_anyway(str, *r, env);
+  } else {
+    pprintf("%*cNamedProd HIT %s %p (FAIL) %p\n", indent_level, ' ', ~name, str.begin, str.end);
   }
   if (parts) {
     if (!prod.capture && r->end)
@@ -980,6 +1003,7 @@ public:
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return prod->match(str, NULL, env); 
     Cache::Data * orig_cache = env.cache.data;
+    //printf("ReparseOuter NEW CACHE\n");
     env.cache.data = new Cache::Data;
     SyntaxBuilderN<2> res;
     MatchRes r = prod->match(str, &res, env);
@@ -994,6 +1018,14 @@ public:
     parts->add_part(syn);
     env.cache.data = orig_cache;
     return r;
+  }
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+    const ReparseSyntax * p = res.res.part_as_reparse();
+    assert(p);
+    Cache::Data * orig_cache = env.cache.data;
+    env.cache.data = (Cache::Data *)p->cache;
+    prod->match_check(str, res, env);
+    env.cache.data = orig_cache;
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
     return prod->match_f(str, errs, env);
@@ -1552,8 +1584,11 @@ public:
     res0.make_flags_parts();
     assert(res0.single_part());
     Syntax * r0 = res0.part(0);
-    if (env.mids && env.mids->anywhere(*r0->arg(0)) > 0) {
-      Syntax * p = SYN(r0->str(), r0->part(0), r0->arg(0), SYN(in_named_prod));
+    Syntax * arg = r0->arg(0);
+    if (!arg->simple() && arg->is_a("antiquote"))
+      arg = arg->arg(0);
+    if (env.mids && env.mids->anywhere(*arg) > 0) {
+      Syntax * p = SYN(r0->str(), r0->part(0), arg, SYN(in_named_prod));
       //printf("MATCH MID %s\n", ~p->to_string());
       if (res) res->add_part(p);
       return r;
@@ -1567,7 +1602,7 @@ public:
     MatchRes r = prod->match(str, &res0, env);
     if (!r) {
       const char * r0 = prod->match_f(str, errs, env);
-      assert(!r0);
+      //assert(!r0);
       return FAIL;
     }
     res0.make_flags_parts();
@@ -1598,9 +1633,65 @@ private:
   ProdProps props_obj;
 };
 
+class S_AntiQuote : public Prod {
+public:
+  MatchRes match(SourceStr str, SynBuilder * the_res, MatchEnviron & env) {
+    if (env.antiquotes) {
+      fprintf(stderr, "I SEE AN ANTIQUOTE, BUT I DON'T KNOW WHAT TO DO!\n");
+      abort();
+    }
+    if (!the_res) return prod->match(str, NULL, env);
+    SyntaxBuilderN<1> syn_buf;
+    MatchRes r = prod->match(str, &syn_buf, env);
+    if (!r) return r;
+    assert(syn_buf.single_part());
+    Syntax * syn = syn_buf.part(0);
+    assert(syn->is_reparse());
+    char buf[16];
+    snprintf(buf, 16, "$0x%lx", (unsigned long)syn->outer().str.begin);
+    the_res->add_part(SYN(syn_aq, SYN(buf), syn));
+    return r;
+  }
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+    if (env.antiquotes) {
+      assert(res.res.single_part());
+      Syntax * syn = res.res.part(0);
+      env.antiquotes->add_part(syn->part(2));
+    } else {
+      prod->match_check(str, res, env);
+    }
+  }
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+    return prod->match_f(str, errs, env);
+  }
+  S_AntiQuote(const char * s, const char * e, const ProdWrap & p)
+    : Prod(s,e), prod(p.prod)
+    {
+      assert(p.capture); 
+      assert(prod->capture_type == ExplicitCapture); 
+      capture_type = ExplicitCapture;
+      syn_aq = SYN("antiquote");
+    }
+  const ProdProps & calc_props() {
+    props_obj = prod->props(); 
+    props_obj.uses_special |= props_obj.USES_ANTIQUOTE;
+    set_props(props_obj);
+    return props_obj;
+  }
+  void finalize() {prod->finalize();}
+  S_AntiQuote(const S_AntiQuote & o, Prod * p = 0)
+    : Prod(o), prod(o.prod->clone(p)), syn_aq(o.syn_aq) {}
+  virtual S_AntiQuote * clone(Prod * p) {return new S_AntiQuote(*this, p);}
+  void dump() {/*prod.dump();*/}
+protected:
+  Prod * prod;
+  Syntax * syn_aq;
+  ProdProps props_obj;
+};
+
 const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
                           const Replacements * repls, void * cache, 
-                          bool match_complete_str) 
+                          bool match_complete_str)
 {
   pprintf("BEGIN %s: %s\n", ~what, ~sample(str.begin, str.end));
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
@@ -1824,7 +1915,7 @@ namespace ParsePeg {
     SubStr name;
     static const unsigned MAX_PARTS = 3;
     SubStr special[MAX_PARTS];
-    enum SpecialType {SP_NONE, SP_NAME_LATER, SP_MID, SP_REPARSE, SP_TID} sp = SP_NONE;
+    enum SpecialType {SP_NONE, SP_NAME_LATER, SP_MID, SP_REPARSE, SP_TID, SP_ANTIQUOTE} sp = SP_NONE;
     if (*str == ':') {
       capture_as_flag = true;
       named_capture = true;
@@ -1865,6 +1956,8 @@ namespace ParsePeg {
         } else if (special[0] == "tid") {
           name = special[0];
           sp = SP_TID;
+        } else if (special[0] == "antiquote") {
+          sp = SP_ANTIQUOTE;
         }
         else
           throw error(start, "Unknown special");
@@ -1905,6 +1998,8 @@ namespace ParsePeg {
       return Res(new ReparseOuter(start, str, prod.prod, name, special[2] ? String(special[2]) : String()));
     else if (sp == SP_TID) 
       return Res(new S_TId(start, str, prod, name));
+    else if (sp == SP_ANTIQUOTE)
+      return Res(new S_AntiQuote(start, str, prod));
     if (named_capture)
       return Res(new NamedCapture(start, str, prod, name, capture_as_flag));
     else
@@ -2159,4 +2254,29 @@ void ParseErrors::print(const SourceInfo * file, const SourceFile * grammer)
     }
     printf("\n");
   }
+}
+
+extern "C" namespace macro_abi {
+
+  typedef MutableSyntax SyntaxList;
+  SyntaxList * new_syntax_list();
+
+  SyntaxList * gather_antiquotes(Syntax * syn) {
+    assert(syn->is_reparse());
+    const ReparseSyntax * p = syn->as_reparse();
+    SourceStr str = p->outer().str;
+    Cache::Data * cache = (Cache::Data *)p->cache;
+    assert(cache);
+    pprintf("BEGIN %s: %s\n", ~cache->origin->name, ~sample(str.begin, str.end));
+    MatchEnviron env;
+    env.mids = p->outer().repl;
+    env.antiquotes = new_syntax_list();
+    env.cache.reset(cache);
+    Res res;
+    res.end = str.end;
+    res.res.add_part(syn);
+    cache->origin->match_anyway(str, res, env);
+    return env.antiquotes;
+  }
+
 }

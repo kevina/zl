@@ -1283,7 +1283,7 @@ namespace syntax_ns {
 
     bool single_part() const {return num_parts() == 1 && num_flags() == 0;}
     bool empty() const {return num_parts() == 0 && num_flags() == 0;}
-    
+
     void make_flags_parts() {
       if (num_flags() > 0) {
         add_part(SYN(SYN("@"), PARTS(), FLAGS(flags_, flags_end_)));
@@ -1325,6 +1325,12 @@ namespace syntax_ns {
       }
     }
 
+    const Reparse * part_as_reparse() {
+      if (!single_part()) return NULL;
+      Syntax * p = first_part();
+      if (!p->is_reparse()) return NULL;
+      return p->as_reparse();
+    }
   };
 
   template <unsigned SZ = COPY_THRESHOLD>
