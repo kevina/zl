@@ -1,6 +1,6 @@
 Syntax * foreach (Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match(0, syntax(_,VAR,WHAT,BODY), syn);
+  Match * m = match_f(0, syntax(VAR,WHAT,BODY), syn);
   Syntax * what = match_var(m, syntax WHAT);
   if (!symbol_exists(syntax begin,what,mark,env) || 
       !symbol_exists(syntax end,what,mark,env))

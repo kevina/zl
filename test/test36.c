@@ -1,11 +1,11 @@
 
 Syntax * macro(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, syntax (name, parms, repl), syn);
+  Match * m = match_f(0, syntax (name, parms, repl), syn);
   Syntax * res = replace(syntax {
       Syntax * name(Syntax * syn, Environ * env) {
         Mark * mark = new_mark();
-        Match * m = match_args(0, syntax parms, syn);
+        Match * m = match_f(0, syntax parms, syn);
         Syntax * res = replace(syntax repl, m, mark);
         return res;
       }
@@ -36,7 +36,7 @@ macro foo (v,z) {
  */
 
 Syntax * foo2(Syntax * syn, Environ * env) {
-  Match * m = match_args(0, syntax (v, z), syn);
+  Match * m = match_f(0, syntax (v, z), syn);
   Syntax * res = replace( syntax {int x = v + y; z = x * x;}, m, new_mark());
   return res;
 }

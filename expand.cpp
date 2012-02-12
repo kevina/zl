@@ -374,8 +374,8 @@ extern "C" namespace macro_abi {
   typedef const ::Syntax Syntax;
   typedef Syntax UnmarkedSyntax;
   //struct SyntaxEnum;
-  Match * match_f(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
-  Match * match_args_f(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+  Match * match_parts_f_(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+  Match * match_f_(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
   Syntax * replace(const UnmarkedSyntax * p, Match * match, Mark * mark);
   Context * get_context(Syntax * p);
   Syntax * replace_context(Syntax * p, Context * context);
@@ -384,6 +384,8 @@ extern "C" namespace macro_abi {
   SyntaxEnum * partly_expand_list(SyntaxEnum *, Position pos, Environ *);
   Syntax * pre_parse(Syntax *, Environ *);
 }
+
+Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsigned shift, Mark * mark);
 
 String gen_sym() {
   static unsigned uniq_num = 0;
@@ -516,11 +518,11 @@ struct SimpleMacro : public Macro {
     using namespace macro_abi;
     using macro_abi::Syntax;
     Mark * mark = new Mark(env);
-    Match * m = match_args_f(NULL, parms, p, mark);
+    Match * m = match(NULL, parms, p, 1, mark);
     if (!m)
       throw error(p, "Wrong number of arguments or other mismatch in call to %s.", ~real_name.name);
     if (free)
-      m = match_f(m, free, replace_context(free, get_context(p)), mark);
+      m = match(m, free, replace_context(free, get_context(p)), 0, mark);
     Syntax * res = replace(repl, m, mark);
     //printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
     //printf("  %s\n", ~res->sample_w_loc());
@@ -855,11 +857,11 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
 
 extern "C" namespace macro_abi {
 
-  Match * match_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+  Match * match_parts_f_(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
     return match(m, pattern, with, 0, mark);
   }
   
-  Match * match_args_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+  Match * match_f_(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
     return match(m, pattern, with, 1, mark);
   }
   

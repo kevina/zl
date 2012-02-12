@@ -6,9 +6,9 @@ user_type M {
 
 Syntax * get_prop(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, syntax (where, what), syn);
-  m = match_args(m, syntax (where), partly_expand(m->var(syntax where), ExpPos, env));
-  m = match_args(m, syntax (what), partly_expand(m->var(syntax what), ExpPos, env));
+  Match * m = match_f(0, syntax (where, what), syn);
+  m = match_f(m, syntax (where), partly_expand(m->var(syntax where), ExpPos, env));
+  m = match_f(m, syntax (what), partly_expand(m->var(syntax what), ExpPos, env));
   Syntax * res = get_symbol_prop(m->var(syntax where), m->var(syntax what), env);
   return res;
 }

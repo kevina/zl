@@ -9,10 +9,10 @@ import_file "class.zl";
 
   virtual void init() {
     ParseClass::init`non_virtual();
-    m = match(m, syntax _base_constructor, replace_context(syntax _base_constructor, context));
-    m = match(m, syntax _base_destructor, replace_context(syntax _base_destructor, context));
-    m = match(m, syntax _deleting_destructor, replace_context(syntax _deleting_destructor, context));
-    m = match(m, syntax _VTableBase, replace_context(syntax _VTableBase, context));
+    m = match_f(m, syntax _base_constructor, replace_context(syntax _base_constructor, context));
+    m = match_f(m, syntax _base_destructor, replace_context(syntax _base_destructor, context));
+    m = match_f(m, syntax _deleting_destructor, replace_context(syntax _deleting_destructor, context));
+    m = match_f(m, syntax _VTableBase, replace_context(syntax _VTableBase, context));
     base_destructor_collect.virtual_override = false;
     base_destructor_collect.this_type = NULL;
     deleting_destructor_collect.virtual_override = false;
@@ -33,7 +33,7 @@ import_file "class.zl";
     // We also need to possible emit a deleting destructor.
     // The second copy of the destructor, however, is not virtual, so we
     // we need to pull that out.
-    __shadow Match * m = match_args(m, raw_syntax (n @ :virtual :pure_virtual @rest), p);
+    __shadow Match * m = match_f(m, raw_syntax (n @ :virtual :pure_virtual @rest), p);
     Syntax * name = expand_id(m->var(syntax n), lenv);
     Syntax * again = NULL;
     if (name->eq(syntax _constructor)) {
@@ -78,7 +78,7 @@ import_file "class.zl";
       SyntaxList * r = new_syntax_list();
       r->append(res);
       // now create base constructor body
-      m = match(m, syntax n, replace(syntax _base_constructor, m, mark));
+      m = match_f(m, syntax n, replace(syntax _base_constructor, m, mark));
       //printf(">2>%s<<\n", syntax_to_string(parms));
       res = ParseClass::mk_method_defn`non_virtual(m,ptr_self,static_,inline_,false,
                                                    this_type, parms, w_body);
@@ -89,7 +89,7 @@ import_file "class.zl";
       r->append(res);
      
       // now create base destructor body
-      m = match(m, syntax n, replace(syntax _base_destructor, m, mark));
+      m = match_f(m, syntax n, replace(syntax _base_destructor, m, mark));
       res = ParseClass::mk_method_defn`non_virtual(m,ptr_self,static_,inline_,base_destructor_collect.virtual_override,
                                                    base_destructor_collect.this_type, parms, w_body);
       r->append(res);
@@ -100,8 +100,8 @@ import_file "class.zl";
       p = replace(syntax {void _deleting_destructor() {void * ptr = _destructor`non_virtual(); __raw(free (name) ptr);}}, 
                   m, mark);
       p = partly_expand(p, FieldPos, lenv);
-      m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
-      m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
+      m = match_f(m, raw_syntax (n parms ret @ body @rest), p);
+      m = match_f(m, raw_syntax (@parms), m->var(syntax parms));
       res = mk_method_defn(m, ptr_self, false, inline_, deleting_destructor_collect.virtual_override, 
                            deleting_destructor_collect.this_type, m->varl(syntax parms), m->var(syntax body));
       r->append(res);

@@ -8,7 +8,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   // to avoid duplicate work
   p = partly_expand_class(p, mark, env);
 
-  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) :(fix_vtable_size fix_vtable_size) @rest), p);
+  Match * m = match_f(0, raw_syntax (name @ (pattern ({...} @body)) :(fix_size fix_size) :(fix_vtable_size fix_vtable_size) @rest), p);
 
   //printf("MY CLASS PARSE on %s\n", syntax_to_string(m->var(syntax name)));
   //dump_syntax(p);
@@ -26,8 +26,8 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
     res->append(replace(raw_syntax(smacro vtable_class (@r) 
                                    (class @r :(fix_size fix_vtable_size))),
                         m, mark));
-    m = match(m, syntax rest, replace(raw_syntax(@ @rest :(vtable_class vtable_class)),
-                                      m, mark));
+    m = match_parts_f(m, syntax rest, replace(raw_syntax(@ @rest :(vtable_class vtable_class)),
+                                              m, mark));
     if (!fix_size_s) {
       res->append(replace(raw_syntax(class name ({...} body) @rest), m, mark));
       return res;
@@ -38,7 +38,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
   
   size_t fix_size = ct_value(fix_size_s, env);
 
-  m = match(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
+  m = match_f(m, syntax dummy_decl, replace(syntax {char dummy;}, NULL, mark));
   Syntax * r = replace(raw_syntax (@ (class name ({...} body dummy_decl) @rest) 
                                      (import name)),
                                    m, mark);
@@ -67,7 +67,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
 
     char buf[32];
     snprintf(buf, 32, "{char dummy[%u];}", fix_size - size);
-    m = match(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
+    m = match_f(m, syntax buffer, replace(string_to_syntax(buf), NULL, mark));
     res->append(replace(raw_syntax (class name ({...} body buffer) @rest), m, mark));
 
   } else {
@@ -83,7 +83,7 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
     SyntaxEnum * itr = m->varl(syntax body);
     Syntax * member;
     while ((member = itr->next)) {
-      Match * m0 = match(m, raw_syntax (what n @ type @_), member);
+      Match * m0 = match_parts_f(m, raw_syntax (what n @ type @_), member);
       const char * what = m0 ? syntax_to_string(m0->var(syntax what)) : " ";
       if (strcmp(what, "var")==0) {
         size_t offset = ct_value(replace(syntax (offsetof(name, n)), m0, mark), lenv);

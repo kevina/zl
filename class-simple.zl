@@ -53,7 +53,7 @@ static Syntax *  parse_class_fun_body(Syntax * p, Match * m, Mark * mark,
 Syntax * parse_class_simple(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
   
-  Match * m = match_args(0, raw_syntax (name @ body :(public parent_n)), p);
+  Match * m = match_f(0, raw_syntax (name @ body :(public parent_n)), p);
 
   Syntax * name = m->var(syntax name);
   Syntax * body = m->var(syntax body);
@@ -86,14 +86,14 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
   SyntaxList * vtable_i = new_syntax_list();
   SyntaxList * exports  = new_syntax_list();
                          
-  m = match(m, syntax _Data, replace_context(syntax _Data, context));
-  m = match(m, syntax _parent, replace_context(syntax _parent, context));
-  m = match(m, syntax _VTable, replace_context(syntax _VTable, context));
-  m = match(m, syntax _vtable, replace_context(syntax _vtable, context));
-  m = match(m, syntax _vptr, replace_context(syntax _vptr, context));
-  m = match(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
-  m = match(m, syntax _constructor, replace_context(syntax _constructor, context));
-  m = match(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
+  m = match_f(m, syntax _Data, replace_context(syntax _Data, context));
+  m = match_f(m, syntax _parent, replace_context(syntax _parent, context));
+  m = match_f(m, syntax _VTable, replace_context(syntax _VTable, context));
+  m = match_f(m, syntax _vtable, replace_context(syntax _vtable, context));
+  m = match_f(m, syntax _vptr, replace_context(syntax _vptr, context));
+  m = match_f(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
+  m = match_f(m, syntax _constructor, replace_context(syntax _constructor, context));
+  m = match_f(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
 
   if (parent) {
     parent_m = parent->module;
@@ -121,11 +121,11 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
   // Parse Body
   //
 
-  SyntaxEnum * itr = partly_expand_list(match(NULL, raw_syntax ({...} @body), body)->varl(syntax body),
+  SyntaxEnum * itr = partly_expand_list(match_parts_f(NULL, raw_syntax ({...} @body), body)->varl(syntax body),
                                         FieldPos, lenv);
   Syntax * member;
   while ((member = itr->next)) {
-    Match * m0 = match(m, raw_syntax (what n @ type @_), member);
+    Match * m0 = match_parts_f(m, raw_syntax (what n @ type @_), member);
     const char * what = syntax_to_string(m0->var(syntax what));
 
     // ignore access control labels for now
@@ -135,7 +135,7 @@ Syntax * parse_class_simple(Syntax * p, Environ * env) {
     if (strcmp(what, "var")==0) {
       parse_class_var(member, m, mark, struct_b, module_b);
     } else if (strcmp(what, "alias")==0) {
-      Match * m0 = match(m, raw_syntax (what n type value @_), member);
+      Match * m0 = match_parts_f(m, raw_syntax (what n type value @_), member);
       module_b->append(replace(syntax {macro n (:this ths = this) {({__shadow typeof(ths) fluid this = ths; value;});}}, m0, mark));
     } else if (strcmp(what, "fun")==0) {
       err = parse_class_fun(member, m, mark, module_b, parent_vtable,
@@ -249,7 +249,7 @@ static void parse_class_var(Syntax * p, Match * m, Mark * mark,
                             SyntaxList * struct_b, SyntaxList * module_b)
 {
   //printf("parse_class_var: %s\n", syntax_to_string(p));
-  m = match_args(m, raw_syntax (n @rest), p);
+  m = match_f(m, raw_syntax (n @rest), p);
   bool is_static = p->flag(syntax static);
 
   // FIXME: handle flags
@@ -270,8 +270,8 @@ static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                                  Context * context, Environ * env)
 {
   //printf("parse_class_fun: %s\n", syntax_to_string(p));
-  m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
-  m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
+  m = match_f(m, raw_syntax (n parms ret @ body @rest), p);
+  m = match_f(m, raw_syntax (@parms), m->var(syntax parms));
   //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
   //assert(!(is_static && is_virtual)); // FIXME Error message
 
@@ -288,7 +288,7 @@ static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   // _destructor with the real function
   char sbuf[1024];
   snprintf(sbuf, 1024, "%s$fp", syntax_to_string(m->var(syntax n)));
-  m = match(m, syntax fpn,
+  m = match_f(m, syntax fpn,
             replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
   
   bool virtual_override = parent_vtable && parent_vtable->module->have_symbol(m->var(syntax fpn));
@@ -300,10 +300,10 @@ static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
   Syntax * this_parm = NULL;
   if (!is_static) {
     if (virtual_override) {
-      m = match(m, syntax this_t, 
-                replace(raw_syntax(.tprop (.type (.tprop (-> (reinterpret_cast 
-                                                              (.ptr ((:: parent_n _VTable))) 0) fpn) 
-                                                  inner)) (parm 0)), m, mark));
+      m = match_f(m, syntax this_t, 
+                  replace(raw_syntax(.tprop (.type (.tprop (-> (reinterpret_cast 
+                                                                (.ptr ((:: parent_n _VTable))) 0) fpn) 
+                                                    inner)) (parm 0)), m, mark));
       this_parm = replace(raw_syntax(this_t ths), m, mark);
     } else
       this_parm = replace(raw_syntax ((.ptr name) (fluid this)), m, mark);
@@ -349,8 +349,8 @@ static Syntax *  parse_class_fun(Syntax * p, Match * m, Mark * mark,
                        match_local(m, macro_parms, call_parms, 0),
                        mark));
     if (!virtual_override) {
-      m = match(m, syntax pfun, 
-                replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
+      m = match_f(m, syntax pfun, 
+                  replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
       vtable_b->append(replace(raw_syntax (var (mid fpn) (mid pfun)), m, mark));
     }
     vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) (` n internal)), m, mark));

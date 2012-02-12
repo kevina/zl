@@ -1,7 +1,7 @@
 
 Syntax * foo(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, syntax (t), syn);
+  Match * m = match_f(0, syntax (t), syn);
   Syntax * s = replace(syntax{sizeof(t);}, m, mark);
   size_t sz = ct_value(s, env);
   printf("::: %u\n", sz);

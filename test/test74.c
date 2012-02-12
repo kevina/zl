@@ -4,7 +4,7 @@ double r = 1.61803399;
 
 Syntax * make_golden(Syntax * syn, Environ * env) { 
   Mark * mark = new_mark(); 
-  Match * m = match_args(0, syntax (D,A,B,FIX), syn); 
+  Match * m = match_f(0, syntax (D,A,B,FIX), syn); 
   UnmarkedSyntax * r = syntax { 
     for (;;) { double a = A, b = B; 
                double D = (a - r*b)/(1 + r); 

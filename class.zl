@@ -136,7 +136,7 @@ public:
     }
 
     if (name->part(0)->eq(syntax ::)) {
-      Match * m0 = match(0, raw_syntax (what (pattern (:: module name)) @rest), p_);
+      Match * m0 = match_parts_f(0, raw_syntax (what (pattern (:: module name)) @rest), p_);
       return replace(raw_syntax(memberdecl module (what name @rest)), m0, mark);
     }
 
@@ -201,11 +201,11 @@ public:
   }
 
   virtual void init_match() {
-    m = match_args(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), class_s, mark);
+    m = match_f(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), class_s, mark);
     name = m->var(syntax name);
     if (strcmp(syntax_to_string(name), "") == 0) {
       name = replace(syntax anon, m, mark);
-      m = match(m, syntax name, name);
+      m = match_f(m, syntax name, name);
     }
     body = m->var(syntax body);
   }
@@ -235,24 +235,24 @@ public:
     exports  = new_syntax_list();
     fields = new_syntax_list();
 
-    m = match(m, syntax _Data, replace_context(syntax _Data, context));
-    m = match(m, syntax _parent, replace_context(syntax _parent, context));
-    m = match(m, syntax _VTable, replace_context(syntax _VTable, context));
-    m = match(m, syntax _vtable, replace_context(syntax _vtable, context));
-    m = match(m, syntax _vptr, replace_context(syntax _vptr, context));
-    m = match(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
-    m = match(m, syntax _constructor, replace_context(syntax _constructor, context));
-    m = match(m, syntax _destructor, replace_context(syntax _destructor, context));
-    m = match(m, syntax _assign, replace_context(syntax _assign, context));
-    m = match(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
-    m = match(m, syntax _init, replace_context(syntax _init, context));
-    m = match(m, syntax fields, replace_context(syntax fields, context));
-    m = match(m, syntax this_type, replace_context(syntax this_type, context));
-    m = match(m, syntax ptr, replace_context(syntax ptr, context));
-    m = match(m, syntax syntax_obj, replace_context(syntax syntax_obj, context));
-    m = match(m, syntax is_method, replace_context(syntax is_method, context));
-    m = match(m, syntax is_static, replace_context(syntax is_static, context));
-    m = match(m, syntax memberdecl, replace_context(syntax memberdecl, context));
+    m = match_f(m, syntax _Data, replace_context(syntax _Data, context));
+    m = match_f(m, syntax _parent, replace_context(syntax _parent, context));
+    m = match_f(m, syntax _VTable, replace_context(syntax _VTable, context));
+    m = match_f(m, syntax _vtable, replace_context(syntax _vtable, context));
+    m = match_f(m, syntax _vptr, replace_context(syntax _vptr, context));
+    m = match_f(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
+    m = match_f(m, syntax _constructor, replace_context(syntax _constructor, context));
+    m = match_f(m, syntax _destructor, replace_context(syntax _destructor, context));
+    m = match_f(m, syntax _assign, replace_context(syntax _assign, context));
+    m = match_f(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
+    m = match_f(m, syntax _init, replace_context(syntax _init, context));
+    m = match_f(m, syntax fields, replace_context(syntax fields, context));
+    m = match_f(m, syntax this_type, replace_context(syntax this_type, context));
+    m = match_f(m, syntax ptr, replace_context(syntax ptr, context));
+    m = match_f(m, syntax syntax_obj, replace_context(syntax syntax_obj, context));
+    m = match_f(m, syntax is_method, replace_context(syntax is_method, context));
+    m = match_f(m, syntax is_static, replace_context(syntax is_static, context));
+    m = match_f(m, syntax memberdecl, replace_context(syntax memberdecl, context));
     
     init_special_funs();
   }
@@ -289,12 +289,12 @@ public:
   }
 
   Syntax * parse_body() {
-    SyntaxEnum * itr = partly_expand_list(match(NULL, raw_syntax ({...} @body), body)->varl(syntax body),
+    SyntaxEnum * itr = partly_expand_list(match_parts_f(NULL, raw_syntax ({...} @body), body)->varl(syntax body),
                                           FieldPos, lenv);
     Syntax * member;
     while ((member = itr->next)) {
       //printf("MEMBER: %s\n", syntax_to_string(member));
-      Match * m0 = match(m, raw_syntax (what n @ type @_), member);
+      Match * m0 = match_parts_f(m, raw_syntax (what n @ type @_), member);
       if (!m0) {
         builder->add(member);
         continue;
@@ -310,7 +310,7 @@ public:
         parse_class_var(member, struct_b);
         register_field(m0->var(syntax n), NULL, m0->var(syntax type));
       } else if (strcmp(what, "alias")==0) {
-        Match * m0 = match(m, raw_syntax (what n type value @_), member);
+        Match * m0 = match_parts_f(m, raw_syntax (what n type value @_), member);
         //builder->add(replace(raw_syntax (macro n (:(this (reparse this this))) value), m0, mark));
         builder->add(replace(syntax {macro n (:this ths = this) {({__shadow typeof(ths) fluid this = ths; value;});}}, m0, mark));
         if (member->flag(syntax need_constructor))
@@ -444,7 +444,7 @@ public:
   };
 
   Syntax * prep_constructor(Syntax * constructor) {
-    Match * m0 = match(m, raw_syntax (w n parms ret @ body @_), constructor);
+    Match * m0 = match_parts_f(m, raw_syntax (w n parms ret @ body @_), constructor);
     InitCode init_code;
     init_code.init(constructor->flag(syntax init));
     SyntaxList * code = new_syntax_list();
@@ -510,7 +510,7 @@ public:
     }
 
     if (destructor) {
-      Match * m0 = match(m, raw_syntax ($w $n $parms $ret @ $body @rest), destructor);
+      Match * m0 = match_parts_f(m, raw_syntax ($w $n $parms $ret @ $body @rest), destructor);
       if (m0->var(syntax $body))
         destructor =
           replace(raw_syntax($w $n $parms (.ptr (void)) (block $body $1 (return this)) @rest), 
@@ -528,7 +528,7 @@ public:
 
   virtual void parse_class_var(Syntax * p, SyntaxList * struct_b) {
     //printf("parse_class_var: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_args(m, raw_syntax (n t @rest), p);
+    __shadow Match * m = match_f(m, raw_syntax (n t @rest), p);
     bool is_static = p->flag(syntax static);
     
     // FIXME: handle flags
@@ -544,8 +544,8 @@ public:
 
   virtual Syntax * parse_class_fun(Syntax * p, struct Collect * collect) {
     //printf("parse_class_fun: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_args(m, raw_syntax (n parms0 ret @ body :static @rest), p);
-    m = match_args(m, raw_syntax (@parms), m->var(syntax parms0));
+    __shadow Match * m = match_f(m, raw_syntax (n parms0 ret @ body :static @rest), p);
+    m = match_f(m, raw_syntax (@parms), m->var(syntax parms0));
     //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
     //assert(!(is_static && is_virtual)); // FIXME Error message
 
@@ -559,7 +559,7 @@ public:
     } else if (name->eq(raw_syntax (operator =))) {
       //printf("ASSIGN\n");
       // just change the name, nothing special needs to be done
-      m = match(m, syntax n, replace(syntax _assign, m, mark));
+      m = match_f(m, syntax n, replace(syntax _assign, m, mark));
     } else if (!name->simple() && name->part(0)->eq(syntax ~) 
                && expand_id(name->part(1), lenv)->eq(class_name)) {
       //printf("DESTRUCTOR\n");
@@ -589,7 +589,7 @@ public:
     unsigned i = 0;
     Syntax * parm;
     while ((parm = parms_enum->next())) {
-      Match * m0 = match(m, raw_syntax(type @ name :(default default)), parm);
+      Match * m0 = match_parts_f(m, raw_syntax(type @ name :(default default)), parm);
       //printf("AND THE PARM IS %s w/ type %s\n", syntax_to_string(parm), syntax_to_string(m0->var(syntax type)));
       //printf("AND THE PARM IS %s\n", syntax_to_string(parm));
       Syntax * arg = m0 ? m0->var(syntax name) : NULL;
@@ -640,7 +640,7 @@ public:
                          match_local(m, macro_parms, typed_parms, call_nv, 0), mark));
     
     if (is_virtual) {
-      //m = match(m, syntax fpn, m->var(syntax n));
+      //m = match_f(m, syntax fpn, m->var(syntax n));
       if (virtual_override) {
         // don't define a new method but bring the parent method into
         // the same scope
@@ -657,7 +657,7 @@ public:
                                   (eblock (:shadow var (fluid this) $3 ths) $4)),
                        match_local(m, macro_parms, typed_parms, ptr_self, call_v, 0),
                        mark));
-        m = match(m, syntax pfun, 
+        m = match_f(m, syntax pfun, 
                   replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
         vtable_b->append(replace(raw_syntax (var (mid fpn) (mid pfun)), m, mark));
         vtable_b->append(replace(raw_syntax (add_prop fpn this_type $1), 
@@ -693,7 +693,7 @@ public:
     snprintf(sbuf, 1024, "%s%s$fp", 
              mangle_name(m->var(syntax n), env),
              mangle_fun_parms(m->var(syntax parms0), lenv));
-    return match(m, syntax fpn,
+    return match_f(m, syntax fpn,
                  replace_context(string_to_syntax(sbuf), get_context(m->var(syntax n))));
   }
 
@@ -743,8 +743,8 @@ public:
   // destructor for now
   virtual Syntax * finish_class_fun(Syntax * p, Collect * collect, bool inline_) {
     //printf("finish_class_fun: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_args(m, raw_syntax (n parms ret @ body @rest), p);
-    m = match_args(m, raw_syntax (@parms), m->var(syntax parms));
+    __shadow Match * m = match_f(m, raw_syntax (n parms ret @ body @rest), p);
+    m = match_f(m, raw_syntax (@parms), m->var(syntax parms));
     
     // FIXME: handle flags
 
@@ -807,7 +807,7 @@ public:
   // FIXME: Rename
   virtual void register_field(Syntax * name, Syntax * user_name, Syntax * type) {
     if (!user_name) user_name = name;
-    Match * m0 = match(m, syntax n, name);
+    Match * m0 = match_f(m, syntax n, name);
     const UserType * ut = user_type_info(type, lenv);
 
     fields->append(name);
@@ -841,8 +841,8 @@ public:
 
   virtual Syntax * parse_class_fun_defn(Syntax * p) {
     //printf("parse_class_fun: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_args(m, raw_syntax (n parms0 ret @ body :static @rest), p);
-    m = match_args(m, raw_syntax (@parms), m->var(syntax parms0));
+    __shadow Match * m = match_f(m, raw_syntax (n parms0 ret @ body :static @rest), p);
+    m = match_f(m, raw_syntax (@parms), m->var(syntax parms0));
 
     Syntax * class_name = m->var(syntax name);
     Syntax * name = m->var(syntax n);
@@ -855,11 +855,11 @@ public:
     } else if (name->eq(raw_syntax (operator =))) { // assign
       // just change the name, nothing special needs to be done
       //printf("OK GOT ASSIGN\n");
-      m = match(m, syntax n, replace(syntax _assign, m, mark));
+      m = match_f(m, syntax n, replace(syntax _assign, m, mark));
     } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) { // destructor
-      m = match(m, syntax n, replace(syntax _destructor, m, mark));
-      m = match(m, syntax ret, replace(raw_syntax(.ptr void), m, mark));
-      m = match(m, syntax body, replace(raw_syntax(block body $1 (return this)), match_local(m, destructor_code, 0), mark));
+      m = match_f(m, syntax n, replace(syntax _destructor, m, mark));
+      m = match_f(m, syntax ret, replace(raw_syntax(.ptr void), m, mark));
+      m = match_f(m, syntax body, replace(raw_syntax(block body $1 (return this)), match_local(m, destructor_code, 0), mark));
       return mk_method_defn(m, determine_ptr_self(NULL), false, false, destructor_collect.virtual_override, 
                             destructor_collect.this_type, m->varl(syntax parms), true);
     }
@@ -900,7 +900,7 @@ Syntax * parse_class(Syntax * p, Environ * env) {
 }
 
 Syntax * parse_memberdecl(Syntax * p, Environ * env) {
-  Match * m = match_args(NULL, raw_syntax (name defn), p);
+  Match * m = match_f(NULL, raw_syntax (name defn), p);
   Syntax * defn = m->var(syntax defn);
   defn = partly_expand(defn, OtherPos, env);
   Syntax * ptr_syn = get_symbol_prop(m->var(syntax name), syntax ptr, env);
@@ -910,7 +910,7 @@ Syntax * parse_memberdecl(Syntax * p, Environ * env) {
     Syntax * res = pc->parse_class_fun_defn(m->var(syntax defn));
     return res;
   } else if (defn->part(0)->eq(syntax var)) {
-    m = match_args(m, raw_syntax(n @rest), defn);
+    m = match_f(m, raw_syntax(n @rest), defn);
     return replace(raw_syntax(var (` n internal) @rest), m, pc->mark);
   } else {
     return defn;

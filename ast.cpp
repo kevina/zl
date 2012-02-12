@@ -5292,7 +5292,6 @@ namespace ast {
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
     //if (what == "empty")   return (new Empty)->parse_self(p, env);
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
-    if (what == "raw_syntax")       return (new SyntaxC)->parse_self(p, env);
     if (what == "environ_snapshot") return (new EnvironSnapshot)->parse_self(p, env);
     if (what == "__builtin_va_start") 
       return (new GccBuiltIn("__builtin_va_start", 2, VOID_T))->parse_self(p, env);

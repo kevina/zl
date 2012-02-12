@@ -4,8 +4,8 @@ import_file "../class.zl";
   
   void init() {
     ParseClass::init`non_virtual();
-    m = match(m, syntax _parent_ptr, replace_context(syntax _parent_ptr, context));
-    m = match(m, syntax _child_ptr, replace_context(syntax _child_ptr, context));
+    m = match_f(m, syntax _parent_ptr, replace_context(syntax _parent_ptr, context));
+    m = match_f(m, syntax _child_ptr, replace_context(syntax _child_ptr, context));
   }
 
   void add_parent_info() {

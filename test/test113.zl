@@ -7,7 +7,7 @@ class X {
 
 Syntax * make_cmp(Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, syntax (type, @_), syn);
+  Match * m = match_f(0, syntax (type, @_), syn);
   Syntax * res = get_symbol_prop(partly_expand(m->var(syntax type), NoPos, env), 
                                  syntax fields, env);
   SyntaxEnum * els = res->args();
@@ -18,8 +18,8 @@ Syntax * make_cmp(Syntax * syn, Environ * env) {
                          match_local(m, s, NULL), mark));
   }
   Context * context = empty_context();
-  m = match(m, syntax ==, replace_context(syntax ==, context));
-  m = match(m, syntax !=, replace_context(syntax !=, context));
+  m = match_f(m, syntax ==, replace_context(syntax ==, context));
+  m = match_f(m, syntax !=, replace_context(syntax !=, context));
   Syntax * res = replace( syntax {
       bool operator== (const type & lhs, const type & rhs) {$1; return true;}
       bool operator!= (const type & lhs, const type & rhs) {return !(lhs == rhs);}}, 

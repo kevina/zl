@@ -9,7 +9,7 @@ size_t zl_abi_version = 1;
 
 Syntax * parse_class_w_abi(Syntax * p, Environ * env) {
   Mark * mark = new_mark();
-  Match * m = match_args(0, raw_syntax (name @ (pattern ({...} @body)) :(abi_ver abi_ver) @rest), p);
+  Match * m = match_f(0, raw_syntax (name @ (pattern ({...} @body)) :(abi_ver abi_ver) @rest), p);
 
   Syntax * body = match_var(m, syntax body);
   Syntax * abi_ver_s = match_var(m, syntax abi_ver);
