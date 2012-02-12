@@ -1,0 +1,45 @@
+Syntax * parse_quasiquote(Syntax * in, Environ * env) {
+  Mark * outer_mark = new_mark(prelude_envss);
+  Match * m = match_f(0, raw_syntax (pattern), in);
+  //printf("XXX");
+  //dump_syntax(m->var(syntax pattern));
+  SyntaxList * aqs = gather_antiquotes(m->var(syntax pattern));
+  if (aqs->empty()) {
+    return replace(syntax {replace(syntax_d pattern, repl, mark);}, m, outer_mark);
+  } else {
+    UnmarkedSyntax * res = syntax {
+      replace(syntax_d pattern, match_antiquotes(repl, syntax_d $1, $2, NULL), mark);
+    };
+    return replace(res, match_local(m, aqs, aqs, NULL), outer_mark);
+  }
+}
+
+Syntax * parse_match(Syntax * in, Environ * env) {
+  Mark * mark = new_mark(prelude_envss);
+  Match * m = match_f(0, syntax (pattern, with, :match_f match_f = match_f_), in, mark);
+  Syntax * pattern = m->var(syntax pattern);
+  Environ * lenv = temp_environ(env);
+  pre_parse(replace(raw_syntax(kill_fluid (` quasiquote syntax)),
+                    NULL, mark), lenv);
+  pattern = partly_expand(pattern, ExpPos, lenv);
+  // FIXME: make sure with have a syntax or quasiquote
+  //dump_syntax(pattern);
+  pattern = pattern->part(1);
+  //dump_syntax(pattern);
+  SyntaxList * aqs = gather_antiquotes(pattern);
+  pattern = mark_antiquotes(pattern, aqs);
+  SyntaxEnum * iter = aqs->elements();
+  SyntaxList * assign = new_syntax_list();
+  Syntax * aq;
+  while ((aq = iter->next())) {
+    assign->append(replace(syntax {$1 = match_aq_var(m, syntax_d $2);},
+                           match_local(m, aq, aq),
+                           mark));
+  }
+  UnmarkedSyntax * res = syntax {({
+    Match * m = match_f(repl, syntax_d $1, with, NULL);
+    $2;
+    m;
+  });};
+  return replace(res, match_local(m, pattern, assign, NULL), mark);  
+}

@@ -38,7 +38,7 @@ abi_info.zlh: zl zlc abi_info.hpp
 	./zlc -E abi_info.hpp -o abi_info.i
 	mv abi_info.i abi_info.zlh
 
-prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in abi_info.zlh
+prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in abi_info.zlh qquote.zl
 	ulimit -s 1024; ./zl -C -P prelude.zl > prelude-fct.log
 #	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls
 

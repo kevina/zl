@@ -66,7 +66,7 @@ __raw(smacro default_free (type ptr)
 __raw(.struct .dummy (char whocares));
 
 //
-// Basic Macro ABI support
+// Basic Macro API support
 //
 
 typedef struct EnvironSnapshot EnvironSnapshot;
@@ -198,6 +198,20 @@ __ct_callback Syntax * error(Syntax *, const char *, ...);
 __ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * prop, const Environ * env);
 
 __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
+
+//
+// Macro API with quasiquote support
+//
+
+fluid_binding mark;
+fluid_binding repl;
+macro fluid repl() {NULL;}
+fluid_syntax quasiquote;
+Syntax * parse_quasiquote(Syntax * in, Environ * env);
+make_macro fluid quasiquote`syntax parse_quasiquote;
+Syntax * parse_match(Syntax * in, Environ * env);
+make_macro match parse_match;
+macro match_parts(pattern, with) {match(pattern, with, :match_f = match_parts_f_);}
 
 //
 // make_syntax_macro
