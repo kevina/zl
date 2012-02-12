@@ -222,7 +222,7 @@ RAW_ID : "identifier" =
   {[@$\a_][$\a_\d]*} SPACING;
 
 BASIC_ID : "identifier" =
-  <<mid>> {MID} / {RAW_ID};
+  <<mid>> {MID} /  <fluid> "fluid" {RAW_ID} / {RAW_ID};
 
 ID_W_TEMPLATE = 
   {TEMPLATE_ID} / {BASIC_ID};
@@ -230,11 +230,8 @@ ID_W_TEMPLATE =
 ID_W_NS : "identifer" =
   <<>> {ID_W_TEMPLATE} ("::" {ID_W_NS} = <::>)?;
 
-ID_W_INNER = 
+ID = 
   <<>> {ID_W_NS} (("`" {ID_W_NS})+ = <`>)?;
-
-ID =
-  <fluid> "fluid" {ID} / {ID_W_INNER};
 
 RAW = 
   "__raw" {SEXP_R};
