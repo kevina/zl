@@ -160,6 +160,8 @@ test175.c
 test176.cpp
 test177.cpp
 
+test-qq.zl
+
 fix_size-0-t.zl # was 67
 fix_size-1-t.zl # was 95
 fix_size-2-t.zl # was 101

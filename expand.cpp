@@ -820,7 +820,7 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   ReplTable * rt 
     = new ReplTable(mark, 
                     new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
-  if (pattern->is_reparse("()")) {
+  if (pattern->is_reparse("()") || pattern->is_reparse("[]")) {
     //printf("YES!\n");
     pattern = reparse("MATCH_LIST", pattern->inner());
   } else {
@@ -2081,6 +2081,14 @@ Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
   SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
   FluidBindingDecl * b = new FluidBindingDecl(mark(n, new Mark(NULL)));
   env.add(n, b);
+  return empty_stmt();
+}
+
+Stmt * parse_kill_fluid(const Syntax * p, Environ & env) {
+  assert_num_args(p, 1);
+  SymbolKey sym = expand_binding(p->arg(0), env);
+  FluidBinding * b = env.symbols.lookup<FluidBinding>(sym, p->arg(0)->str());
+  env.add(SymbolKey(b->rebind, sym.ns), new NoSymbol());
   return empty_stmt();
 }
 

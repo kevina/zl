@@ -94,7 +94,7 @@ MATCH = <<mid>> {MID} / :<> ':'{ID} {<reparse> {ID} ("=" {SPLIT_PARM})?} / <repa
 
 TOKEN_ : "token'" =  
          <<mid PARM>> ({MID} !("`" / "::" / "<") / {SYM} / {'[]'} SPACING)
-         / {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX}
+         / {STRUCT_UNION} / {ENUM} / {TYPEOF} / {SYNTAX} / {QUASIQUOTE}
          / {RAW} / {TEMPLATE_CALL} 
          / {BRACK} / {CONST}
          / {ID} / {SYM};
@@ -147,8 +147,9 @@ SYNTAX =
   / <syntax> "syntax_d" (<<mid ->> {MID});
 
 SYNTAX_P =
-  <<reparse id MID_ID>> {ID} / <<reparse sym MID_SYM>> {SYM} / {ID} / {BRACE} / {PARAN}; # / {BRACK};
-#   {ID} / {SYM} / {BRACE} / {PARAN}; # / {BRACK};
+   {SYNTAX_ID} / {BRACE} / {PARAN} / {BRACK};
+SYNTAX_ID = 
+  <<reparse id MID_ID>> {ID} / <<reparse sym MID_SYM>> {SYM};
 
 MID_ID = 
   <<mid ->> {MID} EOF / {ID};
@@ -159,7 +160,10 @@ MID_SYM =
 SYNTAX_STR =
   ({SYNTAX_P} / <<reparse parm>> {RAW_TOKEN+}) EOF;
 
-#
+QUASIQUOTE = 
+  <quasiquote> '`'({BRACE} / {BRACK}  / {SEXP_R} / '`'{SYNTAX_ID});
+
+# 
 # Misc
 #
 

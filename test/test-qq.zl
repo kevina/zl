@@ -2,18 +2,22 @@
 fluid_binding mark;
 fluid_binding repl;
 macro fluid repl() {NULL;}
+fluid_syntax quasiquote;
 
 Syntax * mm(Syntax * in, Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_args(0, syntax (pattern, with), in);
   Syntax * pattern = m->var(syntax pattern);
-  pattern = partly_expand(pattern, ExpPos, env);
+  Environ * lenv = temp_environ(env);
+  pre_parse(replace(raw_syntax(kill_fluid (` quasiquote syntax)),
+                    NULL, mark), lenv);
+  pattern = partly_expand(pattern, ExpPos, lenv);
+  //assert(pattern->is_a("syntax", "quasiquote"));
+  //dump_syntax(pattern);
   pattern = pattern->part(1);
   //dump_syntax(pattern);
   SyntaxList * aqs = gather_antiquotes(pattern);
-  //dump_syntax(aqs);
   pattern = mark_antiquotes(pattern, aqs);
-  //dump_syntax(pattern);
   SyntaxEnum * iter = aqs->elements();
   SyntaxList * assign = new_syntax_list();
   Syntax * aq;
@@ -34,7 +38,7 @@ make_macro mm;
 
 Syntax * qq(Syntax * in, Environ * env) {
   Mark * outer_mark = new_mark();
-  Match * m = match_args(0, syntax (pattern,@rest), in);
+  Match * m = match_args(0, raw_syntax (pattern), in);
   SyntaxList * aqs = gather_antiquotes(m->var(syntax pattern));
   UnmarkedSyntax * res = syntax {
     replace(syntax pattern, match_antiquotes(repl, syntax_d $1, $2, NULL), mark);
@@ -42,16 +46,14 @@ Syntax * qq(Syntax * in, Environ * env) {
   return replace(res, match_local(m, aqs, aqs, NULL), outer_mark);
 }
 
-make_macro qq;
+make_syntax_macro fluid quasiquote qq;
 
 Syntax * test(Syntax * in, Environ * env) {
   Mark * fluid mark = new_mark;
-  //Match * m = match_args(NULL, syntax(A,B), in);
-  //Syntax * a = m->var(syntax A);
-  //Syntax * b = m->var(syntax B);
   Syntax *a, *b;
-  mm(syntax ($a,$b), in);
-  return qq((1 + $a + $b),);
+  mm(`[$a,$b], in);
+  return `{1 + $a + $b};
+  //return `(plus $a $b);
 }
 
 make_macro test;
@@ -59,5 +61,6 @@ make_macro test;
 
 int main() {
   printf("%d\n", test(2,4));
+  return 0;
 }
 

@@ -102,6 +102,7 @@ static inline const Syntax * reparse(String what, ReparseInfo p, Environ * env =
 ast::Stmt * parse_map(const Syntax * p, Environ & env);
 ast::Stmt * parse_macro(const Syntax * p, Environ & env);
 ast::Stmt * parse_fluid_binding(const Syntax *, Environ &);
+ast::Stmt * parse_kill_fluid(const Syntax *, Environ &);
 
 void assert_num_args(const Syntax * p, unsigned num);
 void assert_num_args(const Syntax * p, unsigned min, unsigned max);
