@@ -29,6 +29,7 @@ ENUM_EXP: trans;
 TYPEOF: trans;
 SYNTAX: trans;
 SYNTAX_P: trans;
+SYNTAX_ID: trans;
 SYNTAX_STR: trans;
 EXP: trans;
 INIT: trans;

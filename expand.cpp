@@ -1964,7 +1964,15 @@ void compile_for_ct(Deps & deps, Environ & env) {
   }
 }
 
-struct Syntaxes {const char * str; const Syntax * syn;};
+struct Syntaxes {
+  const char * what; 
+  const char * str;
+  const char * parse_as;
+  unsigned len;
+  unsigned inner_offset;
+  unsigned inner_len;
+  const Syntax * syn;
+};
 
 AbiInfo ast::DEFAULT_ABI_INFO = {"default", NULL, NULL, NULL, NULL};
 
@@ -2059,7 +2067,15 @@ void load_macro_lib(ParmString lib, Environ & env) {
     Syntaxes * i = (Syntaxes *)dlsym(lh, "_syntaxes");
     Syntaxes * e = i + *syntaxes_size;
     for (; i != e; ++i) {
-      i->syn = parse_syntax_c(parse_str("SYNTAX", SourceStr(i->str, i->str+strlen(i->str))));
+      if (i->what) {
+        i->syn = new ReparseSyntax(SYN(i->what), NULL, NULL, 
+                                   i->parse_as ? String(i->parse_as) : String(), 
+                                   SourceStr(i->str, i->str + i->len),
+                                   SourceStr(i->str + i->inner_offset,
+                                             i->str + i->inner_offset + i->inner_len));
+      } else {
+        i->syn = parse_str(i->parse_as, SourceStr(i->str, i->str + i->len));
+      }
     }
   }
 }

@@ -250,6 +250,7 @@ public:
   virtual ~Prod() {}
   virtual String d_name() const {return String();}
   //virtual bool optional() const = 0;
+  virtual bool need_new_cache() const {return false;}
   Prod(const char * p, const char * e) 
     : capture_type(NoCapture), pos(p), end(e), props_(NULL) {}
 public: // but don't useq
@@ -285,6 +286,7 @@ struct ProdWrap {
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
   const ProdProps & props() {return prod->props();}
   void finalize() {prod->finalize();}
+  bool need_new_cache() const {return capture && prod->need_new_cache();}
   //bool optional() const {return prod->optional();}
 private:
   ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
@@ -457,6 +459,11 @@ private:
   //CharSet cs;
 };
 
+String cache_origin(void * ptr) {
+  Cache::Data * cache = (Cache::Data *)ptr;
+  return cache->origin->name;
+}
+
 Cache::LookupRes Cache::lookup(CachedProd * prod, SourceStr str) {
   pair<Data::value_type *, bool> 
     cached = data->insert(Key(prod, str.begin));
@@ -623,14 +630,24 @@ MatchRes CachedProd::match_i(SourceStr str, SynBuilder * parts, Res * given_res,
     if (!given_res)
       pprintf("%*cNamedProd MISS %s %p %p\n", indent_level, ' ', ~name, str.begin, str.end);
     indent_level++;
-    if (!given_res)
-      r->end = prod.match(str, &r->res, env);
-    else
+    if (given_res) {
       prod.match_anyway(str, *given_res, env);
-    indent_level--;
-    if (const ReparseSyntax * p = r->res.part_as_reparse()) {
-      static_cast<Cache::Data *>(p->cache)->origin = this;
+    } else if (prod.need_new_cache()) {
+      Cache::Data * orig_cache = env.cache.data;
+      Cache::Data * new_cache = new Cache::Data;
+      env.cache.data = new_cache;
+      r->end = prod.match(str, &r->res, env);
+      env.cache.data = orig_cache;
+      if (r) {
+        ReparseSyntax * p = const_cast<ReparseSyntax *>(r->res.part_as_reparse());
+        assert(p);
+        new_cache->origin = this;
+        p->cache = new_cache;
+      }
+    } else {
+      r->end = prod.match(str, &r->res, env);
     }
+    indent_level--;
   } else if (r->end != FAIL) {
     pprintf("%*cNamedProd HIT %s %p (%p) %p\n", indent_level, ' ', ~name, str.begin, r->end, str.end);
     if (env.antiquotes && w_antiquote())
@@ -1002,9 +1019,6 @@ public:
   MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return prod->match(str, NULL, env); 
-    Cache::Data * orig_cache = env.cache.data;
-    //printf("ReparseOuter NEW CACHE\n");
-    env.cache.data = new Cache::Data;
     SyntaxBuilderN<2> res;
     MatchRes r = prod->match(str, &res, env);
     if (!r) return r;
@@ -1012,11 +1026,9 @@ public:
     ReparseSyntax * syn = const_cast<ReparseSyntax *>(res.part(0)->as_reparse());
     syn->str_ = syn->outer_ = SourceStr(str, r);
     syn->what_ = name;
-    syn->cache = env.cache.data;
     syn->parse_as = parse_as;
     //printf("ro: %s %s\n", ~syn->rwhat().name, syn->parse_as ? ~String(syn->parse_as) : NULL);
     parts->add_part(syn);
-    env.cache.data = orig_cache;
     return r;
   }
   void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
@@ -1047,6 +1059,7 @@ public:
   }
   void finalize() {prod->finalize();}
   void dump() {printf("{"); prod->dump(); printf("}");}
+  bool need_new_cache() const {return true;}
 private:
   Prod * prod;
   const Syntax * name;

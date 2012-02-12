@@ -27,4 +27,6 @@ static inline const Syntax * parse_str(String what, SourceStr str,
   return parse_prod(what, str, env, repls, cache, true);
 }
 
+String cache_origin(void *);
+
 #endif

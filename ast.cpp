@@ -4846,9 +4846,7 @@ namespace ast {
 
   const Syntax * parse_syntax_c(const Syntax * p) {
     assert_num_args(p, 1);
-    const Syntax * syn;
-    String what = p->part(0)->what().name;
-    syn = p->part(1);
+    const Syntax * syn = p->part(1);
     ChangeSrc<SyntaxSourceInfo> cs(syn);
     syn = SYN(cs, *syn);
     SyntaxC::keep_me.push_back(syn);
@@ -5431,6 +5429,20 @@ namespace ast {
        << "#\n\n";
   }
 
+  static void str_literal(CompileWriter & cw, SourceStr str) {
+    cw << "(s \"";
+    for (const char * i = str.begin; i != str.end; ++i)
+      escape(cw, *i);
+    cw << "\") ";
+  }
+
+  static void str_literal(CompileWriter & cw, String str) {
+    cw << "(s \"";
+    for (const char * i = str.begin(); i != str.end(); ++i)
+      escape(cw, *i);
+    cw << "\") ";
+  }
+
   void compile(TopLevelSymbolTable * tls, CompileWriter & cw) {
 
     SymbolNode * syms = *tls->front;
@@ -5593,14 +5605,35 @@ namespace ast {
       unsigned syntaxes_size = cw.for_macro_sep_c->syntaxes.size();
       if (syntaxes_size > 0) {
         cw << "(var _syntaxes_size (unsigned) :(__visibility__ (s protected)) " << syntaxes_size << ")\n";
-        cw << "(.struct _syntaxes ((.ptr (char :const)) str) ((.ptr (struct UnmarkedSyntax)) syn))\n";
+        cw << "(.struct _syntaxes ";
+        cw <<     "((.ptr (char :const)) what) ((.ptr (char :const)) str) ((.ptr (char :const)) parse_as)";
+        cw <<     "((unsigned) len) ((unsigned) inner_offset) ((unsigned) inner_len) ";
+        cw <<     "((.ptr (struct UnmarkedSyntax)) syn))\n";
         cw << "(var _syntaxes (.array (struct _syntaxes) " << syntaxes_size << ") :(__visibility__ (s protected)) (.\n";
         for (Vector<SyntaxC *>::const_iterator i = cw.for_macro_sep_c->syntaxes.begin(), 
                e = cw.for_macro_sep_c->syntaxes.end(); i != e; ++i)
         {
-          cw << "  (. (s \"";
-          escape(cw, (*i)->syn->str());
-          cw << "\") 0)\n";
+          cw << "  (. ";
+          const ReparseSyntax * s = (*i)->syn_p->maybe_reparse();
+          if (s->cache) {
+            // The cache will need to be regenerated anyway ...
+            cw << "0 ";
+            str_literal(cw, s->outer_);
+            str_literal(cw, cache_origin(s->cache));
+            cw << s->outer_.size() << " ";
+            cw << "0 0 ";
+          } else {
+            str_literal(cw, s->what_->what().name); // if there are marks (that matter) we have bigger problems
+            str_literal(cw, s->outer_);
+            if (s->parse_as.defined())
+              str_literal(cw, s->parse_as);
+            else
+              cw << "0 ";
+            cw << s->outer_.size() << " ";
+            cw << s->inner_.begin - s->outer_.begin << " ";
+            cw << s->inner_.size() << " ";
+          }
+          cw << "0)\n";
         }
         cw << "))\n\n";
       }
