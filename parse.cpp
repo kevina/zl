@@ -147,7 +147,7 @@ Error * error(const Syntax * p, const char * fmt, ...) {
   va_end(ap);
   if (p) {
     StringBuf buf = res->extra;
-    buf.printf(">>%p %s\n", p, ~p->to_string());
+    buf.printf(">>%p %s %s\n", p, ~p->to_string(), ~p->sample_w_loc(80));
     res->extra = buf.freeze();
   }
   return res;
@@ -390,7 +390,7 @@ void ReparseSyntax::do_instantiate(bool no_throw) const {
     //printf("reparsing as %s\n", ~parse_as);
     cached_val = reparse(parse_as, outer());
   } else if (!no_throw) {
-    fprintf(stderr, "Can Inst %s\n", ~sample_w_loc());
+    fprintf(stderr, "Can't Inst %s\n", ~sample_w_loc());
     abort();
   }
 }

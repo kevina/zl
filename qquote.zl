@@ -1,45 +1,53 @@
-Syntax * parse_quasiquote(Syntax * in, Environ * env) {
+Syntax * uint_to_syntax(unsigned i) {
+  char buf[16];
+  snprintf(buf, 16, "%u", i);
+  UnmarkedSyntax * s = string_to_syntax(buf);
+  return (Syntax *)s;
+}
+
+Syntax * parse_quasiquote(Syntax * qq, Environ * env) {
   Mark * outer_mark = new_mark(prelude_envss);
-  Match * m = match_f(0, raw_syntax (pattern), in);
-  //printf("XXX");
-  //dump_syntax(m->var(syntax pattern));
-  SyntaxList * aqs = gather_antiquotes(m->var(syntax pattern));
-  if (aqs->empty()) {
+  Match * m = match_f(0, raw_syntax (pattern aqs), qq);
+  printf("XXX: ");
+  dump_syntax(qq);
+  Syntax * aqs = m->var(syntax aqs);
+  if (aqs->num_args() == 0) {
     return replace(syntax {replace(syntax_d pattern, repl, mark);}, m, outer_mark);
   } else {
     UnmarkedSyntax * res = syntax {
-      replace(syntax_d pattern, match_antiquotes(repl, syntax_d $1, $2, NULL), mark);
+      replace_w_antiquotes(syntax_d $1, repl, mark, $2, $3);
     };
-    return replace(res, match_local(m, aqs, aqs, NULL), outer_mark);
+    return replace(res, match_local(m, qq, uint_to_syntax(aqs->num_args()), aqs, NULL), outer_mark);
   }
 }
 
 Syntax * parse_match(Syntax * in, Environ * env) {
   Mark * mark = new_mark(prelude_envss);
-  Match * m = match_f(0, syntax (pattern, with, :match_f match_f = match_f_), in, mark);
-  Syntax * pattern = m->var(syntax pattern);
+  Match * m = match_f(0, syntax (qq, with, :match_f match_f = match_f_), in, mark);
+  Syntax * qq = m->var(syntax qq);
   Environ * lenv = temp_environ(env);
   pre_parse(replace(raw_syntax(kill_fluid (` quasiquote syntax)),
                     NULL, mark), lenv);
-  pattern = partly_expand(pattern, ExpPos, lenv);
-  // FIXME: make sure with have a syntax or quasiquote
-  //dump_syntax(pattern);
-  pattern = pattern->part(1);
-  //dump_syntax(pattern);
-  SyntaxList * aqs = gather_antiquotes(pattern);
-  pattern = mark_antiquotes(pattern, aqs);
-  SyntaxEnum * iter = aqs->elements();
+  qq = partly_expand(qq, ExpPos, lenv);
+  // FIXME: make sure with have a quasiquote
+  dump_syntax(qq);
+  Syntax * pattern = qq->arg(0);
+  dump_syntax(pattern);
+  Syntax * aqs = qq->arg(1);
+  SyntaxEnum * iter = aqs->args();
   SyntaxList * assign = new_syntax_list();
   Syntax * aq;
+  unsigned idx = 0;
   while ((aq = iter->next())) {
-    assign->append(replace(syntax {$1 = match_aq_var(m, syntax_d $2);},
-                           match_local(m, aq, aq),
+    assign->append(replace(syntax {$1 = match_aq_var(m, $2);},
+                           match_local(m, aq, uint_to_syntax(idx)),
                            mark));
+    idx++;
   }
   UnmarkedSyntax * res = syntax {({
     Match * m = match_f(repl, syntax_d $1, with, NULL);
     $2;
     m;
   });};
-  return replace(res, match_local(m, pattern, assign, NULL), mark);  
+  return replace(res, match_local(m, qq, assign, NULL), mark);  
 }

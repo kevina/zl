@@ -5443,6 +5443,13 @@ namespace ast {
     cw << "\") ";
   }
 
+  static void str_literal(CompileWriter & cw, const char * str) {
+    cw << "(s \"";
+    for (; *str; ++str)
+      escape(cw, *str);
+    cw << "\") ";
+  }
+
   void compile(TopLevelSymbolTable * tls, CompileWriter & cw) {
 
     SymbolNode * syms = *tls->front;
@@ -5614,15 +5621,25 @@ namespace ast {
                e = cw.for_macro_sep_c->syntaxes.end(); i != e; ++i)
         {
           cw << "  (. ";
-          const ReparseSyntax * s = (*i)->syn_p->maybe_reparse();
+          const Syntax * syn_p = (*i)->syn_p;
+          const Syntax * qq = NULL;
+          if (syn_p->is_a("quasiquote")) {
+            qq = syn_p;
+            syn_p = syn_p->part(1);
+          }
+          const ReparseSyntax * s = syn_p->maybe_reparse();
           if (s->cache) {
             // The cache will need to be regenerated anyway ...
-            cw << "0 ";
+            if (qq)
+              str_literal(cw, "quasiquote");
+            else
+              cw << "0 ";
             str_literal(cw, s->outer_);
-            str_literal(cw, cache_origin(s->cache));
+            str_literal(cw, s->origin);
             cw << s->outer_.size() << " ";
             cw << "0 0 ";
           } else {
+            assert(!qq);
             str_literal(cw, s->what_->what().name); // if there are marks (that matter) we have bigger problems
             str_literal(cw, s->outer_);
             if (s->parse_as.defined())

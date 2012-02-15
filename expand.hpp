@@ -5,6 +5,7 @@
 #include "parse.hpp"
 #include "hash.hpp"
 #include "vector.hpp"
+#include "peg.hpp"
 
 namespace ast {
   struct Environ;
@@ -28,6 +29,7 @@ struct ReplTable;
 
 struct Replacements : public Vector<ReplTable *> {
   bool anywhere(String s) const;
+  unsigned lookup_antiquote(const void * key) const;
   void to_string(OStream & o, PrintFlags f, SyntaxGather * = NULL) const;
   String to_string() const {
     StringBuf buf;
@@ -89,10 +91,12 @@ static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
 const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env = NULL,
                             bool match_complete_str = false, 
                             ReplTable * = NULL, 
-                            const Replacements * additional_repls = NULL);
+                            const Replacements * additional_repls = NULL,
+                            ParseAsQuasiQuote = ParseAsQuasiQuote());
 static inline const Syntax * reparse(String what, ReparseInfo p, Environ * env = NULL,
                                      ReplTable * r = NULL, 
-                                     const Replacements * additional_repls = NULL) 
+                                     const Replacements * additional_repls = NULL,
+                                     ParseAsQuasiQuote = ParseAsQuasiQuote()) 
 {
   const Syntax * res = reparse_prod(what, p, env, true, r, additional_repls);
   const_cast<Syntax *>(res)->str_ = p.orig->str();

@@ -161,7 +161,7 @@ SYNTAX_STR =
   ({SYNTAX_P} / <<reparse parm>> {RAW_TOKEN+}) EOF;
 
 QUASIQUOTE = 
-  <quasiquote> '`'({BRACE} / {BRACK}  / {SEXP_R} / '`'{SYNTAX_ID});
+  <<quasiquote>> '`'({BRACE} / {BRACK}  / {SEXP_R} / '`'{SYNTAX_ID});
 
 # 
 # Misc
@@ -281,8 +281,8 @@ MID = {ANTIQUOTE} / {RAW_ID};
 
 SID = [\a_][\a_\d]*;
 
-ANTIQUOTE = 
-  <<antiquote>> '$' ({PARAN} / <<reparse parm>> {SID} SPACING);
+ANTIQUOTE =
+  <<antiquote>> '@'?'$' ({PARAN} / <<reparse parm>> {SID} SPACING);
 
 #
 # Special tokens

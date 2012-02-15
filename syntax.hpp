@@ -662,6 +662,7 @@ namespace syntax_ns {
     SourceStr inner_;
     void * cache;
     String parse_as;
+    String origin;
     mutable Syntax * cached_val;
     const SymbolName & rwhat() const {return what_->what();}
     const Syntax * what_part() const {return what_;}
@@ -669,11 +670,11 @@ namespace syntax_ns {
     ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, cache);}
     ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, cache);}
     Reparse(const SourceStr & str) : SyntaxBase(REPARSE_TI), what_(), inner_(str), cache(), cached_val() {}
-    Reparse(const Syntax * p, const Replacements * r, void * c, String pa, const SourceStr & o, const SourceStr & i)
-      : SyntaxBase(REPARSE_TI, o), what_(p), outer_(o), inner_(i), cache(c), parse_as(pa), cached_val() {repl = r;}
+    Reparse(const Syntax * p, const Replacements * r, void * c, String pa, String ogn, const SourceStr & o, const SourceStr & i)
+      : SyntaxBase(REPARSE_TI, o), what_(p), outer_(o), inner_(i), cache(c), parse_as(pa), origin(ogn), cached_val() {repl = r;}
     Reparse(const Reparse & other) 
       : SyntaxBase(other), what_(other.what_), outer_(other.outer_), inner_(other.inner_), 
-        cache(other.cache), parse_as(other.parse_as), cached_val() {}
+        cache(other.cache), parse_as(other.parse_as), origin(other.origin), cached_val() {}
     Reparse * clone() const {return new Reparse(*this);}
     Syntax * instantiate(bool no_throw = false) const {
       if (!cached_val) do_instantiate(no_throw);

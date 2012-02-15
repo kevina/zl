@@ -241,10 +241,8 @@ make_macro stupid_hack_dont_use parse_enum;
 //
 // antiquote support
 //
-__ct_callback SyntaxList * gather_antiquotes(UnmarkedSyntax * syn);
-__ct_callback Match * match_antiquotes(Match *, UnmarkedSyntax * aqs, ...);
-__ct_callback Syntax * match_aq_var(Match *, UnmarkedSyntax *);
-__ct_callback Syntax * mark_antiquotes(Syntax * pattern, Syntax * aqs);
+__ct_callback Syntax * replace_w_antiquotes(UnmarkedSyntax *, Match *, Mark *, unsigned num, ...);
+__ct_callback Syntax * match_aq_var(Match *, unsigned idx);
 
 // 
 // misc.

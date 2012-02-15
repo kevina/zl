@@ -264,6 +264,16 @@ struct ReplTable {
   void insert(SymbolName n, const Syntax * p) {
     table.push_back(std::pair<SymbolName, const Syntax *>(n,p));
   }
+
+  typedef Vector<const void *> AntiQuotes;
+  AntiQuotes antiquotes;
+  unsigned lookup_antiquote(const void * key) const {
+    for (unsigned i = 0, sz = antiquotes.size(); i < sz; ++i) {
+      if (antiquotes[i] == key) return i;
+    }
+    return NPOS;
+  }
+
   const ast::Mark * mark;
   ExpandSourceInfo * expand_si;
   ChangeSrc<SplitSourceInfo> ci;
@@ -336,6 +346,14 @@ bool Replacements::anywhere(String s0) const {
   return false;
 }
 
+unsigned Replacements::lookup_antiquote(const void * key) const {
+  for (const_iterator i = begin(), e = end(); i != e; ++i) {
+    unsigned idx = (*i)->lookup_antiquote(key);
+    if (idx != NPOS) return idx;
+  }
+  return NPOS;
+}
+
 void Replacements::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
   for (const_iterator i = begin(), e = end(); i != e; ++i)
     (*i)->to_string(o, f, g);
@@ -368,7 +386,8 @@ void compile_for_ct(Deps & deps, Environ & env);
 
 // the slightly different C++ version
 typedef ReplTable::Table Match;
-extern "C" namespace macro_abi {
+extern "C" 
+namespace macro_abi {
   typedef const Marks Context;
   typedef MutableSyntax SyntaxList;
   typedef const ::Syntax Syntax;
@@ -415,6 +434,9 @@ const Syntax * flatten(const Syntax * p) {
 
 static const Syntax * replace(const Syntax * p, ReplTable * r, const Replacements * rs, 
                               bool * splice);
+const Syntax * replace(const Syntax * p, ReplTable::Table * match, 
+                       ReplTable::AntiQuotes * aqs, Mark * mark);
+
 static const Syntax * reparse_replace(const Syntax * new_name, 
                                       const Syntax * p, ReplTable * r);
 
@@ -617,7 +639,8 @@ struct SimpleSyntaxEnum : public SyntaxEnum {
   }
 };
 
-extern "C" namespace macro_abi {
+extern "C" 
+namespace macro_abi {
 
   Mark * new_mark_f(SymbolNode * e) {
     return new Mark(e);
@@ -822,9 +845,14 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   ReplTable * rt 
     = new ReplTable(mark, 
                     new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
+  //ParseAsQuasiQuote pqq(false);
+  if (pattern->is_a("quasiquote")) {
+    //pqq = ParseAsQuasiQuote(pattern->arg(1)->as_expandable());
+    pattern = pattern->arg(0);
+  }
   if (pattern->is_reparse("()") || pattern->is_reparse("[]")) {
     //printf("YES!\n");
-    pattern = reparse("MATCH_LIST", pattern->inner());
+    pattern = reparse("MATCH_LIST", pattern->inner());//, NULL, NULL, NULL, pqq);
   } else {
     //printf("NO! >>%s<<\n", ~pattern->what());
   }
@@ -855,7 +883,8 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
   return m;
 }
 
-extern "C" namespace macro_abi {
+extern "C" 
+namespace macro_abi {
 
   Match * match_parts_f_(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
     return match(m, pattern, with, 0, mark);
@@ -907,33 +936,36 @@ extern "C" namespace macro_abi {
     return m;
   }
 
-  Match * match_antiquotes(Match * orig_m, Syntax * aqs, ...) {
+  Syntax * replace_w_antiquotes(Syntax * qq, Match * orig_m, Mark * mark, unsigned num, ...)
+  {
     Match * m = new Match;
-    assert(aqs->is_a("@"));
-    parts_iterator i = aqs->args_begin(), e = aqs->args_end();
     va_list parms;
-    va_start(parms, aqs);
-    Syntax * val = va_arg(parms, const Syntax *);
+    va_start(parms, num);
     char buf[16];
-    for (; i != e; ++i) {
-      Syntax * p = *i;
-      assert(p->is_reparse());
-      snprintf(buf, 16, "$0x%lx", (unsigned long)p->outer().str.begin);
+    for (unsigned i = 0; i != num; ++i) {
+      Syntax * val = va_arg(parms, const Syntax *);
+      snprintf(buf, 16, "aq.%u", i);
       add_match_var(m, buf, val);
-      if (val)
-        val = va_arg(parms, const Syntax *);
     }
-    assert(val == NULL);
     va_end(parms);
     if (orig_m) 
       m->insert(m->end(), orig_m->begin(), orig_m->end());
-    return m;
+    
+    assert(qq->is_a("quasiquote"));
+    const Syntax * p = qq->arg(0);
+    const Syntax * aql = qq->arg(1);
+
+    ReplTable::AntiQuotes aqs;
+    for (parts_iterator i = aql->args_begin(), e = aql->args_end(); 
+         i != e; ++i)
+      aqs.push_back((*i)->as_reparse()->outer_.begin);
+    
+    return replace(p, m, &aqs, mark);
   }
 
-  const Syntax * match_aq_var(Match * m, UnmarkedSyntax * n) {
-    assert(n->is_reparse());
+  const Syntax * match_aq_var(Match * m, unsigned idx) {
     char buf[16];
-    snprintf(buf, 16, "$0x%lx", (unsigned long)n->outer().str.begin);
+    snprintf(buf, 16, "aq.%u", idx);
     Match::const_iterator i = m->begin(), e = m->end();
     for (; i != e; ++i) {
       if (i->first == buf) {
@@ -943,40 +975,21 @@ extern "C" namespace macro_abi {
     return NULL;
   }
 
-  const Syntax * mark_antiquotes(Syntax * pattern, Syntax * aqs) {
-    ReplTable * rt = new ReplTable(NULL, NULL);
-    rt->no_repl = true;
-    assert(aqs->is_a("@"));
-    parts_iterator i = aqs->args_begin(), e = aqs->args_end();
-    char buf[16];
-    for (; i != e; ++i) {
-      Syntax * p = *i;
-      assert(p->is_reparse());
-      snprintf(buf, 16, "$0x%lx", (unsigned long)p->outer().str.begin);
-      rt->insert(buf, NULL);
-    }
-    assert(pattern->is_reparse());
-    //return reparse_replace(pattern->what_part(), pattern, rt);
-    Syntax * p = pattern; ReplTable * r = rt;
-    return new ReparseSyntax(p->what_part(),
-                             combine_repl(p->repl, r),
-                             p->as_reparse()->cache, p->as_reparse()->parse_as,
-                             r->expand_source_info_str(p->outer().str),
-                             r->expand_source_info_str(p->inner().str));
-  }  
 }
 
 //
 //
 //
 
-const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
+const Syntax * replace(const Syntax * p, Match * match, ReplTable::AntiQuotes * aqs, Mark * mark) {
   ReplTable * rparms 
     = new ReplTable(mark, 
                     new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
   //new ExpandSourceInfo);
   if (match)
     rparms->table = *match;
+  if (aqs)
+    rparms->antiquotes = *aqs;
   //printf("tREPLACE: %s\n", ~p->to_string());
   //rparms->macro_call = Macro::macro_call;
   //rparms->macro_def = Macro::macro_def;
@@ -997,7 +1010,7 @@ const Syntax * replace(const Syntax * p, Match * match, Mark * mark) {
 }
 
 const Syntax * macro_abi::replace(const UnmarkedSyntax * p, Match * match, Mark * mark) {
-  return ::replace(p, match, mark);
+  return ::replace(p, match, NULL, mark);
 }
 
 struct ReplToApply {
@@ -1029,13 +1042,14 @@ struct ReplToApply {
 
 const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env,
                             bool match_complete_str,
-                            ReplTable * r, const Replacements * additional_repls)
+                            ReplTable * r, const Replacements * additional_repls,
+                            ParseAsQuasiQuote pqq)
 {
   //printf("REPARSE %s AS %s\n", ~p.str.to_string(), ~what);
   //printf("....... %s\n", ~p.orig->sample_w_loc());
   ReplToApply to_apply(p.repl, r, additional_repls);
   const Syntax * res;
-  res = parse_prod(what, p.str, env, &to_apply.combined_repls, p.cache, match_complete_str);
+  res = parse_prod(what, p.str, env, &to_apply.combined_repls, p.cache, match_complete_str, pqq);
   //printf("PARSED STRING %s\n", ~res->to_string());
   res = to_apply.apply(res);
   //printf("REPARSE %s RES: %s\n", "??"/*~p->to_string()*/, ~res->to_string());
@@ -1101,7 +1115,10 @@ static const Syntax * replace(const Syntax * p,
     return SYN(p, r->mark, r->expand_source_info(p));
   } else if (p->is_a("mid")/* && r->have(*p->arg(0))*/) {
     const Syntax * res = try_mid(p->arg(0), p, r, rs, splice_r);
-    if (!res) goto def;
+    if (!res) {
+      //printf("MID MATCH FAILED %s\n", ~p->arg(0)->to_string());
+      goto def;
+    }
     return res;
   } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f")) {
     ChangeSrc<ExpandSourceInfo> ci(r);
@@ -1144,6 +1161,7 @@ static const Syntax * reparse_replace(const Syntax * new_name,
   return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->what_part())),
                            combine_repl(p->repl, r),
                            p->as_reparse()->cache, p->as_reparse()->parse_as,
+                           p->as_reparse()->origin,
                            r->expand_source_info_str(p->outer().str),
                            r->expand_source_info_str(p->inner().str));
 }
@@ -1209,7 +1227,8 @@ const Syntax * replace_context(const Syntax * p, const Marks * context) {
   }
 }
 
-extern "C" namespace macro_abi {
+extern "C" 
+namespace macro_abi {
 
   Context * empty_context() {
     return NULL;
@@ -1228,7 +1247,8 @@ extern "C" namespace macro_abi {
 //
 //
 
-extern "C" namespace macro_abi {
+extern "C" 
+namespace macro_abi {
   
   const UnmarkedSyntax * string_to_syntax(const char * str) {
     return parse_str("SYNTAX_STR", SourceStr(str));
@@ -1689,7 +1709,8 @@ SyntaxEnum * partly_expand_list(const Syntax * p, Position pos, Environ & env) {
   return new PartlyExpandSyntaxEnum(new SimpleSyntaxEnum(p->args_begin(), p->args_end()), pos, &env);
 }
 
-extern "C" namespace macro_abi {
+extern "C" 
+namespace macro_abi {
   
   SyntaxEnum * partly_expand_list(SyntaxEnum * l, Position pos, Environ * env) {
     return new PartlyExpandSyntaxEnum(l, pos, env);
@@ -2067,9 +2088,12 @@ void load_macro_lib(ParmString lib, Environ & env) {
     Syntaxes * i = (Syntaxes *)dlsym(lh, "_syntaxes");
     Syntaxes * e = i + *syntaxes_size;
     for (; i != e; ++i) {
-      if (i->what) {
+      if (i->what && strcmp(i->what, "quasiquote") == 0) {
+        i->syn = parse_str_as_quasiquote(i->parse_as, SourceStr(i->str, i->str + i->len));
+      } else if (i->what) {
         i->syn = new ReparseSyntax(SYN(i->what), NULL, NULL, 
-                                   i->parse_as ? String(i->parse_as) : String(), 
+                                   i->parse_as ? String(i->parse_as) : String(),
+                                   String(), 
                                    SourceStr(i->str, i->str + i->len),
                                    SourceStr(i->str + i->inner_offset,
                                              i->str + i->inner_offset + i->inner_len));
@@ -2114,8 +2138,9 @@ Stmt * parse_kill_fluid(const Syntax * p, Environ & env) {
 // 
 //
 
-extern "C" namespace macro_abi {
-
+extern "C" 
+namespace macro_abi {
+  
   typedef ast::UserType UserType;
   typedef ast::Module Module;
   
@@ -2294,4 +2319,3 @@ extern "C" {
   }
 
 }
-
