@@ -211,7 +211,8 @@ Syntax * parse_quasiquote(Syntax * in, Environ * env);
 make_macro fluid quasiquote`syntax parse_quasiquote;
 Syntax * parse_match(Syntax * in, Environ * env);
 make_macro match parse_match;
-macro match_parts(pattern, with) {match(pattern, with, :match_f = match_parts_f_);}
+__raw(macro match_parts (pattern with @rest) 
+      (call match (. pattern with :(match_f match_parts_f_) @rest)));
 
 //
 // make_syntax_macro

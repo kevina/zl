@@ -14,8 +14,7 @@ make_macro test;
 
 Syntax * test2(Syntax * in, Environ * env) {
   Mark * fluid mark = new_mark;
-  Syntax *name, *val;
-  match(`[$name,$val], in);
+  match(`[$name,$val], in, :bind);
   return `{int $name() {return $val;}};
 }
 
@@ -23,9 +22,20 @@ make_macro test2;
 
 test2(myfun,34);
 
+Syntax * test3(Syntax * in, Environ * env) {
+  Mark * fluid mark = new_mark;
+  match_parts(`[_,name,val], in, :shadow);
+  return `{int name() {return val;}};
+}
+
+make_macro test3;
+
+test3(myfun3,34);
+
 int main() {
   printf("%d\n", test(2,4));
   printf("%d\n", myfun());
+  printf("%d\n", myfun3());
   return 0;
 }
 

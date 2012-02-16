@@ -23,31 +23,60 @@ Syntax * parse_quasiquote(Syntax * qq, Environ * env) {
 
 Syntax * parse_match(Syntax * in, Environ * env) {
   Mark * mark = new_mark(prelude_envss);
-  Match * m = match_f(0, syntax (qq, with, :match_f match_f = match_f_), in, mark);
+  Match * m = match_f(0, syntax [qq, with, :match_f match_f = match_f_], in, mark);
   Syntax * qq = m->var(syntax qq);
   Environ * lenv = temp_environ(env);
   pre_parse(replace(raw_syntax(kill_fluid (` quasiquote syntax)),
                     NULL, mark), lenv);
   qq = partly_expand(qq, ExpPos, lenv);
   // FIXME: make sure with have a quasiquote
-  dump_syntax(qq);
+  //dump_syntax(qq);
   Syntax * pattern = qq->arg(0);
-  dump_syntax(pattern);
+  //dump_syntax(pattern);
+  //dump_syntax(m->var(syntax with));
   Syntax * aqs = qq->arg(1);
-  SyntaxEnum * iter = aqs->args();
   SyntaxList * assign = new_syntax_list();
-  Syntax * aq;
   unsigned idx = 0;
-  while ((aq = iter->next())) {
-    assign->append(replace(syntax {$1 = match_aq_var(m, $2);},
-                           match_local(m, aq, uint_to_syntax(idx)),
-                           mark));
-    idx++;
+  bool bind = in->flag(syntax bind) != NULL;
+  bool shadow = in->flag(syntax shadow) != NULL;
+  UnmarkedSyntax * assign_pattern;
+  if (shadow)
+    m = match_f(m, syntax new_repl, replace_context(syntax repl, get_context(in)));
+  if (aqs->num_args() == 0) {
+    // don't use quasiquote if not needed
+    qq = pattern;
+  } else {
+    if (bind)
+      assign_pattern = syntax {Syntax * $1 = match_aq_var(new_repl, $2);};
+    else
+      assign_pattern = syntax {$1 = match_aq_var(new_repl, $2);};
+    SyntaxEnum * iter = aqs->args();
+    Syntax * aq;
+    while ((aq = iter->next())) {
+      assign->append(replace(assign_pattern,
+                             match_local(m, aq, uint_to_syntax(idx)),
+                             mark));
+      idx++;
+    }
   }
-  UnmarkedSyntax * res = syntax {({
-    Match * m = match_f(repl, syntax_d $1, with, NULL);
-    $2;
-    m;
-  });};
-  return replace(res, match_local(m, qq, assign, NULL), mark);  
+  UnmarkedSyntax * res;
+  if (!bind && !shadow) {
+    res = syntax {({
+          Match * new_repl = match_f(repl, syntax_d $1, with, NULL);
+          $2;
+          new_repl;
+        });};
+  } else if (shadow) {
+    res = syntax {
+      __shadow Match * fluid new_repl = match_f(repl, syntax_d $1, with, NULL);
+      $2;
+    };
+  } else {
+     res = syntax {
+      Match * new_repl = match_f(repl, syntax_d $1, with, NULL);
+      $2;
+    };
+  }
+  return replace(res, match_local(m, qq, assign, NULL), mark);
 }
+
