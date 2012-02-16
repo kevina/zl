@@ -221,8 +221,11 @@ RAW_TOKEN = ANTIQUOTE / STRING / CHAR / BRACE / PARAN / BRACK / RAW_ID / CONST /
 RAW_ID : "identifier" = 
   {[@$\a_][$\a_\d]*} SPACING;
 
-BASIC_ID : "identifier" =
-  <<mid>> {MID} /  <fluid> "fluid" {RAW_ID} / {RAW_ID};
+SIMPLE_ID : "identifier" =
+  <<mid>> {MID} / {RAW_ID};
+
+BASIC_ID = 
+  <fluid> "fluid" {SIMPLE_ID} / {SIMPLE_ID};
 
 ID_W_TEMPLATE = 
   {TEMPLATE_ID} / {BASIC_ID};
