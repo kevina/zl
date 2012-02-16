@@ -1497,7 +1497,9 @@ const Syntax * partly_expand(const Syntax * p, Position pos, Environ & env, unsi
         return partly_expand(reparse("BLOCK", p->outer(), &env), pos, env, flags);
     } else if (what == "@{}" && !(flags & EXPAND_NO_BLOCK_LIST)) {
       ReparseInfo r = p->inner();
-      const Syntax * p0 = reparse_prod("STMTE", r, &env);
+      const Syntax * p0 = pos == ExpPos 
+        ? reparse_prod("EXP_", r, &env)
+        : reparse_prod("STMTE", r, &env);
       if (r.str.empty()) {
         const_cast<Syntax *>(p0)->str_ = p->str();
         return partly_expand(p0, pos, env, flags);

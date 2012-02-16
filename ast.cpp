@@ -383,7 +383,9 @@ namespace ast {
   void reparse_ast_nodes(ReparseInfo r, Environ & env, C * container) 
   {
     while (!r.str.empty()) {
-      const Syntax * p = reparse_prod("STMT", r, &env);
+      const Syntax * p = POS == ExpPos 
+        ? reparse_prod("EXP_", r, &env)
+        : reparse_prod("STMT", r, &env);
       parse_ast_node<POS>(p, env, container);
     }
   }

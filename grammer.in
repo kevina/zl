@@ -306,6 +306,7 @@ TOKENS = <(...)> {TOKEN}*;
 STMTS = <@> {STMT}*; # FIXME: Eventually remove
 
 STMTE = {STMT} / <noop> EOF;
+EXP_  = {EXP} ";"?;
 
 SPLIT_TOKEN = !"," RAW_TOKEN;
 SPLIT = <.> (EOF / {SPLIT_ITEM} ("," {SPLIT_ITEM})* EOF) ;
@@ -319,7 +320,6 @@ PARM : "macro paramater" =
 
 PARM_ : "macro paramater" = 
    {TOKEN} EOF / <(...)> {TOKEN}+ EOF;
-
 
 EOF = SPACING !_ ;
 

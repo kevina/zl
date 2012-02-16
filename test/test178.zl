@@ -4,9 +4,9 @@ Syntax * test(Syntax * in, Environ * env) {
   Syntax *a, *b;
   match(`[$a,$b], in);
   printf("---\n");
-  Syntax * c = `{1 + $a;};
+  Syntax * c = `{1 + $a};
   Syntax * d = `(plus $(b) $c);
-  Syntax * e = `{$(d) + 8;};
+  Syntax * e = `{$(d) + 8};
   return e;
 }
 

@@ -1843,6 +1843,7 @@ const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
     ParseErrors errors;
     const char * e0 = p->match_f(str, errors, env);
     assert(e0 == e);
+    //if (match_complete_str) abort();
     //if (what == "SYNTAX_STR") abort();
     throw errors.to_error(new ParseSourceInfo(str, what), parse.file);
   }
