@@ -56,9 +56,11 @@ public:
 
 .class ParseClass {
 public:
-  Mark * mark;
+  Mark * mark_; // needed due to fluid bug
+  Mark * fluid mark;
 
   Match * m;
+  Match * fluid repl;
 
   Syntax * class_s;
   Environ * env;
@@ -127,12 +129,13 @@ public:
     class_s = p_;
     env = e_;
     mark = m_ ? m_ : new_mark(prelude_envss);
+    mark_ = mark;
     
     init_match();
     
     if (!body) {
       //printf("DONE (declare only) %s\n", syntax_to_string(name));
-      return replace(raw_syntax (<@ (declare_user_type name) (.type name)), m, mark);
+      return `(<@ (declare_user_type name) (.type name));
     }
 
     if (name->part(0)->eq(syntax ::)) {
@@ -142,19 +145,9 @@ public:
 
     init();
 
-    builder->add(replace(
-                   raw_syntax(add_prop ptr $1),
-                   match_local(m, Syntax::stash_ptr(this), 0),
-                   mark));
-    builder->add(replace(
-                   raw_syntax(add_prop syntax_obj $1),
-                   match_local(m, p_, 0),
-                   mark));
-    builder->add(replace(
-                   syntax {make_macro memberdecl`syntax parse_memberdecl;}, 
-                   m, mark));
-
-
+    builder->add(`(add_prop ptr $(Syntax::stash_ptr(this))));
+    builder->add(`(add_prop syntax_obj $p_));
+    builder->add(`{make_macro memberdecl`syntax parse_memberdecl;});
                  
     if (parent) {
       import_parent();
@@ -172,18 +165,9 @@ public:
     if (!vtable_i->empty())
       create_vtable();
 
-    builder->add(replace(
-                   raw_syntax (.struct _Data @$1 @$2),
-                   match_local(m, struct_p, struct_b, 0),
-                   mark));
-    builder->add(replace(
-                   raw_syntax (finalize_user_type ((` _Data tag))),
-                   m,
-                   mark));
-    builder->add(replace(
-                   raw_syntax (add_prop fields (. @$1)),
-                   match_local(m, fields, 0),
-                   mark));
+    builder->add(`(.struct _Data @$struct_p @$struct_b));
+    builder->add(`(finalize_user_type ((` _Data tag))));
+    builder->add(`(add_prop fields (. @$fields)));
 
     //module_b->append(replace(
     //                   syntax {export $1;},
@@ -193,7 +177,7 @@ public:
     create_special();
 
     Syntax * res = builder->to_syntax();
-    res = replace(raw_syntax(<@ $1 (.type name)), match_local(m, res, 0), mark);
+    res = `(<@ $res (.type name));
     //printf("DONE %s\n", syntax_to_string(name));
     //dump_syntax(res);
     //printf("---\n");
@@ -207,6 +191,7 @@ public:
       name = replace(syntax anon, m, mark);
       m = match_f(m, syntax name, name);
     }
+    repl = m;
     body = m->var(syntax body);
   }
 
@@ -253,6 +238,7 @@ public:
     m = match_f(m, syntax is_method, replace_context(syntax is_method, context));
     m = match_f(m, syntax is_static, replace_context(syntax is_static, context));
     m = match_f(m, syntax memberdecl, replace_context(syntax memberdecl, context));
+    repl = m;
     
     init_special_funs();
   }
@@ -283,9 +269,9 @@ public:
     register_field(m->var(syntax _parent), parent_s,
                    replace(raw_syntax (parent_n), m, mark));
     
-    builder->add(replace(syntax {macro cast_up(p) {&(*p).._parent;}}, m, mark));
-    builder->add(replace(syntax {macro cast_down(p) {reinterpret_cast<name *>(p);}}, m, mark));
-    builder->add(replace(syntax {make_subtype parent_n cast_up cast_down;}, m, mark));
+    builder->add(`{macro cast_up(p) {&(*p).._parent;}});
+    builder->add(`{macro cast_down(p) {reinterpret_cast<name *>(p);}});
+    builder->add(`{make_subtype parent_n cast_up cast_down;});
   }
 
   Syntax * parse_body() {
@@ -294,13 +280,13 @@ public:
     Syntax * member;
     while ((member = itr->next)) {
       //printf("MEMBER: %s\n", syntax_to_string(member));
-      Match * m0 = match_parts_f(m, raw_syntax (what n @ type @_), member);
-      if (!m0) {
+      match_parts(:shadow, `(what n @ type @_), member);
+      if (!repl) {
         builder->add(member);
         continue;
       }
 
-      const char * what = syntax_to_string(m0->var(syntax what));
+      const char * what = syntax_to_string(repl->var(syntax what));
 
       // ignore access control labels for now
       if (strcmp(what, "label")==0) continue;
@@ -308,13 +294,13 @@ public:
       Syntax * err = NULL;
       if (strcmp(what, "var")==0) {
         parse_class_var(member, struct_b);
-        register_field(m0->var(syntax n), NULL, m0->var(syntax type));
+        register_field(repl->var(syntax n), NULL, repl->var(syntax type));
       } else if (strcmp(what, "alias")==0) {
-        Match * m0 = match_parts_f(m, raw_syntax (what n type value @_), member);
+        match_parts(:shadow, `(what n type value @_), member);
         //builder->add(replace(raw_syntax (macro n (:(this (reparse this this))) value), m0, mark));
-        builder->add(replace(syntax {macro n (:this ths = this) {({__shadow typeof(ths) fluid this = ths; value;});}}, m0, mark));
+        builder->add(`{macro n (:this ths = this) {({__shadow typeof(ths) fluid this = ths; value;});}});
         if (member->flag(syntax need_constructor))
-          register_field(m0->var(syntax n), NULL, m0->var(syntax type));
+          register_field(repl->var(syntax n), NULL, repl->var(syntax type));
       } else if (strcmp(what, "fun")==0) {
         err = parse_class_fun(member, NULL);      
       } else if (strcmp(what, "add_prop")==0) {
@@ -323,7 +309,7 @@ public:
         builder->add(member);
       }
       if (err) return err;
-      exports->append(m0->var(syntax n));
+      exports->append(repl->var(syntax n));
     }
     return NULL;
   }
@@ -338,7 +324,7 @@ public:
       //destrtr = destructor;
       return;
     } else if (need_destructor) {
-      destrtr = partly_expand(replace(syntax{void * _destructor();}, m, mark), FieldPos, lenv);
+      destrtr = partly_expand(`{void * _destructor();}, FieldPos, lenv);
     }
     if (destrtr)
       parse_class_fun(destrtr, &destructor_collect);
@@ -348,15 +334,12 @@ public:
 
     SyntaxList * flags = new_syntax_list();
     if (parent_vtable) // inherit parent vtable if one
-      flags->append_flag(replace(raw_syntax(public $1), 
-                                 match_local(m, parent_vtable_n, NULL), mark));
+      flags->append_flag(`(public $parent_vtable_n));
     if (m->var(syntax vtable_flag))
       flags->append_flag(m->var(syntax vtable_flag));
     
     // create new vtable class, 
-    vtable = replace (raw_syntax(vtable_class _VTable @$1 ({...} $2)),
-                      match_local(m, flags, vtable_b, 0),
-                      mark);
+    vtable = `(vtable_class _VTable @$flags ({...} $vtable_b));
     
     // create static vtable obj
     // create init function
@@ -364,48 +347,39 @@ public:
     builder->add(vtable);
     SyntaxList * parent_init = new_syntax_list();
     if (parent_vtable)
-      parent_init->append(replace(syntax {parent_n::_vtable_init(_vt);}, m, mark));
+      parent_init->append(`{parent_n::_vtable_init(_vt);});
     //builder->add(replace(raw_syntax (vtable_class _VTable), m, mark));
-    builder->add(replace(
-                       syntax {static void _vtable_init(_VTable * _vt) {$1; $2;}},
-                       match_local(m, parent_init, vtable_i, 0),
-                       mark));
-    exports->append(replace(syntax _vtable_init, m, mark));
+    builder->add(`{static void _vtable_init(_VTable * _vt) {$parent_init; $vtable_i;}});
+    exports->append(``_vtable_init);
     
-    builder->add(replace(
-                     syntax {static __static_constructor void _init() {/*printf("INIT BASE VTABLE%c", 0x0A);*/ 
-                                                                       _vtable_init(&_vtable);}},
-                     m, mark));
+    builder->add(`{static __static_constructor void _init() {/*printf("INIT BASE VTABLE%c", 0x0A);*/ 
+                                                             _vtable_init(&_vtable);}});
     
     //printf("Adding _vptr\n");
     if (parent_vtable) {
-      builder->add(replace(
-                     syntax {macro _vptr (:this ths = this) 
-                       {(_VTable *)(implicit_ptr_cast<parent_n>(ths)->_vptr);}},
-                     m, mark));
+      builder->add(`{macro _vptr (:this ths = this) 
+                       {(_VTable *)(implicit_ptr_cast<parent_n>(ths)->_vptr);}});
     } else {
-      Syntax * v = replace(raw_syntax (var (mid _vptr) (.ptr (mid _VTable))), m, mark);
+      Syntax * v = `(var (mid _vptr) (.ptr (mid _VTable)));
       parse_class_var(v, struct_p); // Note: beginning of structure but end of module
-      builder->add(replace(
-                     syntax {macro _set_vptr (:this ths = this, other) 
-                       {(*implicit_ptr_cast<name>(ths)).._vptr = other;}}, 
-                     m, mark));
+      builder->add(`{macro _set_vptr (:this ths = this, other) 
+                       {(*implicit_ptr_cast<name>(ths)).._vptr = other;}});
     }
-    exports->append(replace(syntax _vptr, m, mark));
-    Syntax * assign = replace(syntax (_set_vptr(&_vtable)), m, mark);
+    exports->append(``_vptr);
+    Syntax * assign = `{_set_vptr(&_vtable);};
     need_constructor = true;
     add_constructor_code(assign);
     need_copy_constructor = true;
     copy_constructor_code->append(assign);
     
-    exports->append(replace(syntax _VTable, m, mark));
-    exports->append(replace(syntax _VTable`outer, m, mark));
+    exports->append(``_VTable);
+    exports->append(``_VTable`outer);
     
     add_static_vtable();
   }
 
   virtual void add_static_vtable() {
-    builder->add(replace(syntax {static _VTable _vtable;}, m, mark));
+    builder->add(`{static _VTable _vtable;});
   }
 
   SyntaxList * get_constructor_code() {
@@ -444,24 +418,20 @@ public:
   };
 
   Syntax * prep_constructor(Syntax * constructor) {
-    Match * m0 = match_parts_f(m, raw_syntax (w n parms ret @ body @_), constructor);
+    match_parts(:shadow, `(w n parms ret @ body @_), constructor);
     InitCode init_code;
     init_code.init(constructor->flag(syntax init));
     SyntaxList * code = new_syntax_list();
     for (ConstructorCode * cur = constructor_code; cur; cur = cur->next) {
       Syntax * c = cur->name ? init_code.find(cur->name) : NULL;
       if (c) {
-        code->append(replace(raw_syntax(construct (kill_const (-> this $1))
-                                        $2 . $3), 
-                             match_local(m0, cur->field, cur->type, c, 0), mark));
+        code->append(`(construct (kill_const (-> this $(cur->field))) $(cur->type) . $c)); 
       } else {
         if (cur->code) code->append(cur->code);
       }
     }
-    if (m0->var(syntax body)) {
-      constructor =
-        replace(raw_syntax(w n parms ret (block $1 body)),
-                match_local(m0, code, 0), mark);
+    if (repl->var(syntax body)) {
+      constructor = `(w n parms ret (block $code body));
     }
     return constructor;
   }
@@ -484,8 +454,7 @@ public:
     if (num_constructors == 0 && need_constructor) {
       constructor = 
         partly_expand(
-          replace(syntax{void _constructor() {$1;}}, 
-                  match_local(m, get_constructor_code(), 0), mark), 
+          `{void _constructor() {$(get_constructor_code());}}, 
           FieldPos, lenv);
       parse_class_fun(constructor, NULL);
     }
@@ -493,8 +462,7 @@ public:
     if (!builder->have_copy_constructor() && need_copy_constructor) {
       constructor = 
         partly_expand(
-          replace(syntax{void _constructor(const name & other) {$1;}}, 
-                  match_local(m, copy_constructor_code, 0), mark), 
+          `{void _constructor(const name & other) {$copy_constructor_code;}},
           FieldPos, lenv);
       parse_class_fun(constructor, NULL);
     }
@@ -502,24 +470,21 @@ public:
     if (!builder->have_assign() && need_assign && builder->can_have_assign()) {
       Syntax * assign = 
         partly_expand(
-          replace(syntax{void _assign(const name & other) {$1;}}, 
-                  match_local(m, assign_code, 0), mark), 
+          `{void _assign(const name & other) {$assign_code;}}, 
           FieldPos, lenv);
       // don't allow virtual assign for now
       parse_class_fun(assign, NULL);
     }
 
     if (destructor) {
-      Match * m0 = match_parts_f(m, raw_syntax ($w $n $parms $ret @ $body @rest), destructor);
-      if (m0->var(syntax $body))
+      match_parts(:shadow, `(w n parms ret @ body @rest), destructor);
+      if (repl->var(syntax body))
         destructor =
-          replace(raw_syntax($w $n $parms (.ptr (void)) (block $body $1 (return this)) @rest), 
-                  match_local(m0, destructor_code, 0), mark);
+          `(w n parms (.ptr (void)) (block body $destructor_code (return this)) @rest);
     } else if (need_destructor) {
       destructor =
         partly_expand(
-          replace(syntax{void * _destructor() {$1; return this;}}, 
-                  match_local(m, destructor_code, 0), mark), 
+          `{void * _destructor() {$destructor_code; return this;}}, 
           FieldPos, lenv);
     }
     if (destructor)
@@ -528,43 +493,43 @@ public:
 
   virtual void parse_class_var(Syntax * p, SyntaxList * struct_b) {
     //printf("parse_class_var: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_f(m, raw_syntax (n t @rest), p);
+    match(:shadow, `(n t @rest), p);
     bool is_static = p->flag(syntax static);
     
     // FIXME: handle flags
     if (is_static) {
-      builder->add(replace(raw_syntax(var (` (mid n) internal) (mid t) (mid @rest)), m, mark));
-      builder->add(replace(syntax {macro n () :id {n`internal;}}, m, mark));
+      builder->add(`(var (` (mid n) internal) (mid t) (mid @rest)));
+      builder->add(`{macro n () :id {n`internal;}});
     } else {
-      struct_b->append(replace(raw_syntax((mid t) (mid n)), m, mark));
+      struct_b->append(`((mid t) (mid n)));
       // FIXME: (name *)(this) may cast away const
-      builder->add(replace(syntax {macro n (:this ths = this) :id {(*(name *)(ths))..n;}}, m, mark));
+      builder->add(`{macro n (:this ths = this) :id {(*(name *)(ths))..n;}});
     }
   }
 
   virtual Syntax * parse_class_fun(Syntax * p, struct Collect * collect) {
     //printf("parse_class_fun: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_f(m, raw_syntax (n parms0 ret @ body :static @rest), p);
-    m = match_f(m, raw_syntax (@parms), m->var(syntax parms0));
+    match(:shadow, `(n parms0 ret @ body :static @rest), p);
+    Match * & m = repl;
+    m = match_f(m, raw_syntax(@parms), m->var(syntax parms0));
     //printf("STATIC? %d   VIRTUAL? %d\n", is_static, is_virtual);
     //assert(!(is_static && is_virtual)); // FIXME Error message
 
-    Syntax * class_name = expand_id(m->var(syntax name), lenv);
-    Syntax * name = expand_id(m->var(syntax n), lenv);
+    Syntax * class_name = expand_id(repl->var(syntax name), lenv);
+    Syntax * name = expand_id(repl->var(syntax n), lenv);
     //printf("<><>%s %s\n", syntax_to_string(class_name), syntax_to_string(name));
     if (name->eq(class_name)) {
-      constructors->append
-        (replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark));
+      constructors->append(`(fun _constructor (. @parms) ret body @rest));
       return NULL;
     } else if (name->eq(raw_syntax (operator =))) {
       //printf("ASSIGN\n");
       // just change the name, nothing special needs to be done
-      m = match_f(m, syntax n, replace(syntax _assign, m, mark));
+      repl = match_f(repl, syntax n, ``_assign);
     } else if (!name->simple() && name->part(0)->eq(syntax ~) 
                && expand_id(name->part(1), lenv)->eq(class_name)) {
       //printf("DESTRUCTOR\n");
       // change the return type to "void *", the body will get fixed up later
-      destructor = replace(raw_syntax(fun _destructor (. @parms) (.ptr void) body @rest), m, mark);
+      destructor = `(fun _destructor (. @parms) (.ptr void) body @rest);
       return parse_class_fun(destructor, &destructor_collect);
     }
 
@@ -604,22 +569,22 @@ public:
           //printf("W/DEFAULT MAN\n");
           macro_parms->append(replace(raw_syntax(reparse name default), m0, mark));
           if (!now_optional)
-            typed_parms->append(replace(syntax @, NULL, mark));
+            typed_parms->append(``@);
           now_optional = true;
         } else {
-          macro_parms->append(replace(raw_syntax(reparse $1), match_local(m0, arg, NULL), mark));
+          macro_parms->append(`(reparse $arg));
         }
         typed_parms->append(parm);
         call_parms->append(make_mid(arg));
       } else if (parm->eq(syntax ...)) {
-        macro_parms->append(replace(raw_syntax (reparse @varargs), NULL, mark));
+        macro_parms->append(`(reparse @varargs));
         typed_parms->append(parm);
-        call_parms->append(replace(syntax varargs, NULL, mark));
+        call_parms->append(``varargs);
       }
       ++i;
     }
     if (!is_static)
-      macro_parms->append_flag(replace(raw_syntax(this (reparse ths this)), m, mark));
+      macro_parms->append_flag(`(this (reparse ths this)));
     SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     
     bool w_body = !collect && m->var(syntax body);
@@ -630,56 +595,43 @@ public:
       collect->this_type = this_type;
     }
     
-    Syntax * call_nv = mk_call(replace(syntax n`internal, m, mark),
+    Syntax * call_nv = mk_call(``n`internal,
                                !is_static ? replace(syntax ths, m, mark) : NULL, 
                                call_parms);
     //printf("TP: %s\n", syntax_to_string(typed_parms));
     //builder->add(replace(syntax {macro n`non_virtual ($1) :typed_parms($2) {$3;}},
     //                     match_local(m, macro_parms, typed_parms, call_nv, 0), mark));
-    builder->add(replace(raw_syntax (macro (` n non_virtual) (@$1) :(typed-parms (. @$2)) $3),
-                         match_local(m, macro_parms, typed_parms, call_nv, 0), mark));
+    builder->add(`(macro (` n non_virtual) (@$macro_parms) :(typed-parms (. @$typed_parms)) $call_nv));
     
     if (is_virtual) {
       //m = match_f(m, syntax fpn, m->var(syntax n));
       if (virtual_override) {
         // don't define a new method but bring the parent method into
         // the same scope
-        builder->add(replace(
-                       raw_syntax (bring_to_this_scope (:: parent_n n)),
-                       m, mark));
+        builder->add(`(bring_to_this_scope (:: parent_n n)));
       } else {
-        Syntax * call_v = mk_call(replace(raw_syntax (-> (-> this _vptr) fpn), m, mark),
-                                  replace(syntax this, m, mark),
-                                  call_parms);
-        builder->add(replace(
-                       //syntax {macro n ($1) :typed_parms($2) {({__shadow name * fluid this = ths; $3;});}},
-                       raw_syntax (macro n (@$1) :(typed-parms (. @$2)) 
-                                  (eblock (:shadow var (fluid this) $3 ths) $4)),
-                       match_local(m, macro_parms, typed_parms, ptr_self, call_v, 0),
-                       mark));
-        m = match_f(m, syntax pfun, 
-                  replace(raw_syntax (.ptr (.fun (.(mid $1)) (mid ret))), match_local(m, new_parms, 0), mark));
-        vtable_b->append(replace(raw_syntax (var (mid fpn) (mid pfun)), m, mark));
-        vtable_b->append(replace(raw_syntax (add_prop fpn this_type $1), 
-                                 match_local(m, this_type, 0), mark));
+        Syntax * call_v = mk_call(`(-> (-> this _vptr) fpn), ``this, call_parms);
+        builder->add(`(macro n (@$macro_parms) :(typed-parms (. @$typed_parms)) 
+                         (eblock (:shadow var (fluid this) $ptr_self ths) $call_v)));
+        Syntax * pfun = `(.ptr (.fun (. $new_parms) ret));
+        vtable_b->append(`(var fpn $pfun));
+        vtable_b->append(`(add_prop fpn this_type $this_type)); 
       }
       if (p->flag(syntax pure_virtual)) {
-        vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) 0), m, mark));
+        vtable_i->append(`(assign (-> _vt fpn) 0));
       } else {
-        vtable_i->append(replace(raw_syntax (assign (-> _vt fpn) (` n internal)), m, mark));
+        vtable_i->append(`(assign (-> _vt fpn) (` n internal)));
         //vtable_i->append(replace(syntax {printf("%p%c", _vt->fpn, 0xA);}, m, mark));
       }
     } else {
       //printf("OK HERE WE GO: %s %s\n", 
       //       syntax_to_string(macro_parms),
       //       syntax_to_string(typed_parms));
-      builder->add(replace(raw_syntax (macro n (@$1) :(typed-parms (. @$2)) $3),
-                           //syntax {macro n ($1) :typed_parms($2) {$3;}},
-                           match_local(m, macro_parms, typed_parms, call_nv, 0), mark));
+      builder->add(`(macro n (@$macro_parms) :(typed-parms (. @$typed_parms)) $call_nv));
     }
-    builder->add(replace(raw_syntax (add_prop (fun n (. @parms)) is_method true), m, mark));
+    builder->add(`(add_prop (fun n (. @parms)) is_method true));
     if (is_static)
-      builder->add(replace(raw_syntax (add_prop (fun n (. @parms)) is_static true), m, mark));
+      builder->add(`(add_prop (fun n (. @parms)) is_static true));
 
     //printf("DONE %s\n", syntax_to_string(m->var(syntax n)));
     return NULL;
@@ -723,18 +675,15 @@ public:
 
   virtual Syntax * mk_call(Syntax * fun, Syntax * ths, SyntaxList * parms) {
     if (ths)
-      return replace(raw_syntax (call $1 (. $2 $3)), 
-                     match_local(NULL, fun, ths, parms, NULL), mark);
+      return `(call $fun (. $ths $parms));
     else
-      return replace(raw_syntax (call $1 (. $2)), 
-                     match_local(NULL, fun, parms, NULL), mark);
+      return `(call $fun (. $parms));
   }
 
   virtual SyntaxList * mk_method_parms(Syntax * this_type, SyntaxEnum * parms) {
     SyntaxList * new_parms = new_syntax_list();
     if (this_type) 
-      new_parms->append(replace(raw_syntax($1 (fluid this)), 
-                                match_local(NULL, this_type, NULL), mark));
+      new_parms->append(`($this_type (fluid this)));
     new_parms->append_all(parms);
     return new_parms;
   }
@@ -754,7 +703,7 @@ public:
     return NULL;
   }
 
-  virtual Syntax * mk_method_defn(Match * m, Syntax * ptr_self,
+  virtual Syntax * mk_method_defn(Match * fluid repl, Syntax * ptr_self,
                                   bool static_, bool inline_, bool virtual_override, 
                                   Syntax * this_type, SyntaxEnum * parms,
                                   bool w_body) {
@@ -765,18 +714,16 @@ public:
       Syntax * body0;
       if (virtual_override) {
         body0 =
-          replace(raw_syntax(block (var :__shadow (fluid this) $1 (cast (.ptr (:const name)) this)) 
-                              body), match_local(m, ptr_self, 0), mark);
+          `(block (var :__shadow (fluid this) $ptr_self (cast (.ptr (:const name)) this)) body);
       } else {
-        body0 = m->var(syntax body);
+        body0 = repl->var(syntax body);
       }
       body->append(mk_method_body(this_type, body0));
     }
     SyntaxList * flags = new_syntax_list();
-    if (inline_)  flags->append_flag(replace(syntax inline, NULL, mark));
-    if (!static_) flags->append_flag(replace(syntax prop_w_this, NULL, mark));
-    return replace(raw_syntax (@$1 fun (` n internal) (. $2) ret @$3),
-                   match_local(m, flags, new_parms, body, 0), mark);
+    if (inline_)  flags->append_flag(``inline);
+    if (!static_) flags->append_flag(``prop_w_this);
+    return `(@$flags fun (` n internal) (. $new_parms) ret @$body);
   }
 
   virtual Syntax * mk_method_body(Syntax * this_type, Syntax * body) {
@@ -807,7 +754,6 @@ public:
   // FIXME: Rename
   virtual void register_field(Syntax * name, Syntax * user_name, Syntax * type) {
     if (!user_name) user_name = name;
-    Match * m0 = match_f(m, syntax n, name);
     const UserType * ut = user_type_info(type, lenv);
 
     fields->append(name);
@@ -815,7 +761,7 @@ public:
     if (ut && ut->have_default_constructor()) {
       need_constructor = true;
       add_constructor_field(name, user_name, type, 
-        replace(raw_syntax(member (kill_const (mid n)) (call _constructor (.))), m0, mark));
+        `(member (kill_const $name) (call _constructor (.))));
     } else {
       add_constructor_field(name, user_name, type, NULL);
     }
@@ -823,63 +769,60 @@ public:
     if (ut && ut->have_copy_constructor())
       need_copy_constructor = true;
     copy_constructor_code->append(
-      replace(raw_syntax(init-assign (kill_const (mid n)) (member other (mid n))), 
-              m0, mark));
+      `(init-assign (kill_const $name) (member other $name)));
     
     if (ut && ut->have_assign())
       need_assign = true;
-    assign_code->append(
-      replace(raw_syntax(assign (mid n) (member other (mid n))), 
-              m0, mark));
+    assign_code->append(`(assign $name (member other $name)));
     
     if (ut && ut->have_destructor()) {
       need_destructor = true;
       destructor_code->append(
-        replace(raw_syntax(member (kill_const (mid n)) (call (` _destructor non_virtual) (.))), m0, mark));
+        `(member (kill_const $name) (call (` _destructor non_virtual) (.))));
     }
   }
 
   virtual Syntax * parse_class_fun_defn(Syntax * p) {
     //printf("parse_class_fun: %s\n", syntax_to_string(p));
-    __shadow Match * m = match_f(m, raw_syntax (n parms0 ret @ body :static @rest), p);
-    m = match_f(m, raw_syntax (@parms), m->var(syntax parms0));
+    match(:shadow, `(n parms0 ret @ body :static @rest), p);
+    match(:shadow, `(@parms), repl->var(syntax parms0));
 
-    Syntax * class_name = m->var(syntax name);
-    Syntax * name = m->var(syntax n);
+    Syntax * class_name = repl->var(syntax name);
+    Syntax * name = repl->var(syntax n);
 
     //printf("ABC>%s\n", syntax_to_string(name));
     if (name->eq(class_name)) { // constructor
-      Syntax * c = replace(raw_syntax(fun _constructor (. @parms) ret body @rest), m, mark);
+      Syntax * c = `(fun _constructor (. @parms) ret body @rest);
       c = prep_constructor(c);
       return parse_class_fun_defn(c);
     } else if (name->eq(raw_syntax (operator =))) { // assign
       // just change the name, nothing special needs to be done
       //printf("OK GOT ASSIGN\n");
-      m = match_f(m, syntax n, replace(syntax _assign, m, mark));
+      repl = match_f(repl, syntax n, ``_assign);
     } else if (!name->simple() && name->part(0)->eq(syntax ~) && name->part(1)->eq(class_name)) { // destructor
-      m = match_f(m, syntax n, replace(syntax _destructor, m, mark));
-      m = match_f(m, syntax ret, replace(raw_syntax(.ptr void), m, mark));
-      m = match_f(m, syntax body, replace(raw_syntax(block body $1 (return this)), match_local(m, destructor_code, 0), mark));
-      return mk_method_defn(m, determine_ptr_self(NULL), false, false, destructor_collect.virtual_override, 
-                            destructor_collect.this_type, m->varl(syntax parms), true);
+      repl = match_f(repl, syntax n, ``_destructor);
+      repl = match_f(repl, syntax ret, `(.ptr void));
+      repl = match_f(repl, syntax body, `(block body $destructor_code (return this)));
+      return mk_method_defn(repl, determine_ptr_self(NULL), false, false, destructor_collect.virtual_override, 
+                            destructor_collect.this_type, repl->varl(syntax parms), true);
     }
 
     // FIXME: handle flags
     bool is_static = p->flag(syntax static);
     bool is_inline = p->flag(syntax inline);
 
-    if (get_symbol_prop(replace(raw_syntax(fun (:: name n) parms0), m, mark), syntax is_static, env))
+    if (get_symbol_prop(`(fun (:: name n) parms0), syntax is_static, env))
       is_static = true;
-
-    m = create_vtable_entry_name(m);
-    bool virtual_override = determine_virtual_override(m);
-    Syntax * ptr_self = determine_ptr_self(p);
-    Syntax * this_type = is_static ? NULL : determine_this_type(p, m, ptr_self, virtual_override);
-
-    SyntaxList * new_parms = mk_method_parms(this_type, m->varl(syntax parms));
     
-    return mk_method_defn(m, ptr_self, false, is_inline, virtual_override, 
-                          this_type, m->varl(syntax parms), true);
+    repl = create_vtable_entry_name(repl);
+    bool virtual_override = determine_virtual_override(repl);
+    Syntax * ptr_self = determine_ptr_self(p);
+    Syntax * this_type = is_static ? NULL : determine_this_type(p, repl, ptr_self, virtual_override);
+
+    SyntaxList * new_parms = mk_method_parms(this_type, repl->varl(syntax parms));
+    
+    return mk_method_defn(repl, ptr_self, false, is_inline, virtual_override, 
+                          this_type, repl->varl(syntax parms), true);
   }
 };
 
@@ -911,7 +854,7 @@ Syntax * parse_memberdecl(Syntax * p, Environ * env) {
     return res;
   } else if (defn->part(0)->eq(syntax var)) {
     m = match_f(m, raw_syntax(n @rest), defn);
-    return replace(raw_syntax(var (` n internal) @rest), m, pc->mark);
+    return replace(raw_syntax(var (` n internal) @rest), m, pc->mark_);
   } else {
     return defn;
   }
