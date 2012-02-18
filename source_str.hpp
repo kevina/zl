@@ -2,14 +2,12 @@
 #define SOURCE_STR__HPP
 
 bool pos_str(const SourceFile * source, const char * pos,
-             const char * pre, OStream & o, const char * post,
-             bool w_source = true);
+             const char * pre, OStream & o, const char * post);
 
 static inline bool pos_str(const SourceInfo * source, const char * pos,
-                           const char * pre, OStream & o, const char * post,
-                           bool w_source = true) 
+                           const char * pre, OStream & o, const char * post)
 {
-  return pos_str(source ? source->file() : NULL, pos, pre, o, post, w_source);
+  return pos_str(source ? source->file() : NULL, pos, pre, o, post);
 }
 
 String sample(const char * begin, const char * end, unsigned max_len = 20);
@@ -51,9 +49,6 @@ struct SourceStr : public SubStr {
   SourceStr & operator=(const char * s) {begin = s; return *this;}
   bool pos_str(const char * pre, OStream & o, const char * pos) const {
     return ::pos_str(source, begin, pre, o, pos);
-  }
-  bool end_pos_str(const char * pre, OStream & o, const char * pos) const {
-    return ::pos_str(source, end, pre, o, pos, false);
   }
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
 };

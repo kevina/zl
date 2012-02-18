@@ -159,6 +159,7 @@ foreach (@files) {
     push @zl_ops, '-xc' if $l eq 'c';
     push @zl_ops, '-xc++' if $l eq 'c++' && !$gcc_abi;
     push @zl_ops, '-xg++' if $l eq 'c++' && $gcc_abi;
+    push @zl_ops, '-pp' if ($ext eq 'i' || $ext eq 'ii');
     if ($l ne 'zls' && $l ne 'obj') {
         #print "$ZL @zl_ops $file\n";
         system($ZL, @zl_ops, $file);

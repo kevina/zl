@@ -138,12 +138,13 @@ static inline bool operator!=(SubStr x, const char * y) {
 }
 
 struct Pos {
+  String file_name;
   unsigned line;
   unsigned col;
-  Pos(unsigned l, unsigned c) : line(l), col(c) {}
+  Pos(String fn, unsigned l, unsigned c) : file_name(fn), line(l), col(c) {}
 };
 
-char * pos_to_str(Pos p, char * buf);
+void pos_to_str(Pos p, OStream & out);
 
 class OStream;
 class SourceFile;
@@ -182,18 +183,22 @@ public:
 };
 
 class SourceFile : public SourceInfo, public gc_cleanup {
+public: // but don't use
+  struct SourceChange {const char * idx; String file_name; unsigned lineno;};
 private:
   String file_name_;
   char * data_;
   unsigned size_;
+  bool pp_mode; // pp = preprocess
+  Vector<SourceChange> source_change;
   Vector<const char *> lines_;
 public:
-  SourceFile(String file) : data_(), size_(0) {read(file);}
-  SourceFile(int fd) : data_(), size_(0) {read(fd);}
+  SourceFile(String file, bool cpm = false) : data_(), size_(0), pp_mode(cpm) {read(file);}
+  SourceFile(int fd, bool cpm = false) : data_(), size_(0), pp_mode(cpm) {read(fd);}
   String file_name() const {return file_name_;}
   Pos get_pos(const char * s) const;
-  char * get_pos_str(const char * s, char * buf) const {
-    return pos_to_str(get_pos(s), buf);
+  void get_pos_str(const char * s, OStream & buf) const {
+    pos_to_str(get_pos(s), buf);
   }
   unsigned size() const {return size_;}
   const char * begin() const {return data_;}
@@ -215,9 +220,9 @@ inline const char * SourceInfo::end() const {return file()->end();}
 
 String add_dir_if_needed(String file, const SourceInfo * included_from);
 
-SourceFile * new_source_file(String file, const SourceInfo * included_from = NULL);
+SourceFile * new_source_file(String file, const SourceInfo * included_from = NULL, bool pp_mode = false);
 
-SourceFile * new_source_file(int fd);
+SourceFile * new_source_file(int fd, bool pp_mode = false);
 
 #undef NPOS
 static const unsigned NPOS = UINT_MAX;

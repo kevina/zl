@@ -44,7 +44,7 @@ prelude-fct.so: zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.i
 
 mangle-fct.so: zl zlc prelude.zlh mangle.zlp string_buf-zl.hpp string_buf-zl.cpp prelude-fct.so
 	./zlc -E mangle.zlp -o mangle.i
-	ulimit -s 1024; ./zl -C -P mangle.i > mangle-fct.log
+	ulimit -s 1024; ./zl -C -P -pp mangle.i > mangle-fct.log
 #	zls -g -fexceptions -shared -fpic -o prelude-fct.so prelude.zls mangle.zls
 
 class-gcc_abi-fct.so: zl class-gcc_abi.zl class-simple-fct.so prelude.zlh prelude.zl class.zl grammer.in

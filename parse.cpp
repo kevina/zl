@@ -50,15 +50,11 @@ void SyntaxBase::dump_type_info() {
 //
 
 bool pos_str(const SourceFile * source, const char * pos,
-             const char * pre, OStream & o, const char * post,
-             bool w_source)
+             const char * pre, OStream & o, const char * post)
 {
-  char buf[24];
   if (source) {
     o << pre;
-    if (w_source)
-      o << source->file_name() << ":";
-    o << source->get_pos_str(pos, buf);
+    source->get_pos_str(pos, o);
     o << post;
     return true;
   } else {
@@ -521,7 +517,7 @@ namespace parse_common {
     while (s != end) {
       if (*s == '\\') {
         ++s;
-        assert(s != end);
+        assert(s != end); // FIXME: Error message, unexpected end-of-string
         switch (*s) {
         case 'a': out += '\a'; break;
         case 'b': out += '\b'; break;

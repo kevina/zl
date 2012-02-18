@@ -61,6 +61,7 @@ int main(int argc, const char *argv[])
     bool gcc_abi = false;
     bool for_ct = false;
     bool load_prelude = true;
+    bool pp_mode = false;
     if (argc > offset && strcmp(argv[offset], "-d") == 0) {
       debug_mode = true;
       offset++;
@@ -90,10 +91,14 @@ int main(int argc, const char *argv[])
       load_prelude = false;
       offset++;
     }
+    if (argc > offset && strcmp(argv[offset], "-pp") == 0) {
+      pp_mode = true;
+      offset++;
+    }
     String base_name;
     String output_fn;
     if (argc > offset) {
-      code = new_source_file(argv[offset]);
+      code = new_source_file(argv[offset], NULL, pp_mode);
       const char * dot = strrchr(argv[offset], '.');
       if (!dot) {
           base_name = argv[offset];

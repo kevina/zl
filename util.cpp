@@ -8,6 +8,7 @@
 #include "iostream.hpp"
 #include "string_buf.hpp"
 #include "hash-t.hpp"
+#include "parse_common.hpp"
 
 #include <algorithm>
 
@@ -39,12 +40,17 @@ struct StringObj1 {
 
 const StringObj1 EMPTY_STRING_OBJ1 = {0, {'\0'}};
 
-char * pos_to_str(Pos p, char * buf) {
-  if (p.line == UINT_MAX)
-    strcpy(buf, "<somewhere>");
+void pos_to_str(Pos p, OStream & buf) {
+  if (p.file_name.empty())
+    buf.write("<anon>");
   else
-    snprintf(buf, 24, "%u:%u", p.line, p.col);
-  return buf;
+    buf.write(p.file_name);
+  if (p.line == NPOS)
+    ;//buf.write(":");
+  else if (p.col == NPOS)
+    buf.printf(":%u", p.line);
+  else
+    buf.printf(":%u:%u", p.line, p.col);
 }
 
 void SourceFile::read(String file) {
@@ -74,17 +80,74 @@ void SourceFile::read(int fd) {
   d[size_] = '\0';
   data_ = d;
   lines_.push_back(data_);
-  for (const char * s = data_; *s; ++s)
-    if (*s == '\n') lines_.push_back(s+1);
+  bool new_line = true;
+  bool need_push = true;
+  for (char * s = data_; *s; ++s) {
+    if (new_line) {
+      if (pp_mode && *s == '#') {
+        if (s[1] != ' ') continue;
+        SourceChange sc;
+        sc.idx = s; // the idx is the start of the line
+        ++s;
+        sc.lineno = strtoul(s, &s, 10);
+        ++s;
+        assert(*s == '"');
+        ++s;
+        char * begin = s;
+        while (*s && *s != '"') {
+          if (*s == '\\') {
+            ++s;
+            assert(*s);
+          }
+          ++s;
+        }
+        assert(*s == '"');
+        sc.file_name = parse_common::unescape(begin,s);
+        while (*s && *s != '\n') ++s;
+        if (need_push)
+          source_change.push_back(sc);
+        else
+          source_change.back() = sc;
+        memset((void *)sc.idx, ' ', s - sc.idx); // blank line
+        need_push = false; // if the next line is also a line control
+                           // line just overwrite this one
+      } else if (pp_mode) {
+        need_push = true;
+      }
+      new_line = true;
+    } 
+    if (*s == '\n') {
+      lines_.push_back(s+1);
+      new_line = true;
+    }
+  }
 }
+
+struct SourceChangeLt {
+  bool operator() (const SourceFile::SourceChange & x, const SourceFile::SourceChange & y) 
+    {return x.idx < y.idx;}
+  bool operator() (const char * x, const SourceFile::SourceChange & y) 
+    {return x < y.idx;}
+  bool operator() (const SourceFile::SourceChange & x, const char * y) 
+    {return x.idx < y;}
+};
 
 Pos SourceFile::get_pos(const char * s) const {
   if (s < data_ || s > data_ + size_ + 1) {
-    return Pos(UINT_MAX,0);
+    return Pos(file_name_, NPOS, NPOS);
   }
-  Vector<const char *>::const_iterator i = lower_bound(lines_.begin(), lines_.end(), s);
-  if (*i != s) --i;
-  return Pos(i - lines_.begin() + 1, s - *i + 1);
+  Vector<const char *>::const_iterator l = lower_bound(lines_.begin(), lines_.end(), s);
+  if (*l != s) --l;
+  if (!pp_mode) return Pos(file_name_, l - lines_.begin() + 1, s - *l + 1);
+
+  Vector<SourceChange>::const_iterator sc = lower_bound(source_change.begin(), source_change.end(), 
+                                                        s, SourceChangeLt());
+  if (sc->idx != s) --sc;
+  Vector<const char *>::const_iterator sc_l = lower_bound(lines_.begin(), lines_.end(), sc->idx);
+  if (*sc_l != sc->idx) --sc_l;
+  assert(sc_l <= l);
+  unsigned line_offset = l - sc_l - 1;
+  return Pos(sc->file_name, sc->lineno + line_offset, NPOS);
 }
 
 String add_dir_if_needed(String file, const SourceInfo * included_from) {
@@ -109,12 +172,12 @@ String add_dir_if_needed(String file, const SourceInfo * included_from) {
   } 
 }
 
-SourceFile * new_source_file(String file, const SourceInfo * included_from) {
-  return new SourceFile(add_dir_if_needed(file, included_from));
+SourceFile * new_source_file(String file, const SourceInfo * included_from, bool pp_mode) {
+  return new SourceFile(add_dir_if_needed(file, included_from), pp_mode);
 }
 
-SourceFile * new_source_file(int fd) {
-  return new SourceFile(fd);
+SourceFile * new_source_file(int fd, bool pp_mode) {
+  return new SourceFile(fd, pp_mode);
 }
 
 bool SourceFile::dump_info_self(OStream & o) const {
