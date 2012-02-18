@@ -568,7 +568,7 @@ namespace ast {
   enum StorageClass {SC_NONE, SC_AUTO, SC_STATIC, SC_EXTERN, SC_REGISTER};
 
   struct VarDeclaration : public Declaration, public BasicVar {
-    VarDeclaration() {}
+    VarDeclaration() : link_once(false) {}
     StorageClass storage_class;
     bool link_once;
     //VarSymbol * sym;
