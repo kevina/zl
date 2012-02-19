@@ -53,7 +53,7 @@ namespace ast {
   CompileWriter::CompileWriter(TargetLang tl) 
     : target_lang(tl), in_fun(), indent_level(0), deps(), syntax_gather(), 
       real_line_num(1), never_use_local_line_info(false), local_line_mode(false),
-      used_line_control(false), last_end_line(NPOS)
+      used_line_control(false)
   {
     if (tl == ZLE)
       syntax_gather = new SyntaxGather;
@@ -80,9 +80,9 @@ namespace ast {
         lld = LastLineDirective();
         used_line_control = false;
       } else {
-        // we entired and existed with nothing but whitespace (or #lc
-        // ... restore), don't reset anything, just disregard the
-        // whitespace
+        // we existed and entered with nothing but whitespace (or
+        // insignificant #lc directives), don't reset anything, just
+        // disregard the whitespace.
         buf.clear();
       }
     } else {
@@ -94,9 +94,6 @@ namespace ast {
     if (!never_use_local_line_info) {
       flush_w_line_info();
       local_line_mode = false;
-      //if (buf.back() != '\n');
-      //buf << '\n';
-      //flush();
       if (out_stream && used_line_control)
         buf.printf("#lc %d \"%s\" restore\n", real_line_num+1, ~escaped_file_name);
     } else {
@@ -139,7 +136,6 @@ namespace ast {
       //out_stream->put('\n');
       real_line_num++;
     }
-    last_end_line = NPOS;
   }
 
   bool CompileWriter::set_line_info(const SourceStr & str) {
@@ -171,8 +167,6 @@ namespace ast {
 
   void CompileWriter::end_line() {
     if (local_line_mode) {
-      if (last_end_line != NPOS) 
-        last_end_line = buf.size();
       buf << "\n";
     } else {
       if (pos_info.defined()) {
@@ -5641,13 +5635,10 @@ namespace ast {
 
     sep(cw, "definitions");
 
-    //cw.enter_local_line_mode();
     for (VarsItr i = var_defns.begin(), e = var_defns.end(); i != e; ++i) {
       //printf("COMPILE %s %d\n", ~(*i)->uniq_name(), (*i)->order_num);
       (*i)->compile(cw, Declaration::Body);
-      //cw.force_new_line();
     }
-    //cw.exit_local_line_mode();
 
     sep(cw, "special");
 

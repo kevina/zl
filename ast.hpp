@@ -71,7 +71,6 @@ namespace ast {
     bool used_line_control;
     LastLineDirective lld;
     Pos pos_info;
-    unsigned last_end_line;
     void enter_local_line_mode();
     void exit_local_line_mode();
     inline bool set_line_info(const AST *);
