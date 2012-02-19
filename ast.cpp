@@ -52,7 +52,7 @@ namespace ast {
 
   CompileWriter::CompileWriter(TargetLang tl) 
     : target_lang(tl), in_fun(), indent_level(0), deps(), syntax_gather(), 
-      real_line_num(1), never_use_local_line_info(false), local_line_mode(false),
+      real_line_num(1), rewrite_level(ExcludeInternal), local_line_mode(false),
       used_line_control(false)
   {
     if (tl == ZLE)
@@ -60,7 +60,7 @@ namespace ast {
   }
 
   void CompileWriter::enter_local_line_mode() {
-    if (!never_use_local_line_info) {
+    if (rewrite_level > NoRewrite) {
       if (out_stream)
         local_line_mode = true; 
       bool have_content = true;
@@ -91,7 +91,7 @@ namespace ast {
   }
 
   void CompileWriter::exit_local_line_mode() {
-    if (!never_use_local_line_info) {
+    if (rewrite_level > NoRewrite) {
       flush_w_line_info();
       local_line_mode = false;
       if (out_stream && used_line_control)
@@ -140,20 +140,16 @@ namespace ast {
 
   bool CompileWriter::set_line_info(const SourceStr & str) {
     if (local_line_mode) {
-      if (str.source && str.source->file() && !str.source->file()->internal) {
-        Pos new_pos = str.source->file()->get_pos(str.begin);
-        if (new_pos.name != pos_info.name || new_pos.line != pos_info.line) {
-          flush_w_line_info();
-          pos_info = new_pos;
-          return true; 
-        } else {
-          pos_info = new_pos;
-          return false;
-        }
-      } else {
-        return false;
-        // don't do anything
+      if (!str.source) return false;
+      const SourceFile * sf = str.source->file();
+      if (!sf) return false;
+      if (rewrite_level <= ExcludeInternal && sf->internal) return false;
+      Pos new_pos = sf->get_pos(str.begin);
+      if (new_pos.name != pos_info.name || new_pos.line != pos_info.line) {
+        flush_w_line_info();
       }
+      pos_info = new_pos;
+      return true; 
     } else {
       if (str.source && str.source->file()) {
         pos_info = str.source->file()->get_pos(str.begin);

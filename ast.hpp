@@ -44,6 +44,9 @@ namespace ast {
     SymbolNode * fun_symbols;
   };
 
+  // Note: ExcludeGenerated level not implemented yet
+  enum LineRewriteLevel {NoRewrite, ExcludeGenerated, ExcludeInternal, IncludeAll};
+
   struct LastLineDirective {
     String name;
     unsigned line;
@@ -66,7 +69,7 @@ namespace ast {
     ~CompileWriter() {close();}
     String escaped_file_name;
     unsigned real_line_num;
-    bool never_use_local_line_info;
+    LineRewriteLevel rewrite_level;
     bool local_line_mode;
     bool used_line_control;
     LastLineDirective lld;
