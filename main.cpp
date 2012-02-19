@@ -21,6 +21,7 @@ extern "C" {
 
 void parse_maps(ast::Environ & env) {
   SourceFile * code = new_source_file(SOURCE_PREFIX "grammer.ins");
+  code->internal = true;
   const char * s = code->begin();
   try {
     SourceStr str(code, s, code->end());
@@ -132,6 +133,7 @@ int main(int argc, const char *argv[])
     } else {
       parse_maps(env);
       SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
+      prelude->internal = true;
       ast::parse_stmts(SourceStr(prelude, prelude->begin(), prelude->end()), env);
       if (debug_mode && load_prelude) {
         SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");

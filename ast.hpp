@@ -44,9 +44,17 @@ namespace ast {
     SymbolNode * fun_symbols;
   };
 
+  struct LastLineDirective {
+    String name;
+    unsigned line;
+    unsigned pos; // as in where this directive takes effect    
+    LastLineDirective() : name(), line(NPOS), pos(NPOS) {}
+  };
+
   class CompileWriter : public CompileEnviron {
   public:
-    OStream * stream;
+    OStream * out_stream;
+    StringBuf buf;
     enum TargetLang {ZLS, ZLE};
     TargetLang target_lang;
     const Fun * in_fun;
@@ -55,12 +63,30 @@ namespace ast {
     SyntaxGather * syntax_gather;
     bool for_compile_time() {return deps;}
     CompileWriter(TargetLang tl = ZLS);
+    ~CompileWriter() {close();}
+    String escaped_file_name;
+    unsigned real_line_num;
+    bool never_use_local_line_info;
+    bool local_line_mode;
+    bool used_line_control;
+    LastLineDirective lld;
+    Pos pos_info;
+    unsigned last_end_line;
+    void enter_local_line_mode();
+    void exit_local_line_mode();
+    inline bool set_line_info(const AST *);
+    void flush_w_line_info();
+    String local_file_name() {return lld.name;}
+    unsigned local_line_pos() {return real_line_num - lld.pos + lld.line;}    
+    bool set_line_info(const SourceStr & str);
+    void end_line();
+    void force_new_line();
     void indent() {
       for (int i = 0; i != indent_level; ++i)
-        stream->put(' ');
+        buf.put(' ');
     }
     int vprintf(const char *format, va_list ap) {
-      return stream->vprintf(format, ap);
+      return buf.vprintf(format, ap);
     }
 
 #ifdef __GNUC__
@@ -74,34 +100,30 @@ namespace ast {
       va_end(ap);
       return res;
     }
-    operator OStream & () {return *stream;}
-    void open(ParmStr str, const char * mode) {
-      FStream * f = new FStream();
-      f->open(str, mode);
-      stream = f;
-    }
-    void close() {
-      delete stream;
-    }
+    operator OStream & () {return buf;}
+
+    void open(ParmStr str, const char * mode);
+    void close();
+    void flush();
 
     CompileWriter & operator<< (String str) {
-      *stream << str;
+      buf.append(str);
       return *this;
     }
     CompileWriter & operator<< (const char * str) {
-      *stream << str;
+      buf.append(str);
       return *this;
     }
     CompileWriter & operator<< (char c) {
-      *stream << c;
+      buf.append(c);
       return *this;
     }
     CompileWriter & operator<< (int n) {
-      *stream << n;
+      buf.printf("%i", n);
       return *this;
     }
     CompileWriter & operator<< (unsigned n) {
-      *stream << n;
+      buf.printf("%u", n);
       return *this;
     }
   };
@@ -147,6 +169,10 @@ namespace ast {
     virtual ~AST() {}
     //void print(OStream & o) const;
   };
+
+  inline bool CompileWriter::set_line_info(const AST * ast) {
+    return set_line_info(ast->source_str());
+  }
 
   struct Stmt;
   struct EStmt;
@@ -212,12 +238,17 @@ namespace ast {
     Stmt(const Syntax * p = 0) : AST(p), next() {}
     Stmt * next;
     inline Exp * as_exp(Environ & env); 
-    void end_line(CompileWriter & f, const AST * ast = NULL) const {
-      if (!ast) ast = this;
-      ast->source_str().pos_str(" # ", f, "");
-      f << "\n";
-    }
+    // void set_line_info(CompileWriter & f, const AST * ast = NULL) const {
+    //   if (!ast) ast = this;
+    //   f.set_line_info(ast->source_str());
+    // }
+    // void end_line(CompileWriter & f, const AST * ast = NULL) const {
+    //   if (!ast) ast = this;
+    //   ast->source_str().pos_str(" # ", f, "");
+    //   f << "\n";
+    // }
   };
+
 
   struct StmtLeaf : public Stmt {
     StmtLeaf(const Syntax * p = 0) : Stmt(p) {}

@@ -32,6 +32,8 @@ namespace ast {
 
   void breakpoint() {}
 
+  static void escape(OStream & o, char c);
+
   struct Var;
 
   struct ExpContext {
@@ -49,11 +51,170 @@ namespace ast {
   static Exp * just_parse_exp(const Syntax * p, Environ & env, ExpContext c);
 
   CompileWriter::CompileWriter(TargetLang tl) 
-    : target_lang(tl), in_fun(), indent_level(0), deps(), syntax_gather() 
+    : target_lang(tl), in_fun(), indent_level(0), deps(), syntax_gather(), 
+      real_line_num(1), never_use_local_line_info(false), local_line_mode(false),
+      used_line_control(false), last_end_line(NPOS)
   {
     if (tl == ZLE)
       syntax_gather = new SyntaxGather;
   }
+
+  void CompileWriter::enter_local_line_mode() {
+    if (!never_use_local_line_info) {
+      if (out_stream)
+        local_line_mode = true; 
+      bool have_content = true;
+      StringBuf::iterator i = buf.begin(), e = buf.end();
+      for (;;) {
+        while (i != e && asc_isspace(*i)) ++i;
+        if (i != e && *i == '#') {
+          ++i;
+          while (i != e && *i != '\n') ++i;
+          continue;
+        }
+        break;
+      }
+      if (i == e) have_content = false;
+      if (have_content) {
+        flush();
+        lld = LastLineDirective();
+        used_line_control = false;
+      } else {
+        // we entired and existed with nothing but whitespace (or #lc
+        // ... restore), don't reset anything, just disregard the
+        // whitespace
+        buf.clear();
+      }
+    } else {
+      flush();
+    }
+  }
+
+  void CompileWriter::exit_local_line_mode() {
+    if (!never_use_local_line_info) {
+      flush_w_line_info();
+      local_line_mode = false;
+      //if (buf.back() != '\n');
+      //buf << '\n';
+      //flush();
+      if (out_stream && used_line_control)
+        buf.printf("#lc %d \"%s\" restore\n", real_line_num+1, ~escaped_file_name);
+    } else {
+      flush();
+    }
+  }
+
+  void CompileWriter::flush_w_line_info() {
+    const Pos & pos = pos_info;
+    if (!pos.defined()) {
+      flush();
+    } else {
+      if (local_file_name() != pos.name || local_line_pos() > pos.line) {
+        used_line_control = true;
+        out_stream->printf("#lc %d \"%s\" set\n", pos.line, ~pos.name);
+        real_line_num++;
+        lld.name = pos.name;
+        lld.line = pos.line;
+        lld.pos = real_line_num;
+      }
+      unsigned blanks_needed = pos.line - local_line_pos();
+      real_line_num += blanks_needed;
+      for (; blanks_needed != 0; --blanks_needed) {
+        out_stream->put('\n');
+      }
+      if (!buf.empty()) 
+        for (StringBuf::iterator i = buf.begin(), e = buf.end();;) {
+          if (*i == '\n') {
+            out_stream->put(' ');
+            ++i;
+            while (i != e && asc_isspace(*i))
+              ++i;
+          }
+          if (i == e) break;
+          out_stream->put(*i);
+          ++i;
+        }
+      buf.clear();
+      out_stream->printf("# %u\n", pos.line);
+      //out_stream->put('\n');
+      real_line_num++;
+    }
+    last_end_line = NPOS;
+  }
+
+  bool CompileWriter::set_line_info(const SourceStr & str) {
+    if (local_line_mode) {
+      if (str.source && str.source->file() && !str.source->file()->internal) {
+        Pos new_pos = str.source->file()->get_pos(str.begin);
+        if (new_pos.name != pos_info.name || new_pos.line != pos_info.line) {
+          flush_w_line_info();
+          pos_info = new_pos;
+          return true; 
+        } else {
+          pos_info = new_pos;
+          return false;
+        }
+      } else {
+        return false;
+        // don't do anything
+      }
+    } else {
+      if (str.source && str.source->file()) {
+        pos_info = str.source->file()->get_pos(str.begin);
+        return true;
+      } else {
+        pos_info.clear();
+        return false;
+      }
+    }
+  }
+
+  void CompileWriter::end_line() {
+    if (local_line_mode) {
+      if (last_end_line != NPOS) 
+        last_end_line = buf.size();
+      buf << "\n";
+    } else {
+      if (pos_info.defined()) {
+        buf << " # ";
+        pos_to_str(pos_info, buf);
+      }
+      pos_info.clear();
+      buf << '\n';
+    }
+  }
+
+  
+  void CompileWriter::open(ParmStr str, const char * mode) {
+    FStream * f = new FStream();
+    f->open(str, mode);
+    out_stream = f;
+    StringBuf lbuf;
+    const char * s = str;
+    while (*s) escape(lbuf, *s++);
+    escaped_file_name = lbuf.freeze();
+    real_line_num = 1;
+    local_line_mode = false;
+  }
+
+  void CompileWriter::close() {
+    flush();
+    delete out_stream;
+    out_stream = NULL;
+    escaped_file_name = String();
+  }
+
+  void CompileWriter::flush() {
+    if (out_stream) {
+      for (const char * i = buf.data(), * e = buf.data_end(); i != e; ++i) {
+        if (*i == '\n') real_line_num++;
+      }
+      out_stream->write(buf.data(), buf.size());
+      buf.clear();
+    }
+    pos_info.clear();
+  }
+
 
   void compile(CompileWriter & o, const SymbolKey & key, const InnerNS * default_ns)
   {
@@ -140,8 +301,9 @@ namespace ast {
       exp->compile_prep(env);
     }
     void compile(CompileWriter & f) {
+      f.set_line_info(exp);
       f << indent << exp;
-      end_line(f, exp);
+      f.end_line();
     }
   };
 
@@ -668,8 +830,9 @@ namespace ast {
     }
     void compile_prep(CompileEnviron & env) {}
     void compile(CompileWriter & o) {
+      o.set_line_info(this);
       o << indent << "(goto " << sym << ")";
-      end_line(o);
+      o.end_line();
     }
   };
   
@@ -738,8 +901,6 @@ namespace ast {
     f << "\")";
   }
 
-  static void escape(OStream & o, char c);
-  
   CharC * CharC::parse_self(const Syntax * p, Environ & env) {
     syn = p;
     assert_num_args(1, 2);
@@ -1300,6 +1461,7 @@ namespace ast {
         init->compile_prep(env);
     }
     void compile(CompileWriter & f, Phase phase) const {
+      f.set_line_info(this);
       if (cleanup && cleanup->cleanup_flag) {
         f << indent << "(var "<< uniq_name() << "$nc (bool)";
         if (phase != Forward) f << " 0";
@@ -1319,7 +1481,7 @@ namespace ast {
         }
       }
       f << ")";
-      end_line(f);
+      f.end_line();
     }
 
   };
@@ -1710,8 +1872,9 @@ namespace ast {
         if_false->compile_prep(env);
     }
     void compile(CompileWriter & f) {
+      f.set_line_info(exp);
       f << indent << "(if " << exp;
-      end_line(f, exp);
+      f.end_line();
       f << "\n" << adj_indent(2) << if_true;
       //f << indent << "else\n";
       if (if_false)
@@ -4102,12 +4265,17 @@ namespace ast {
   }
 
   void Fun::compile(CompileWriter & f, Phase phase) const {
+    f.set_line_info(this);
     if (!body && phase == Body)
       return;
     if (phase != Forward)
       f << indent << "# " << full_name() << "\n";
     if (env_ss && phase != Forward) {
       f << "(var " << uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
+    }
+    if (body && phase != Forward) {
+      f.enter_local_line_mode();
+      f.set_line_info(this) || f.set_line_info(body);
     }
     f << "(fun " << uniq_name();
     f << " " << parms;
@@ -4118,13 +4286,15 @@ namespace ast {
       f << " :inline";
     if (static_constructor)
       f << " :__constructor__";
+    f.end_line();
     if (body && phase != Forward) {
       f.in_fun = this;
-      end_line(f);
       f << adj_indent(2) << body;
       f.in_fun = NULL;
     }
     f << ")\n";
+    if (body && phase != Forward)
+      f.exit_local_line_mode();
   }
   
   struct Return : public Stmt {
@@ -4153,11 +4323,12 @@ namespace ast {
         exp->compile_prep(env);
     }
     void compile(CompileWriter & f) {
+      f.set_line_info(this);
       if (exp) 
         f << indent << "(return " << exp << ")";
       else
         f << indent << "(return)";
-      end_line(f);
+      f.end_line();
     }
   };
 
@@ -5276,6 +5447,7 @@ namespace ast {
   }
   
   static void sep(CompileWriter & cw, const char * what) {
+    cw.flush();
     cw << "\n"
        << "#\n"
        << "# " << what << "\n"
@@ -5469,10 +5641,13 @@ namespace ast {
 
     sep(cw, "definitions");
 
+    //cw.enter_local_line_mode();
     for (VarsItr i = var_defns.begin(), e = var_defns.end(); i != e; ++i) {
       //printf("COMPILE %s %d\n", ~(*i)->uniq_name(), (*i)->order_num);
       (*i)->compile(cw, Declaration::Body);
+      //cw.force_new_line();
     }
+    //cw.exit_local_line_mode();
 
     sep(cw, "special");
 
@@ -5501,13 +5676,14 @@ namespace ast {
 
     if (cw.target_lang == CompileWriter::ZLE) {
       sep(cw, "others");
-      StringBuf buf;
-      OStream * stream = cw.stream;
-      cw.stream = &buf;
+      cw.flush();
+      OStream * stream = cw.out_stream;
+      cw.out_stream = NULL;
       for (OthersItr i = others.begin(), e = others.end(); i != e; ++i) {
         cw << *i;
       }
-      cw.stream = stream;
+      String rest = cw.buf.freeze();
+      cw.out_stream = stream;
       cw << "(syntax_data\n";
       cw.printf("  (marks %u)\n", cw.syntax_gather->mark_map.num);
       cw.printf("  (repl_tables %u\n", cw.syntax_gather->repl_table_map.to_print.size());
@@ -5517,7 +5693,7 @@ namespace ast {
            i != e; ++i) 
         cw.printf("    %s\n", ~*i);
       cw << ")\n";
-      cw << buf.freeze();
+      cw << rest;
     }
 
     sep(cw, "done");

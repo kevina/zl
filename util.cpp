@@ -41,10 +41,10 @@ struct StringObj1 {
 const StringObj1 EMPTY_STRING_OBJ1 = {0, {'\0'}};
 
 void pos_to_str(Pos p, OStream & buf) {
-  if (p.file_name.empty())
+  if (p.name.empty())
     buf.write("<anon>");
   else
-    buf.write(p.file_name);
+    buf.write(p.name);
   if (p.line == NPOS)
     ;//buf.write(":");
   else if (p.col == NPOS)
@@ -102,7 +102,7 @@ void SourceFile::read(int fd) {
           ++s;
         }
         assert(*s == '"');
-        sc.file_name = parse_common::unescape(begin,s);
+        sc.file_name = String(begin,s);
         while (*s && *s != '\n') ++s;
         if (need_push)
           source_change.push_back(sc);

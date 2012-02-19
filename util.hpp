@@ -12,6 +12,9 @@
 #include "hash.hpp"
 #include "iostream.hpp"
 
+#undef NPOS
+static const unsigned NPOS = UINT_MAX;
+
 //String sample(const char * begin, const char * end, unsigned max_len);
 
 struct StringObj {
@@ -138,10 +141,13 @@ static inline bool operator!=(SubStr x, const char * y) {
 }
 
 struct Pos {
-  String file_name;
+  String name;
   unsigned line;
   unsigned col;
-  Pos(String fn, unsigned l, unsigned c) : file_name(fn), line(l), col(c) {}
+  Pos() : line(NPOS), col(NPOS) {}
+  Pos(String fn, unsigned l, unsigned c) : name(fn), line(l), col(c) {}
+  bool defined() const {return !name.empty() && line != NPOS;}
+  void clear() {name = String(); line = NPOS; col = NPOS;}
 };
 
 void pos_to_str(Pos p, OStream & out);
@@ -193,8 +199,9 @@ private:
   Vector<SourceChange> source_change;
   Vector<const char *> lines_;
 public:
-  SourceFile(String file, bool cpm = false) : data_(), size_(0), pp_mode(cpm) {read(file);}
-  SourceFile(int fd, bool cpm = false) : data_(), size_(0), pp_mode(cpm) {read(fd);}
+  bool internal;
+  SourceFile(String file, bool cpm = false) : data_(), size_(0), pp_mode(cpm), internal(false) {read(file);}
+  SourceFile(int fd, bool cpm = false) : data_(), size_(0), pp_mode(cpm), internal(false) {read(fd);}
   String file_name() const {return file_name_;}
   Pos get_pos(const char * s) const;
   void get_pos_str(const char * s, OStream & buf) const {
@@ -223,8 +230,5 @@ String add_dir_if_needed(String file, const SourceInfo * included_from);
 SourceFile * new_source_file(String file, const SourceInfo * included_from = NULL, bool pp_mode = false);
 
 SourceFile * new_source_file(int fd, bool pp_mode = false);
-
-#undef NPOS
-static const unsigned NPOS = UINT_MAX;
 
 #endif
