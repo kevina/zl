@@ -1626,7 +1626,7 @@ public:
       Syntax * p = in_named_prod == "-" 
         ? SYN(r0->str(), r0->part(0), arg)
         : SYN(r0->str(), r0->part(0), arg, SYN(in_named_prod));
-      printf("MATCH MID %s %s\n", ~p->to_string(), ~p->sample_w_loc());
+      //printf("MATCH MID %s %s\n", ~p->to_string(), ~p->sample_w_loc());
       if (res) res->add_part(p);
       return r;
     } else {
@@ -1674,7 +1674,7 @@ MatchRes parse_as_quasiquote(SourceStr str, SynBuilder * parts,
                              ProdWrap prod, const Syntax * name,
                              MatchEnviron & env, MutableSyntax * given_aql = NULL)
 {
-  fprintf(stderr, "IN QUASIQUOTE: %s\n", ~sample(str.begin, str.end));
+  //fprintf(stdout, "IN QUASIQUOTE: %s\n", ~sample(str.begin, str.end));
   if (!parts) return prod.match(str, NULL, env); 
   
   MatchEnviron nenv = env;
@@ -1689,7 +1689,7 @@ MatchRes parse_as_quasiquote(SourceStr str, SynBuilder * parts,
   res.add_part(aql.els);
   
   Syntax * res_syn = res.build(str);
-  fprintf(stderr, "QUASIQUOTE RES: %s\n", ~res_syn->to_string());
+  //fprintf(stdout, "QUASIQUOTE RES: %s\n", ~res_syn->to_string());
   parts->add_part(res_syn);
   return r;
 }
@@ -1700,7 +1700,7 @@ public:
     return parse_as_quasiquote(str, parts, prod, name, env);
   }
   void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
-    fprintf(stderr, "in quasiquote: %s\n", ~sample(str.begin, str.end));
+    //fprintf(stdout, "in quasiquote: %s\n", ~sample(str.begin, str.end));
     assert(res.res.single_part());
     const Syntax * syn = res.res.part(0);
     MatchEnviron nenv = env;
@@ -1718,7 +1718,7 @@ public: // but don't use
 class S_AntiQuote : public Prod {
 public:
   MatchRes match_i(SourceStr str, const Syntax * * the_res, MatchEnviron & env) {
-    fprintf(stderr, "IN ACTIVE ANTIQUOTE: %s\n", ~sample(str.begin, str.end));
+    //fprintf(stdout, "IN ACTIVE ANTIQUOTE: %s\n", ~sample(str.begin, str.end));
     MatchRes r;
     Syntax * syn = env.antiquotes->get();
     MatchEnviron nenv = env;
@@ -1749,7 +1749,7 @@ public:
       }
       return match_i(str, new_syn, env);
     } else if (!the_res) {
-      fprintf(stderr, "antiquote no res\n");
+      //fprintf(stdout, "antiquote no res\n");
       return prod->match(str, NULL, env);
     } else {
       SyntaxBuilderN<1> syn_buf;
@@ -1761,10 +1761,10 @@ public:
           ? env.mids->lookup_antiquote(s->outer_.begin) 
           : NPOS;
         if (idx != NPOS) {
-          fprintf(stderr, "antiquote found res\n");
+          //fprintf(stdout, "antiquote found res\n");
           the_res->add_part(mk_antiquote(str, idx));
         } else {
-          printf("antiquote dummy res: %s\n", ~sample(str.begin, str.end));
+          //printf("antiquote dummy res: %s\n", ~sample(str.begin, str.end));
           the_res->add_part(AQ_NONE);
         }
       }
@@ -1844,7 +1844,7 @@ const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
     const char * e0 = p->match_f(str, errors, env);
     assert(e0 == e);
     //if (match_complete_str) abort();
-    //if (what == "SYNTAX_STR") abort();
+    //if (what == "STMT") abort();
     throw errors.to_error(new ParseSourceInfo(str, what), parse.file);
   }
   str.begin = e;

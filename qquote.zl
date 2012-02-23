@@ -8,8 +8,8 @@ Syntax * uint_to_syntax(unsigned i) {
 Syntax * parse_quasiquote(Syntax * qq, Environ * env) {
   Mark * outer_mark = new_mark(prelude_envss);
   Match * m = match_f(0, raw_syntax (pattern aqs), qq);
-  printf("XXX: ");
-  dump_syntax(qq);
+  //printf("XXX: ");
+  //dump_syntax(qq);
   Syntax * aqs = m->var(syntax aqs);
   if (aqs->num_args() == 0) {
     return replace(syntax {replace(syntax_d pattern, repl, mark);}, m, outer_mark);
