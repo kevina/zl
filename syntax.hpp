@@ -138,7 +138,6 @@ namespace syntax_ns {
   struct SyntaxBase {
     unsigned type_inf; // "type_info" a reserved word
     mutable SourceStr str_;
-    const Replacements * repl; // FIXME: Why is this here?
 
     void dump_type_info();
 
@@ -238,7 +237,7 @@ namespace syntax_ns {
 
   protected:
     SyntaxBase(unsigned tinf, const SourceStr & s = SourceStr()) 
-      : type_inf(tinf), str_(s), repl() {}
+      : type_inf(tinf), str_(s) {}
   };
 
   struct SemiMutable : public SyntaxBase {
@@ -658,6 +657,7 @@ namespace syntax_ns {
 
   struct Reparse : public SyntaxBase {
     Syntax * what_;
+    const Replacements * repl;
     SourceStr outer_;
     SourceStr inner_;
     void * cache;
@@ -671,9 +671,9 @@ namespace syntax_ns {
     ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, cache);}
     Reparse(const SourceStr & str) : SyntaxBase(REPARSE_TI), what_(), inner_(str), cache(), cached_val() {}
     Reparse(const Syntax * p, const Replacements * r, void * c, String pa, String ogn, const SourceStr & o, const SourceStr & i)
-      : SyntaxBase(REPARSE_TI, o), what_(p), outer_(o), inner_(i), cache(c), parse_as(pa), origin(ogn), cached_val() {repl = r;}
+      : SyntaxBase(REPARSE_TI, o), what_(p), repl(r), outer_(o), inner_(i), cache(c), parse_as(pa), origin(ogn), cached_val() {}
     Reparse(const Reparse & other) 
-      : SyntaxBase(other), what_(other.what_), outer_(other.outer_), inner_(other.inner_), 
+      : SyntaxBase(other), what_(other.what_), repl(other.repl), outer_(other.outer_), inner_(other.inner_), 
         cache(other.cache), parse_as(other.parse_as), origin(other.origin), cached_val() {}
     Reparse * clone() const {return new Reparse(*this);}
     Syntax * instantiate(bool no_throw = false) const {
@@ -1201,7 +1201,6 @@ namespace syntax_ns {
     }
     SyntaxBuilderDirect(const SyntaxBase & other, unsigned n_parts, unsigned max_flags) {
       init(other.str(), other.num_parts() + n_parts, other.num_flags() + max_flags);
-      syn->repl = other.repl;
       add_parts(other.parts_begin(), other.parts_end());
       set_flags(other.flags_begin(), other.flags_end());
     }

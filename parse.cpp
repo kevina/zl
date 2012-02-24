@@ -292,13 +292,16 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
     as_syn_entity()->desc(o);
     o << ")";
   } else if (is_reparse()) {
-    Syntax * r = as_reparse()->cached_val;
+    const ReparseSyntax * rs = as_reparse();
+    Syntax * r = rs->cached_val;
     if (r) {
       o.printf("=");
       r->to_string(o,f,g);
     } else {
       o.printf("(%s ...)", ~escape(rwhat().to_string(g)));
     }
+    if (rs->repl)
+      rs->repl->to_string(o, f, g);
   } else if (have_parts()) {
     SymbolName what_ = what();
     o.printf("(");
@@ -338,8 +341,6 @@ void SyntaxBase::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
       }
     }
     o.printf(")");
-    if (repl)
-      repl->to_string(o, f, g);
   } else {
     abort();
   }

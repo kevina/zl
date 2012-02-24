@@ -1158,10 +1158,11 @@ static const Syntax * replace(const Syntax * p,
 static const Syntax * reparse_replace(const Syntax * new_name, 
                                       const Syntax * p, ReplTable * r)
 {
+  const ReparseSyntax * rs = p->as_reparse();
   return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->what_part())),
-                           combine_repl(p->repl, r),
-                           p->as_reparse()->cache, p->as_reparse()->parse_as,
-                           p->as_reparse()->origin,
+                           combine_repl(rs->repl, r),
+                           rs->cache, rs->parse_as,
+                           rs->origin,
                            r->expand_source_info_str(p->outer().str),
                            r->expand_source_info_str(p->inner().str));
 }
@@ -1190,8 +1191,9 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
       if (repl->is_reparse("parm") || repl->is_reparse("()")) { // FIXME: Just check for is_reparse()?
-        if (repl->repl) {
-          for (Replacements::const_iterator i = repl->repl->begin(), e = repl->repl->end(); 
+        const Replacements * repls = repl->as_reparse()->repl;
+        if (repls) {
+          for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
                i != e; ++i) 
           {
             // FIXME: This seams like the correct thing to do,
@@ -2223,17 +2225,18 @@ namespace syntax_ns {
   SyntaxBase * new_syntax(ChangeSrc<T> & f, const Syntax & other) {
     SyntaxBase * syn = other.shallow_clone();
     syn->str_.source = f(other.str_.source);
-    if (other.repl) {
-      syn->repl = new Replacements(*other.repl);
-    } else {
-      syn->repl = NULL;
-    }
+    // FIXME: Why?
+    //if (other.repl) {
+    //  syn->repl = new Replacements(*other.repl);
+    //} else {
+    //  syn->repl = NULL;
+    //}
     return syn;
   }
 }
-//
-//
-//
+
+
+
 
 struct PointerEntity {
   typedef ::TypeInfo<PointerEntity> TypeInfo;
