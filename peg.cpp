@@ -13,6 +13,7 @@
 #include "peg.hpp"
 
 #include "parse.hpp"
+#include "error.hpp"
 #include "parse_common.hpp"
 #include "charset.hpp"
 #include "vector.hpp"

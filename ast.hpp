@@ -5,11 +5,11 @@
 
 #include "environ.hpp"
 #include "gc.hpp"
-#include "parse.hpp"
 #include "fstream.hpp"
 #include "symbol_table.hpp"
 #include "type.hpp"
 #include "expand.hpp"
+#include "error.hpp"
 
 #include "indent_ostream.hpp"
 

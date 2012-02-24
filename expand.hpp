@@ -2,7 +2,6 @@
 #define EXPAND__HPP
 
 #include "symbol_table.hpp"
-#include "parse.hpp"
 #include "hash.hpp"
 #include "vector.hpp"
 #include "peg.hpp"
@@ -117,20 +116,8 @@ const Syntax * flatten(const Syntax * p);
 
 void load_macro_lib(ParmString lib, Environ & env);
 
-// template <>
-// struct ChangeSrc<SourceInfo> {
-//   const SourceInfo * orig;
-//   const SourceInfo * new_;
-//   ChangeSrc(const SourceInfo * o, const SourceInfo * n) : orig(o), new_(n) {}
-//   const SourceInfo * operator() (const SourceInfo * o) {
-//     if (o == orig) return new_;
-//     else return o;
-//   }
-// };
-
 class SyntaxSourceInfo : public SourceInfo {
 public:
-  //const MacroSymbol * macro;
   const Syntax * syntax;
   SyntaxSourceInfo(const Syntax * s) : SourceInfo(s->str().source), syntax(s) {}
   SyntaxSourceInfo(const SourceInfo * p, const Syntax * s) : SourceInfo(p), syntax(s) {}

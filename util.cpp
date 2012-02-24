@@ -5,12 +5,35 @@
 #include <unistd.h>
 
 #include "util.hpp"
+#include "source_str.hpp"
 #include "iostream.hpp"
 #include "string_buf.hpp"
 #include "hash-t.hpp"
 #include "parse_common.hpp"
 
 #include <algorithm>
+
+//
+//
+//
+
+int cmp(const char * x, unsigned x_sz, const char * y, unsigned y_sz) {
+  if (x_sz == y_sz) {
+      return memcmp(x, y, x_sz);
+  } else if (x_sz < y_sz) {
+    int res = memcmp(x, y, x_sz);
+    if (res == 0) return -1;
+    return res;
+  } else {
+    int res = memcmp(x, y, y_sz);
+    if (res == 0) return 1;
+    return res;
+  }
+}
+
+//
+//
+//
 
 void SourceInfo::dump_info(OStream & o, AlreadySeen & as, const char * prefix) const {
   bool seen_self = as.have(this);
@@ -183,18 +206,4 @@ SourceFile * new_source_file(int fd, bool pp_mode) {
 bool SourceFile::dump_info_self(OStream & o) const {
   return false;
   //o.printf("%sin file %s\n", prefix, ~file_name_);
-}
-
-int cmp(const char * x, unsigned x_sz, const char * y, unsigned y_sz) {
-  if (x_sz == y_sz) {
-      return memcmp(x, y, x_sz);
-  } else if (x_sz < y_sz) {
-    int res = memcmp(x, y, x_sz);
-    if (res == 0) return -1;
-    return res;
-  } else {
-    int res = memcmp(x, y, y_sz);
-    if (res == 0) return 1;
-    return res;
-  }
 }

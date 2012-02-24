@@ -8,7 +8,9 @@ AM_CXXFLAGS += -I/usr/include/gc
 
 bin_PROGRAMS=zl
 bin_SCRIPTS=zlc
-zl_SOURCES=ast.cpp  expand.cpp charset.cpp  main.cpp  parse.cpp  parse_op.cpp  peg.cpp util.cpp string_buf.cpp fstream.cpp type.cpp parse_decl.cpp symbol_table.cpp iostream.cpp ct_value.cpp
+zl_SOURCES=ast.cpp expand.cpp charset.cpp main.cpp parse.cpp		\
+  parse_op.cpp peg.cpp util.cpp string_buf.cpp fstream.cpp type.cpp	\
+  parse_decl.cpp symbol_table.cpp iostream.cpp ct_value.cpp syntax.cpp
 zl_LDADD=
 #zl_LDADD+= /home/kevina/gc6.8/gc.a 
 zl_LDADD+= -lgc

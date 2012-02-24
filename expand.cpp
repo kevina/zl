@@ -64,19 +64,6 @@ public:
   }
 };
 
-class ResultSourceInfo : public SourceInfo {
-public:
-  SourceStr orig;
-  ResultSourceInfo(const SourceInfo * p, const SourceStr & o) : SourceInfo(p), orig(o) {}
-  virtual const SourceInfo * clone_until(const SourceInfo * stop, 
-                                         const SourceInfo * new_parent) const {
-    return new ResultSourceInfo(parent->clone_until(stop, new_parent), orig);
-  }
-  bool dump_info_self(OStream & o) const {
-    return true;
-  }
-};
-
 struct ChangeSrcBase {
   virtual const SourceInfo * operator() (const SourceInfo * o) = 0;
   virtual ~ChangeSrcBase() {}
@@ -471,19 +458,8 @@ struct Macro : public Declaration, public Symbol {
       MacroInfo whocares(s,def);
       Syntax * res = expand(p, env);
       res->str_ = s->str(); // OK, maybe this is a bit harsh
-      // Don't do this for now, might cause weird problems
-      //SourceStr n = s->str();
-      //n.source = new ResultSourceInfo(n.source, res->str());
-      //res = SYN(n, *res);
-      // FIXME: What is this find_insertion_point doing, it fails for test56.c
-      //ExpandSourceInfo * ip 
-      //  = const_cast<ExpandSourceInfo *>
-      //  (dynamic_cast<const ExpandSourceInfo *>
-      //   (res->str().source->find_insertion_point(res)));
-      //assert(ip); 
-      //printf("SETTING 123 on %p\n", ip);
-      //ip->set(s, def);
-      //printf("%d EXPAND IP %s %s: %p\n", c, ~s->sample_w_loc(), ~p->sample_w_loc(), ip);
+      // ^^FIXME: and shouldn't be necessary once proper backtrace info
+      // is provided
       return res;
     } catch (Error * err) {
       StringBuf buf = err->extra;

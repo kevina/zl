@@ -7,6 +7,7 @@
 #include "parse.hpp"
 #include "parse_op.hpp"
 #include "hash-t.hpp"
+#include "error.hpp"
 
 // http://en.wikipedia.org/wiki/Common_operator_notation
 //   http://en.wikipedia.org/w/index.php?title=Common_operator_notation&oldid=147904781

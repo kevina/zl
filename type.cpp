@@ -1,7 +1,7 @@
 #include <typeinfo>
 
 #include "type.hpp"
-#include "parse.hpp"
+#include "error.hpp"
 #include "ast.hpp"
 
 namespace ast {
