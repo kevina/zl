@@ -164,6 +164,7 @@ String Error::message() {
     pos_str(source->file(), pos, "", res, ": ");
   res += msg;
   res += "\n";
+  res += note;
   if (source)
     source->dump_info(res, "  ");
   res += extra;

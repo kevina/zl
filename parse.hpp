@@ -10,19 +10,11 @@
 struct Annon;
 struct SyntaxGather;
 
-struct ParseSourceInfo : public SourceInfo {
-  SourceStr str;
-  String what;
-  ParseSourceInfo(const SourceStr & s, String w) 
-    : SourceInfo(s.source), str(s), what(w) {}
-  bool dump_info_self(OStream &) const;
-};
+String extra_parse_info(const SourceStr & str, String what);
 
 namespace ast {
   inline SymbolKey::SymbolKey(const Syntax & p, const InnerNS * ns0) 
     : SymbolName(p.as_symbol_name()), ns(ns0 ? ns0 : DEFAULT_NS) {}
-
-
 }
 
 namespace parse_parse {

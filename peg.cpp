@@ -1846,7 +1846,7 @@ const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
     assert(e0 == e);
     //if (match_complete_str) abort();
     //if (what == "STMT") abort();
-    throw errors.to_error(new ParseSourceInfo(str, what), parse.file);
+    throw errors.to_error(str.source, parse.file)->add_note(extra_parse_info(str, what));
   }
   str.begin = e;
   //clock_t stop = clock();

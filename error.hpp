@@ -1,6 +1,8 @@
 #ifndef ERROR__HPP
 #define ERROR__HPP
 
+// defined in syntax.cpp
+
 #include "type_info.hpp"
 #include "source_str.hpp"
 
@@ -9,8 +11,10 @@ struct Error {
   const SourceInfo * source;
   const char * pos;
   String msg;
+  String note; // extra information before backtrace
   String message();
   String extra; // extra information after expand backtrace
+  Error * add_note(String n) {note = n; return this;}
 };
 
 Error * verror(const SourceInfo * s, const char * pos, 

@@ -317,7 +317,8 @@ public:
     } catch (Error * err) {
       printf("?? %s %s\n", ~p->sample_w_loc(), ~p->to_string());
       //abort();
-      err->source = new ParseSourceInfo(p->str(), "<op exp>");
+      err->source = p->str().source;
+      err->note = extra_parse_info(p->str(), "<op exp>");
       throw err;
     }
   }

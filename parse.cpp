@@ -34,13 +34,13 @@ static const char * s_id(SourceStr str, String & res) {
   return str;
 }
 
-bool ParseSourceInfo::dump_info_self(OStream & o) const {
-  o << "  when parsing ";
-  str.sample_w_loc(o);
-  o << " as " << what;
-  return true;
-  // FIXME: ... below, make parent
-  //str.source->dump_info(o, prefix); 
+String extra_parse_info(const SourceStr & str, String what) {
+  StringBuf buf;
+  buf << "    when parsing ";
+  str.sample_w_loc(buf);
+  buf << " as " << what;  
+  buf << "\n";
+  return buf.freeze();
 }
 
 namespace parse_parse {
