@@ -669,7 +669,7 @@ namespace syntax_ns {
     String desc() const {return rwhat().name;}
     ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, cache);}
     ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, cache);}
-    Reparse(const SourceStr & str) : SyntaxBase(REPARSE_TI), what_(), inner_(str), cache(), cached_val() {}
+    Reparse(const SourceStr & str) : SyntaxBase(REPARSE_TI), what_(), repl(), inner_(str), cache(), cached_val() {}
     Reparse(const Syntax * p, const Replacements * r, void * c, String pa, String ogn, const SourceStr & o, const SourceStr & i)
       : SyntaxBase(REPARSE_TI, o), what_(p), repl(r), outer_(o), inner_(i), cache(c), parse_as(pa), origin(ogn), cached_val() {}
     Reparse(const Reparse & other) 
