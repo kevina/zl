@@ -28,7 +28,7 @@ extern void * this_reg;
       return replace(raw_syntax(block
                                 (var :__shadow (fluid this) $1 (cast $1 this_reg))
                                 $2), 
-                     match_local(NULL, this_type, body), mark);
+                     match_local(NULL, this_type, body, NULL), mark);
     else
       return body;
   }

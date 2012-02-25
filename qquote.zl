@@ -54,7 +54,7 @@ Syntax * parse_match(Syntax * in, Environ * env) {
     Syntax * aq;
     while ((aq = iter->next())) {
       assign->append(replace(assign_pattern,
-                             match_local(m, aq, uint_to_syntax(idx)),
+                             match_local(m, aq, uint_to_syntax(idx), NULL),
                              mark));
       idx++;
     }
