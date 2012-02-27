@@ -116,25 +116,49 @@ const Syntax * flatten(const Syntax * p);
 
 void load_macro_lib(ParmString lib, Environ & env);
 
-class SyntaxSourceInfo : public SourceInfo {
-public:
-  const Syntax * syntax;
-  SyntaxSourceInfo(const Syntax * s) : SourceInfo(s->str().source), syntax(s) {}
-  SyntaxSourceInfo(const SourceInfo * p, const Syntax * s) : SourceInfo(p), syntax(s) {}
-  const SourceInfo * block() const {return this;}
-  const SourceInfo * clone_until(const SourceInfo * stop, 
-                                 const SourceInfo * new_parent) const;
-  bool dump_info_self(OStream &) const;
-};
+// class SyntaxSourceInfo : public SourceInfo {
+// public:
+//   const Syntax * syntax;
+//   SyntaxSourceInfo(const Syntax * s) : SourceInfo(s->str().source), syntax(s) {}
+//   SyntaxSourceInfo(const SourceInfo * p, const Syntax * s) : SourceInfo(p), syntax(s) {}
+//   const SourceInfo * block() const {return this;}
+//   const SourceInfo * clone_until(const SourceInfo * stop, 
+//                                  const SourceInfo * new_parent) const;
+//   bool dump_info_self(OStream &) const;
+// };
 
-template <>
-struct ChangeSrc<SyntaxSourceInfo> {
-  const SyntaxSourceInfo * cache;
-  ChangeSrc(const Syntax * s) : cache(new SyntaxSourceInfo(s)) {}
-  const SourceInfo * operator() (const SourceInfo * o) {
-    if (o == cache->syntax->str().source) return cache;
-    else return o;
+// template <>
+// struct ChangeSrc<SyntaxSourceInfo> {
+//   const SyntaxSourceInfo * cache;
+//   ChangeSrc(const Syntax * s) : cache(new SyntaxSourceInfo(s)) {}
+//   const SourceInfo * operator() (const SourceInfo * o) {
+//     if (o == cache->syntax->str().source) return cache;
+//     else return o;
+//   }
+// };
+
+
+struct MapSource_QuotedSyntax {
+  SourceStr box;
+  MapSource_QuotedSyntax(const SourceStr & s) : box(s) {}
+  struct CacheItem {const SourceFile * key; const SourceInfo * value;};
+  typedef Vector<CacheItem> Cache;
+  Cache cache;
+  const SourceInfo * f(const SourceInfo * o) {
+    if (!o) return NULL;
+    CacheItem item;
+    item.key = o->file();
+    for (Cache::const_iterator i = cache.begin(), e = cache.end(); i != e; ++i)
+      if (i->key == item.key) return i->value;
+    SourceBlock * block = new SourceBlock(item.key, box);
+    item.value = &block->base_info;
+    cache.push_back(item);
+    return item.value;
   }
+  MapSourceRes operator() (const Syntax * other) {
+    return MapSourceRes(f(other->str_.source));
+  }
+  MapSourceRes operator() (const ReparseSyntax * other, const Replacements * repl);
 };
 
 struct SyntaxEnum {

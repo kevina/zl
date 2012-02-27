@@ -240,7 +240,7 @@ public:
   void init() {
     SourceFile * code = new_source_file(SOURCE_PREFIX "ops.in");
     //const char * s = code.begin();
-    parse_parse::Res r = parse_parse::parse(code);
+    parse_parse::Res r = parse_parse::parse(SourceStr(code));
     //printf(">.>%.*s<.<\n", r.end-s, s);
     //r.parse->print();
     //printf("\n");
@@ -355,9 +355,9 @@ public:
       const Syntax * p2 = val_s.back(); val_s.pop_back();
       const Syntax * p1 = val_s.back(); val_s.pop_back();
       str = opi.parse->str();
-      if (p1->str().source->block() == str.source->block())
+      if (p1->str().block() == str.block())
         str.begin = p1->str().begin;
-      if (p2->str().source->block() == str.source->block())
+      if (p2->str().block() == str.block())
         str.end   = p2->str().end;
       res.add_part(p1);
       if (op->capture_op_itself()) res.add_part(opi.parse);
@@ -370,14 +370,14 @@ public:
       const Syntax * p1 = val_s.back(); val_s.pop_back();
       if (op->type == Op::Prefix) {
         str = opi.parse->str();
-        if (p1->str().source->block() == str.source->block())
+        if (p1->str().block() == str.block())
           str.end = p1->str().end;
         if (op->capture_op_itself())
           res.add_part(opi.parse);
         res.add_part(p1);
       } else if (op->type == Op::Postfix) {
         str = opi.parse->str();
-        if (p1->str().source->block() == str.source->block())
+        if (p1->str().block() == str.block())
           str.begin = p1->str().begin;
         res.add_part(p1);
         if (op->capture_op_itself())

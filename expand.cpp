@@ -36,171 +36,135 @@
 // 
 //
 
-class SplitSourceInfo : public SourceInfo {
-public:
-  const SourceInfo * source;
-  SplitSourceInfo(const SourceInfo * p, const SourceInfo * s) : SourceInfo(p), source(s) {}
-  virtual const SourceFile * file() const  {return source ? source->file()  : NULL;}
-  virtual const SourceInfo * block() const {return source ? source->block() : NULL;}
-  virtual const SourceInfo * clone_until(const SourceInfo * stop, 
-                                         const SourceInfo * new_parent) const {
-    return new SplitSourceInfo(parent->clone_until(stop, new_parent), source);
-  }
-  bool dump_info_self(OStream & o) const {abort();}
-  void dump_info(OStream & o, AlreadySeen & as, const char * prefix) const {
-    //o.printf("%sSPLIT SOURCE %p %p\n", prefix, prefix, source);
-    bool seen_self = as.have(this);
-    as.insert(this);
-    StringBuf buf;
-    if (parent)
-      parent->dump_info(buf, as, prefix);
-    if (!seen_self && source) {
-      AlreadySeen as2(as);
-      StringBuf new_prefix = prefix;
-      new_prefix += ". ";
-      source->dump_info(o, as2, new_prefix.freeze());
-    }
-    o << buf.freeze();
-  }
-};
+//
+//
+//
 
-struct ChangeSrcBase {
-  virtual const SourceInfo * operator() (const SourceInfo * o) = 0;
-  virtual ~ChangeSrcBase() {}
-};
+// class ReplaceSourceInfo : public SourceInfo {
+// public:
+//   const Syntax * mid;
+//   //const Syntax * repl;
+//   //const Syntax * call;
+//   ReplaceSourceInfo(const SourceInfo * p, const Syntax * m)
+//     : SourceInfo(p), mid(m) {}
+//   const SourceInfo * clone_until(const SourceInfo * stop, 
+//                                  const SourceInfo * new_parent) const {
+//     return new ReplaceSourceInfo(parent->clone_until(stop, new_parent), mid);
+//   }
+//   bool dump_info_self(OStream &) const;
+//   //ReplaceSourceInfo(const SourceInfo * s, const Syntax * m, const Syntax * r, const Syntax * c)
+//   //  : source(s), mid(m), repl(r), call(c) {}
+// };
 
-template <>
-struct ChangeSrc<SplitSourceInfo> : public ChangeSrcBase {
-  struct CacheItem {
-    const SourceInfo * key;
-    const SourceInfo * value;
-  };
-  Vector<CacheItem> cache;
-  const Syntax * outer;
-  const SourceInfo * new_;
-  ChangeSrc(const Syntax * o, const SourceInfo * n) 
-    : outer(o), new_(n) {cache.reserve(2);}
-  const SourceInfo * operator() (const SourceInfo * o) {
-    //printf("CHANGE SPLIT SRC\n");
-    //if (o)
-    //  o->dump_info(COUT, "   in>");
-    for (Vector<CacheItem>::const_iterator i = cache.begin(), e = cache.end(); i != e; ++i) {
-      if (i->key == o) return i->value;
-    }
-    CacheItem n = {n.key};
-    const SourceInfo * ip = o && outer ? o->find_insertion_point(outer) : NULL; // insert just above
-    //const SourceInfo * ip = NULL;
-    //if (ip != NULL) printf("FOUND SOMETHING\n");
-    //printf("FIND I POINT (%s): %p %p = %p\n", outer ? ~outer->sample_w_loc() : "", o, outer, ip);
-    if (ip == NULL)
-      n.value = new SplitSourceInfo(new_, o);
-    else
-      n.value = o->clone_until(ip, new SplitSourceInfo(new_,ip->parent));
-    cache.push_back(n);
-    //n.value->dump_info(COUT, "  out>");
-    return n.value;
-  }
-};
+// bool ReplaceSourceInfo::dump_info_self(OStream & o) const {
+//   o << "when replacing ";
+//   mid->sample_w_loc(o);
+//   //o << " with ";
+//   //repl->sample_w_loc(o);
+//   //o.printf("/%s/ ", ~sample(repl->to_string(), 40));
+//   //o << ", in expansion of ";
+//   //call->sample_w_loc(o);
+//   return true;
+// }
 
 //
 //
 //
 
-class ReplaceSourceInfo : public SourceInfo {
-public:
-  const Syntax * mid;
-  //const Syntax * repl;
-  //const Syntax * call;
-  ReplaceSourceInfo(const SourceInfo * p, const Syntax * m)
-    : SourceInfo(p), mid(m) {}
-  const SourceInfo * clone_until(const SourceInfo * stop, 
-                                 const SourceInfo * new_parent) const {
-    return new ReplaceSourceInfo(parent->clone_until(stop, new_parent), mid);
-  }
-  bool dump_info_self(OStream &) const;
-  //ReplaceSourceInfo(const SourceInfo * s, const Syntax * m, const Syntax * r, const Syntax * c)
-  //  : source(s), mid(m), repl(r), call(c) {}
-};
+// const SourceInfo * SyntaxSourceInfo::clone_until(const SourceInfo * stop, 
+//                                                  const SourceInfo * new_parent) const 
+// {
+//   return new SyntaxSourceInfo(parent->clone_until(stop, new_parent), syntax);
+// }
 
-bool ReplaceSourceInfo::dump_info_self(OStream & o) const {
-  o << "when replacing ";
-  mid->sample_w_loc(o);
-  //o << " with ";
-  //repl->sample_w_loc(o);
-  //o.printf("/%s/ ", ~sample(repl->to_string(), 40));
-  //o << ", in expansion of ";
-  //call->sample_w_loc(o);
-  return true;
-}
+// bool SyntaxSourceInfo::dump_info_self(OStream & o) const {
+//   return false;
+//   //o << "in syntax ";
+//   //syntax->sample_w_loc(o);
+// }
 
 //
 //
 //
 
-const SourceInfo * SyntaxSourceInfo::clone_until(const SourceInfo * stop, 
-                                                 const SourceInfo * new_parent) const 
-{
-  return new SyntaxSourceInfo(parent->clone_until(stop, new_parent), syntax);
-}
+// class ExpandSourceInfo : public SourceInfo {
+// public:
+//   const Syntax * call;
+//   const Syntax * def;
+//   const Syntax * outer_ip;
+//   ExpandSourceInfo()
+//     : call(), def(), outer_ip() {}
+//   void set(const Syntax * c, const Syntax * d) 
+//     { parent = c->str().source; call = c, def = d;}
+//   ExpandSourceInfo(const Syntax * c, const Syntax * d) 
+//     : SourceInfo(c->str().source), call(c), def(d), outer_ip(NULL) {}
+//   ExpandSourceInfo(const SourceInfo * p, const Syntax * c, const Syntax * d, const Syntax * o) 
+//     : SourceInfo(p), call(c), def(d), outer_ip(o) {}
+//   const SourceInfo * find_insertion_point(const Syntax * outer) const {
+//     //printf("ESI FIND I POINT: %p\n", outer_ip);
+//     if (outer == outer_ip) return this;
+//     return parent ? parent->find_insertion_point(outer) : NULL;
+//   }
+//   const SourceInfo * clone_until(const SourceInfo * stop, 
+//                                  const SourceInfo * new_parent) const {
+//     const SourceInfo * np = (stop == this) ? new_parent : parent->clone_until(stop, new_parent);
+//     ExpandSourceInfo * res = new ExpandSourceInfo(np, call, def, outer_ip);
+//     //if (!call) printf("WARNING 123 on %p now %p\n", this, res);
+//     return res;
+//   }
+//   const SourceInfo * clone(const SourceInfo * new_parent) const {
+//     return new ExpandSourceInfo(new_parent, call, def, outer_ip);
+//   }
 
-bool SyntaxSourceInfo::dump_info_self(OStream & o) const {
-  return false;
-  //o << "in syntax ";
-  //syntax->sample_w_loc(o);
-}
+//   bool dump_info_self(OStream &) const;
+// };
 
-//
-//
-//
-
-class ExpandSourceInfo : public SourceInfo {
-public:
-  const Syntax * call;
-  const Syntax * def;
-  const Syntax * outer_ip;
-  ExpandSourceInfo()
-    : call(), def(), outer_ip() {}
-  void set(const Syntax * c, const Syntax * d) 
-    { parent = c->str().source; call = c, def = d;}
-  ExpandSourceInfo(const Syntax * c, const Syntax * d) 
-    : SourceInfo(c->str().source), call(c), def(d), outer_ip(NULL) {}
-  ExpandSourceInfo(const SourceInfo * p, const Syntax * c, const Syntax * d, const Syntax * o) 
-    : SourceInfo(p), call(c), def(d), outer_ip(o) {}
-  const SourceInfo * find_insertion_point(const Syntax * outer) const {
-    //printf("ESI FIND I POINT: %p\n", outer_ip);
-    if (outer == outer_ip) return this;
-    return parent ? parent->find_insertion_point(outer) : NULL;
-  }
-  const SourceInfo * clone_until(const SourceInfo * stop, 
-                                 const SourceInfo * new_parent) const {
-    const SourceInfo * np = (stop == this) ? new_parent : parent->clone_until(stop, new_parent);
-    ExpandSourceInfo * res = new ExpandSourceInfo(np, call, def, outer_ip);
-    //if (!call) printf("WARNING 123 on %p now %p\n", this, res);
-    return res;
-  }
-  const SourceInfo * clone(const SourceInfo * new_parent) const {
-    return new ExpandSourceInfo(new_parent, call, def, outer_ip);
-  }
-
-  bool dump_info_self(OStream &) const;
-};
-
-bool ExpandSourceInfo::dump_info_self(OStream & o) const {
-  if (call) {
-    //o.printf("(%s) ", ~call->to_string());
-    o << "in expansion of ";
-    call->sample_w_loc(o);
-  } else {
-    o << "in expansion of <unknown>\n";
-  }
-  return true;
-}
+// bool ExpandSourceInfo::dump_info_self(OStream & o) const {
+//   if (call) {
+//     //o.printf("(%s) ", ~call->to_string());
+//     o << "in expansion of ";
+//     call->sample_w_loc(o);
+//   } else {
+//     o << "in expansion of <unknown>\n";
+//   }
+//   return true;
+// }
 
 //
 //
 //
 
 static const Syntax * const NO_MATCH = SYN(SYN("@"));
+
+//
+//
+//
+
+struct MapSource_ExpansionOf {
+  const ExpansionOf * expansion_of;
+  struct CacheItem {const SourceBlock * key; const SourceInfo * value;};
+  typedef Vector<CacheItem> Cache;
+  Cache cache;
+  MapSource_ExpansionOf(const ExpansionOf * eo) : expansion_of(eo) {}
+  const SourceInfo * f (const SourceInfo * o) {
+    if (!o || !o->block) return o;
+    CacheItem item;
+    item.key = o->block;
+    for (Cache::const_iterator i = cache.begin(), e = cache.end(); i != e; ++i)
+      if (i->key == item.key) return i->value;
+    item.value = new SourceInfo(item.key, expansion_of);
+    cache.push_back(item);
+    return item.value;
+  }
+  MapSourceRes operator() (const Syntax * syn) {
+    return MapSourceRes(f(syn->str_.source));
+  }
+  MapSourceRes operator() (const ReparseSyntax * syn, const Replacements * repl);
+};
+
+//
+//
+//
 
 // misnamed, now replaces and marks and so much more
 struct ReplTable {
@@ -262,12 +226,11 @@ struct ReplTable {
   }
 
   const ast::Mark * mark;
-  ExpandSourceInfo * expand_si;
-  ChangeSrc<SplitSourceInfo> ci;
-  const SourceInfo * outer_si;
+  MapSource_ExpansionOf * ci;
+  MapSource_QuotedSyntax * qcs;
   bool no_repl;
   const SourceInfo * expand_source_info(const SourceInfo * s) {
-    return ci(s);
+    return ci->f(s);
   }
   const SourceInfo * expand_source_info(const Syntax * s) {
     return expand_source_info(s->str().source);
@@ -284,8 +247,12 @@ struct ReplTable {
     to_string(buf, PrintFlags(), NULL);
     return buf.freeze();
   }
-  ReplTable(const ast::Mark * m, ExpandSourceInfo * e)
-    : mark(m), expand_si(e), ci(NULL, e), outer_si(NULL), no_repl(false) {}
+  ReplTable(const ast::Mark * m, MapSource_ExpansionOf * e)
+    : mark(m), ci(e), qcs(NULL), no_repl(false) {}
+  ReplTable(MapSource_ExpansionOf * e) 
+    : mark(NULL), ci(e), qcs(NULL), no_repl(true) {}
+  ReplTable(MapSource_QuotedSyntax * qcs) 
+    : mark(NULL), ci(NULL), qcs(qcs), no_repl(true) {}
 };
 
 void ReplTable::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const {
@@ -350,14 +317,13 @@ void Replacements::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const 
 //
 //
 
-template <>
-struct ChangeSrc<ExpandSourceInfo> : public ChangeSrcBase {
-  ReplTable * r;
-  ChangeSrc(ReplTable * r0) : r(r0) {}
-  const SourceInfo * operator() (const SourceInfo * o) {
-    return r->expand_source_info(o);
-  }
-};
+MapSourceRes MapSource_ExpansionOf::operator() 
+  (const ReparseSyntax * syn, const Replacements * repl) 
+{
+  if (!repl || repl->empty() || repl->back()->ci != this)
+    repl = combine_repl(repl, new ReplTable(this));
+  return MapSourceRes(f(syn->str_.source), repl);
+}
 
 //
 //
@@ -429,23 +395,18 @@ static const Syntax * reparse_replace(const Syntax * new_name,
 
 struct Macro : public Declaration, public Symbol {
   SymbolKey real_name;
-  static const Syntax * macro_call;
-  static const Syntax * macro_def;
+  static MapSource_ExpansionOf * macro_ci;
   Overloadable overloadable_;
   Macro() {}
   Overloadable overloadable() const {return overloadable_;}
   struct MacroInfo {
-    const Syntax * orig_call;
-    const Syntax * orig_def;
-    MacroInfo(const Syntax * c, const Syntax * d) {
-      orig_call = macro_call;
-      orig_def = macro_def;
-      macro_call = c;
-      macro_def = d;
+    MapSource_ExpansionOf * orig_ci;
+    MacroInfo(const Macro * m, const Syntax * c) {
+      orig_ci = macro_ci;
+      macro_ci = new MapSource_ExpansionOf(new ExpansionOf(m, c->str()));
     }
     ~MacroInfo() {
-      macro_call = orig_call;
-      macro_def = orig_def;
+      macro_ci = orig_ci;
     }
   };
   const Syntax * def;
@@ -455,11 +416,8 @@ struct Macro : public Declaration, public Symbol {
     unsigned c = ++c0;
     //printf("%d EXPAND: %s %s\n", c, ~s->sample_w_loc(), ~p->sample_w_loc());
     try {
-      MacroInfo whocares(s,def);
+      MacroInfo whocares(this, s);
       Syntax * res = expand(p, env);
-      res->str_ = s->str(); // OK, maybe this is a bit harsh
-      // ^^FIXME: and shouldn't be necessary once proper backtrace info
-      // is provided
       return res;
     } catch (Error * err) {
       StringBuf buf = err->extra;
@@ -473,8 +431,7 @@ struct Macro : public Declaration, public Symbol {
   const Syntax * get_prop(SymbolName n) const {return props.get_prop(n);}
 };
 
-const Syntax * Macro::macro_call = NULL;
-const Syntax * Macro::macro_def = NULL;
+MapSource_ExpansionOf * Macro::macro_ci = NULL;
 
 struct SimpleMacro : public Macro {
   const char * what() const {return "simple-macro";}
@@ -505,8 +462,7 @@ struct SimpleMacro : public Macro {
     if (id_macro) {
       overloadable_ = Overloadable::AS_ID;
     }
-    ChangeSrc<SyntaxSourceInfo> cs(p->arg(2));
-    repl = new_syntax(cs,*p->arg(2));
+    repl = p->arg(2)->map_source(*new MapSource_QuotedSyntax(p->arg(2)->str()));
     return this;
   }
   const Syntax * expand(const Syntax * p, Environ &) const {
@@ -716,6 +672,8 @@ namespace macro_abi {
 void add_match_var(Match * m, const SymbolName & n, const Syntax * repl) {
   if (n == "_") return; // "_" is a special variable meaning: don't care
   //printf("AM: x%p %p\n", NO_MATCH, repl);
+  if (repl && repl->str().source)
+    repl = repl->map_source(*Macro::macro_ci);
   m->push_back(Match::value_type(n, repl));
 }
 
@@ -819,11 +777,8 @@ bool match_list(Match * m,
 Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsigned shift, Mark * mark) {
   Match * m = new Match();
   ReplTable * rt 
-    = new ReplTable(mark, 
-                    new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
-  //ParseAsQuasiQuote pqq(false);
+    = new ReplTable(mark, Macro::macro_ci);
   if (pattern->is_a("quasiquote")) {
-    //pqq = ParseAsQuasiQuote(pattern->arg(1)->as_expandable());
     pattern = pattern->arg(0);
   }
   if (pattern->is_reparse("()") || pattern->is_reparse("[]")) {
@@ -959,9 +914,7 @@ namespace macro_abi {
 
 const Syntax * replace(const Syntax * p, Match * match, ReplTable::AntiQuotes * aqs, Mark * mark) {
   ReplTable * rparms 
-    = new ReplTable(mark, 
-                    new ExpandSourceInfo(Macro::macro_call, Macro::macro_def));
-  //new ExpandSourceInfo);
+    = new ReplTable(mark, Macro::macro_ci);
   if (match)
     rparms->table = *match;
   if (aqs)
@@ -978,7 +931,7 @@ const Syntax * replace(const Syntax * p, Match * match, ReplTable::AntiQuotes * 
   } else {
     res = replace(p, rparms, NULL, NULL);
   }
-  rparms->expand_si->outer_ip = res;
+  //rparms->expand_si->outer_ip = res; // XXX
   // fixme: why am i doing this? commented it out for now
   //res->str_ = p->str();
   //printf("tREPLACE res: %s\n", ~res->to_string());
@@ -1004,12 +957,30 @@ struct ReplToApply {
     {init(repl,table,additional);}
   const Syntax * apply(const Syntax * res) {
     if (repls) {
+      // res->sample_w_loc(COUT);
+      // printf("::");
+      // for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
+      //      i != e; ++i) 
+      // {
+      //   if (!(*i)->no_repl) 
+      //     printf(" NORMAL-REPL");
+      //   if ((*i)->no_repl && (*i)->ci)
+      //     printf(" CI-ONLY");
+      //   if ((*i)->qcs)
+      //     printf(" QCS");
+      //   printf(" / ");
+      // }
+      // printf("\n");
       for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
            i != e; ++i) 
       {
         combined_repls.erase(combined_repls.begin());
         if (!(*i)->no_repl)
           res = replace(res, *i, &combined_repls, NULL);
+        if ((*i)->no_repl && (*i)->ci)
+          res = res->map_source(*(*i)->ci);
+        if ((*i)->qcs)
+          res = res->map_source(*(*i)->qcs);
       }
     }
     return res;
@@ -1097,8 +1068,9 @@ static const Syntax * replace(const Syntax * p,
     }
     return res;
   } else if (p->is_a("s") || p->is_a("c") || p->is_a("n") || p->is_a("f")) {
-    ChangeSrc<ExpandSourceInfo> ci(r);
-    return SYN(ci, *p);
+    // This special case should no longer be needed, however, without
+    // it the adding of marks causes problems
+    return p->map_source(*r->ci);
   } else {
   def:
     SyntaxBuilder res;
@@ -1135,12 +1107,14 @@ static const Syntax * reparse_replace(const Syntax * new_name,
                                       const Syntax * p, ReplTable * r)
 {
   const ReparseSyntax * rs = p->as_reparse();
+  SourceStr str = r->expand_source_info_str(rs->str_);
   return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->what_part())),
                            combine_repl(rs->repl, r),
                            rs->cache, rs->parse_as,
                            rs->origin,
-                           r->expand_source_info_str(p->outer().str),
-                           r->expand_source_info_str(p->inner().str));
+                           rs->outer_,
+                           rs->inner_,
+                           &str);
 }
 
 const Syntax * replace_context(const Syntax * p, const Marks * context);
@@ -1160,23 +1134,19 @@ const Syntax * replace_mid(const Syntax * mid, const Syntax * repl, ReplTable * 
     }
     return res.build(repl->str());
   } else {
-    ChangeSrc<SplitSourceInfo> cs(repl, r->outer_si ? r->outer_si : new ReplaceSourceInfo(r->expand_si,mid));
-    const Syntax * orig_repl = repl;
-    repl = SYN(cs, *repl);
-    
     if (mid->num_args() > 1) {
       String what = mid->arg(1)->as_symbol_name().name;
       if (repl->is_reparse("parm") || repl->is_reparse("()")) { // FIXME: Just check for is_reparse()?
-        const Replacements * repls = repl->as_reparse()->repl;
-        if (repls) {
-          for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
-               i != e; ++i) 
-          {
-            // FIXME: This seams like the correct thing to do,
-            //        however, I have no idea if it is.....
-            (*i)->outer_si = cs.new_;
-          }
-        }
+        // const Replacements * repls = repl->as_reparse()->repl;
+        // if (repls) {
+        //   for (Replacements::const_iterator i = repls->begin(), e = repls->end(); 
+        //        i != e; ++i) 
+        //   {
+        //     // FIXME: This seams like the correct thing to do,
+        //     //        however, I have no idea if it is.....
+        //     (*i)->outer_si = cs.new_;
+        //   }
+        // }
         repl = reparse(what, repl->inner(), NULL, NULL, rs);
       }
     }
@@ -1229,7 +1199,7 @@ extern "C"
 namespace macro_abi {
   
   const UnmarkedSyntax * string_to_syntax(const char * str) {
-    return parse_str("SYNTAX_STR", SourceStr(str));
+    return parse_str("SYNTAX_STR", SourceStr(new SourceBlock(SubStr(str))));
   }
   
   const char * syntax_to_string(const UnmarkedSyntax * s) {
@@ -2068,17 +2038,19 @@ void load_macro_lib(ParmString lib, Environ & env) {
     Syntaxes * i = (Syntaxes *)dlsym(lh, "_syntaxes");
     Syntaxes * e = i + *syntaxes_size;
     for (; i != e; ++i) {
+      SourceBlock * block = new SourceBlock(SubStr(i->str, i->str + i->len));
       if (i->what && strcmp(i->what, "quasiquote") == 0) {
-        i->syn = parse_str_as_quasiquote(i->parse_as, SourceStr(i->str, i->str + i->len));
+        i->syn = parse_str_as_quasiquote(i->parse_as, SourceStr(block));
       } else if (i->what) {
         i->syn = new ReparseSyntax(SYN(i->what), NULL, NULL, 
                                    i->parse_as ? String(i->parse_as) : String(),
                                    String(), 
-                                   SourceStr(i->str, i->str + i->len),
-                                   SourceStr(i->str + i->inner_offset,
+                                   SourceStr(block),
+                                   SourceStr(&block->base_info,
+                                             i->str + i->inner_offset,
                                              i->str + i->inner_offset + i->inner_len));
       } else {
-        i->syn = parse_str(i->parse_as, SourceStr(i->str, i->str + i->len));
+        i->syn = parse_str(i->parse_as, SourceStr(block));
       }
     }
   }
@@ -2174,46 +2146,6 @@ namespace macro_abi {
 //
 //
 
-// template <typename T>
-// SyntaxBase::SyntaxBase(ChangeSrc<T> & f, const Syntax & other)
-//   : what_(other.what_), 
-//     str_(f(other.str_.source), other.str_), 
-//     d(other.d)
-// {
-//   if (other.repl) {
-//     repl = new Replacements(*other.repl);
-//     for (Replacements::const_iterator i = repl->begin(), e = repl->end(); 
-//          i != e; ++i) 
-//     {
-//       for (ReplTable::Table::iterator j = (*i)->table.begin(), e = (*i)->table.end();
-//            j != e; ++j)
-//       {
-//         //j->second = SYN(f, *j->second);
-//       }
-//     }
-//   } else {
-//     repl = NULL;
-//   }
-// }
-
-namespace syntax_ns {
-  template <typename T>
-  SyntaxBase * new_syntax(ChangeSrc<T> & f, const Syntax & other) {
-    SyntaxBase * syn = other.shallow_clone();
-    syn->str_.source = f(other.str_.source);
-    // FIXME: Why?
-    //if (other.repl) {
-    //  syn->repl = new Replacements(*other.repl);
-    //} else {
-    //  syn->repl = NULL;
-    //}
-    return syn;
-  }
-}
-
-
-
-
 struct PointerEntity {
   typedef ::TypeInfo<PointerEntity> TypeInfo;
 };
@@ -2299,4 +2231,38 @@ extern "C" {
     return GC_FREE(ptr);
   }
 
+}
+
+//
+//
+//
+
+MapSourceRes MapSource_QuotedSyntax::operator() 
+  (const ReparseSyntax * other, const Replacements * repl) 
+{
+  ReplTable * rt = new ReplTable(this);
+  return MapSourceRes(f(other->str_.source), 
+                      combine_repl(repl, new ReplTable(this)));
+}
+
+void BacktraceInfo::dump_info(StringBuf & o, const char * prefix) const {
+  switch (action) {
+  case EXPANSION_OF: {
+    const ExpansionOf * ths = static_cast<const ExpansionOf *>(this);
+    o.printf("%s(%p) in expansion of ", prefix, ths);
+    //o << prefix << "in expansion of ";
+    ths->call_site.sample_w_loc(o);
+    o << '\n' << prefix << "  (macro \"" << ths->macro->real_name << '"';
+    const SourceFile * f = ths->macro->def->str().file();
+    if (f) {
+      o << ": defined at ";
+      f->get_pos_str(ths->macro->def->str().begin, o);
+    }
+    o << ")\n";
+    const BacktraceInfo * parent = ths->parent();
+    if (parent) parent->dump_info(o, prefix);
+    break;
+  } default:
+    abort();
+  }
 }

@@ -592,7 +592,7 @@ void parse_peg(const char * fn) {
   try {
     parse.top(parse.file->begin(), parse.file->end());
   } catch (Error * err) {
-    err->source = parse.file;
+    err->source = &parse.file->base_block.base_info;
     throw err;
   }
 }
@@ -1892,7 +1892,7 @@ namespace ParsePeg {
             parse_hints_file(hints->begin(), hints->end());
           } catch (Error * err) {
             // OK this is very bad, fix latter
-            err->source = hints;
+            err->source = &hints->base_block.base_info;
             //fprintf(stderr, "%s\n", err->message().c_str());
             exit(1);
           }
@@ -1982,7 +1982,7 @@ namespace ParsePeg {
     Vector<TokenRule>::iterator i = token_rules.begin(), e = token_rules.end();
     for (;i != e; ++i) {
       //ParseErrors errors;
-      SourceStr str(p->name);
+      SourceStr str(new SourceBlock(p->name));
       str.begin = i->to_match->match(str, NULL, dummy_env);
       if (str.empty()) {
         p->desc = i->desc;
@@ -2382,7 +2382,7 @@ void ParseErrors::print(const SourceInfo * file, const SourceFile * grammer)
   if (empty()) {
     printf("Parse Failed (no specific error)\n");
   } else {
-    Pos pos = file->get_pos(front()->pos);
+    Pos pos = file->file()->get_pos(front()->pos);
     printf("Error %d.%d: Expected ", pos.line, pos.col);
     int i = 0; 
     for (;;) {

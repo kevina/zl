@@ -10,9 +10,6 @@
 
 struct Replacements;
 
-template <typename T>
-struct ChangeSrc;
-
 namespace syntax_ns {
 
   inline void stop() {}
@@ -135,6 +132,16 @@ namespace syntax_ns {
   typedef Syntax * * mutable_parts_iterator;
   typedef Syntax * * mutable_flags_iterator;
 
+  struct MapSourceRes {
+    bool stop;
+    const SourceInfo * source;
+    const Replacements * repl;
+    explicit MapSourceRes()
+      : stop(true), source(NULL), repl(NULL) {}
+    explicit MapSourceRes(const SourceInfo * s, const Replacements * repl = NULL) 
+      : stop(false), source(s), repl(repl) {}
+  };
+
   struct SyntaxBase {
     unsigned type_inf; // "type_info" a reserved word
     mutable SourceStr str_;
@@ -179,6 +186,8 @@ namespace syntax_ns {
 
     inline SemiMutable * clone() const;
     inline SyntaxBase * shallow_clone() const;
+    template <typename F>
+    inline const SyntaxBase * map_source(F & f) const;
 
     inline unsigned num_parts() const;
     inline unsigned num_flags() const;
@@ -308,6 +317,8 @@ namespace syntax_ns {
     }
 
     inline PartsInlined * clone() const;
+    template <typename F>
+    const PartsInlined * map_source(F & f) const;
 
   protected:
     PartsInlined(unsigned tinf, const SourceStr & str = SourceStr())
@@ -340,6 +351,24 @@ namespace syntax_ns {
     PartsInlined * syn = (PartsInlined *)GC_MALLOC(sizeof(PartsInlined) + (sz - 1)*sizeof(void *));
     new (syn) PartsInlined(*this);
     copy(parts_, parts_ + sz, syn->parts_);
+    return syn;
+  }
+
+  template <typename F>
+  inline void map_source_copy_parts(F & f, const Syntax * * dest, const Syntax * const * src, unsigned sz) {
+    for (unsigned i = 0; i != sz; ++i)
+      dest[i] = src[i]->map_source(f);
+  }
+
+  template <typename F>
+  const PartsInlined * PartsInlined::map_source(F & f) const {
+    MapSourceRes res = f(this);
+    if (res.stop) return this;
+    unsigned sz = num_parts() + num_flags();
+    PartsInlined * syn = (PartsInlined *)GC_MALLOC(sizeof(PartsInlined) + (sz - 1)*sizeof(void *));
+    new (syn) PartsInlined(*this);
+    syn->str_.source = res.source;
+    map_source_copy_parts(f, syn->parts_, parts_, sz);
     return syn;
   }
 
@@ -382,6 +411,9 @@ namespace syntax_ns {
       this->finalize();
     }
 
+    template <typename F>
+    void map_source_copy_in(F & f, const ExternParts & other);
+
     ExternParts(unsigned tinf, const SourceStr & str, 
                 Syntax * * p, Syntax * * pe, Syntax * * f, Syntax * * fe)
       : T(tinf, str)
@@ -419,6 +451,18 @@ namespace syntax_ns {
     
     unsigned alloc_size() const {return flags_end_ - parts_;}
   };
+
+  template <typename T>
+  template <typename F>
+  void ExternParts<T>::map_source_copy_in(F & f, const ExternParts & other) {
+    allocate(other.flags_end_ - other.parts_);
+    parts_end_ = parts_ + other.num_parts();
+    flags_     = flags_ - other.num_flags();
+    map_source_copy_parts(f, parts_, other.parts_, other.num_parts());
+    map_source_copy_parts(f, flags_, other.flags_, other.num_flags());
+    this->finalize();
+  }
+
   
   // "T" must inherate from Entity, it must also define add_part_hook
   // and add_parts_hook, and insure_space
@@ -551,6 +595,7 @@ namespace syntax_ns {
 
   struct PartsSeparate : public ExternParts<SemiMutable> {
     typedef ExternParts<SemiMutable> Base;
+
     PartsSeparate(const SourceStr & str) 
       : Base(IS_PARTS_SEPARATE, str) {}
     PartsSeparate(const SourceStr & str, 
@@ -560,6 +605,14 @@ namespace syntax_ns {
       : Base(IS_PARTS_SEPARATE, str, max_sz) {}
     PartsSeparate(const PartsSeparate & other) : Base(other) {direct_copy(other);}
     PartsSeparate * clone() const {return new PartsSeparate(*this);}
+    template <typename F>
+    const PartsSeparate * map_source(F & f) const {
+      MapSourceRes res = f(this);
+      if (res.stop) return this;
+      PartsSeparate * syn = new PartsSeparate(SourceStr(res.source, str_.begin, str_.end));
+      syn->map_source_copy_in(f, *this);
+      return syn;
+    }
   protected:
     PartsSeparate(unsigned tinf, const SourceStr & str) 
       : Base(tinf, str) {}
@@ -582,9 +635,19 @@ namespace syntax_ns {
     
     Expandable(const SourceStr & str = SourceStr()) : Base(IS_EXPANDABLE, str) {allocate(COPY_THRESHOLD);}
 
-    PartsSeparate * clone() const {return new Expandable(*this);}
+    Expandable * clone() const {return new Expandable(*this);}
+    template <typename F>
+    const Expandable * map_source(F & f) const {
+      MapSourceRes res = f(this);
+      if (res.stop) return this;
+      return new Expandable(SourceStr(res.source,str_.begin, str_.end), *this, f);
+    }
+  private:
+    template <typename F>
+    Expandable(const SourceStr & str, const Expandable & other, F & f) 
+      : Base(IS_EXPANDABLE, str) {map_source_copy_in(f, other);}
   };
-    
+
   struct Leaf : public NoParts {
     SymbolName what_;
     
@@ -605,6 +668,14 @@ namespace syntax_ns {
 
     Leaf * clone() const {
       return new Leaf(*this);
+    }
+    template <typename F>
+    const Leaf * map_source(F & f) const {
+      MapSourceRes res = f(this);
+      if (res.stop || res.source == str_.source)
+        return this;
+      else
+        return new Leaf(what_, SourceStr(res.source, str_.begin, str_.end));
     }
   };
 
@@ -651,8 +722,18 @@ namespace syntax_ns {
     template <typename T> SynEntity(const T * e) : NoParts(SYN_ENTITY_TI, e->source_str()), d(e) {}
     template <typename T> SynEntity(const SourceStr & s, const T * e) : NoParts(SYN_ENTITY_TI, s), d(e) {}
 
+    SynEntity(const SourceStr & s, const Data & d) : NoParts(SYN_ENTITY_TI, s), d(d) {}
+
     void desc(OStream & o) const;
     SynEntity * clone() const {return new SynEntity(*this);}
+    template <typename F>
+    const SynEntity * map_source(F & f) const {
+      MapSourceRes res = f(this);
+      if (res.stop || res.source == str_.source)
+        return this;
+      else
+        return new SynEntity(SourceStr(res.source, str_.begin, str_.end), d);
+    }
   };
 
   struct Reparse : public SyntaxBase {
@@ -670,12 +751,23 @@ namespace syntax_ns {
     ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, cache);}
     ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, cache);}
     Reparse(const SourceStr & str) : SyntaxBase(REPARSE_TI), what_(), repl(), inner_(str), cache(), cached_val() {}
-    Reparse(const Syntax * p, const Replacements * r, void * c, String pa, String ogn, const SourceStr & o, const SourceStr & i)
-      : SyntaxBase(REPARSE_TI, o), what_(p), repl(r), outer_(o), inner_(i), cache(c), parse_as(pa), origin(ogn), cached_val() {}
+    Reparse(const Syntax * p, const Replacements * r, void * c, String pa, String ogn, 
+            const SourceStr & o, const SourceStr & i, const SourceStr * str = NULL)
+      : SyntaxBase(REPARSE_TI, str ? *str : o), what_(p), repl(r), 
+        outer_(o), inner_(i), cache(c), parse_as(pa), origin(ogn), cached_val() {}
     Reparse(const Reparse & other) 
       : SyntaxBase(other), what_(other.what_), repl(other.repl), outer_(other.outer_), inner_(other.inner_), 
         cache(other.cache), parse_as(other.parse_as), origin(other.origin), cached_val() {}
     Reparse * clone() const {return new Reparse(*this);}
+    template <typename F>
+    const Reparse * map_source(F & f) const {
+      MapSourceRes res = f(this, repl);
+      if (res.stop) return this;
+      SourceStr new_str = str_;
+      new_str.source = res.source;
+      return new Reparse(what_->map_source(f), res.repl, cache, parse_as, origin,
+                         outer_, inner_, &new_str);
+    }
     Syntax * instantiate(bool no_throw = false) const {
       if (!cached_val) do_instantiate(no_throw);
       return cached_val;
@@ -730,18 +822,29 @@ namespace syntax_ns {
 
   inline SemiMutable * SyntaxBase::clone() const {
     if (is_parts_inlined()) return as_parts_inlined()->clone();
-    if (is_parts_separate()) return as_parts_separate()->clone();
     if (expandable()) return as_expandable()->clone();
+    if (is_parts_separate()) return as_parts_separate()->clone();
     abort();
   }
 
   inline SyntaxBase * SyntaxBase::shallow_clone() const {
     if (is_parts_inlined()) return as_parts_inlined()->clone();
-    if (is_parts_separate()) return as_parts_separate()->clone();
     if (expandable()) return as_expandable()->clone();
+    if (is_parts_separate()) return as_parts_separate()->clone();
     if (is_leaf()) return as_leaf()->clone();
     if (have_entity()) return as_syn_entity()->clone();
     if (is_reparse()) return as_reparse()->clone();
+    abort();
+  }
+
+  template <typename F>
+  inline const SyntaxBase * SyntaxBase::map_source(F & f) const {
+    if (is_parts_inlined()) return as_parts_inlined()->map_source(f);
+    if (expandable()) return as_expandable()->map_source(f);
+    if (is_parts_separate()) return as_parts_separate()->map_source(f);
+    if (is_leaf()) return as_leaf()->map_source(f);
+    if (have_entity()) return as_syn_entity()->map_source(f);
+    if (is_reparse()) return as_reparse()->map_source(f);
     abort();
   }
 
@@ -1385,9 +1488,10 @@ namespace syntax_ns {
     return res.build();
   }
   
-  template <typename T> // defined in expand.cpp
-  SyntaxBase * new_syntax(ChangeSrc<T> & f, const Syntax & other);
-
+  //
+  //
+  //
+  
 }
 
 using syntax_ns::Syntax;
@@ -1408,6 +1512,7 @@ using syntax_ns::ReparseInfo;
 using syntax_ns::new_syntax;
 using syntax_ns::mk_pt_flg;
 using syntax_ns::SPECIAL_OK;
+using syntax_ns::MapSourceRes;
 
 static inline Syntax * instantiate(Syntax * syn) {
   if (const ReparseSyntax * r = syn->maybe_reparse())

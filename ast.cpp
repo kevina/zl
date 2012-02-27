@@ -3799,7 +3799,7 @@ namespace ast {
     clock_t start = clock();
     printf("INCLUDING: %s\n", ~file_name);
     SourceFile * code = new_source_file(file_name);
-    parse_stmts(SourceStr(code, code->begin(), code->end()), env);
+    parse_stmts(SourceStr(code), env);
     clock_t parse_done = clock();
     clock_t load_done = clock();
     printf("Include Time (%s): %f  (parse: %f)\n", ~file_name,
@@ -3811,7 +3811,7 @@ namespace ast {
   Stmt * parse_include_file(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     String file_name = *p->arg(0);
-    file_name = add_dir_if_needed(file_name, p->str().source);
+    file_name = add_dir_if_needed(file_name, p->str().source->file());
     include_file(file_name, env);
     return empty_stmt();
   }
@@ -3836,7 +3836,7 @@ namespace ast {
       try {
         env.interface = true;
         assert(!env.collect);
-        parse_stmts(SourceStr(code, code->begin(), code->end()), env);
+        parse_stmts(SourceStr(code), env);
       } catch (...) {
         env.interface = env_interface_orig;
         throw;
@@ -3866,7 +3866,7 @@ namespace ast {
   Stmt * parse_import_file(const Syntax * p, Environ & env) {
     assert_num_args(p, 1);
     String file_name = *p->arg(0);
-    file_name = add_dir_if_needed(file_name, p->str().source);
+    file_name = add_dir_if_needed(file_name, p->str().source->file());
     import_file(file_name, env);
     return empty_stmt();
   }
@@ -4848,8 +4848,7 @@ namespace ast {
   const Syntax * parse_syntax_c(const Syntax * p) {
     assert_num_args(p, 1);
     const Syntax * syn = p->part(1);
-    ChangeSrc<SyntaxSourceInfo> cs(syn);
-    syn = SYN(cs, *syn);
+    syn = syn->map_source(*new MapSource_QuotedSyntax(syn->str()));
     SyntaxC::keep_me.push_back(syn);
     return syn;
   }

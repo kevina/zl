@@ -163,10 +163,16 @@ String Error::message() {
   if (source)
     pos_str(source->file(), pos, "", res, ": ");
   res += msg;
+  if (source && source->origin())
+    res += " [1]";
   res += "\n";
   res += note;
-  if (source)
-    source->dump_info(res, "  ");
+  if (source && source->backtrace)
+    source->backtrace->dump_info(res, "  ");
+  if (source && source->origin()) {
+    res << "[1] source origin:\n";
+    source->origin()->dump_info(res, "[1]   ");
+  }
   res += extra;
   return res.freeze();
 }
@@ -186,7 +192,7 @@ void SyntaxBase::set_src_from_parts() const {
     SourceStr other = part(i)->str();
     if (!s.source) {
       s = other;
-    } else if (s.source_block() == other.source_block()) {
+    } else if (s.block() == other.block()) {
       // enlarge str
       if (!s.begin || (other.begin && other.begin < s.begin))
         s.begin = other.begin;

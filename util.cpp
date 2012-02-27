@@ -35,26 +35,26 @@ int cmp(const char * x, unsigned x_sz, const char * y, unsigned y_sz) {
 //
 //
 
-void SourceInfo::dump_info(OStream & o, AlreadySeen & as, const char * prefix) const {
-  bool seen_self = as.have(this);
-  as.insert(this);
-  StringBuf buf;
-  bool dump_parents = dump_info_self(buf);
-  String str = buf.freeze();
-  if (!str.empty()) {
-    if (seen_self) 
-      o << prefix << "[" << str << "]\n";
-    else
-      o << prefix << str << "\n";
-  }
-  if (parent && !seen_self && dump_parents)
-    parent->dump_info(o, as, prefix);
-}
+// void SourceInfo::dump_info(OStream & o, AlreadySeen & as, const char * prefix) const {
+//   bool seen_self = as.have(this);
+//   as.insert(this);
+//   StringBuf buf;
+//   bool dump_parents = dump_info_self(buf);
+//   String str = buf.freeze();
+//   if (!str.empty()) {
+//     if (seen_self) 
+//       o << prefix << "[" << str << "]\n";
+//     else
+//       o << prefix << str << "\n";
+//   }
+//   if (parent && !seen_self && dump_parents)
+//     parent->dump_info(o, as, prefix);
+// }
 
-void SourceInfo::dump_info(OStream & o, const char * prefix) const {
-  AlreadySeen as;
-  dump_info(o, as, prefix);
-}
+// void SourceInfo::dump_info(OStream & o, const char * prefix) const {
+//   AlreadySeen as;
+//   dump_info(o, as, prefix);
+// }
 
 struct StringObj1 {
   unsigned size;
@@ -144,6 +144,7 @@ void SourceFile::read(int fd) {
       new_line = true;
     }
   }
+  base_block.box = SourceStr(this);
 }
 
 struct SourceChangeLt {
@@ -173,7 +174,7 @@ Pos SourceFile::get_pos(const char * s) const {
   return Pos(sc->file_name, sc->lineno + line_offset, NPOS);
 }
 
-String add_dir_if_needed(String file, const SourceInfo * included_from) {
+String add_dir_if_needed(String file, const SourceFile * included_from) {
   if (file[0] == '/') {
     return file;
   } else {
@@ -195,7 +196,7 @@ String add_dir_if_needed(String file, const SourceInfo * included_from) {
   } 
 }
 
-SourceFile * new_source_file(String file, const SourceInfo * included_from, bool pp_mode) {
+SourceFile * new_source_file(String file, const SourceFile * included_from, bool pp_mode) {
   return new SourceFile(add_dir_if_needed(file, included_from), pp_mode);
 }
 
@@ -203,7 +204,3 @@ SourceFile * new_source_file(int fd, bool pp_mode) {
   return new SourceFile(fd, pp_mode);
 }
 
-bool SourceFile::dump_info_self(OStream & o) const {
-  return false;
-  //o.printf("%sin file %s\n", prefix, ~file_name_);
-}

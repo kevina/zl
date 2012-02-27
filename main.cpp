@@ -22,9 +22,8 @@ extern "C" {
 void parse_maps(ast::Environ & env) {
   SourceFile * code = new_source_file(SOURCE_PREFIX "grammer.ins");
   code->internal = true;
-  const char * s = code->begin();
   try {
-    SourceStr str(code, s, code->end());
+    SourceStr str(code);
     parse_prod("S_SPACING", str, &env);
     while (!str.empty()) {
       const Syntax * p = parse_prod("SEXP", str, &env);
@@ -129,15 +128,15 @@ int main(int argc, const char *argv[])
     if (zls_mode) {
       printf("ZLS MODE\n");
       env.mangle = false;
-      ast::parse_stmts_raw(SourceStr(code, code->begin(), code->end()), env);
+      ast::parse_stmts_raw(SourceStr(code), env);
     } else {
       parse_maps(env);
       SourceFile * prelude = new_source_file(SOURCE_PREFIX "prelude.zlh");
       prelude->internal = true;
-      ast::parse_stmts(SourceStr(prelude, prelude->begin(), prelude->end()), env);
+      ast::parse_stmts(SourceStr(prelude), env);
       if (debug_mode && load_prelude) {
         SourceFile * prelude_body = new_source_file(SOURCE_PREFIX "prelude.zl");
-        ast::parse_stmts(SourceStr(prelude_body, prelude_body->begin(), prelude_body->end()), env);
+        ast::parse_stmts(SourceStr(prelude_body), env);
         //SourceFile * class_body = new_source_file(SOURCE_PREFIX "class.zl");
         //parse_stmts(parse_str("SLIST", SourceStr(class_body, class_body->begin(), class_body->end())), env);
       } else if (load_prelude) {
@@ -145,11 +144,11 @@ int main(int argc, const char *argv[])
       }
       if (load_prelude && !debug_mode /* debug mode doesn't work with new abi stuff yet */ ) {
         SourceFile * prelude_extra = new_source_file(SOURCE_PREFIX "prelude-extra.zlh");
-        ast::parse_stmts(SourceStr(prelude_extra, prelude_extra->begin(), prelude_extra->end()), env);
+        ast::parse_stmts(SourceStr(prelude_extra), env);
       }
       if (cpp_mode) {
         SourceFile * prelude_cpp = new_source_file(SOURCE_PREFIX "prelude-c++.zlh");
-        ast::parse_stmts(SourceStr(prelude_cpp, prelude_cpp->begin(), prelude_cpp->end()), env);
+        ast::parse_stmts(SourceStr(prelude_cpp), env);
       }
       //if (load_prelude && !for_ct)
         //ast::import_file(SOURCE_PREFIX "test/class-new_abi.zl", env);
@@ -157,9 +156,9 @@ int main(int argc, const char *argv[])
       if (c_mode)
         env.mangle = false;
       if (gcc_abi) {
-        ast::parse_stmts_wrap_abi(SourceStr(code, code->begin(), code->end()), "gcc", env);
+        ast::parse_stmts_wrap_abi(SourceStr(code), "gcc", env);
       } else {
-        ast::parse_stmts(SourceStr(code, code->begin(), code->end()), env);
+        ast::parse_stmts(SourceStr(code), env);
       }
     }
     ast::CompileWriter out;
