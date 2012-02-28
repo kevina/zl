@@ -116,6 +116,12 @@ const Syntax * flatten(const Syntax * p);
 
 void load_macro_lib(ParmString lib, Environ & env);
 
+struct MacroInfo {
+  ast::SymbolKey real_name;
+  const Syntax * def;
+  MacroInfo() : def() {}
+};
+
 // class SyntaxSourceInfo : public SourceInfo {
 // public:
 //   const Syntax * syntax;

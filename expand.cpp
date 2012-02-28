@@ -317,6 +317,14 @@ void Replacements::to_string(OStream & o, PrintFlags f, SyntaxGather * g) const 
 //
 //
 
+MapSourceRes MapSource_QuotedSyntax::operator() 
+  (const ReparseSyntax * other, const Replacements * repl) 
+{
+  ReplTable * rt = new ReplTable(this);
+  return MapSourceRes(f(other->str_.source), 
+                      combine_repl(repl, new ReplTable(this)));
+}
+
 MapSourceRes MapSource_ExpansionOf::operator() 
   (const ReparseSyntax * syn, const Replacements * repl) 
 {
@@ -393,8 +401,7 @@ const Syntax * replace(const Syntax * p, ReplTable::Table * match,
 static const Syntax * reparse_replace(const Syntax * new_name, 
                                       const Syntax * p, ReplTable * r);
 
-struct Macro : public Declaration, public Symbol {
-  SymbolKey real_name;
+struct Macro : public MacroInfo, public Declaration, public Symbol {
   static MapSource_ExpansionOf * macro_ci;
   Overloadable overloadable_;
   Macro() {}
@@ -409,7 +416,6 @@ struct Macro : public Declaration, public Symbol {
       macro_ci = orig_ci;
     }
   };
-  const Syntax * def;
   virtual const Syntax * expand(const Syntax *, Environ & env) const = 0;
   const Syntax * expand(const Syntax * s, const Syntax * p, Environ & env) const {
     static unsigned c0 = 0;
@@ -2237,32 +2243,3 @@ extern "C" {
 //
 //
 
-MapSourceRes MapSource_QuotedSyntax::operator() 
-  (const ReparseSyntax * other, const Replacements * repl) 
-{
-  ReplTable * rt = new ReplTable(this);
-  return MapSourceRes(f(other->str_.source), 
-                      combine_repl(repl, new ReplTable(this)));
-}
-
-void BacktraceInfo::dump_info(StringBuf & o, const char * prefix) const {
-  switch (action) {
-  case EXPANSION_OF: {
-    const ExpansionOf * ths = static_cast<const ExpansionOf *>(this);
-    o.printf("%s(%p) in expansion of ", prefix, ths);
-    //o << prefix << "in expansion of ";
-    ths->call_site.sample_w_loc(o);
-    o << '\n' << prefix << "  (macro \"" << ths->macro->real_name << '"';
-    const SourceFile * f = ths->macro->def->str().file();
-    if (f) {
-      o << ": defined at ";
-      f->get_pos_str(ths->macro->def->str().begin, o);
-    }
-    o << ")\n";
-    const BacktraceInfo * parent = ths->parent();
-    if (parent) parent->dump_info(o, prefix);
-    break;
-  } default:
-    abort();
-  }
-}

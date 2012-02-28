@@ -186,11 +186,11 @@ inline void SourceFile::get_pos_str(const char * s, OStream & buf) const {
 // BacktraceInfo members
 //
 
-struct Macro;
+struct MacroInfo;
 struct ExpansionOf : public BacktraceInfo {
-  ExpansionOf(const Macro * m, const SourceStr & str) 
+  ExpansionOf(const MacroInfo * m, const SourceStr & str) 
     : BacktraceInfo(EXPANSION_OF), macro(m), call_site(str)  {}
-  const Macro * macro;
+  const MacroInfo * macro;
   SourceStr call_site;
   inline const BacktraceInfo * parent() const {
     if (!call_site.source) return NULL; // FIXME: Should't be necessary

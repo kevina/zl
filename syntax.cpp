@@ -177,6 +177,27 @@ String Error::message() {
   return res.freeze();
 }
 
+void BacktraceInfo::dump_info(StringBuf & o, const char * prefix) const {
+  switch (action) {
+  case EXPANSION_OF: {
+    const ExpansionOf * ths = static_cast<const ExpansionOf *>(this);
+    o.printf("%s(%p) in expansion of ", prefix, ths);
+    //o << prefix << "in expansion of ";
+    ths->call_site.sample_w_loc(o);
+    o << '\n' << prefix << "  (macro \"" << ths->macro->real_name << '"';
+    const SourceFile * f = ths->macro->def->str().file();
+    if (f) {
+      o << ": defined at ";
+      f->get_pos_str(ths->macro->def->str().begin, o);
+    }
+    o << ")\n";
+    const BacktraceInfo * parent = ths->parent();
+    if (parent) parent->dump_info(o, prefix);
+    break;
+  } default:
+    abort();
+  }
+}
 
 //
 //
