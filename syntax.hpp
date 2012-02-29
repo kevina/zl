@@ -242,6 +242,7 @@ namespace syntax_ns {
     void sample_w_loc(OStream & o, unsigned max_len = 20, unsigned syn_len = 0) const;
     String sample_w_loc(unsigned max_len = 20, unsigned syn_lan = 0) const;
 
+    SourceStr get_inner_src(const SourceStr & s = SourceStr()) const;
     void set_src_from_parts() const;
 
   protected:

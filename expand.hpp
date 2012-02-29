@@ -97,9 +97,7 @@ static inline const Syntax * reparse(String what, ReparseInfo p, Environ * env =
                                      const Replacements * additional_repls = NULL,
                                      ParseAsQuasiQuote = ParseAsQuasiQuote()) 
 {
-  const Syntax * res = reparse_prod(what, p, env, true, r, additional_repls);
-  const_cast<Syntax *>(res)->str_ = p.orig->str();
-  return res;
+  return reparse_prod(what, p, env, true, r, additional_repls);
 }
 
 ast::Stmt * parse_map(const Syntax * p, Environ & env);

@@ -363,10 +363,9 @@ void BacktraceInfo::get_info(ErrorLine * * ip) const {
 
 // note: if the source info is diffrent for the parts but the source
 //       block is the same, it will use the source info of the first part
-void SyntaxBase::set_src_from_parts() const {
-  //printf("SET SRC FROM PARTS\n");
-  SourceStr s = str_; // even though the SubStr is empty it might
-                      // contain useful source info
+
+SourceStr SyntaxBase::get_inner_src(const SourceStr & base) const {
+  SourceStr s = base;
   for (unsigned i = 0, sz = num_parts(); i != sz; ++i) {
     SourceStr other = part(i)->str();
     if (!s.source) {
@@ -380,14 +379,22 @@ void SyntaxBase::set_src_from_parts() const {
     } else if (i == 1) { // ignore source string for first part, only use the args
       s = other;
     } else {
-      s = str_;
+      s = base;
       break;
     }
   }
   assert((!s.begin && !s.end) || (s.begin && s.end));
+  return s;
+}
+
+void SyntaxBase::set_src_from_parts() const {
+  //printf("SET SRC FROM PARTS\n");
+  // even though the SubStr is empty it might
+  // contain useful source info
+  SourceStr s = get_inner_src(str_);
   if (s.source) {
     str_ = s;
-  } else if (num_parts() > 0) { // FIXME: Is this check really necessary ...
+  } else if (num_parts() > 0) {
     str_ = part(0)->str();
   }
 }

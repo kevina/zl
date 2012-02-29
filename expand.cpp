@@ -1003,9 +1003,9 @@ const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env,
   ReplToApply to_apply(p.repl, r, additional_repls);
   const Syntax * res;
   res = parse_prod(what, p.str, env, &to_apply.combined_repls, p.cache, match_complete_str, pqq);
-  //printf("PARSED STRING %s\n", ~res->to_string());
+  //printf("PARSED STRING %s: %s\n", ~res->to_string(), ~res->sample_w_loc());
   res = to_apply.apply(res);
-  //printf("REPARSE %s RES: %s\n", "??"/*~p->to_string()*/, ~res->to_string());
+  //printf("REPARSE RES: %s: %s\n", ~res->to_string(), ~res->sample_w_loc());
   //printf("....... %s\n", ~res->sample_w_loc());
   return res;
 }
@@ -1105,7 +1105,20 @@ static const Syntax * replace(const Syntax * p,
       res.add_flag(r0.build());
     }
     //printf("REPLACE Res %d: %s\n", seql, ~res->to_string());
-    return res.build(r->expand_source_info_str(p));
+    SourceStr outer = p->str();
+    SourceStr inner = p->get_inner_src();
+    SourceStr str;
+    // If in the template the source string for the outer syntax is
+    // the same the combination of the inner, don't set the source
+    // string of the replacement, instead let it be derived from the
+    // parts.  Important so that things like (exp (mid X)) will get
+    // the source string of the replacement (i.e., (mid X)) and not
+    // the template as the later is rarely what's wanted.
+    if (outer.begin == inner.begin && outer.end == inner.end)
+      ; // nothing to do
+    else
+      str = r->expand_source_info_str(p);
+    return res.build(str);
   }
 }
 
