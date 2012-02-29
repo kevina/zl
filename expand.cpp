@@ -236,7 +236,7 @@ struct ReplTable {
     return expand_source_info(s->str().source);
   }
   inline SourceStr expand_source_info_str(const SourceStr & str) {
-    return SourceStr(expand_source_info(str.source), str);
+    return SourceStr(expand_source_info(str.source), str.begin, str.end);
   }
   SourceStr expand_source_info_str(const Syntax * s) {
     return expand_source_info_str(s->str());

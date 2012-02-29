@@ -47,6 +47,11 @@ struct ParseError {
     {
       //printf(">>ERROR %p: Expected %s<<\n", pos, e.c_str());
     }
+  ParseError(const char * gp, const SourceStr & str, String e)
+    : grammer_pos(gp), pos(str.begin), expected(e) 
+    {
+      //printf(">>ERROR %p: Expected %s<<\n", pos, e.c_str());
+    }
 };
 
 struct ParseErrors : public Vector<const ParseError *> {
@@ -618,7 +623,7 @@ const char * SymProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & 
   } else {
     ParseErrors my_errs;
     const char * r = prod.match_f(str, my_errs, env);
-    if (my_errs.size() > 0 && my_errs.front()->pos <= str) {
+    if (my_errs.size() > 0 && my_errs.front()->pos <= str.begin) {
       errs.add(new ParseError(pos, str, desc));
     } else if (my_errs.size() > 0 && my_errs.front()->expected == "<charset>") {
       errs.add(new ParseError(pos, str, desc));
@@ -1142,13 +1147,13 @@ class CharClass : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) {
     if (!str.empty() && cs[*str])
-      return str + 1;
+      return str.begin + 1;
     else
       return FAIL;
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
     if (!str.empty() && cs[*str]) {
-      return str + 1;
+      return str.begin + 1;
     } else {
       errs.add(new ParseError(pos, str, "<charset>")); // FIXME 
       return FAIL;
@@ -1179,12 +1184,12 @@ class Any : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &)  {
     if (!str.empty())
-      return str+1;
+      return str.begin+1;
     return FAIL;
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &)  {
     if (!str.empty())
-      return str+1;
+      return str.begin+1;
     errs.push_back(new ParseError(pos, str, "<EOF>"));
     return FAIL;
   }
@@ -1216,7 +1221,7 @@ public:
       if (once) break;
     }
     if (matched || optional)
-      return str;
+      return str.begin;
     else 
       return FAIL;
   }
@@ -1234,7 +1239,7 @@ public:
       if (once) break;
     }
     if (matched || optional)
-      return str;
+      return str.begin;
     else 
       return FAIL;
   }
@@ -1281,9 +1286,9 @@ public:
     if (dont_match_empty && r == str.begin)
       r = FAIL;
     if (r) {
-      return MatchRes(invert ? FAIL : str);
+      return MatchRes(invert ? FAIL : str.begin);
     } else {
-      return MatchRes(invert ? str : FAIL);
+      return MatchRes(invert ? str.begin : FAIL);
     }
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {

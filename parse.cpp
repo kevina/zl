@@ -7,31 +7,32 @@
 #include "asc_ctype.hpp"
 #include "error.hpp"
 
-static const char * s_id(SourceStr str, String & res) {
+static const char * s_id(const SourceStr & str, String & res) {
   bool have_quotes = false;
   bool in_quote = false;
   StringBuf buf;
-  while (!str.empty()) {
-    if ((asc_isspace(*str) || *str == '(' || *str == ')' || *str == '#') && !in_quote) break;
-    if (*str == '"') {
+  const char * p = str.begin;
+  while (p != str.end) {
+    if ((asc_isspace(*p) || *p == '(' || *p == ')' || *p == '#') && !in_quote) break;
+    if (*p == '"') {
       have_quotes = true;
       in_quote = !in_quote;
-      ++str;
+      ++p;
       continue;
     }
-    if (*str == '\\') {
-      buf += *str;
-      ++str;
-      if (str.empty())
-        throw error(str, "Unexpected end of identifier");
+    if (*p == '\\') {
+      buf += *p;
+      ++p;
+      if (p == str.end)
+        throw error(str.source, p, "Unexpected end of identifier");
     }
-    buf += *str;
-    ++str;
+    buf += *p;
+    ++p;
   }
   res = buf.freeze();
   if (res.empty() && !have_quotes)
     res = String();
-  return str;
+  return p;
 }
 
 ErrorLine * extra_parse_info(const SourceStr & str, String what) {
@@ -42,15 +43,21 @@ namespace parse_parse {
 
   using namespace parse_common;
 
-  Res parse_grp_or_id(SourceStr str) 
+  using parse_common::spacing;
+  static inline const char * spacing(const SourceStr & str) {
+    return spacing(str.begin, str.end);
+  }
+
+  Res parse_grp_or_id(const SourceStr & str) 
   {
-    if (*str == '(') {
+    if (*str.begin == '(') {
       return parse(str);
     } else {
       SyntaxLeaf * r = new SyntaxLeaf(str);
-      str = s_id(str, r->what_);
-      r->str_.end = str;
-      return Res(str, r);
+      const char * p = str.begin;
+      p = s_id(str, r->what_);
+      r->str_.end = p;
+      return Res(p, r);
     }
   }
 
@@ -58,12 +65,13 @@ namespace parse_parse {
   {
     String name;
     const char * start = str.begin;
-    str = spacing(str);
+    const char * p = str.begin;
+    str.begin = spacing(str);
     if (*str != '(') throw error(str, "Expected '('");
     SyntaxBuilder res;
     SourceStr rstr = str;
-    ++str;
-    str = spacing(str);
+    ++str.begin;
+    str.begin = spacing(str);
     /*const char * name_start = str.begin;
     str = s_id(str, name);
     const char * name_end = str.end;
@@ -74,26 +82,26 @@ namespace parse_parse {
     while (!str.empty() && *str != ')') {
       if (*str == '(') {
         Res r = parse(str);
-        str = r.end;
+        str.begin = r.end;
         res.add_part(r.parse);
       } else if (str[0] == ':' && str[1] != ':') {
-        ++str;
+        ++str.begin;
         Res r = parse_grp_or_id(str);
-        str = r.end;
+        str.begin = r.end;
         res.add_flag(r.parse);
       } else {
         SyntaxLeaf * r = new SyntaxLeaf(str);
-        str = s_id(str, r->what_);
-        r->str_.end = str;
+        str.begin = s_id(str, r->what_);
+        r->str_.end = str.begin;
         res.add_part(r);
       }
-      str = spacing(str);
+      str.begin = spacing(str);
     }
     if (str.empty() || *str != ')') throw error(str.source, start, "Unterminated '('");
-    ++str;
-    rstr.end = str;
-    str = spacing(str);
-    return Res(str, res.build(rstr));
+    ++str.begin;
+    rstr.end = str.begin;
+    str.begin = spacing(str);
+    return Res(str.begin, res.build(rstr));
   }
 }
 

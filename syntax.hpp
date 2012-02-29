@@ -654,7 +654,7 @@ namespace syntax_ns {
     explicit Leaf(const char * n) : NoParts(LEAF_TI), what_(n){}
     explicit Leaf(String n) : NoParts(LEAF_TI), what_(n) {}
     explicit Leaf(SymbolName n) : NoParts(LEAF_TI), what_(n) {}
-    explicit Leaf(SourceStr & str) : NoParts(LEAF_TI, str) {}
+    explicit Leaf(const SourceStr & str) : NoParts(LEAF_TI, str) {}
     Leaf(const char * n, const SourceStr & s) 
       : NoParts(LEAF_TI, s), what_(n){}
     Leaf(String n, const SourceStr & s) 
@@ -1256,7 +1256,7 @@ namespace syntax_ns {
   static inline Leaf * new_syntax(const Syntax * o, const ast::Mark * m, const SourceInfo * s)
   {
     assert(o->simple());
-    return new_syntax(ast::mark(o->what(), m), SourceStr(s, o->str_));
+    return new_syntax(ast::mark(o->what(), m), SourceStr(s, o->str_.begin, o->str_.end));
   }
 
 

@@ -47,30 +47,36 @@ struct SourceInfo {
   inline const BacktraceInfo * origin() const;
 };
 
-struct SourceStr : public SubStr {
+struct SourceStr {
+  const char * begin;
+  const char * end;
   const SourceInfo * source;
   const SourceBlock * block() const {return source ? source->block : NULL;}
   const SourceFile * file() const {return source ? source->file() : NULL;}
   const BacktraceInfo * backtrace() {return source ? source->backtrace : NULL;}
   const BacktraceInfo * origin() {return source ? source->origin() : NULL;}
-  SourceStr() : source() {}
+  SourceStr() : begin(NULL), end(NULL), source() {}
   explicit SourceStr(const SourceBlock * f);
   explicit SourceStr(const SourceFile * f);
   SourceStr(const SourceInfo * f, const char * b, const char * e) 
-    : SubStr(b,e), source(f) {}
+    : begin(b), end(e), source(f) {}
   SourceStr(const SourceInfo * f, SubStr s) 
-    : SubStr(s), source(f) {}
+    : begin(s.begin), end(s.end), source(f) {}
   SourceStr(const SourceStr & other, const char * e)
-    : SubStr(other.begin, e), source(other.source) {}
-  operator const char * & () {return begin;}
-  operator const char * () const {return begin;}
+    : begin(other.begin), end(e), source(other.source) {}
+  unsigned size() const {return end - begin;}
+  bool empty() const {return begin == end;}
+  bool defined() const {return begin != NULL;}
+  char operator*() const {return *begin;}
+  char operator[](unsigned i) const {return begin[i];}
   void clear() {
-    SubStr::clear();
+    begin = end = 0;
     source = 0;
   }
-  void assign(const char * str, const SourceStr & end) {
-    SubStr::assign(str, end.begin);
-    source = end.source;
+  void assign(const char * str, const SourceStr & e) {
+    begin = str;
+    end = e.begin;
+    source = e.source;
   }
   void adj(const SourceStr & other) {
     if (!source && other.source) source = other.source;
@@ -78,7 +84,6 @@ struct SourceStr : public SubStr {
     if (!begin || begin > other.begin) begin = other.begin;
     if (!end || end < other.end) end = other.end;
   }
-  SourceStr & operator=(const char * s) {begin = s; return *this;}
   inline bool pos_str(const char * pre, OStream & o, const char * pos) const;
   void sample_w_loc(OStream & o, unsigned max_len = 20) const;
 };
@@ -143,9 +148,9 @@ inline const BacktraceInfo * SourceInfo::origin() const {
 }
 
 inline SourceStr::SourceStr(const SourceBlock * f) 
-  : SubStr(f->box.begin, f->box.end), source(&f->base_info) {}
+  : begin(f->box.begin), end(f->box.end), source(&f->base_info) {}
 inline SourceStr::SourceStr(const SourceFile * f) 
-  : SubStr(f->begin(), f->end()), source(&f->base_block.base_info) {}
+  : begin(f->begin()), end(f->end()), source(&f->base_block.base_info) {}
 
 //
 //
