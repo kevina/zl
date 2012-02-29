@@ -9,8 +9,9 @@
 
 struct Annon;
 struct SyntaxGather;
+struct ErrorLine;
 
-String extra_parse_info(const SourceStr & str, String what);
+ErrorLine * extra_parse_info(const SourceStr & str, String what);
 
 namespace ast {
   inline SymbolKey::SymbolKey(const Syntax & p, const InnerNS * ns0) 

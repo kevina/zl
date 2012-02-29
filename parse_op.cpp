@@ -315,10 +315,10 @@ public:
         res->str_ = p->str();
       return res;
     } catch (Error * err) {
-      printf("?? %s %s\n", ~p->sample_w_loc(), ~p->to_string());
+      //printf("?? %s %s\n", ~p->sample_w_loc(), ~p->to_string());
       //abort();
-      err->source = p->str().source;
-      err->note = extra_parse_info(p->str(), "<op exp>");
+      err->msg.span.source = p->str().source;
+      err->add_note(extra_parse_info(p->str(), "<op exp>"));
       throw err;
     }
   }

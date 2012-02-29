@@ -30,11 +30,12 @@ struct Pos {
 
 struct SourceBlock;
 struct SourceFile;
+struct ErrorLine;
 
 struct BacktraceInfo {
   enum Action {EXPANSION_OF} const action;
   BacktraceInfo(Action a) : action(a) {}
-  void dump_info(StringBuf & res, const char * prefix) const;
+  void get_info(ErrorLine * *) const;
 };
 
 struct SourceInfo {
@@ -50,6 +51,8 @@ struct SourceStr : public SubStr {
   const SourceInfo * source;
   const SourceBlock * block() const {return source ? source->block : NULL;}
   const SourceFile * file() const {return source ? source->file() : NULL;}
+  const BacktraceInfo * backtrace() {return source ? source->backtrace : NULL;}
+  const BacktraceInfo * origin() {return source ? source->origin() : NULL;}
   SourceStr() : source() {}
   explicit SourceStr(const SourceBlock * f);
   explicit SourceStr(const SourceFile * f);

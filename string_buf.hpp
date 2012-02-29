@@ -409,5 +409,10 @@ inline String sbprintf(const char * format, ...) {
   return buf.freeze();
 }
 
+static inline String vsbprintf(const char * format, va_list ap) {
+  StringBuf buf;
+  int res = buf.vprintf(format, ap);
+  return buf.freeze();
+}
 
 #endif

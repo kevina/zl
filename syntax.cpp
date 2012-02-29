@@ -109,21 +109,17 @@ String SyntaxBase::sample_w_loc(unsigned max_len, unsigned syn_len) const {
 // Error
 //
 
-Error * verror(const SourceInfo * s, const char * pos, 
-               const char * fmt, va_list ap) {
-  StringBuf buf;
-  buf.vprintf(fmt, ap);
-  Error * error = new Error;
-  error->source = s;
-  error->pos = pos;
-  error->msg = buf.freeze();
-  return error;
+Error::Error(const SourceStr & str, const char * fmt, va_list ap)
+  : msg(0, str, vsbprintf(fmt, ap)), ip(&msg.next)
+{
+  msg.pos_level = ErrorLine::FullLine; 
+  msg.maybe_origin = true;
 }
 
 Error * error(const SourceInfo * s, const char * pos, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(s, pos, fmt, ap);
+  Error * res = new Error(SourceStr(s,pos,pos), fmt, ap);
   va_end(ap);
   return res;
 }
@@ -131,7 +127,7 @@ Error * error(const SourceInfo * s, const char * pos, const char * fmt, ...) {
 Error * error(const SourceStr & str, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(str.source, str.begin, fmt, ap);
+  Error * res = new Error(str, fmt, ap);
   va_end(ap);
   return res;
 }
@@ -140,7 +136,7 @@ Error * error(const Syntax * p, const char * fmt, ...) {
   SourceStr str = p ? p->str() : SourceStr();
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(str.source, str.begin, fmt, ap);
+  Error * res = new Error(str, fmt, ap);
   va_end(ap);
   if (p) {
     StringBuf buf = res->extra;
@@ -153,46 +149,208 @@ Error * error(const Syntax * p, const char * fmt, ...) {
 Error * error(const char * pos, const char * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  Error * res = verror(NULL, pos, fmt, ap);
+  Error * res = new Error(SourceStr(NULL,pos,pos), fmt, ap);
   va_end(ap);
   return res;
 }
 
+struct OriginBacktraces {
+  unsigned start;
+  unsigned stop;
+  struct Data {
+    const BacktraceInfo * bt;
+    ErrorLine * msg;
+    Data(const BacktraceInfo * bt) : bt(bt), msg() {}
+  };
+  Vector<Data> data;
+  OriginBacktraces() : start(0), stop(0) {}
+  unsigned find(const BacktraceInfo * to_find) const {
+    if (to_find == NULL) return NPOS;
+    for (unsigned i = start; i != stop; ++i)
+      if (data[i].bt == to_find) return i;
+    return NPOS;
+  }
+  void push_back(const BacktraceInfo * to_add) {
+    if (to_add == NULL) return;
+    if (find(to_add) == NPOS)
+      data.insert(data.begin() + stop, to_add);
+    stop++;
+  }
+  void kill(const BacktraceInfo * to_kill) {
+    unsigned pos = find(to_kill);
+    if (pos == NPOS) return;
+    data.erase(data.begin() + pos);
+    stop--;
+  }
+  void clean() {
+    for (unsigned i = start; i != stop; ++i) {
+      for (unsigned j = 0; j < start; ++j) 
+        if (data[i].bt == data[j].bt) {
+          printf("PURGE SELF %u (%u)\n", i, j);
+          assert(data[i].msg == NULL);
+          data[i].bt = NULL;
+        }
+      for (unsigned j = stop, sz = data.size(); j < sz; ++j)
+        if (data[i].bt == data[j].bt) {
+          printf("PURGE LATER %u (%u)\n", j, i);
+          assert(data[j].msg == NULL);
+          data[j].bt = NULL;
+        }
+    }
+  }
+  void purge() {
+    Vector<Data>::iterator ip = data.begin(), i = data.begin(), e = data.end();
+    while (i != e) {
+      if (i->bt == NULL) {
+        ++i;
+      } else {
+        *ip = *i;
+        ++ip;
+        ++i;
+      }
+    }
+    data.erase(ip, e);
+  }
+};
+
+void ErrorLine::to_string(StringBuf & res, const OriginBacktraces & obts) 
+{
+  for (unsigned i = 0; i < indent; ++i)
+    res += ' ';
+  res << prefix;
+  switch (pos_level) {
+  case LocOnly:
+  case FullLine:
+    pos_str(span.file(), span.begin, "", res, prefix.defined() ? "" : ": ");
+    break;
+  case Sample:
+    if (suffix.defined())
+      span.sample_w_loc(res);
+    break;
+  }
+  res << suffix;
+  unsigned origin_idx = maybe_origin ? obts.find(span.origin()) : NPOS;
+  if (origin_idx != NPOS)
+    res.printf(" [%u]", origin_idx + 1);
+  res += '\n';
+  if (pos_level == FullLine) {
+    const char * line_start = span.begin;
+    const char * line_stop = span.end;
+    const SourceBlock * block = span.block();
+    if (block) {
+      const char * begin = block->box.begin;
+      const char * end = block->box.end;
+      if (begin <= line_start && line_start <= end
+          && begin <= line_stop  && line_stop  <= end) 
+      {
+        do {
+          --line_start;
+        } while (line_start >= begin && *line_start != '\n');
+        ++line_start;
+        while (line_stop < end && *line_stop != '\n')
+          ++line_stop;
+      } else {
+        fprintf(stderr, "WARNING: INVALID BLOCK\n");
+      }
+    }
+    unsigned line_count = 1;
+    while (line_start < line_stop && line_count <= 3) {
+      for (unsigned i = 0; i < indent+4; ++i) res += ' ';
+      const char * p = line_start;
+      for (;p < line_stop && *p != '\n'; ++p)
+        res += *p;
+      res += '\n';
+      for (unsigned i = 0; i < indent+4; ++i) res += ' ';
+      const char * q = line_start;
+      if (span.begin == span.end) {
+        for (;q < p; ++q)
+          if (q == span.begin)
+            res += '^';
+          else
+            res += ' ';
+      } else {
+        for (;q < p; ++q)
+          if (span.begin <= q && q < span.end)
+            res += '^';
+          else
+            res += ' ';
+      }
+      if (q == span.begin)
+        res += '^';
+      res += '\n';
+      line_start = p + 1;
+      line_count++;
+    }
+  }
+  if (next)
+    next->to_string(res, obts);
+}
+
+void collect_origin(ErrorLine * msg, OriginBacktraces & obts) {
+  for (; msg; msg = msg->next)
+    if (msg->maybe_origin) 
+      obts.push_back(msg->span.origin());
+}
+
+void get_backtrace(const BacktraceInfo * bti, ErrorLine * * ip, OriginBacktraces & obts) {
+  if (!bti) return;
+  ErrorLine * & head = *ip;
+  bti->get_info(&head);
+  for (ErrorLine * msg = head; msg; msg = msg->next) {
+    if (msg->maybe_origin) 
+      obts.push_back(msg->span.origin());
+    if (msg->res_bt && msg->res_bt != bti)
+      obts.kill(msg->res_bt);
+  }
+}
+
 String Error::message() {
+  OriginBacktraces obts;
+  ErrorLine * bt = NULL;
+  collect_origin(&msg, obts);
+  get_backtrace(msg.span.backtrace(), &bt, obts);
+  for (unsigned i = 0; i < obts.data.size(); ++i) {
+    obts.start = i;
+    obts.stop = i + 1;
+    get_backtrace(obts.data[i].bt, &obts.data[i].msg, obts);
+    obts.clean();
+  }
+  obts.purge();
+  obts.start = 0;
+  obts.stop = obts.data.size();
   StringBuf res;
-  if (source)
-    pos_str(source->file(), pos, "", res, ": ");
-  res += msg;
-  if (source && source->origin())
-    res += " [1]";
-  res += "\n";
-  res += note;
-  if (source && source->backtrace)
-    source->backtrace->dump_info(res, "  ");
-  if (source && source->origin()) {
-    res << "[1] source origin:\n";
-    source->origin()->dump_info(res, "[1]   ");
+  msg.to_string(res, obts);
+  if (bt)
+    bt->to_string(res, obts);
+  for (unsigned i = 0, sz = obts.data.size(); i != sz; ++i) {
+    res.printf("[%u] source origin:\n", i + 1);
+    obts.data[i].msg->to_string(res, obts);
   }
   res += extra;
   return res.freeze();
 }
 
-void BacktraceInfo::dump_info(StringBuf & o, const char * prefix) const {
+void BacktraceInfo::get_info(ErrorLine * * ip) const {
   switch (action) {
   case EXPANSION_OF: {
     const ExpansionOf * ths = static_cast<const ExpansionOf *>(this);
-    o.printf("%s(%p) in expansion of ", prefix, ths);
-    //o << prefix << "in expansion of ";
-    ths->call_site.sample_w_loc(o);
-    o << '\n' << prefix << "  (macro \"" << ths->macro->real_name << '"';
+    ErrorLine * msg = new ErrorLine(2, "in expansion of ", ths->call_site, "");
+    msg->res_bt = this;
+    *ip = msg;
+    ip = &msg->next;
+    const char * name = ~ths->macro->real_name;
     const SourceFile * f = ths->macro->def->str().file();
     if (f) {
-      o << ": defined at ";
-      f->get_pos_str(ths->macro->def->str().begin, o);
-    }
-    o << ")\n";
+      msg = new ErrorLine(4, sbprintf("(macro \"%s\", defined at ", name), ths->macro->def->str(), ")");
+      msg->pos_level = ErrorLine::LocOnly;
+      msg->maybe_origin = true;
+    } else {
+      msg = new ErrorLine(4, sbprintf("(macro \"%s\")", name));
+    } 
+    *ip = msg;
+    ip = &msg->next;
     const BacktraceInfo * parent = ths->parent();
-    if (parent) parent->dump_info(o, prefix);
+    if (parent) parent->get_info(ip);
     break;
   } default:
     abort();

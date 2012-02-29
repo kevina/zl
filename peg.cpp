@@ -592,7 +592,7 @@ void parse_peg(const char * fn) {
   try {
     parse.top(parse.file->begin(), parse.file->end());
   } catch (Error * err) {
-    err->source = &parse.file->base_block.base_info;
+    err->msg.span.source = &parse.file->base_block.base_info;
     throw err;
   }
 }
@@ -1892,7 +1892,7 @@ namespace ParsePeg {
             parse_hints_file(hints->begin(), hints->end());
           } catch (Error * err) {
             // OK this is very bad, fix latter
-            err->source = &hints->base_block.base_info;
+            err->msg.span.source = &hints->base_block.base_info;
             //fprintf(stderr, "%s\n", err->message().c_str());
             exit(1);
           }

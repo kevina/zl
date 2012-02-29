@@ -836,10 +836,11 @@ namespace ast {
     try {
       rhs = rhs->resolve_to(lhs->type, env);
     } catch (Error * err) {
-      StringBuf buf;
-      buf = err->msg;
-      buf.printf(" in assignment of %s.", ~lhs->syn->sample_w_loc());
-      err->msg = buf.freeze();
+      //FIMXE: Maybe turn into a note?
+      //StringBuf buf;
+      //buf = err->msg;
+      //buf.printf(" in assignment of %s.", ~lhs->syn->sample_w_loc());
+      //err->msg = buf.freeze();
       throw err;
     }
   }

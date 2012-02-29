@@ -2172,7 +2172,7 @@ namespace macro_abi {
     SourceStr str = p ? p->str() : SourceStr();
     va_list ap;
     va_start(ap, fmt);
-    Error * res = verror(str.source, str.begin, fmt, ap);
+    Error * res = new Error(str, fmt, ap);
     va_end(ap);
     return SYN(p->str(), res);
   }

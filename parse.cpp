@@ -34,13 +34,8 @@ static const char * s_id(SourceStr str, String & res) {
   return str;
 }
 
-String extra_parse_info(const SourceStr & str, String what) {
-  StringBuf buf;
-  buf << "    when parsing ";
-  str.sample_w_loc(buf);
-  buf << " as " << what;  
-  buf << "\n";
-  return buf.freeze();
+ErrorLine * extra_parse_info(const SourceStr & str, String what) {
+  return new ErrorLine(4, "when parsing ", str, sbprintf(" as %s", ~what));
 }
 
 namespace parse_parse {
