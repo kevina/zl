@@ -147,12 +147,12 @@ struct MapSource_ExpansionOf {
   Cache cache;
   MapSource_ExpansionOf(const ExpansionOf * eo) : expansion_of(eo) {}
   const SourceInfo * f (const SourceInfo * o) {
-    if (!o || !o->block) return o;
+    if (!o) return NULL;
     CacheItem item;
-    item.key = o->block;
+    item.key = &o->block;
     for (Cache::const_iterator i = cache.begin(), e = cache.end(); i != e; ++i)
       if (i->key == item.key) return i->value;
-    item.value = new SourceInfo(item.key, expansion_of);
+    item.value = new SourceInfo(*item.key, expansion_of);
     cache.push_back(item);
     return item.value;
   }

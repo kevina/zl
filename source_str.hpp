@@ -4,7 +4,6 @@
 #include "util.hpp"
 
 class OStream;
-class SourceFile;
 #define PURE __attribute__ ((pure))
 
 //
@@ -29,7 +28,7 @@ struct Pos {
 //
 
 struct SourceBlock;
-struct SourceFile;
+class SourceFile;
 struct ErrorLine;
 
 struct BacktraceInfo {
@@ -39,9 +38,9 @@ struct BacktraceInfo {
 };
 
 struct SourceInfo {
-  const SourceBlock * block;
+  const SourceBlock & block;
   const BacktraceInfo * backtrace;
-  SourceInfo(const SourceBlock * b, const BacktraceInfo * bt = NULL) 
+  SourceInfo(const SourceBlock & b, const BacktraceInfo * bt = NULL) 
     : block(b), backtrace(bt) {}
   inline const SourceFile * file() const;
   inline const BacktraceInfo * origin() const;
@@ -51,7 +50,7 @@ struct SourceStr {
   const char * begin;
   const char * end;
   const SourceInfo * source;
-  const SourceBlock * block() const {return source ? source->block : NULL;}
+  const SourceBlock * block() const {return source ? &source->block : NULL;}
   const SourceFile * file() const {return source ? source->file() : NULL;}
   const BacktraceInfo * backtrace() {return source ? source->backtrace : NULL;}
   const BacktraceInfo * origin() {return source ? source->origin() : NULL;}
@@ -94,11 +93,11 @@ struct SourceBlock {
   //const BacktraceInfo * origin;
   SourceInfo base_info;
   SourceBlock(const SourceFile * f, const SourceStr & s) 
-    : file(f), box(s), base_info(this) {}
+    : file(f), box(s), base_info(*this) {}
   SourceBlock(SubStr s) 
-    : file(NULL), box(NULL, s.begin, s.end), base_info(this) {}
+    : file(NULL), box(NULL, s.begin, s.end), base_info(*this) {}
   SourceBlock(const SourceStr & s) 
-    : file(s.file()), box(s), base_info(this) {}
+    : file(s.file()), box(s), base_info(*this) {}
 private:
   SourceBlock(const SourceBlock &);
   void operator=(const SourceBlock &);
@@ -139,12 +138,11 @@ private:
   void operator=(const SourceFile &);
 };
 
-// XXX: Fix so block is always defined
 inline const SourceFile * SourceInfo::file() const {
-  return block ? block->file : NULL;
+  return block.file;
 }
 inline const BacktraceInfo * SourceInfo::origin() const {
-  return block && block->box.source ? block->box.source->backtrace : NULL;
+  return block.box.source ? block.box.source->backtrace : NULL;
 }
 
 inline SourceStr::SourceStr(const SourceBlock * f) 
