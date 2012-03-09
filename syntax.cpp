@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "syntax.hpp"
+#include "syntax-t.hpp"
 #include "string_buf.hpp"
 #include "asc_ctype.hpp"
 #include "iostream.hpp"
@@ -330,8 +330,37 @@ String Error::message() {
   return res.freeze();
 }
 
+bool BacktraceInfo::somewhere(const BacktraceInfo * to_find) const {
+  if (to_find == this) return true;
+  switch (action) {
+  case EXPANSION_OF: {
+    const ExpansionOf * ths = static_cast<const ExpansionOf *>(this);
+    const BacktraceInfo * parent = ths->parent();
+    if (parent) return parent->somewhere(to_find);
+    break;
+  } default:
+    abort();
+  }
+  return false;
+}
+
+void BacktraceInfo::collect(Vector<const BacktraceInfo *> & bts) const {
+  bts.push_back(this);
+  switch (action) {
+  case EXPANSION_OF: {
+    const ExpansionOf * ths = static_cast<const ExpansionOf *>(this);
+    const BacktraceInfo * parent = ths->parent();
+    if (parent) parent->collect(bts);
+    break;
+  } default:
+    abort();
+  }
+}
+
 void BacktraceInfo::get_info(ErrorLine * * ip) const {
   switch (action) {
+  case NONE: 
+    break;
   case EXPANSION_OF: {
     const ExpansionOf * ths = static_cast<const ExpansionOf *>(this);
     ErrorLine * msg = new ErrorLine(2, "in expansion of ", ths->call_site, "");
@@ -364,10 +393,12 @@ void BacktraceInfo::get_info(ErrorLine * * ip) const {
 // note: if the source info is diffrent for the parts but the source
 //       block is the same, it will use the source info of the first part
 
-SourceStr SyntaxBase::get_inner_src(const SourceStr & base) const {
+SourceStr get_inner_src(const SourceStr & base, bool first, 
+                        parts_iterator i, parts_iterator e)
+{
   SourceStr s = base;
-  for (unsigned i = 0, sz = num_parts(); i != sz; ++i) {
-    SourceStr other = part(i)->str();
+  for (; i != e; ++i) {
+    SourceStr other = (*i)->str();
     if (!s.source) {
       s = other;
     } else if (s.block() == other.block()) {
@@ -376,15 +407,20 @@ SourceStr SyntaxBase::get_inner_src(const SourceStr & base) const {
         s.begin = other.begin;
       if (other.end > s.end)
         s.end = other.end;
-    } else if (i == 1) { // ignore source string for first part, only use the args
+    } else if (first) { // ignore source string for first part, only use the args
       s = other;
     } else {
       s = base;
       break;
     }
+    first = false;
   }
   assert((!s.begin && !s.end) || (s.begin && s.end));
   return s;
+}
+
+SourceStr SyntaxBase::get_inner_src(const SourceStr & base) const {
+  return ::get_inner_src(base, true, parts_begin(), parts_end());
 }
 
 void SyntaxBase::set_src_from_parts() const {
@@ -398,6 +434,32 @@ void SyntaxBase::set_src_from_parts() const {
     str_ = part(0)->str();
   }
 }
+
+// Try to find a reasonable span for the syntax which if possible is
+// not from syntax generated from a macro
+SourceStr find_reasonable_span(const Syntax * syn) {
+  // First try to find a span which is not part of a macro expansion
+  SourceStr str = find_qualifying_span(syn, NotFromMacro());
+  if (str.defined()) return str;
+  // That failed, now try to find a span which is part of the
+  // outermost macro, than work inwards
+  str = syn->str();
+  Vector<const BacktraceInfo *> bts;
+  if (str.backtrace())
+    str.backtrace()->collect(bts);
+  for (Vector<const BacktraceInfo *>::reverse_iterator i = bts.rbegin(), e = bts.rend();
+       i != e; ++i) 
+  {
+    str = find_qualifying_span(syn, ExpandedFromHere(*i));
+    if (str.defined()) return str;
+  }
+  // Still nothing, well the inner span is likely to be better than
+  // the outer so use it if it's defined
+  str = syn->get_inner_src();
+  if (str.defined()) return str;
+  // No luck, give up and just use the outer span.
+  return syn->str();
+}  
 
 
 /*

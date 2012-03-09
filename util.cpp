@@ -76,6 +76,8 @@ void pos_to_str(Pos p, OStream & buf) {
     buf.printf(":%u:%u", p.line, p.col);
 }
 
+const BacktraceInfo SourceBlock::PLACEHOLDER(BacktraceInfo::NONE);
+
 void SourceFile::read(String file) {
   file_name_ = file;
   int fd = open(file.c_str(), O_RDONLY);

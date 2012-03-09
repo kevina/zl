@@ -152,7 +152,14 @@ struct MapSource_ExpansionOf {
     item.key = &o->block;
     for (Cache::const_iterator i = cache.begin(), e = cache.end(); i != e; ++i)
       if (i->key == item.key) return i->value;
-    item.value = new SourceInfo(*item.key, expansion_of);
+    if (o->block.backtrace == &SourceBlock::PLACEHOLDER) {
+      SourceBlock * bl = new SourceBlock(o->block, expansion_of);
+      item.value = &bl->base_info;
+      CacheItem also = {bl, item.value};
+      cache.push_back(also);
+    } else {
+      item.value = new SourceInfo(*item.key, expansion_of);
+    }
     cache.push_back(item);
     return item.value;
   }

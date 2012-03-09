@@ -32,8 +32,10 @@ class SourceFile;
 struct ErrorLine;
 
 struct BacktraceInfo {
-  enum Action {EXPANSION_OF} const action;
+  enum Action {NONE, EXPANSION_OF} const action;
   BacktraceInfo(Action a) : action(a) {}
+  bool somewhere(const BacktraceInfo *) const;
+  void collect(Vector<const BacktraceInfo *> &) const;
   void get_info(ErrorLine * *) const;
 };
 
@@ -90,15 +92,25 @@ struct SourceStr {
 struct SourceBlock {
   const SourceFile * file;
   SourceStr box;
-  //const BacktraceInfo * origin;
+  static const BacktraceInfo PLACEHOLDER;
+  // This is a limited backtrace that gets set on the first call to
+  // replace.  It keeps track of the expansion sight where the string
+  // came from, not where it ended up, which might be different in the
+  // syntax is than passed into another macro as a parameter.
+  const BacktraceInfo * backtrace;
   SourceInfo base_info;
   SourceBlock(const SourceFile * f, const SourceStr & s) 
-    : file(f), box(s), base_info(*this) {}
+    : file(f), box(s), backtrace(&PLACEHOLDER), base_info(*this) {}
   SourceBlock(SubStr s) 
-    : file(NULL), box(NULL, s.begin, s.end), base_info(*this) {}
+    : file(NULL), box(NULL, s.begin, s.end), backtrace(&PLACEHOLDER), base_info(*this) {}
   SourceBlock(const SourceStr & s) 
-    : file(s.file()), box(s), base_info(*this) {}
+    : file(s.file()), box(s), backtrace(&PLACEHOLDER), base_info(*this) {}
+  SourceBlock(const SourceBlock & o, const BacktraceInfo * bt) 
+    : file(o.file), box(o.box), backtrace(bt), base_info(*this, bt) {}
 private:
+  friend class SourceFile;
+  SourceBlock(const SourceFile * f) 
+    : file(f), box(), backtrace(), base_info(*this) {}
   SourceBlock(const SourceBlock &);
   void operator=(const SourceBlock &);
 };
@@ -118,11 +130,11 @@ public:
   SourceBlock base_block;
   SourceFile(String file, bool cpm = false) 
     : data_(), size_(0), pp_mode(cpm), internal(false),
-      base_block(this, SourceStr())
+      base_block(this)
     {read(file);}
   SourceFile(int fd, bool cpm = false) 
     : data_(), size_(0), pp_mode(cpm), internal(false),
-      base_block(this, SourceStr())
+      base_block(this)
     {read(fd);}
   String file_name() const {return file_name_;}
   Pos get_pos(const char * s) const;

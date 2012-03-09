@@ -4265,6 +4265,11 @@ namespace ast {
       f << "(var " << uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
     }
     if (body && phase != Forward) {
+      //if (body->syn) {
+      //  SourceStr str = find_reasonable_span(body->syn);
+      //  Error * err = error(str, "Body Location");
+      //  printf("%s\n", ~err->message());
+      //}
       f.enter_local_line_mode();
       f.set_line_info(this) || f.set_line_info(body);
     }

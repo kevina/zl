@@ -1522,4 +1522,6 @@ static inline Syntax * instantiate(Syntax * syn) {
     return NULL;
 }
 
+SourceStr find_reasonable_span(const Syntax * syn);
+
 #endif
