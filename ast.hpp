@@ -44,8 +44,7 @@ namespace ast {
     SymbolNode * fun_symbols;
   };
 
-  // Note: ExcludeGenerated level not implemented yet
-  enum LineRewriteLevel {NoRewrite, ExcludeGenerated, ExcludeInternal, IncludeAll};
+  enum LineRewriteLevel {NoRewrite, IncludeAll, ExcludeInternal, ExcludeGenerated};
 
   struct LastLineDirective {
     String name;
@@ -70,17 +69,18 @@ namespace ast {
     String escaped_file_name;
     unsigned real_line_num;
     LineRewriteLevel rewrite_level;
+    SourceStr outer_span;
     bool local_line_mode;
     bool used_line_control;
     LastLineDirective lld;
     Pos pos_info;
-    void enter_local_line_mode();
+    void enter_local_line_mode(const Syntax *);
     void exit_local_line_mode();
     inline bool set_line_info(const AST *);
     void flush_w_line_info();
     String local_file_name() {return lld.name;}
     unsigned local_line_pos() {return real_line_num - lld.pos + lld.line;}    
-    bool set_line_info(const SourceStr & str);
+    bool set_line_info(const Syntax * syn);
     void end_line();
     void force_new_line();
     void indent() {
@@ -128,6 +128,8 @@ namespace ast {
       buf.printf("%u", n);
       return *this;
     }
+  private:
+    bool set_line_info(const SourceStr & str);
   };
 
   static inline void copy_val(void * lhs, const void * rhs, const Type * t) {
@@ -173,7 +175,7 @@ namespace ast {
   };
 
   inline bool CompileWriter::set_line_info(const AST * ast) {
-    return set_line_info(ast->source_str());
+    return set_line_info(ast->syn);
   }
 
   struct Stmt;

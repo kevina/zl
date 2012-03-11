@@ -21,6 +21,7 @@
 
 #include "ct_value-impl.hpp"
 #include "hash-t.hpp"
+#include "syntax-t.hpp"
 
 //#define NO_ELIDE
 
@@ -51,18 +52,51 @@ namespace ast {
 
   CompileWriter::CompileWriter(TargetLang tl) 
     : target_lang(tl), in_fun(), indent_level(0), deps(), syntax_gather(), 
-      real_line_num(1), rewrite_level(ExcludeInternal), local_line_mode(false),
+      real_line_num(1), rewrite_level(ExcludeGenerated), local_line_mode(false),
       used_line_control(false)
   {
     if (tl == ZLE)
       syntax_gather = new SyntaxGather;
   }
 
-  void CompileWriter::enter_local_line_mode() {
+  struct WithinSpan {
+    SourceStr span;
+    WithinSpan(SourceStr s) : span(s) {}
+    bool operator() (const SourceStr & str) const {
+      return (str.block() == span.block() 
+              && str.begin >= span.begin
+              && str.end <= span.end);
+    }
+  };
+  
+  struct SameBlock {
+    const SourceBlock * block;
+    SameBlock(const SourceBlock * b) : block(b) {}
+    bool operator() (const SourceStr & str) const {
+      return str.block() == block;
+    }
+  };
+
+  struct NotInternal {
+    bool operator() (const SourceStr & str) const {
+      return str.file() && !str.file()->internal;
+    }
+  };
+
+  struct WithFile {
+    bool operator() (const SourceStr & str) const {
+      return str.file();
+    }
+  };
+
+  void CompileWriter::enter_local_line_mode(const Syntax * span) {
     if (rewrite_level > NoRewrite) {
       if (out_stream)
-        local_line_mode = true; 
+        local_line_mode = true;
       bool have_content = true;
+      if (rewrite_level >= ExcludeGenerated) {
+        outer_span = find_reasonable_span(span);
+      } 
       StringBuf::iterator i = buf.begin(), e = buf.end();
       for (;;) {
         while (i != e && asc_isspace(*i)) ++i;
@@ -86,6 +120,11 @@ namespace ast {
       }
     } else {
       flush();
+    }
+    if (rewrite_level >= ExcludeGenerated) {
+      set_line_info(outer_span);
+    } else {
+      set_line_info(span);
     }
   }
 
@@ -137,12 +176,33 @@ namespace ast {
     }
   }
 
+  bool CompileWriter::set_line_info(const Syntax * syn) {
+    if (!syn) return false;
+    SourceStr str;
+    if (local_line_mode) {
+      if (rewrite_level >= ExcludeGenerated) {
+        str = find_qualifying_span(syn, WithinSpan(outer_span));
+        if (str.defined()) goto all_good;
+        str = find_qualifying_span(syn, SameBlock(outer_span.block()));
+        if (str.defined()) goto all_good;
+        return false;
+      } else if (rewrite_level >= ExcludeInternal) {
+        str = find_qualifying_span(syn, NotInternal());
+      } else {
+        str = find_qualifying_span(syn, WithFile());
+      }
+    } else {
+      str = syn->str();
+    }
+  all_good:
+    return set_line_info(str);
+  }
+
   bool CompileWriter::set_line_info(const SourceStr & str) {
     if (local_line_mode) {
       if (!str.source) return false;
       const SourceFile * sf = str.source->file();
       if (!sf) return false;
-      if (rewrite_level <= ExcludeInternal && sf->internal) return false;
       Pos new_pos = sf->get_pos(str.begin);
       if (new_pos.name != pos_info.name || new_pos.line != pos_info.line) {
         flush_w_line_info();
@@ -150,8 +210,8 @@ namespace ast {
       pos_info = new_pos;
       return true; 
     } else {
-      if (str.source && str.source->file()) {
-        pos_info = str.source->file()->get_pos(str.begin);
+      if (str.file()) {
+        pos_info = str.file()->get_pos(str.begin);
         return true;
       } else {
         pos_info.clear();
@@ -159,6 +219,7 @@ namespace ast {
       }
     }
   }
+
 
   void CompileWriter::end_line() {
     if (local_line_mode) {
@@ -4265,13 +4326,7 @@ namespace ast {
       f << "(var " << uniq_name() << '$' << "env_ss" << " (.ptr (struct EnvironSnapshot)))\n";
     }
     if (body && phase != Forward) {
-      //if (body->syn) {
-      //  SourceStr str = find_reasonable_span(body->syn);
-      //  Error * err = error(str, "Body Location");
-      //  printf("%s\n", ~err->message());
-      //}
-      f.enter_local_line_mode();
-      f.set_line_info(this) || f.set_line_info(body);
+      f.enter_local_line_mode(body->syn);
     }
     f << "(fun " << uniq_name();
     f << " " << parms;
