@@ -16,7 +16,6 @@ STMT : "statement" =
     / <while> "while" "(" {EXP} ")" {STMT}
     / <do>    "do" {STMT} "while" "(" {EXP} ")" ";"
     / <for>   "for" "(" {<stmt> {TOKEN}+ / <noop>} ";" {EXP/<n 1>} ";" {<eblock> {EXP}/<noop>} ")" {STMT}
-    / <foreach> "foreach" "(" {ID} "in" {EXP} ")" {STMT} # added for foreach testcase
     / <break>    "break" ";"
     / <continue> "continue" ";"
     / <return>   "return" {EXP}? ";"
@@ -44,9 +43,15 @@ STMT : "statement" =
     / <noop>   ";"
     / <extern> "extern" {STRING_L} (:<abi> ({STRING}/":"{STRING_L}))? ({BRACEL} / {STMT})
     / <once> "__once" {ID} ({BRACEL} / {STMT})
+    / {CUSTOM_STMT}
     / <stmt>   ({TOKEN_}+ {PARAN} {"const"}? {INIT_LIST}? {BRACE} / {TOKEN}+ ";")
 #   / <stmt>   ({TOKEN_}+ ({PARAN} {BRACE} / {TOKEN}* ";") / ({PARAN} / {BRACE}) {TOKEN}* ";")
    ;
+
+CUSTOM_STMT = !__;
+
+CUSTOM_STMT := _cur / <foreach> "foreach" "(" {ID} "in" {EXP} ")" {STMT} # added for foreach testcase
+            ;
 
 INIT_LIST =
   <init> ":" (<> {ID} {PARAN}) (<> "," {ID} {PARAN})*;
@@ -127,12 +132,17 @@ FLOATING_SUFFIX = <f> [fF] / <long-double> [lL] / <double>;
 
 STRUCT_UNION = <%> {"struct"/"union"/"class"/".class"} 
                    {ID/}
-                   (:<public> ":" "public" {ID})?
-                   (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
-                   (:<fix_vtable_size> ":" "fix_vtable_size" "(" {EXP} ")" )? # used for test101
-                   (:<vtable_slots> ":" "vtable_slots" "(" {EXP} ")" )?
-                   (:<abi_ver> ":" "abi_ver" "(" {EXP} ")" )?
+                   {STRUCT_UNION_PARMS}
                    {<{...}> {BRACEL} }?;
+
+STRUCT_UNION_PARMS = (:<public> ":" "public" {ID})?;
+
+STRUCT_UNION_PARMS := _cur
+                     (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
+                     (:<fix_vtable_size> ":" "fix_vtable_size" "(" {EXP} ")" )? # used for test101
+                     (:<vtable_slots> ":" "vtable_slots" "(" {EXP} ")" )?
+                     (:<abi_ver> ":" "abi_ver" "(" {EXP} ")" )?;
+
 
 ENUM = <enum> "enum" {ID/} 
               {<{,}> "{" ({ENUM_MEMBER} ",")* ({ENUM_MEMBER} ","?)? "}" }?;

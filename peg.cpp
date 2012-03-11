@@ -560,6 +560,7 @@ namespace ParsePeg {
     Vector< Sym<NamedProd> > unresolved_syms;
     Vector< Sym<TokenProd> > token_syms;
     Vector<TokenRule>        token_rules;
+    ProdWrap                 existing; // used when redefining
 
     void top(const char * str, const char * end);
 
@@ -1865,6 +1866,7 @@ namespace ParsePeg {
 
   const char * opt_desc(const char * str, const char * end, String & res) {
     if (*str == ':') {
+      if (end - str > 1 && str[1] == '=') return str;
       str = symbol(':', str, end);
       if (str == end || *str != '"') throw error(str, "'\"' expected");
       SubStr res0;
@@ -1928,11 +1930,26 @@ namespace ParsePeg {
         if (p == 0) p = new_named_prod(name);
         String desc;
         str = opt_desc(str, end, desc);
-        str = require_symbol('=', str, end);
+        bool redefine = false;
+        if (*str == '=') { 
+          if (p->prod.prod)
+            throw error(str, "Redefining %s", ~name);
+          str += 1;
+        } else if (end - str > 1 && str[0] == ':' && str[1] == '=') {
+          if (!p->prod.prod)
+            throw error(str, "Redefining undefined prod: %s", ~name);
+          str += 2;
+          redefine = true;
+          existing = p->prod;
+        } else {
+          throw error(str, "Expected '=' or ':='");
+        }
+        str = spacing(str, end);
         //bool explicit_capture = false;
         Res r = peg(str, end, ';');
         //r.prod->verify();
         //if (name == "SPLIT_FLAG") stop();
+        existing = ProdWrap();
         p->desc = desc;
         p->set_prod(r);
         str = r.end;
@@ -2321,10 +2338,14 @@ namespace ParsePeg {
     str = id(str, end, name);
     if (name == "_") {
       return Res(new Any(start, str));
+    } else if (name == "__") {
+      return Res(new AlwaysTrue(start, str));
     } else if (name == "_self") {
       // special symbol for "tokens"
       // FIXME: Check that we really can use this symbol here
       return Res(new SymProd(start, str, name));
+    } else if (name == "_cur") {
+      return Res(str,existing);
     } else {
       pprintf("PARSING    DEP: %s\n", ~name);
       NamedProd * & p = named_prods[name];

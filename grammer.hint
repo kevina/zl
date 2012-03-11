@@ -87,3 +87,4 @@ PARAN_LIST: trans;
 PARM: trans;
 PARM_: trans;
 EOF:;
+STRUCT_UNION_PARMS: trans;
