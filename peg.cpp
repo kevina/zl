@@ -404,9 +404,11 @@ bool operator==(const CacheKey & x, const CacheKey & y) {
   return x.prod == y.prod && x.str == y.str;
 }
 
+struct CacheData : public tiny_hash<hash_map<CacheKey,Res>,2,32> {};
+
 struct Cache {
   typedef CacheKey Key;
-  struct Data : public tiny_hash<hash_map<Key,Res>,2,32> {};
+  typedef CacheData Data;
   Data * data;
   Cache() : data() {}
   void reset(Data * p) {
@@ -453,11 +455,12 @@ struct AntiQuoteList {
 };
 
 struct MatchEnviron {
+  PEG * peg;
   const Replacements * mids;
   Cache cache;
   ast::Environ * ast_env;
   AntiQuoteList * antiquotes;
-  MatchEnviron() : mids(), ast_env(), antiquotes() {}
+  MatchEnviron() : peg(), mids(), ast_env(), antiquotes() {}
 };
 
 
@@ -552,19 +555,19 @@ namespace ParsePeg {
 
   class Parse {
   public:
-    SourceFile * file;
+    Parse(PEG * p) : peg(p) {}
+    PEG * peg;
+
     const char * begin;
 
-    hash_map<String, NamedProd *> named_prods;
     hash_set<String> trans_prods;
     Vector< Sym<NamedProd> > unresolved_syms;
     Vector< Sym<TokenProd> > token_syms;
-    Vector<TokenRule>        token_rules;
     ProdWrap                 existing; // used when redefining
 
     void top(const char * str, const char * end);
 
-    Res peg(const char * str, const char * end, char eos, CaptureNeed = DontNeedCapture);
+    Res p_peg(const char * str, const char * end, char eos, CaptureNeed = DontNeedCapture);
     Res sequence(const char * str, const char * end, char eos);
     Res sequence2(const char * str, const char * end, Context);
     Res desc_label(const char * str, const char * end);
@@ -591,16 +594,24 @@ namespace ParsePeg {
 
 }
 
-ParsePeg::Parse parse;
+struct PEG {
+  SourceFile * file;
+  hash_map<String, NamedProd *> named_prods;
+  Vector<ParsePeg::TokenRule>   token_rules;
+};
 
-void parse_peg(const char * fn) {
-  parse.file = new_source_file(fn);
+PEG * parse_peg(const char * fn) {
+  PEG * peg = new PEG;
+  printf("THE PEG=%p\n", peg);
+  peg->file = new_source_file(fn);
+  ParsePeg::Parse parse(peg);
   try {
-    parse.top(parse.file->begin(), parse.file->end());
+    parse.top(peg->file->begin(), peg->file->end());
   } catch (Error * err) {
-    err->msg.span.source = &parse.file->base_block.base_info;
+    err->msg.span.source = &peg->file->base_block.base_info;
     throw err;
   }
+  return peg;
 }
 
 namespace ParsePeg {class Parse;}
@@ -666,7 +677,7 @@ MatchRes CachedProd::match_i(SourceStr str, SynBuilder * parts, Res * given_res,
       if (r->end != FAIL) {
         ReparseSyntax * p = const_cast<ReparseSyntax *>(r->res.part_as_reparse());
         assert(p);
-        p->cache = nenv.cache.data;
+        p->parse_info.cache = nenv.cache.data;
         p->origin = name;
       }
     } else {
@@ -759,7 +770,7 @@ public:
     if (!res) return prod->match(str, NULL, env);
     MatchRes r = prod->match(str, NULL, env);
     if (!r) return r;
-    Syntax * parse = new ReparseSyntax(SourceStr(str, r));
+    Syntax * parse = new ReparseSyntax(SourceStr(str, r), env.peg);
     //printf("REPARSE_CAPTURE with %p\n", parse);
     res->add_part(parse);
     return r;
@@ -1060,7 +1071,8 @@ public:
     const ReparseSyntax * p = res.res.part_as_reparse();
     assert(p);
     MatchEnviron nenv = env;
-    nenv.cache.data = (Cache::Data *)p->cache;
+    // Possible FIXME: What if a different PEG was used?
+    nenv.cache.data = (Cache::Data *)p->parse_info.cache;
     prod->match_check(str, res.end, nenv);
   }
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
@@ -1827,8 +1839,9 @@ protected:
   ProdProps props_obj;
 };
 
-const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
-                          const Replacements * repls, void * cache, 
+const Syntax * parse_prod(String what, SourceStr & str, ParseInfo p_i,
+                          ast::Environ * ast_env,
+                          const Replacements * repls,
                           bool match_complete_str,
                           ParseAsQuasiQuote pqq)
 {
@@ -1836,10 +1849,11 @@ const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
   //clock_t start = clock();
   MatchEnviron env;
+  env.peg = p_i.peg;
   env.mids = repls;
   env.ast_env = ast_env;
-  Prod * p = parse.named_prods[what];
-  env.cache.reset(cache ? (Cache::Data *)cache : new Cache::Data);
+  Prod * p = p_i.peg->named_prods[what];
+  env.cache.reset(p_i.cache ? (Cache::Data *)p_i.cache : new Cache::Data);
   SyntaxBuilder dummy;
   const char * s = str.begin;
   const char * e = pqq
@@ -1852,7 +1866,7 @@ const Syntax * parse_prod(String what, SourceStr & str, ast::Environ * ast_env,
     assert(e0 == e);
     //if (match_complete_str) abort();
     //if (what == "STMT") abort();
-    throw errors.to_error(str.source, parse.file)->add_note(extra_parse_info(str, what));
+    throw errors.to_error(str.source, p_i.peg->file)->add_note(extra_parse_info(str, what));
   }
   str.begin = e;
   //clock_t stop = clock();
@@ -1892,7 +1906,7 @@ namespace ParsePeg {
           StringBuf fn1;
           unescape(fn0.begin, fn0.end, fn1, '"');
           String fn = fn1.freeze();
-          fn = add_dir_if_needed(fn, file);
+          fn = add_dir_if_needed(fn, peg->file);
           //fprintf(stderr, "hint_file = %s\n", ~file);
           SourceFile * hints = new_source_file(fn);
           try {
@@ -1909,7 +1923,7 @@ namespace ParsePeg {
       } else if (*str == '"') {
         // ie a defination of a special token
         str = symbol('"', str, end);
-        Res sr = peg(str, end, '"');
+        Res sr = p_peg(str, end, '"');
         pprintf("PARSING TOKEN PROD: %s\n", ~sample(str, sr.end));
         str = sr.end;
         str = require_symbol('"', str, end);
@@ -1917,15 +1931,15 @@ namespace ParsePeg {
         String desc;
         str = opt_desc(str, end, desc);
         str = require_symbol('=', str, end);
-        Res r = peg(str, end, ';');
+        Res r = p_peg(str, end, ';');
         //r.prod->verify();
-        token_rules.push_back(TokenRule(sr.prod, r.prod, desc));
+        peg->token_rules.push_back(TokenRule(sr.prod, r.prod, desc));
         str = r.end;
       } else {
         str = id(str, end, name);
         pprintf("PARSING NAMED PROD: %s\n", ~name);
         cur_named_prod = name; 
-        NamedProd * & p = named_prods[name];
+        NamedProd * & p = peg->named_prods[name];
         //printf("NAME: %s %p\n", name.c_str(), p);
         if (p == 0) p = new_named_prod(name);
         String desc;
@@ -1946,7 +1960,7 @@ namespace ParsePeg {
         }
         str = spacing(str, end);
         //bool explicit_capture = false;
-        Res r = peg(str, end, ';');
+        Res r = p_peg(str, end, ';');
         //r.prod->verify();
         //if (name == "SPLIT_FLAG") stop();
         existing = ProdWrap();
@@ -1972,8 +1986,8 @@ namespace ParsePeg {
       resolve_token_symbol(i->prod, i->pos);
     }
     
-    hash_map<String, NamedProd *>::iterator i = named_prods.begin(), e = named_prods.end();
-    for (i = named_prods.begin(); i != e; ++i) {
+    hash_map<String, NamedProd *>::iterator i = peg->named_prods.begin(), e = peg->named_prods.end();
+    for (i = peg->named_prods.begin(); i != e; ++i) {
       //printf("AAA %s\n", ~i->second->name);
       i->second->props();
       if (i->second->persistent())
@@ -1994,14 +2008,14 @@ namespace ParsePeg {
     //for (i = named_prods.begin(); i != e; ++i) {
     //  printf("MAY MATCH EMPTY? %s %d\n", ~i->second->name, i->second->props().may_match_empty);
     //}
-    for (i = named_prods.begin(); i != e; ++i)
+    for (i = peg->named_prods.begin(); i != e; ++i)
       i->second->finalize();
   }
 
   void Parse::resolve_token_symbol(TokenProd * p, const char * pos) 
   {
     MatchEnviron dummy_env;
-    Vector<TokenRule>::iterator i = token_rules.begin(), e = token_rules.end();
+    Vector<TokenRule>::iterator i = peg->token_rules.begin(), e = peg->token_rules.end();
     for (;i != e; ++i) {
       //ParseErrors errors;
       SourceStr str(new SourceBlock(p->name));
@@ -2015,7 +2029,7 @@ namespace ParsePeg {
     throw error(pos, "Could not find a match for token symbol: %s", p->name.c_str());
   }
 
-  Res Parse::peg(const char * str, const char * end, char eos, CaptureNeed nc)
+  Res Parse::p_peg(const char * str, const char * end, char eos, CaptureNeed nc)
   {
     const char * start = str;
     str = spacing(str, end);
@@ -2245,12 +2259,12 @@ namespace ParsePeg {
     const char * start = str;
     if (*str == '(') {
       str = symbol('(', str, end);
-      Res r = peg(str, end, ')');
+      Res r = p_peg(str, end, ')');
       str = require_symbol(')', r.end, end);
       return Res(str, r.prod);
     } else if (*str == '{') {
       str = symbol('{', str, end);
-      Res r = peg(str, end, '}', context == NormalContext ? NeedCapture : NeedReparseCapture);
+      Res r = p_peg(str, end, '}', context == NormalContext ? NeedCapture : NeedReparseCapture);
       str = require_symbol('}', r.end, end);
       return Res(str, r);
     } else if (*str == '\'') {
@@ -2348,7 +2362,7 @@ namespace ParsePeg {
       return Res(str,existing);
     } else {
       pprintf("PARSING    DEP: %s\n", ~name);
-      NamedProd * & p = named_prods[name];
+      NamedProd * & p = peg->named_prods[name];
       if (p == 0) p = new_named_prod(name);
       unresolved_syms.push_back(Sym<NamedProd>(start, p));
       return Res(str, p);

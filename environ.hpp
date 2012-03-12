@@ -6,6 +6,8 @@
 #ifndef ENVIRON_HPP
 #define ENVIRON_HPP
 
+struct PEG;
+
 namespace ast {
 
   struct AST;
@@ -109,6 +111,7 @@ namespace ast {
     inline void move_defn(Stmt * defn);
     TopLevelSymbolTable * top_level_symbols;
     SymbolTable symbols;
+    
     TypeSymbolTable types;
     SymbolInsrPoint fun_labels;
     Scope scope;
@@ -123,6 +126,7 @@ namespace ast {
     Collect * collect; // if set don't parse declaration body,
                        // instead store it here to be parsed latter
     AbiInfo * abi_info;
+    PEG * peg;
     bool true_top_level;
     bool interface;
     bool mangle;
@@ -132,10 +136,11 @@ namespace ast {
     Type * bool_type() {return types.inst("int");}
     FunctionSymbol * function_sym() 
       {return static_cast<FunctionSymbol *>(types.find(".fun"));}
-    Environ(Scope s = TOPLEVEL) 
+    Environ(Scope s, PEG * p) 
       : types(this), scope(s), where(),
         top_level_environ(&symbols.front), 
-        deps(), for_ct(), temp_ip(), exp_ip(), collect(), abi_info(&DEFAULT_ABI_INFO),
+        deps(), for_ct(), temp_ip(), exp_ip(), collect(), 
+        abi_info(&DEFAULT_ABI_INFO), peg(p), 
         true_top_level(false), interface(false), mangle(true), link_once(false)
       {
         if (s == TOPLEVEL) {
@@ -158,7 +163,7 @@ namespace ast {
         top_level_environ(other.top_level_environ == &other.symbols.front ? &symbols.front :  other.top_level_environ),
         deps(other.deps), for_ct(other.for_ct), 
         stmt_ip(other.stmt_ip), temp_ip(other.temp_ip), exp_ip(other.exp_ip), 
-        collect(other.collect), abi_info(other.abi_info),
+        collect(other.collect), abi_info(other.abi_info), peg(other.peg),
         true_top_level(other.true_top_level), interface(other.interface), 
         mangle(other.mangle), link_once(other.link_once) {}
     Environ new_scope() const {

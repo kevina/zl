@@ -9,6 +9,16 @@
 #include "source_str.hpp"
 
 struct Replacements;
+struct ParseInfo;
+
+struct PEG;
+struct CacheData;
+struct ParseInfo {
+  PEG * peg;
+  CacheData * cache;
+  explicit ParseInfo(PEG * p = NULL, CacheData * c = NULL)
+    : peg(p), cache(c) {}
+};
 
 namespace syntax_ns {
 
@@ -47,9 +57,9 @@ namespace syntax_ns {
     const Syntax * orig;
     SourceStr str;
     const Replacements * repl;
-    void * cache;
-    ReparseInfo(const Syntax * o, const SourceStr & s, const Replacements * r, void * c)
-      : orig(o), str(s), repl(r), cache(c) {}
+    ParseInfo parse_info;
+    ReparseInfo(const Syntax * o, const SourceStr & s, const Replacements * r, ParseInfo pi)
+      : orig(o), str(s), repl(r), parse_info(pi) {}
   };
 
   // Class inheritance:
@@ -742,23 +752,25 @@ namespace syntax_ns {
     const Replacements * repl;
     SourceStr outer_;
     SourceStr inner_;
-    void * cache;
+    ParseInfo parse_info;
     String parse_as;
     String origin;
     mutable Syntax * cached_val;
     const SymbolName & rwhat() const {return what_->what();}
     const Syntax * what_part() const {return what_;}
     String desc() const {return rwhat().name;}
-    ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, cache);}
-    ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, cache);}
-    Reparse(const SourceStr & str) : SyntaxBase(REPARSE_TI), what_(), repl(), inner_(str), cache(), cached_val() {}
-    Reparse(const Syntax * p, const Replacements * r, void * c, String pa, String ogn, 
+    ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, parse_info);}
+    ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, parse_info);}
+    Reparse(const SourceStr & str, PEG * peg) 
+      : SyntaxBase(REPARSE_TI), what_(), repl(), inner_(str), 
+        parse_info(peg), cached_val() {}
+    Reparse(const Syntax * p, const Replacements * r, ParseInfo pi, String pa, String ogn, 
             const SourceStr & o, const SourceStr & i, const SourceStr * str = NULL)
       : SyntaxBase(REPARSE_TI, str ? *str : o), what_(p), repl(r), 
-        outer_(o), inner_(i), cache(c), parse_as(pa), origin(ogn), cached_val() {}
+        outer_(o), inner_(i), parse_info(pi), parse_as(pa), origin(ogn), cached_val() {}
     Reparse(const Reparse & other) 
       : SyntaxBase(other), what_(other.what_), repl(other.repl), outer_(other.outer_), inner_(other.inner_), 
-        cache(other.cache), parse_as(other.parse_as), origin(other.origin), cached_val() {}
+        parse_info(other.parse_info), parse_as(other.parse_as), origin(other.origin), cached_val() {}
     Reparse * clone() const {return new Reparse(*this);}
     template <typename F>
     const Reparse * map_source(F & f) const {
@@ -766,8 +778,8 @@ namespace syntax_ns {
       if (res.stop) return this;
       SourceStr new_str = str_;
       new_str.source = res.source;
-      return new Reparse(what_->map_source(f), res.repl, cache, parse_as, origin,
-                         outer_, inner_, &new_str);
+      return new Reparse(what_->map_source(f), res.repl, parse_info, 
+                         parse_as, origin, outer_, inner_, &new_str);
     }
     Syntax * instantiate(bool no_throw = false) const {
       if (!cached_val) do_instantiate(no_throw);

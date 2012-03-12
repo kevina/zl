@@ -408,6 +408,8 @@ const Syntax * replace(const Syntax * p, ReplTable::Table * match,
 static const Syntax * reparse_replace(const Syntax * new_name, 
                                       const Syntax * p, ReplTable * r);
 
+PEG * DEFAULT_PEG = NULL; // Yeah, a bit of a hack...
+
 struct Macro : public MacroInfo, public Declaration, public Symbol {
   static MapSource_ExpansionOf * macro_ci;
   Overloadable overloadable_;
@@ -425,6 +427,7 @@ struct Macro : public MacroInfo, public Declaration, public Symbol {
   };
   virtual const Syntax * expand(const Syntax *, Environ & env) const = 0;
   const Syntax * expand(const Syntax * s, const Syntax * p, Environ & env) const {
+    DEFAULT_PEG = env.peg;
     static unsigned c0 = 0;
     unsigned c = ++c0;
     //printf("%d EXPAND: %s %s\n", c, ~s->sample_w_loc(), ~p->sample_w_loc());
@@ -1009,7 +1012,7 @@ const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env,
   //printf("....... %s\n", ~p.orig->sample_w_loc());
   ReplToApply to_apply(p.repl, r, additional_repls);
   const Syntax * res;
-  res = parse_prod(what, p.str, env, &to_apply.combined_repls, p.cache, match_complete_str, pqq);
+  res = parse_prod(what, p.str, p.parse_info, env, &to_apply.combined_repls, match_complete_str, pqq);
   //printf("PARSED STRING %s: %s\n", ~res->to_string(), ~res->sample_w_loc());
   res = to_apply.apply(res);
   //printf("REPARSE RES: %s: %s\n", ~res->to_string(), ~res->sample_w_loc());
@@ -1136,10 +1139,9 @@ static const Syntax * reparse_replace(const Syntax * new_name,
   SourceStr str = r->expand_source_info_str(rs->str_);
   return new ReparseSyntax(SYN(new_name, r->mark, r->expand_source_info(p->what_part())),
                            combine_repl(rs->repl, r),
-                           rs->cache, rs->parse_as,
-                           rs->origin,
-                           rs->outer_,
-                           rs->inner_,
+                           rs->parse_info, 
+                           rs->parse_as, rs->origin,
+                           rs->outer_, rs->inner_,
                            &str);
 }
 
@@ -1225,7 +1227,7 @@ extern "C"
 namespace macro_abi {
   
   const UnmarkedSyntax * string_to_syntax(const char * str) {
-    return parse_str("SYNTAX_STR", SourceStr(new SourceBlock(SubStr(str))));
+    return parse_str("SYNTAX_STR", SourceStr(new SourceBlock(SubStr(str))), ParseInfo(DEFAULT_PEG));
   }
   
   const char * syntax_to_string(const UnmarkedSyntax * s) {
@@ -2061,14 +2063,16 @@ void load_macro_lib(ParmString lib, Environ & env) {
   
   unsigned * syntaxes_size = (unsigned *)dlsym(lh, "_syntaxes_size");
   if (syntaxes_size && *syntaxes_size > 0) {
+    // FIXME: Using the PEG from the current environment isn't
+    //        quite right as it could be different
     Syntaxes * i = (Syntaxes *)dlsym(lh, "_syntaxes");
     Syntaxes * e = i + *syntaxes_size;
     for (; i != e; ++i) {
       SourceBlock * block = new SourceBlock(SubStr(i->str, i->str + i->len));
       if (i->what && strcmp(i->what, "quasiquote") == 0) {
-        i->syn = parse_str_as_quasiquote(i->parse_as, SourceStr(block));
+        i->syn = parse_str_as_quasiquote(i->parse_as, SourceStr(block), ParseInfo(env.peg));
       } else if (i->what) {
-        i->syn = new ReparseSyntax(SYN(i->what), NULL, NULL, 
+        i->syn = new ReparseSyntax(SYN(i->what), NULL,  ParseInfo(env.peg), 
                                    i->parse_as ? String(i->parse_as) : String(),
                                    String(), 
                                    SourceStr(block),
@@ -2076,7 +2080,7 @@ void load_macro_lib(ParmString lib, Environ & env) {
                                              i->str + i->inner_offset,
                                              i->str + i->inner_offset + i->inner_len));
       } else {
-        i->syn = parse_str(i->parse_as, SourceStr(block));
+        i->syn = parse_str(i->parse_as, SourceStr(block), ParseInfo(env.peg));
       }
     }
   }

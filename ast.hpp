@@ -736,7 +736,7 @@ namespace ast {
     enum Which {STRUCT, UNION} which;
     Vector<Member> members;
     StructUnion(Which w) 
-      : which(w), have_body(false), env(OTHER), 
+      : which(w), have_body(false), env(OTHER, NULL), 
         defined(false), size_(NPOS), align_(NPOS), bit_field(false) {}
     bool have_body; // fixme: redundent, fixup "defined" and elinimate
     Environ env;
@@ -845,7 +845,7 @@ namespace ast {
 
   //int ct_value(const Syntax * p, Environ &);
 
-  AST * parse_top(const Syntax * p);
+  AST * parse_top(const Syntax * p, PEG * peg);
   AST * parse_top(const Syntax * p, Environ & env);
   void parse_stmts_raw(SourceStr, Environ & env);
   void parse_stmts(const Syntax * p, Environ & env);

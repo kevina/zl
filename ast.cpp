@@ -470,9 +470,9 @@ namespace ast {
   }
 
   void parse_stmts(SourceStr str, Environ & env) {
-    parse_prod("SPACING", str);
+    parse_prod("SPACING", str, ParseInfo(env.peg));
     while (!str.empty()) {
-      const Syntax * p = parse_prod("STMT", str, &env); 
+      const Syntax * p = parse_prod("STMT", str, ParseInfo(env.peg), &env); 
      parse_stmt_part(p, env);
     }
   }
@@ -5082,8 +5082,8 @@ namespace ast {
   //
   //
 
-  AST * parse_top(const Syntax * p) {
-    Environ env(TOPLEVEL);
+  AST * parse_top(const Syntax * p, PEG * peg) {
+    Environ env(TOPLEVEL, peg);
     return parse_top(p, env);
   }
 
@@ -5688,7 +5688,7 @@ namespace ast {
             syn_p = syn_p->part(1);
           }
           const ReparseSyntax * s = syn_p->maybe_reparse();
-          if (s->cache) {
+          if (s->parse_info.cache) {
             // The cache will need to be regenerated anyway ...
             if (qq)
               str_literal(cw, "quasiquote");

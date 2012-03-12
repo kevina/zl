@@ -11,7 +11,7 @@ namespace ast {
   bool template_id(const Syntax * syn, Environ * env);
 }
 
-void parse_peg(const char * fn);
+PEG * parse_peg(const char * fn);
 
 struct Replacements;
 struct ParseAsQuasiQuote {
@@ -22,23 +22,23 @@ struct ParseAsQuasiQuote {
   operator bool() const {return answer;}
 };
 
-const Syntax * parse_prod(String what, SourceStr & str, 
+const Syntax * parse_prod(String what, SourceStr & str, ParseInfo,
                           ast::Environ * ast_env = NULL,
                           const Replacements * repls = NULL, 
-                          void * cache = NULL,
                           bool match_complete_str = false,
                           ParseAsQuasiQuote = ParseAsQuasiQuote());
 
-static inline const Syntax * parse_str(String what, SourceStr str, 
+static inline const Syntax * parse_str(String what, SourceStr str, ParseInfo pinfo,
                                        ast::Environ * env = NULL,
                                        const Replacements * repls = NULL, 
                                        void * cache = NULL)
 {
-  return parse_prod(what, str, env, repls, cache, true);
+  return parse_prod(what, str, pinfo, env, repls, true);
 }
 
-static inline const Syntax * parse_str_as_quasiquote(String what, SourceStr str)
+static inline const Syntax * parse_str_as_quasiquote(String what, SourceStr str, ParseInfo pinfo)
 {
-  return parse_prod(what, str, NULL, NULL, NULL, true, true);
+  return parse_prod(what, str, pinfo, NULL, NULL, true, true);
 }
+
 #endif

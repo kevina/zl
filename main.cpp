@@ -24,10 +24,10 @@ void parse_maps(ast::Environ & env) {
   code->internal = true;
   try {
     SourceStr str(code);
-    parse_prod("S_SPACING", str, &env);
+    parse_prod("S_SPACING", str, ParseInfo(env.peg), &env);
     while (!str.empty()) {
-      const Syntax * p = parse_prod("SEXP", str, &env);
-      parse_prod("S_SPACING", str, &env); 
+      const Syntax * p = parse_prod("SEXP", str, ParseInfo(env.peg), &env);
+      parse_prod("S_SPACING", str, ParseInfo(env.peg), &env); 
       read_macro(p, env);
     }
   } catch (Error * err) {
@@ -44,13 +44,14 @@ int main(int argc, const char *argv[])
   assert(setvbuf(stdin, 0, _IOLBF, 0) == 0); 
   assert(setvbuf(stdout, 0, _IOLBF, 0) == 0);
   parse_exp_->init();
-  ast::Environ env;
+  PEG * peg = NULL;
   try {
-    parse_peg(SOURCE_PREFIX "grammer.in");
+    peg = parse_peg(SOURCE_PREFIX "grammer.in");
   } catch (Error * err) {
     fprintf(stderr, "%s\n", err->message().c_str());
     exit(1);
   }
+  ast::Environ env(ast::TOPLEVEL, peg);
   SourceFile * code = NULL;
   try {
     unsigned offset = 1;
