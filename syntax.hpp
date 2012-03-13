@@ -14,9 +14,9 @@ struct ParseInfo;
 struct PEG;
 struct CacheData;
 struct ParseInfo {
-  PEG * peg;
+  const PEG * peg;
   CacheData * cache;
-  explicit ParseInfo(PEG * p = NULL, CacheData * c = NULL)
+  explicit ParseInfo(const PEG * p = NULL, CacheData * c = NULL)
     : peg(p), cache(c) {}
 };
 
@@ -761,7 +761,7 @@ namespace syntax_ns {
     String desc() const {return rwhat().name;}
     ReparseInfo outer() const {return ReparseInfo(this, outer_, repl, parse_info);}
     ReparseInfo inner() const {return ReparseInfo(this, inner_, repl, parse_info);}
-    Reparse(const SourceStr & str, PEG * peg) 
+    Reparse(const SourceStr & str, const PEG * peg) 
       : SyntaxBase(REPARSE_TI), what_(), repl(), inner_(str), 
         parse_info(peg), cached_val() {}
     Reparse(const Syntax * p, const Replacements * r, ParseInfo pi, String pa, String ogn, 

@@ -29,6 +29,8 @@
 #  define pprintf
 #endif
 
+void my_breakpoint(int x) {}
+
 using std::pair;
 
 struct Prod;
@@ -218,27 +220,27 @@ struct MatchEnviron;
 
 class Prod {
 public:
-  virtual MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) = 0;
+  virtual MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const = 0;
   // used when doing a "parse walk"
-  void match_check(SourceStr str, MatchRes res, MatchEnviron & env) {
+  void match_check(SourceStr str, MatchRes res, MatchEnviron & env) const {
     MatchRes r = match(str, NULL, env);
     assert(r == res);
   }
-  virtual void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+  virtual void match_anyway(SourceStr str, Res & res, MatchEnviron & env) const {
     match_check(str,res.end,env);
   }
   // FIXME: explain match_f: ...
-  virtual const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) = 0;
-  virtual Prod * clone(Prod * = 0) = 0; // the paramater is the new
-                                        // prod to use in place of the
-                                        // placeholder prod "_self"
-  virtual void end_with(Prod * p) {}
+  virtual const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const = 0;
+  virtual const Prod * clone(Prod * = 0) const = 0; // the paramater is the new
+                                              // prod to use in place of the
+                                              // placeholder prod "_self"
+  virtual void end_with(const Prod * p) {}
   virtual void dump() {}
   // calc_props should also set props_ if the value is final (ie no
   // deps)
   virtual const ProdProps & calc_props() {abort();}
   const ProdProps & props() const {assert (props_); return *props_;}
-  const ProdProps & props() {
+  const ProdProps & get_props() {
     //printf("%*c:(%s):%p(%p):%s\n", indent_level, ' ', typeid(*this).
     //       name(), props_, (props_ ? props_->dep : NULL),
     //       pos ? ~sample(pos, end, 40) : "");
@@ -259,11 +261,12 @@ public:
   enum IsSpecial {IS_OTHER, IS_REPARSE};
   virtual IsSpecial is_special() const {return IS_OTHER;}
   Prod(const char * p, const char * e) 
-    : capture_type(NoCapture), pos(p), end(e), props_(NULL) {}
+    : capture_type(NoCapture), pos(p), end(e), finalized(false), props_(NULL) {}
 public: // but don't useq
   CaptureType capture_type;
   const char * pos;
   const char * end;
+  bool finalized; // once finalized can't be modified
 protected:
   void set_props(const ProdProps & o) {if (o.no_deps()) props_ = &o;}
   const ProdProps * props_;
@@ -273,47 +276,75 @@ enum CaptureQ {DontCapture, DoCapture};
 
 namespace ParsePeg {struct Res;}
 
-struct ProdWrap {
-  Prod * prod;
+struct ProdWrapBase {
+  const Prod * prod;
+  explicit ProdWrapBase(const Prod * p = NULL) : prod(p) {}
+  void match_check(SourceStr str, MatchRes res, MatchEnviron & env) const {
+    prod->match_check(str, res, env);}
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) const {
+    prod->match_anyway(str, res, env);}
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
+    return prod->match_f(str, errs, env);}
+  const ProdProps & props() const {return prod->props();}
+  const ProdProps & get_props() {
+    if (prod->finalized) 
+      return prod->props();
+    else
+      return const_cast<Prod *>(prod)->get_props();
+  }
+  void finalize() {
+    if (prod->finalized) return; 
+    const_cast<Prod *>(prod)->finalize(); 
+    assert(prod->finalized);
+  }
+  void end_with(const Prod * p) {
+    assert(!prod->finalized);
+    const_cast<Prod *>(prod)->end_with(p);
+  }
+};
+
+struct ProdPtr : public ProdWrapBase {
+  explicit ProdPtr(const Prod * p = NULL) : ProdWrapBase(p) {}
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
+    return prod->match(str, parts, env);}
+  ProdPtr clone(Prod * o) const {return ProdPtr(prod->clone(o));}
+  Prod::IsSpecial is_special() const {return prod->is_special();}
+  operator const Prod * () const {return prod;}
+  bool operator! () const {return !prod;}
+  const Prod * operator-> () const {return prod;}
+  ProdPtr & operator=(const Prod * p) {prod = p; return *this;}
+};
+
+struct ProdWrap : public ProdWrapBase {
   bool capture;
-  ProdWrap() : prod(NULL), capture(false) {}
-  ProdWrap(Prod * p, CaptureQ c) : prod(p), capture(c) {}
+  ProdWrap() : ProdWrapBase(NULL), capture(false) {}
+  ProdWrap(const Prod * p, CaptureQ c) : ProdWrapBase(p), capture(c) {}
   void get_capture_from_prod() {
     capture = prod->capture_type >= ExplicitCapture;}
-  explicit ProdWrap(Prod * p) : prod(p) {get_capture_from_prod();}
-  //void operator=(const Prod * p) {prod = p; get_capture_from_prod();}
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  explicit ProdWrap(const Prod * p) : ProdWrapBase(p) {get_capture_from_prod();}
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     return prod->match(str, capture ? parts : NULL, env);}
-  void match_check(SourceStr str, MatchRes res, MatchEnviron & env) {
-    prod->match_check(str, res, env);}
-  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
-    prod->match_anyway(str, res, env);}
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
-    return prod->match_f(str, errs, env);}
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
-  const ProdProps & props() {return prod->props();}
-  void finalize() {prod->finalize();}
-  //bool optional() const {return prod->optional();}
   Prod::IsSpecial is_special() const 
     {return capture ? prod->is_special() : Prod::IS_OTHER;}
 private:
-  ProdWrap(Prod * p, bool c) : prod(p), capture(c) {}
+  ProdWrap(const Prod * p, bool c) : ProdWrapBase(p), capture(c) {}
 };
 
 class SymProd : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env);
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env);
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const;
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const;
   SymProd(const char * s, const char * e, String n) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture;}
   SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture; set_prod(p);}
   const ProdProps & calc_props() {
-    const ProdProps & r = prod.props();
+    const ProdProps & r = prod.get_props();
     set_props(r);
     return r;
   }
-  void finalize() {prod.finalize();}
+  void finalize() {finalized = true; prod.finalize();}
   SymProd(const SymProd & other, Prod * p = 0) : Prod(other), name(other.name) 
   {
     if (name == "_self")
@@ -321,7 +352,7 @@ public:
     else
       set_prod(other.prod.clone(p));
   }
-  virtual Prod * clone(Prod * p) {return new SymProd(*this, p);} 
+  virtual const Prod * clone(Prod * p) const {return new SymProd(*this, p);} 
   void set_prod(const ProdWrap & p) {prod = p;}
   //void dump() {printf("%s", name.c_str());}
 public: // but treat as protected
@@ -339,9 +370,9 @@ struct PtrLt {
 
 class NamedProd : public SymProd {
 public:
-  NamedProd(String n) : SymProd(0, 0, n), finalized(false) {}
-  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p), finalized(false) {}
-  virtual Prod * clone(Prod *) {
+  NamedProd(String n) : SymProd(0, 0, n) {}
+  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p) {}
+  virtual const Prod * clone(Prod *) const {
     return this; // don't copy prod with name
   }
   void dump() {printf("%s", name.c_str());}
@@ -353,7 +384,7 @@ public:
     //indent_level += 2;
     //printf("YEAH BABY!\n");
     stack_depth--;
-    const ProdProps & r = prod.props();
+    const ProdProps & r = prod.get_props();
     stack_depth++;
     //indent_level -= 2;
     if (r.no_deps_but(stack_depth)) {
@@ -361,7 +392,7 @@ public:
       props_obj = r;
       props_obj.clear_deps();
       stack_depth--;
-      const ProdProps & r2 = prod.props();
+      const ProdProps & r2 = prod.get_props();
       stack_depth++;
       assert(props_obj == r2);
       return props_obj;
@@ -381,7 +412,6 @@ public:
   }
 public:
   ProdProps props_obj;
-  bool finalized;
 };
 
 
@@ -389,9 +419,9 @@ unsigned run_id = 1; // persistent prod always have a run_id of 0
 
 struct CachedProd;
 struct CacheKey {
-  CachedProd * prod;
+  const CachedProd * prod;
   const char * str;
-  CacheKey(CachedProd * p, const char * s) : prod(p), str(s) {}
+  CacheKey(const CachedProd * p, const char * s) : prod(p), str(s) {}
 };
 
 template <> struct hash<CacheKey>   {
@@ -421,7 +451,7 @@ struct Cache {
     bool exists;
     LookupRes(Res & r, bool e) : res(r), exists(e) {}
   };
-  inline LookupRes lookup(CachedProd * prod, SourceStr str);
+  inline LookupRes lookup(const CachedProd * prod, SourceStr str);
 };
 
 extern "C" 
@@ -455,7 +485,7 @@ struct AntiQuoteList {
 };
 
 struct MatchEnviron {
-  PEG * peg;
+  const PEG * peg;
   const Replacements * mids;
   Cache cache;
   ast::Environ * ast_env;
@@ -467,14 +497,14 @@ struct MatchEnviron {
 class CachedProd : public NamedProd {
   // named productions are memorized
 public:
-  MatchRes match_i(SourceStr str, SynBuilder * parts, Res * given_res, MatchEnviron & env);
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match_i(SourceStr str, SynBuilder * parts, Res * given_res, MatchEnviron & env) const ;
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     return match_i(str, parts, NULL, env);
   }
-  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) const {
     match_i(str, NULL, &res, env);
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env);
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const;
   CachedProd(String n) : NamedProd(n), first_char_(-3) {/*cs = (char *) GC_MALLOC(256);*/}
   void finalize() {
     if (finalized) return;
@@ -493,7 +523,7 @@ private:
   //CharSet cs;
 };
 
-Cache::LookupRes Cache::lookup(CachedProd * prod, SourceStr str) {
+Cache::LookupRes Cache::lookup(const CachedProd * prod, SourceStr str) {
   pair<Data::value_type *, bool> 
     cached = data->insert(Key(prod, str.begin));
   Res & r = cached.first->second;
@@ -516,7 +546,7 @@ public:
   TokenProd(const char * s, const char * e, String n) 
     : SymProd(s, e, n) {}
   TokenProd(const TokenProd & o, Prod * p = 0) : SymProd(o,p) {}
-  virtual Prod * clone(Prod * p) {return new TokenProd(*this, p);}
+  virtual const Prod * clone(Prod * p) const {return new TokenProd(*this, p);}
   void dump() {printf("\"%s\"", name.c_str());}
 };
 
@@ -531,8 +561,8 @@ namespace ParsePeg {
   struct Res : public ProdWrap {
     const char * end;
     Res() {}
-    Res(const char * e, Prod * p, CaptureQ c) : ProdWrap(p, c), end(e) {}
-    Res(const char * e, Prod * p) : ProdWrap(p), end(e) {}
+    Res(const char * e, const Prod * p, CaptureQ c) : ProdWrap(p, c), end(e) {}
+    Res(const char * e, const Prod * p) : ProdWrap(p), end(e) {}
     Res(const char * e, const ProdWrap & p) : ProdWrap(p), end(e) {}
     Res(Prod * p, CaptureQ c) : ProdWrap(p, c), end(p->end) {assert(end);}
     explicit Res(Prod * p) : ProdWrap(p), end(p->end) {assert(end);}
@@ -547,10 +577,10 @@ namespace ParsePeg {
   };
 
   struct TokenRule {
-    Prod * to_match;
-    Prod * if_matched;
+    const Prod * to_match;
+    const Prod * if_matched;
     String desc;
-    TokenRule(Prod * p1, Prod * p2, String d) : to_match(p1), if_matched(p2), desc(d) {}
+    TokenRule(const Prod * p1, const Prod * p2, String d) : to_match(p1), if_matched(p2), desc(d) {}
   };
 
   class Parse {
@@ -620,7 +650,7 @@ namespace ParsePeg {class Parse;}
 
 class Capture;
 
-MatchRes SymProd::match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+MatchRes SymProd::match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
   if (!parts) return prod.match(str,NULL,env);
   MatchRes r = prod.match(str,parts,env);
   if (!r) return r;
@@ -629,7 +659,7 @@ MatchRes SymProd::match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
   return r;
 }
 
-const char * SymProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+const char * SymProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
   if (desc.empty()) {
     return prod.match_f(str,errs, env);
   } else {
@@ -647,7 +677,7 @@ const char * SymProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & 
 }
 
 // if given_res is defined than don't use cache for _this_ production
-MatchRes CachedProd::match_i(SourceStr str, SynBuilder * parts, Res * given_res, MatchEnviron & env) {
+MatchRes CachedProd::match_i(SourceStr str, SynBuilder * parts, Res * given_res, MatchEnviron & env) const {
   //printf("%*cMATCH %s\n", indent_level, ' ', ~name);
   if (first_char_ >= 0 && 
       (str.begin == str.end || first_char_ != *str.begin)) {
@@ -701,7 +731,7 @@ MatchRes CachedProd::match_i(SourceStr str, SynBuilder * parts, Res * given_res,
   return r->end;
 }
 
-const char * CachedProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+const char * CachedProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
   Cache::LookupRes r = env.cache.lookup(this, str);
   if (!r.exists || r.res.end == FAIL) {
     return NamedProd::match_f(str,errs,env);
@@ -712,10 +742,10 @@ const char * CachedProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron
 
 class AlwaysTrue : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) {
+  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) const {
     return str.begin;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &) const {
     return str.begin;
   }
   AlwaysTrue(const char * p, const char * e) : Prod(p,e) {
@@ -725,60 +755,60 @@ public:
     props_obj.first_char_eof = true;
     props_ = &props_obj;
   }
-  Prod * clone(Prod *) {return new AlwaysTrue(*this);}
+  const Prod * clone(Prod *) const {return new AlwaysTrue(*this);}
   ProdProps props_obj;
-  void finalize() {}
+  void finalize() {finalized = true; }
   //void dump() {printf(" _TRUE ");}
 };
 
 class Capture : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) {
-    if (!res) return prod->match(str, NULL, env);
-    MatchRes r = prod->match(str, NULL, env);
+  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) const {
+    if (!res) return prod.match(str, NULL, env);
+    MatchRes r = prod.match(str, NULL, env);
     if (!r) return r;
     Syntax * parse = SYN(String(str.begin, r), str, r);
     //printf("NONE: %s\n", ~parse->to_string());
     res->add_part(parse);
     return r;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
-    return prod->match_f(str, errs, env);
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
+    return prod.match_f(str, errs, env);
   }
-  Capture(const char * s, const char * e, Prod * p)
+  Capture(const char * s, const char * e, const Prod * p)
     : Prod(s,e), prod(p) {capture_type = ExplicitCapture;}
-  Capture(Prod * p)
+  Capture(const Prod * p)
     : Prod(p->pos, p->end), prod(p) {capture_type = ExplicitCapture;}
   const ProdProps & calc_props() {
-    const ProdProps & r = prod->props();
+    const ProdProps & r = prod.get_props();
     set_props(r);
     return r;
   }
-  void finalize() {prod->finalize();}
+  void finalize() {prod.finalize(); finalized = true;}
   //bool optional() const {return prod->optional();}
   Capture(const Capture & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)) {}
-  virtual Capture * clone(Prod * p) {return new Capture(*this, p);}
-  void dump() {printf("{"); prod->dump(); printf("}");}
+    : Prod(o), prod(o.prod.clone(p)) {}
+  virtual Capture * clone(Prod * p) const {return new Capture(*this, p);}
+  //void dump() {printf("{"); prod->dump(); printf("}");}
 protected:
-  Prod * prod;
+  ProdPtr prod;
 };
 
 class ReparseInner : public Capture {
 public:
-  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) {
-    if (!res) return prod->match(str, NULL, env);
-    MatchRes r = prod->match(str, NULL, env);
+  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) const {
+    if (!res) return prod.match(str, NULL, env);
+    MatchRes r = prod.match(str, NULL, env);
     if (!r) return r;
     Syntax * parse = new ReparseSyntax(SourceStr(str, r), env.peg);
     //printf("REPARSE_CAPTURE with %p\n", parse);
     res->add_part(parse);
     return r;
   }
-  ReparseInner(const char * s, const char * e, Prod * p)
+  ReparseInner(const char * s, const char * e, const Prod * p)
     : Capture(s,e,p) {capture_type = ReparseCapture;}
   ReparseInner(const ReparseInner & o, Prod * p = 0) : Capture(o, p) {}
-  virtual ReparseInner * clone(Prod * p) {return new ReparseInner(*this, p);}
+  virtual ReparseInner * clone(Prod * p) const {return new ReparseInner(*this, p);}
 };
 
 static inline const char * first_space(const char * s) 
@@ -817,8 +847,8 @@ protected:
     unsigned stop;
   };
 public:
-  Syntax * gather(SourceStr str, SynBuilder & in);
-  void add_part(Syntax * syn, SynBuilder * res) {
+  Syntax * gather(SourceStr str, SynBuilder & in) const;
+  void add_part(Syntax * syn, SynBuilder * res) const {
     if (collapse) // yeah, a bit of a hack
       syn = syn->part(0);
     if (capture_as_flag)
@@ -892,7 +922,7 @@ protected:
   bool collapse;
 };
 
-Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
+Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) const {
   SyntaxBuilder res2;
   Vector<Parm>::const_iterator i = parms.begin(), e = parms.end();
   if (i->start == NPOS) {
@@ -916,7 +946,7 @@ Syntax * GatherParts::gather(SourceStr str, SynBuilder & in) {
 
 class NamedCaptureBase : public Prod {
 public:
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     return prod.match_f(str, errs, env);
   }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
@@ -927,11 +957,11 @@ public:
   NamedCaptureBase(const NamedCaptureBase & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)) {}
   const ProdProps & calc_props() {
-    const ProdProps & r = prod.props();
+    const ProdProps & r = prod.get_props();
     set_props(r);
     return r;
   }
-  void finalize() {prod.finalize();}
+  void finalize() {prod.finalize(); finalized = true;}
   void dump() {/*printf("{"); prod->dump(); printf("}");*/}
 protected:
   ProdWrap prod;
@@ -940,7 +970,7 @@ protected:
 class NamedCapture : public NamedCaptureBase , public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return prod.match(str, NULL, env); 
     SyntaxBuilder res;
@@ -958,16 +988,17 @@ public:
     : NamedCaptureBase(s,e,p), GatherParts(n, caf) {}
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : NamedCaptureBase(o, p), GatherParts(o) {}
-  Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
+  const Prod * clone(Prod * p) const {return new NamedCapture(*this, p);}
   void finalize() {
     prod.finalize();
+    finalized = true;
   }
   String d_name() const {return name ? name->to_string() : String("<>");}
 };
 
 class S_TId : public NamedCapture {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     SyntaxBuilder res;
     if (parms.empty() && name) res.add_part(name);
     MatchRes r = prod.match(str, &res, env);
@@ -988,13 +1019,13 @@ public:
     : NamedCapture(s,e,p,n) {}
   S_TId(const NamedCapture & o, Prod * p = 0)
     : NamedCapture(o,p) {}
-  Prod * clone(Prod * p) {return new NamedCapture(*this, p);}
+  const Prod * clone(Prod * p) const {return new NamedCapture(*this, p);}
 };
 
 class PlaceHolderCapture : public NamedCaptureBase {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     // FIXME: Explain what the hell is going on here
     if (!parts) return prod.match(str, NULL, env); 
     syntax_ns::SynEntity placeholder(str, parts);
@@ -1019,14 +1050,14 @@ public:
     : NamedCaptureBase(s,e,p) {}
   PlaceHolderCapture(const PlaceHolderCapture & o, Prod * p = 0)
     : NamedCaptureBase(o, p) {}
-  Prod * clone(Prod * p) {return new PlaceHolderCapture(*this, p);}
+  const Prod * clone(Prod * p) const {return new PlaceHolderCapture(*this, p);}
 };
 
 
 class GatherPartsProd : public AlwaysTrue, public GatherParts {
 // NamedCapture can also be used as a "forced capture" if name is empty
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     //fprintf(stderr, "NOW COMES THE FUN!\n");
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
     if (!parts) return str.begin;
@@ -1047,16 +1078,16 @@ public:
     {capture_type = ExplicitCapture;}
   GatherPartsProd(const GatherPartsProd & o, Prod * p = 0)
     : AlwaysTrue(o), GatherParts(o) {}
-  virtual Prod * clone(Prod * p) {return new GatherPartsProd(*this, p);}
+  virtual const Prod * clone(Prod * p) const {return new GatherPartsProd(*this, p);}
 };
 
 class ReparseOuter : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     //printf("NAMED CAPTURE (%s) %p\n", name ? ~name->name : "", this);
-    if (!parts) return prod->match(str, NULL, env); 
+    if (!parts) return prod.match(str, NULL, env); 
     SyntaxBuilderN<2> res;
-    MatchRes r = prod->match(str, &res, env);
+    MatchRes r = prod.match(str, &res, env);
     if (!r) return r;
     assert(res.num_parts() == 1);
     ReparseSyntax * syn = const_cast<ReparseSyntax *>(res.part(0)->as_reparse());
@@ -1067,18 +1098,18 @@ public:
     parts->add_part(syn);
     return r;
   }
-  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) const {
     const ReparseSyntax * p = res.res.part_as_reparse();
     assert(p);
     MatchEnviron nenv = env;
     // Possible FIXME: What if a different PEG was used?
     nenv.cache.data = (Cache::Data *)p->parse_info.cache;
-    prod->match_check(str, res.end, nenv);
+    prod.match_check(str, res.end, nenv);
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
-    return prod->match_f(str, errs, env);
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
+    return prod.match_f(str, errs, env);
   }
-  ReparseOuter(const char * s, const char * e, Prod * p, String n, String pa)
+  ReparseOuter(const char * s, const char * e, const Prod * p, String n, String pa)
     : Prod(s,e), prod(p), name(SYN(n)), parse_as(pa)
     {
       capture_type = ExplicitCapture;
@@ -1086,18 +1117,21 @@ public:
       //printf("RO: %s %s\n", ~n, ~parse_as);
     }
   ReparseOuter(const ReparseOuter & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)), name(o.name), parse_as(o.parse_as) {}
-  virtual Prod * clone(Prod * p) {return new ReparseOuter(*this, p);}
+    : Prod(o), prod(o.prod.clone(p)), name(o.name), parse_as(o.parse_as) {}
+  virtual const Prod * clone(Prod * p) const {return new ReparseOuter(*this, p);}
   const ProdProps & calc_props() {
-    const ProdProps & r = prod->props();
+    const ProdProps & r = prod.get_props();
     set_props(r);
     return r;
   }
-  void finalize() {prod->finalize();}
-  void dump() {printf("{"); prod->dump(); printf("}");}
+  void finalize() {
+    prod.finalize();
+    finalized = true; 
+  }
+  //void dump() {printf("{"); prod->dump(); printf("}");}
   IsSpecial is_special() const {return IS_REPARSE;}
 private:
-  Prod * prod;
+  ProdPtr prod;
   const Syntax * name;
   String parse_as;
 };
@@ -1120,14 +1154,14 @@ bool prefix_equal(const char * i, const char * e,
 
 class Literal : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) {
+  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) const {
     const char * e = str.begin;
     if (prefix_equal(literal.begin(), literal.end(), e, str.end))
       return e;
     else
       return FAIL;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &) const {
     const char * e = str.begin;
     if (prefix_equal(literal.begin(), literal.end(), e, str.end)) {
       return e;
@@ -1148,9 +1182,9 @@ public:
         props_obj.first_char_high = true;
       props_ = &props_obj;
     }
-  virtual Prod * clone(Prod * p) {return new Literal(*this);}
+  virtual const Prod * clone(Prod * p) const {return new Literal(*this);}
   void dump() {printf("'%s'", literal.c_str());}
-  void finalize() {}
+  void finalize() {finalized = true;}
 private:
   String literal;
   ProdProps props_obj;
@@ -1158,13 +1192,13 @@ private:
 
 class CharClass : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) {
+  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) const {
     if (!str.empty() && cs[*str])
       return str.begin + 1;
     else
       return FAIL;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     if (!str.empty() && cs[*str]) {
       return str.begin + 1;
     } else {
@@ -1185,8 +1219,8 @@ public:
       else props_obj.first_char_high = 2;
       props_ = &props_obj;
     }
-  virtual Prod * clone(Prod * p) {return new CharClass(*this);}
-  void finalize() {}
+  virtual const Prod * clone(Prod * p) const {return new CharClass(*this);}
+  void finalize() {finalized = true;}
   //void dump() {printf("[]");}
 private:
   CharSet cs;
@@ -1195,12 +1229,12 @@ private:
 
 class Any : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &)  {
+  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron &) const {
     if (!str.empty())
       return str.begin+1;
     return FAIL;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &)  {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &) const {
     if (!str.empty())
       return str.begin+1;
     errs.push_back(new ParseError(pos, str, "<EOF>"));
@@ -1212,19 +1246,19 @@ public:
       props_obj.first_char_high = true;
       props_ = &props_obj;
     }
-  virtual Prod * clone(Prod * p) {return new Any(*this);}
+  virtual const Prod * clone(Prod * p) const {return new Any(*this);}
   void dump() {printf("_");}
-  void finalize() {}
+  void finalize() {finalized = true;}
   ProdProps props_obj;
 };
 
 class Repeat : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     bool matched = false;
     for (;;) {
       if (end_with_) {
-        MatchRes r = end_with_->match(str, NULL, env);
+        MatchRes r = end_with_.match(str, NULL, env);
         if (r) break;
       }
       MatchRes r = prod.match(str, parts, env);
@@ -1238,11 +1272,11 @@ public:
     else 
       return FAIL;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     bool matched = false;
     for (;;) {
       if (end_with_) {
-        const char * r = end_with_->match_f(str, errs, env);
+        const char * r = end_with_.match_f(str, errs, env);
         if (r) break;
       }
       const char * r = prod.match_f(str, errs, env);
@@ -1263,18 +1297,18 @@ public:
     : Prod(o), prod(o.prod.clone(p)), optional(o.optional), once(o.once) 
   { 
     if (o.end_with_) {
-      end_with_ = o.end_with_->clone(p);
+      end_with_ = o.end_with_.clone(p);
     }
   }
-  virtual void end_with(Prod * p);
-  virtual Prod * clone(Prod * p) {return new Repeat(*this, p);}
+  virtual void end_with(const Prod * p);
+  virtual const Prod * clone(Prod * p) const {return new Repeat(*this, p);}
   void dump() {}
   const ProdProps & calc_props() {
     props_obj.reset();
     bool first = true;
-    merge_for_seq(prod.props(), props_obj, first);
+    merge_for_seq(prod.get_props(), props_obj, first);
     if (end_with_) {
-      ProdProps r0 = end_with_->props();
+      ProdProps r0 = end_with_.get_props();
       r0.invert_char_info();
       merge_for_seq(r0, props_obj, first);
     }
@@ -1283,19 +1317,19 @@ public:
     set_props(props_obj);
     return props_obj;
   }
-  void finalize() {prod.finalize(); if (end_with_) end_with_->finalize();}
+  void finalize() {prod.finalize(); if (end_with_) end_with_.finalize(); finalized = true;}
 private:
   ProdWrap prod;
   ProdProps props_obj;
   bool optional;
   bool once;
-  Prod * end_with_;
+  ProdPtr end_with_;
 };
 
 class Predicate : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron & env) {
-    MatchRes r = prod->match(str, NULL, env);
+  MatchRes match(SourceStr str, SynBuilder *, MatchEnviron & env) const {
+    MatchRes r = prod.match(str, NULL, env);
     if (dont_match_empty && r == str.begin)
       r = FAIL;
     if (r) {
@@ -1304,19 +1338,19 @@ public:
       return MatchRes(invert ? str.begin : FAIL);
     }
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     // FIXME: Correctly handle errors;
     return Predicate::match(str, NULL, env);
   }
-  Predicate(const char * s, const char * e, Prod * p, bool inv, bool dme = false) 
+  Predicate(const char * s, const char * e, const Prod * p, bool inv, bool dme = false) 
     : Prod(s,e), prod(p), invert(inv), dont_match_empty(dme) {}
   Predicate(const Predicate & o, Prod * p = 0)
-    : Prod(o), prod(o.prod->clone(p)), 
+    : Prod(o), prod(o.prod.clone(p)), 
       invert(o.invert), dont_match_empty(o.dont_match_empty) {}
-  virtual Prod * clone(Prod * p) {return new Predicate(*this, p);}
+  virtual const Prod * clone(Prod * p) const {return new Predicate(*this, p);}
   //void dump() {}
   const ProdProps & calc_props() {
-    props_obj = prod->props();
+    props_obj = prod.get_props();
     props_obj.what = PP_PREDICATE;
     if (dont_match_empty)
       props_obj.first_char_eof = false;
@@ -1326,15 +1360,15 @@ public:
     set_props(props_obj);
     return props_obj;
   }
-  void finalize() {prod->finalize();}
+  void finalize() {prod.finalize(); finalized = true;}
 private:
-  Prod * prod;
+  ProdPtr prod;
   ProdProps props_obj;
   bool invert;
   bool dont_match_empty;
 };
 
-void Repeat::end_with(Prod * p) {
+void Repeat::end_with(const Prod * p) {
   assert(!end_with_);
   end_with_ = new Predicate(p->pos, p->end, p, false, true);
 }
@@ -1351,11 +1385,11 @@ static inline CaptureType get_capture_type(const Vector<ProdWrap> & p)
 class Seq : public Prod {
   // NOTE: A Seq _must_ have more than one element
 public: 
-  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) const {
     unsigned orig_parts_sz, orig_flags_sz;
     if (res)
       orig_parts_sz = res->num_parts(), orig_flags_sz = res->num_flags();
-    Vector<ProdWrap>::iterator 
+    Vector<ProdWrap>::const_iterator 
       i = prods.begin(), e = prods.end();
     while (i != e) {
       MatchRes r = i->match(str, res, env);
@@ -1368,8 +1402,8 @@ public:
     }
     return str.begin;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
-    Vector<ProdWrap>::iterator 
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
+    Vector<ProdWrap>::const_iterator 
       i = prods.begin(), e = prods.end();
     while (i != e) {
       const char * r = i->match_f(str, errs, env);
@@ -1389,7 +1423,7 @@ public:
     props_obj.reset();
     bool first = true;
     for (; i != e; ++i)
-      merge_for_seq(i->props(), props_obj, first);
+      merge_for_seq(i->get_props(), props_obj, first);
     set_props(props_obj);
     return props_obj;
   }
@@ -1397,6 +1431,7 @@ public:
     for (Vector<ProdWrap>::iterator 
            i = prods.begin(), e = prods.end(); i != e; ++i)
       i->finalize();
+    finalized = true;
   }
   Seq(const Seq & o, Prod * p = 0) : Prod(o) {
     prods.reserve(o.prods.size());
@@ -1406,7 +1441,7 @@ public:
       prods.push_back(i->clone(p));
     }
   }
-  virtual Prod * clone(Prod * p) {return new Seq(*this, p);}
+  virtual const Prod * clone(Prod * p) const {return new Seq(*this, p);}
   void dump() {}
 private:
   Vector<ProdWrap> prods;
@@ -1415,7 +1450,7 @@ private:
 
 class Choice : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     if (jump_table) {
       //printf("using jump table\n");
       ProdWrap * i;
@@ -1434,7 +1469,7 @@ public:
         ++i;
       }
     } else {
-      Vector<ProdWrap>::iterator 
+      Vector<ProdWrap>::const_iterator 
         i = prods.begin(), e = prods.end();
       while (i != e) {
         MatchRes r = i->match(str, parts, env);
@@ -1444,8 +1479,8 @@ public:
     }
     return FAIL;
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
-    Vector<ProdWrap>::iterator 
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
+    Vector<ProdWrap>::const_iterator 
       i = prods.begin(), e = prods.end();
     while (i != e) {
       const char * r = i->match_f(str, errs, env);
@@ -1471,7 +1506,7 @@ public:
     for (Vector<ProdWrap>::iterator 
            i = prods.begin(), e = prods.end(); i != e; ++i) 
     {
-      const ProdProps & r = i->props();
+      const ProdProps & r = i->get_props();
       //printf("ZZZ <%s>\n", ~i->prod->d_name());
       //for (unsigned j = 0; j != 128; ++j) {
       //  printf("  zzz %u (%c) %u\n", j, (j >= 32 && j < 127 ? j : '?'), r.first_char[j]);
@@ -1484,7 +1519,7 @@ public:
     return props_obj;
   }
   void finalize();
-  virtual Prod * clone(Prod * p) {return new Choice(*this, p);}
+  virtual const Prod * clone(Prod * p) const {return new Choice(*this, p);}
   void dump() {}
 private:
   static const unsigned CHAR_HIGH = 128;
@@ -1617,18 +1652,18 @@ void Choice::finalize() {
 //     }
 //     printf("\n");
   }
-ret:
-  0;
+ret: 0;
+  finalized = true;
 }
 
 String cur_named_prod;
 
 class S_MId : public Prod {
 public:
-  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * res, MatchEnviron & env) const {
     //if (!in_repl) return FAIL;
     SyntaxBuilder res0;
-    MatchRes r = prod->match(str, &res0, env);
+    MatchRes r = prod.match(str, &res0, env);
     if (!r) return r;
     res0.make_flags_parts();
     assert(res0.single_part());
@@ -1652,12 +1687,12 @@ public:
       return MatchRes(FAIL);
     }
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     //if (!in_repl) return FAIL;
     SyntaxBuilder res0;
-    MatchRes r = prod->match(str, &res0, env);
+    MatchRes r = prod.match(str, &res0, env);
     if (!r) {
-      const char * r0 = prod->match_f(str, errs, env);
+      const char * r0 = prod.match_f(str, errs, env);
       //assert(!r0);
       return FAIL;
     }
@@ -1674,18 +1709,18 @@ public:
   S_MId(const char * s, const char * e, const ProdWrap & p, String inp = String())
     : Prod(s,e), in_named_prod(inp.empty() ? cur_named_prod : inp), prod(new NamedCapture(s, e, p, "mid")) {capture_type = ExplicitCapture;}
   S_MId(const S_MId & o, Prod * p = 0)
-    : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod->clone(p)) {}
-  virtual Prod * clone(Prod * p) {return new S_MId(*this, p);}
+    : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod.clone(p)) {}
+  virtual const Prod * clone(Prod * p) const {return new S_MId(*this, p);}
   const ProdProps & calc_props() {
-    props_obj = prod->props(); 
+    props_obj = prod.get_props(); 
     props_obj.uses_special |= props_obj.USES_MID;
     set_props(props_obj);
     return props_obj;
   }
-  void finalize() {prod->finalize();}
+  void finalize() {prod.finalize(); finalized = true;}
 private:
   String in_named_prod;
-  Prod * prod;
+  ProdPtr prod;
   ProdProps props_obj;
 };
 
@@ -1715,10 +1750,10 @@ MatchRes parse_as_quasiquote(SourceStr str, SynBuilder * parts,
 
 class S_QuasiQuote : public NamedCaptureBase {
 public:
-  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const {
     return parse_as_quasiquote(str, parts, prod, name, env);
   }
-  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) const {
     //fprintf(stdout, "in quasiquote: %s\n", ~sample(str.begin, str.end));
     assert(res.res.single_part());
     const Syntax * syn = res.res.part(0);
@@ -1729,14 +1764,14 @@ public:
   }
   S_QuasiQuote(const char * s, const char * e, const ProdWrap & p)
     : NamedCaptureBase(s,e, p), name(SYN("quasiquote")) {capture_type = ExplicitCapture;}
-  virtual Prod * clone(Prod * p) {return new S_QuasiQuote(*this);}
+  virtual const Prod * clone(Prod * p) const {return new S_QuasiQuote(*this);}
 public: // but don't use
   const Syntax * name;
 };
 
 class S_AntiQuote : public Prod {
 public:
-  MatchRes match_i(SourceStr str, const Syntax * * the_res, MatchEnviron & env) {
+  MatchRes match_i(SourceStr str, const Syntax * * the_res, MatchEnviron & env) const {
     //fprintf(stdout, "IN ACTIVE ANTIQUOTE: %s\n", ~sample(str.begin, str.end));
     MatchRes r;
     Syntax * syn = env.antiquotes->get();
@@ -1744,13 +1779,13 @@ public:
     nenv.antiquotes = NULL;
     if (!syn) {
       SyntaxBuilderN<1> syn_buf;
-      r = prod->match(str, &syn_buf, nenv);
+      r = prod.match(str, &syn_buf, nenv);
       if (!r) return r;
       assert(syn_buf.single_part());
       syn = syn_buf.part(0);
       env.antiquotes->set(syn);
     } else {
-      r = prod->match(str, NULL, nenv);
+      r = prod.match(str, NULL, nenv);
       if (!r) return r;
     }
     if (the_res) 
@@ -1758,7 +1793,7 @@ public:
     env.antiquotes->adv();
     return r;
   }
-  MatchRes match(SourceStr str, SynBuilder * the_res, MatchEnviron & env) {
+  MatchRes match(SourceStr str, SynBuilder * the_res, MatchEnviron & env) const {
     if (env.antiquotes) {
       const Syntax * * new_syn = NULL;
       if (the_res) {
@@ -1769,10 +1804,10 @@ public:
       return match_i(str, new_syn, env);
     } else if (!the_res) {
       //fprintf(stdout, "antiquote no res\n");
-      return prod->match(str, NULL, env);
+      return prod.match(str, NULL, env);
     } else {
       SyntaxBuilderN<1> syn_buf;
-      MatchRes r = prod->match(str, &syn_buf, env);
+      MatchRes r = prod.match(str, &syn_buf, env);
       if (r) {
         assert(syn_buf.single_part());
         const ReparseSyntax * s = syn_buf.part(0)->maybe_reparse();
@@ -1790,13 +1825,13 @@ public:
       return r;
     }
   }
-  const Syntax * mk_antiquote(const SourceStr & str, unsigned idx) {
+  const Syntax * mk_antiquote(const SourceStr & str, unsigned idx) const {
     bool with_at = str.begin[0] == '@';
     char buf[16];
     snprintf(buf, 16, "%saq.%u", with_at ? "@" : "", idx);
     return SYN(ANTIQUOTE, SYN(buf));
   }
-  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) {
+  void match_anyway(SourceStr str, Res & res, MatchEnviron & env) const {
     if (env.antiquotes) {
       assert(res.res.single_part());
       const Syntax * syn = res.res.part(0);
@@ -1805,13 +1840,13 @@ public:
       assert(r == res.end);
     } else {
       //fprintf(stderr, "antiquote match_anyway\n");
-      prod->match_check(str,res.end,env);
+      prod.match_check(str,res.end,env);
     }
   }
-  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) {
+  const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     MatchEnviron nenv = env;
     nenv.antiquotes = NULL;
-    return prod->match_f(str, errs, nenv);
+    return prod.match_f(str, errs, nenv);
   }
   S_AntiQuote(const char * s, const char * e, const ProdWrap & p)
     : Prod(s,e), prod(p.prod)
@@ -1824,16 +1859,16 @@ public:
       // FIXME: Check to make sure sub-prod doesn't contain MID
     }
   const ProdProps & calc_props() {
-    props_obj = prod->props(); 
+    props_obj = prod.get_props(); 
     props_obj.uses_special |= props_obj.USES_ANTIQUOTE;
     set_props(props_obj);
     return props_obj;
   }
-  void finalize() {prod->finalize();}
-  virtual S_AntiQuote * clone(Prod * p) {return new S_AntiQuote(*this);}
+  void finalize() {prod.finalize(); finalized = true;}
+  virtual S_AntiQuote * clone(Prod * p) const {return new S_AntiQuote(*this);}
   void dump() {/*prod.dump();*/}
 protected:
-  Prod * prod;
+  ProdPtr prod;
   Syntax * ANTIQUOTE;
   const Syntax * AQ_NONE;
   ProdProps props_obj;
@@ -1845,14 +1880,17 @@ const Syntax * parse_prod(String what, SourceStr & str, ParseInfo p_i,
                           bool match_complete_str,
                           ParseAsQuasiQuote pqq)
 {
-  pprintf("BEGIN %s: %s\n", ~what, ~sample(str.begin, str.end));
+  pprintf("BEGIN %s: (%p) %s\n", ~what, str.begin, ~sample(str.begin, str.end));
   //printf("PARSE STR %.*s as %s\n", str.end - str.begin, str.begin, ~what);
   //clock_t start = clock();
   MatchEnviron env;
   env.peg = p_i.peg;
   env.mids = repls;
   env.ast_env = ast_env;
-  Prod * p = p_i.peg->named_prods[what];
+  hash_map<String, NamedProd *>::const_iterator 
+    i = p_i.peg->named_prods.find(what);
+  if (i == p_i.peg->named_prods.end()) abort(); // FIXME: Error message
+  const Prod * p = i->second;
   env.cache.reset(p_i.cache ? (Cache::Data *)p_i.cache : new Cache::Data);
   SyntaxBuilder dummy;
   const char * s = str.begin;
@@ -1989,7 +2027,7 @@ namespace ParsePeg {
     hash_map<String, NamedProd *>::iterator i = peg->named_prods.begin(), e = peg->named_prods.end();
     for (i = peg->named_prods.begin(); i != e; ++i) {
       //printf("AAA %s\n", ~i->second->name);
-      i->second->props();
+      i->second->get_props();
       if (i->second->persistent())
         pprintf("IS PERSISTENT: %s\n", ~i->second->name);
       else
@@ -2194,7 +2232,7 @@ namespace ParsePeg {
       str = symbol('.', str, end);
       Res r2 = prefix(str, end, context);
       str = r2.end;
-      r1.prod->end_with(r2.prod); // FIXME: Maybe should memorize r2
+      r1.end_with(r2.prod); // FIXME: Maybe should memorize r2
       Vector<ProdWrap> prods;
       prods.push_back(r1);
       prods.push_back(r2);
