@@ -218,6 +218,9 @@ class NamedProd;
 
 struct MatchEnviron;
 
+class Prod;
+struct Mapper {const Prod * operator() (const Prod *) {return NULL;}};
+
 class Prod {
 public:
   virtual MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const = 0;
@@ -231,14 +234,17 @@ public:
   }
   // FIXME: explain match_f: ...
   virtual const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const = 0;
-  virtual const Prod * clone(Prod * = 0) const = 0; // the paramater is the new
-                                              // prod to use in place of the
-                                              // placeholder prod "_self"
+  // NOTE: A cloned productions needs to re-finalized.
+  virtual const Prod * clone(Prod * = 0) const = 0; 
+  // ^^ The paramater is the new prod to use in place of the
+  // placeholder prod "_self"
+  virtual const Prod * clone(Mapper) const = 0;
+  // ^^ The paramter is a mapping of prod which need to change
   virtual void end_with(const Prod * p) {}
   virtual void dump() {}
   // calc_props should also set props_ if the value is final (ie no
   // deps)
-  virtual const ProdProps & calc_props() {abort();}
+  virtual const ProdProps & calc_props() = 0;
   const ProdProps & props() const {assert (props_); return *props_;}
   const ProdProps & get_props() {
     //printf("%*c:(%s):%p(%p):%s\n", indent_level, ' ', typeid(*this).
@@ -262,6 +268,8 @@ public:
   virtual IsSpecial is_special() const {return IS_OTHER;}
   Prod(const char * p, const char * e) 
     : capture_type(NoCapture), pos(p), end(e), finalized(false), props_(NULL) {}
+  Prod(const Prod & o)
+    : capture_type(o.capture_type), pos(o.pos), end(o.end), finalized(false), props_(NULL) {}
 public: // but don't useq
   CaptureType capture_type;
   const char * pos;
@@ -301,6 +309,14 @@ struct ProdWrapBase {
     assert(!prod->finalized);
     const_cast<Prod *>(prod)->end_with(p);
   }
+  ProdWrapBase(const ProdWrapBase & o, Mapper m) {
+    if (o.prod) {
+      prod = m(o.prod);
+      if (!prod) prod = o.prod->clone(m);
+    } else {
+      prod = NULL;
+    }
+  }
 };
 
 struct ProdPtr : public ProdWrapBase {
@@ -313,6 +329,7 @@ struct ProdPtr : public ProdWrapBase {
   bool operator! () const {return !prod;}
   const Prod * operator-> () const {return prod;}
   ProdPtr & operator=(const Prod * p) {prod = p; return *this;}
+  ProdPtr(const ProdPtr & o, Mapper m) : ProdWrapBase(o,m) {}
 };
 
 struct ProdWrap : public ProdWrapBase {
@@ -327,6 +344,7 @@ struct ProdWrap : public ProdWrapBase {
   ProdWrap clone(Prod * o) const {return ProdWrap(prod->clone(o), capture);}
   Prod::IsSpecial is_special() const 
     {return capture ? prod->is_special() : Prod::IS_OTHER;}
+  ProdWrap(const ProdWrap & o, Mapper m) : ProdWrapBase(o,m), capture(o.capture) {}
 private:
   ProdWrap(const Prod * p, bool c) : ProdWrapBase(p), capture(c) {}
 };
@@ -338,28 +356,32 @@ public:
   SymProd(const char * s, const char * e, String n) 
     : Prod(s,e), name(n) {capture_type = CanGiveCapture;}
   SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
-    : Prod(s,e), name(n) {capture_type = CanGiveCapture; set_prod(p);}
+    : Prod(s,e), name(n) {capture_type = CanGiveCapture; prod = p;}
   const ProdProps & calc_props() {
     const ProdProps & r = prod.get_props();
     set_props(r);
     return r;
   }
   void finalize() {finalized = true; prod.finalize();}
-  SymProd(const SymProd & other, Prod * p = 0) : Prod(other), name(other.name) 
-  {
-    if (name == "_self")
-      set_prod(ProdWrap(p));
-    else
-      set_prod(other.prod.clone(p));
-  }
-  virtual const Prod * clone(Prod * p) const {return new SymProd(*this, p);} 
-  void set_prod(const ProdWrap & p) {prod = p;}
   //void dump() {printf("%s", name.c_str());}
 public: // but treat as protected
   String name;
   String desc;
 //protected:
   ProdWrap prod;
+protected:
+  SymProd(const SymProd & o, ProdWrap p) 
+    : Prod(o), name(o.name), desc(o.desc), prod(p) {}
+};
+
+class SelfSymProd : public SymProd {
+public:
+  SelfSymProd(const char * s, const char * e, String n) 
+    : SymProd(s,e,n) {}
+  SelfSymProd(const SymProd & other, Prod * p = 0) 
+    : SymProd(other, ProdWrap(p)) {}
+  const Prod * clone(Prod * p) const {return new SelfSymProd(*this, p);} 
+  const Prod * clone(Mapper m) const {return this;}
 };
 
 struct PtrLt {
@@ -371,10 +393,8 @@ struct PtrLt {
 class NamedProd : public SymProd {
 public:
   NamedProd(String n) : SymProd(0, 0, n) {}
-  NamedProd(const NamedProd & o, Prod * p = 0) : SymProd(o,p) {}
-  virtual const Prod * clone(Prod *) const {
-    return this; // don't copy prod with name
-  }
+  const Prod * clone(Prod *) const {return this;} // don't copy prod with name
+  const Prod * clone(Mapper) const {return this;}
   void dump() {printf("%s", name.c_str());}
   const ProdProps & calc_props() {
     //unsigned esp0 = esp;
@@ -545,8 +565,10 @@ class TokenProd : public SymProd {
 public:
   TokenProd(const char * s, const char * e, String n) 
     : SymProd(s, e, n) {}
-  TokenProd(const TokenProd & o, Prod * p = 0) : SymProd(o,p) {}
-  virtual const Prod * clone(Prod * p) const {return new TokenProd(*this, p);}
+  TokenProd(const TokenProd & o, Prod * p = 0) : SymProd(o,o.prod.clone(p)) {}
+  TokenProd(const TokenProd & o, Mapper m) : SymProd(o,ProdWrap(o.prod, m)) {}
+  const Prod * clone(Prod * p) const {return new TokenProd(*this, p);}
+  const Prod * clone(Mapper m) const {return new TokenProd(*this, m);}
   void dump() {printf("\"%s\"", name.c_str());}
 };
 
@@ -643,6 +665,17 @@ PEG * parse_peg(const char * fn) {
   }
   return peg;
 }
+
+// PEG::PEG(const PEG & other) {
+//   // foreach named_prods
+//   hash_map<NamedProd *, NamedProd *> old_new;
+//   // first need to get the mapping from the old named from to the new
+//   old_new.insert(i->second, i->second->shallow_clone());
+//   // foreach old_new
+//   // now need to clone the prods to change any mappings
+//   i->second->prod = i->second->prod.clone(old_new);
+//   // do the clone on the parts of token rule
+// }
 
 namespace ParsePeg {class Parse;}
 
@@ -755,7 +788,9 @@ public:
     props_obj.first_char_eof = true;
     props_ = &props_obj;
   }
-  const Prod * clone(Prod *) const {return new AlwaysTrue(*this);}
+  const ProdProps & calc_props() {abort();}
+  const Prod * clone(Prod *) const {return this;}
+  const Prod * clone(Mapper) const {return this;}
   ProdProps props_obj;
   void finalize() {finalized = true; }
   //void dump() {printf(" _TRUE ");}
@@ -788,7 +823,10 @@ public:
   //bool optional() const {return prod->optional();}
   Capture(const Capture & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)) {}
-  virtual Capture * clone(Prod * p) const {return new Capture(*this, p);}
+  Capture(const Capture & o, Mapper m) 
+    : Prod(o), prod(o.prod, m) {}
+  Capture * clone(Prod * p) const {return new Capture(*this, p);}
+  Capture * clone(Mapper m) const {return new Capture(*this, m);}
   //void dump() {printf("{"); prod->dump(); printf("}");}
 protected:
   ProdPtr prod;
@@ -808,7 +846,9 @@ public:
   ReparseInner(const char * s, const char * e, const Prod * p)
     : Capture(s,e,p) {capture_type = ReparseCapture;}
   ReparseInner(const ReparseInner & o, Prod * p = 0) : Capture(o, p) {}
-  virtual ReparseInner * clone(Prod * p) const {return new ReparseInner(*this, p);}
+  ReparseInner(const ReparseInner & o, Mapper m) : Capture(o, m) {}
+  ReparseInner * clone(Prod * p) const {return new ReparseInner(*this, p);}
+  ReparseInner * clone(Mapper m) const {return new ReparseInner(*this, m);}
 };
 
 static inline const char * first_space(const char * s) 
@@ -956,6 +996,8 @@ public:
     {capture_type = ExplicitCapture;}
   NamedCaptureBase(const NamedCaptureBase & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)) {}
+  NamedCaptureBase(const NamedCaptureBase & o, Mapper m)
+    : Prod(o), prod(o.prod, m) {}
   const ProdProps & calc_props() {
     const ProdProps & r = prod.get_props();
     set_props(r);
@@ -988,7 +1030,10 @@ public:
     : NamedCaptureBase(s,e,p), GatherParts(n, caf) {}
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : NamedCaptureBase(o, p), GatherParts(o) {}
+  NamedCapture(const NamedCapture & o, Mapper m)
+    : NamedCaptureBase(o, m), GatherParts(o) {}
   const Prod * clone(Prod * p) const {return new NamedCapture(*this, p);}
+  const Prod * clone(Mapper m) const {return new NamedCapture(*this, m);}
   void finalize() {
     prod.finalize();
     finalized = true;
@@ -1019,7 +1064,10 @@ public:
     : NamedCapture(s,e,p,n) {}
   S_TId(const NamedCapture & o, Prod * p = 0)
     : NamedCapture(o,p) {}
+  S_TId(const NamedCapture & o, Mapper m)
+    : NamedCapture(o,m) {}
   const Prod * clone(Prod * p) const {return new NamedCapture(*this, p);}
+  const Prod * clone(Mapper m) const {return new NamedCapture(*this, m);}
 };
 
 class PlaceHolderCapture : public NamedCaptureBase {
@@ -1050,7 +1098,10 @@ public:
     : NamedCaptureBase(s,e,p) {}
   PlaceHolderCapture(const PlaceHolderCapture & o, Prod * p = 0)
     : NamedCaptureBase(o, p) {}
+  PlaceHolderCapture(const PlaceHolderCapture & o, Mapper m)
+    : NamedCaptureBase(o, m) {}
   const Prod * clone(Prod * p) const {return new PlaceHolderCapture(*this, p);}
+  const Prod * clone(Mapper m) const {return new PlaceHolderCapture(*this, m);}
 };
 
 
@@ -1078,7 +1129,8 @@ public:
     {capture_type = ExplicitCapture;}
   GatherPartsProd(const GatherPartsProd & o, Prod * p = 0)
     : AlwaysTrue(o), GatherParts(o) {}
-  virtual const Prod * clone(Prod * p) const {return new GatherPartsProd(*this, p);}
+  const Prod * clone(Prod * p) const {return this;}
+  const Prod * clone(Mapper m) const {return this;}
 };
 
 class ReparseOuter : public Prod {
@@ -1118,7 +1170,10 @@ public:
     }
   ReparseOuter(const ReparseOuter & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)), name(o.name), parse_as(o.parse_as) {}
-  virtual const Prod * clone(Prod * p) const {return new ReparseOuter(*this, p);}
+  ReparseOuter(const ReparseOuter & o, Mapper m)
+    : Prod(o), prod(o.prod, m), name(o.name), parse_as(o.parse_as) {}
+  const Prod * clone(Prod * p) const {return new ReparseOuter(*this, p);}
+  const Prod * clone(Mapper m) const {return new ReparseOuter(*this, m);}
   const ProdProps & calc_props() {
     const ProdProps & r = prod.get_props();
     set_props(r);
@@ -1182,7 +1237,9 @@ public:
         props_obj.first_char_high = true;
       props_ = &props_obj;
     }
-  virtual const Prod * clone(Prod * p) const {return new Literal(*this);}
+  const ProdProps & calc_props() {abort();}
+  const Prod * clone(Prod * p) const {return this;}
+  const Prod * clone(Mapper)   const {return this;}
   void dump() {printf("'%s'", literal.c_str());}
   void finalize() {finalized = true;}
 private:
@@ -1219,7 +1276,9 @@ public:
       else props_obj.first_char_high = 2;
       props_ = &props_obj;
     }
-  virtual const Prod * clone(Prod * p) const {return new CharClass(*this);}
+  const ProdProps & calc_props() {abort();}
+  const Prod * clone(Prod *) const {return this;}
+  const Prod * clone(Mapper) const {return this;}
   void finalize() {finalized = true;}
   //void dump() {printf("[]");}
 private:
@@ -1246,7 +1305,9 @@ public:
       props_obj.first_char_high = true;
       props_ = &props_obj;
     }
-  virtual const Prod * clone(Prod * p) const {return new Any(*this);}
+  const ProdProps & calc_props() {abort();}
+  const Prod * clone(Prod * p) const {return this;}
+  const Prod * clone(Mapper)   const {return this;}
   void dump() {printf("_");}
   void finalize() {finalized = true;}
   ProdProps props_obj;
@@ -1300,8 +1361,12 @@ public:
       end_with_ = o.end_with_.clone(p);
     }
   }
+  Repeat(const Repeat & o, Mapper m) 
+    : Prod(o), prod(o.prod,m), optional(o.optional), once(o.once), 
+      end_with_(o.end_with_, m) {}
   virtual void end_with(const Prod * p);
-  virtual const Prod * clone(Prod * p) const {return new Repeat(*this, p);}
+  const Prod * clone(Prod * p) const {return new Repeat(*this, p);}
+  const Prod * clone(Mapper m) const {return new Repeat(*this, m);}
   void dump() {}
   const ProdProps & calc_props() {
     props_obj.reset();
@@ -1347,7 +1412,11 @@ public:
   Predicate(const Predicate & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)), 
       invert(o.invert), dont_match_empty(o.dont_match_empty) {}
-  virtual const Prod * clone(Prod * p) const {return new Predicate(*this, p);}
+  Predicate(const Predicate & o, Mapper m)
+    : Prod(o), prod(o.prod,m), 
+      invert(o.invert), dont_match_empty(o.dont_match_empty) {}
+  const Prod * clone(Prod * p) const {return new Predicate(*this, p);}
+  const Prod * clone(Mapper m) const {return new Predicate(*this, m);}
   //void dump() {}
   const ProdProps & calc_props() {
     props_obj = prod.get_props();
@@ -1441,7 +1510,16 @@ public:
       prods.push_back(i->clone(p));
     }
   }
-  virtual const Prod * clone(Prod * p) const {return new Seq(*this, p);}
+  Seq(const Seq & o, Mapper m) : Prod(o) {
+    prods.reserve(o.prods.size());
+    for (Vector<ProdWrap>::const_iterator 
+           i = o.prods.begin(), e = o.prods.end(); i != e; ++i) 
+    {
+      prods.push_back(ProdWrap(*i,m));
+    }
+  }
+  const Prod * clone(Prod * p) const {return new Seq(*this, p);}
+  const Prod * clone(Mapper m) const {return new Seq(*this, m);}
   void dump() {}
 private:
   Vector<ProdWrap> prods;
@@ -1500,6 +1578,14 @@ public:
       prods.push_back(i->clone(p));
     }
   }
+  Choice(const Choice & o, Mapper m) : Prod(o), jump_table() {
+    prods.reserve(o.prods.size());
+    for (Vector<ProdWrap>::const_iterator 
+           i = o.prods.begin(), e = o.prods.end(); i != e; ++i) 
+    {
+      prods.push_back(ProdWrap(*i,m));
+    }
+  }
   const ProdProps & calc_props() {
     //printf("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n");
     props_obj.reset();
@@ -1519,7 +1605,8 @@ public:
     return props_obj;
   }
   void finalize();
-  virtual const Prod * clone(Prod * p) const {return new Choice(*this, p);}
+  const Prod * clone(Prod * p) const {return new Choice(*this, p);}
+  const Prod * clone(Mapper m) const {return new Choice(*this, m);}
   void dump() {}
 private:
   static const unsigned CHAR_HIGH = 128;
@@ -1710,7 +1797,10 @@ public:
     : Prod(s,e), in_named_prod(inp.empty() ? cur_named_prod : inp), prod(new NamedCapture(s, e, p, "mid")) {capture_type = ExplicitCapture;}
   S_MId(const S_MId & o, Prod * p = 0)
     : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod.clone(p)) {}
-  virtual const Prod * clone(Prod * p) const {return new S_MId(*this, p);}
+  S_MId(const S_MId & o, Mapper m)
+    : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod, m) {}
+  const Prod * clone(Prod * p) const {return new S_MId(*this, p);}
+  const Prod * clone(Mapper m) const {return new S_MId(*this, m);}
   const ProdProps & calc_props() {
     props_obj = prod.get_props(); 
     props_obj.uses_special |= props_obj.USES_MID;
@@ -1764,7 +1854,10 @@ public:
   }
   S_QuasiQuote(const char * s, const char * e, const ProdWrap & p)
     : NamedCaptureBase(s,e, p), name(SYN("quasiquote")) {capture_type = ExplicitCapture;}
-  virtual const Prod * clone(Prod * p) const {return new S_QuasiQuote(*this);}
+  S_QuasiQuote(const S_QuasiQuote & o, Mapper m)
+    : NamedCaptureBase(o, m), name(o.name) {}
+  Prod * clone(Prod *) const {return new S_QuasiQuote(*this);}
+  Prod * clone(Mapper) const {return new S_QuasiQuote(*this);}
 public: // but don't use
   const Syntax * name;
 };
@@ -1865,7 +1958,10 @@ public:
     return props_obj;
   }
   void finalize() {prod.finalize(); finalized = true;}
-  virtual S_AntiQuote * clone(Prod * p) const {return new S_AntiQuote(*this);}
+  S_AntiQuote(const S_AntiQuote & o, Mapper m) 
+    : Prod(o), prod(o.prod, m), ANTIQUOTE(o.ANTIQUOTE), AQ_NONE(o.AQ_NONE) {}
+  S_AntiQuote * clone(Prod * p) const {return new S_AntiQuote(*this);}
+  S_AntiQuote * clone(Mapper m) const {return new S_AntiQuote(*this,m);}
   void dump() {/*prod.dump();*/}
 protected:
   ProdPtr prod;
@@ -2003,7 +2099,7 @@ namespace ParsePeg {
         //if (name == "SPLIT_FLAG") stop();
         existing = ProdWrap();
         p->desc = desc;
-        p->set_prod(r);
+        p->prod = r;
         str = r.end;
       }
       str = require_symbol(';', str, end);
@@ -2060,7 +2156,7 @@ namespace ParsePeg {
       str.begin = i->to_match->match(str, NULL, dummy_env);
       if (str.empty()) {
         p->desc = i->desc;
-        p->set_prod(ProdWrap(i->if_matched->clone(new Capture(new Literal(p->pos, p->end, p->name)))));
+        p->prod = ProdWrap(i->if_matched->clone(new Capture(new Literal(p->pos, p->end, p->name))));
         return;
       }
     }
@@ -2395,7 +2491,7 @@ namespace ParsePeg {
     } else if (name == "_self") {
       // special symbol for "tokens"
       // FIXME: Check that we really can use this symbol here
-      return Res(new SymProd(start, str, name));
+      return Res(new SelfSymProd(start, str, name));
     } else if (name == "_cur") {
       return Res(str,existing);
     } else {
