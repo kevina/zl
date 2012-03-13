@@ -49,8 +49,8 @@ struct ParseError {
     {
       //printf(">>ERROR %p: Expected %s<<\n", pos, e.c_str());
     }
-  ParseError(const char * gp, const SourceStr & str, String e)
-    : grammer_pos(gp), pos(str.begin), expected(e) 
+  ParseError(const SourceStr & gp, const SourceStr & str, String e)
+    : grammer_pos(gp.begin), pos(str.begin), expected(e) 
     {
       //printf(">>ERROR %p: Expected %s<<\n", pos, e.c_str());
     }
@@ -266,14 +266,13 @@ public:
   //virtual bool optional() const = 0;
   enum IsSpecial {IS_OTHER, IS_REPARSE};
   virtual IsSpecial is_special() const {return IS_OTHER;}
-  Prod(const char * p, const char * e) 
-    : capture_type(NoCapture), pos(p), end(e), finalized(false), props_(NULL) {}
+  Prod(const SourceStr & s) 
+    : capture_type(NoCapture), g_span(s), finalized(false), props_(NULL) {}
   Prod(const Prod & o)
-    : capture_type(o.capture_type), pos(o.pos), end(o.end), finalized(false), props_(NULL) {}
+    : capture_type(o.capture_type), g_span(o.g_span), finalized(false), props_(NULL) {}
 public: // but don't useq
   CaptureType capture_type;
-  const char * pos;
-  const char * end;
+  SourceStr g_span; // grammar span
   bool finalized; // once finalized can't be modified
 protected:
   void set_props(const ProdProps & o) {if (o.no_deps()) props_ = &o;}
@@ -353,10 +352,10 @@ class SymProd : public Prod {
 public:
   MatchRes match(SourceStr str, SynBuilder * parts, MatchEnviron & env) const;
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const;
-  SymProd(const char * s, const char * e, String n) 
-    : Prod(s,e), name(n) {capture_type = CanGiveCapture;}
-  SymProd(const char * s, const char * e, String n, const ProdWrap & p) 
-    : Prod(s,e), name(n) {capture_type = CanGiveCapture; prod = p;}
+  SymProd(const SourceStr & s, String n) 
+    : Prod(s), name(n) {capture_type = CanGiveCapture;}
+  SymProd(const SourceStr & s, String n, const ProdWrap & p) 
+    : Prod(s), name(n) {capture_type = CanGiveCapture; prod = p;}
   const ProdProps & calc_props() {
     const ProdProps & r = prod.get_props();
     set_props(r);
@@ -376,8 +375,8 @@ protected:
 
 class SelfSymProd : public SymProd {
 public:
-  SelfSymProd(const char * s, const char * e, String n) 
-    : SymProd(s,e,n) {}
+  SelfSymProd(const SourceStr & s, String n) 
+    : SymProd(s,n) {}
   SelfSymProd(const SymProd & other, Prod * p = 0) 
     : SymProd(other, ProdWrap(p)) {}
   const Prod * clone(Prod * p) const {return new SelfSymProd(*this, p);} 
@@ -392,7 +391,7 @@ struct PtrLt {
 
 class NamedProd : public SymProd {
 public:
-  NamedProd(String n) : SymProd(0, 0, n) {}
+  NamedProd(String n) : SymProd(SourceStr(), n) {}
   const Prod * clone(Prod *) const {return this;} // don't copy prod with name
   const Prod * clone(Mapper) const {return this;}
   void dump() {printf("%s", name.c_str());}
@@ -563,8 +562,8 @@ Cache::LookupRes Cache::lookup(const CachedProd * prod, SourceStr str) {
 
 class TokenProd : public SymProd {
 public:
-  TokenProd(const char * s, const char * e, String n) 
-    : SymProd(s, e, n) {}
+  TokenProd(const SourceStr & s, String n) 
+    : SymProd(s, n) {}
   TokenProd(const TokenProd & o, Prod * p = 0) : SymProd(o,o.prod.clone(p)) {}
   TokenProd(const TokenProd & o, Mapper m) : SymProd(o,ProdWrap(o.prod, m)) {}
   const Prod * clone(Prod * p) const {return new TokenProd(*this, p);}
@@ -586,9 +585,9 @@ namespace ParsePeg {
     Res(const char * e, const Prod * p, CaptureQ c) : ProdWrap(p, c), end(e) {}
     Res(const char * e, const Prod * p) : ProdWrap(p), end(e) {}
     Res(const char * e, const ProdWrap & p) : ProdWrap(p), end(e) {}
-    Res(Prod * p, CaptureQ c) : ProdWrap(p, c), end(p->end) {assert(end);}
-    explicit Res(Prod * p) : ProdWrap(p), end(p->end) {assert(end);}
-    explicit Res(const ProdWrap & p) : ProdWrap(p), end(p.prod->end) {assert(end);}
+    Res(Prod * p, CaptureQ c) : ProdWrap(p, c), end(p->g_span.end) {assert(end);}
+    explicit Res(Prod * p) : ProdWrap(p), end(p->g_span.end) {assert(end);}
+    explicit Res(const ProdWrap & p) : ProdWrap(p), end(p.prod->g_span.end) {assert(end);}
   };
 
   template <typename T>
@@ -607,8 +606,12 @@ namespace ParsePeg {
 
   class Parse {
   public:
-    Parse(PEG * p) : peg(p) {}
+    Parse(SourceFile * f, PEG * p) : file(f), peg(p) {}
+    SourceFile * file;
     PEG * peg;
+
+    SourceStr mk_src(const char * b, const char * e) 
+      {return SourceStr(&file->base_block.base_info, b, e);}
 
     const char * begin;
 
@@ -656,7 +659,7 @@ PEG * parse_peg(const char * fn) {
   PEG * peg = new PEG;
   printf("THE PEG=%p\n", peg);
   peg->file = new_source_file(fn);
-  ParsePeg::Parse parse(peg);
+  ParsePeg::Parse parse(peg->file, peg);
   try {
     parse.top(peg->file->begin(), peg->file->end());
   } catch (Error * err) {
@@ -699,9 +702,9 @@ const char * SymProd::match_f(SourceStr str, ParseErrors & errs, MatchEnviron & 
     ParseErrors my_errs;
     const char * r = prod.match_f(str, my_errs, env);
     if (my_errs.size() > 0 && my_errs.front()->pos <= str.begin) {
-      errs.add(new ParseError(pos, str, desc));
+      errs.add(new ParseError(g_span, str, desc));
     } else if (my_errs.size() > 0 && my_errs.front()->expected == "<charset>") {
-      errs.add(new ParseError(pos, str, desc));
+      errs.add(new ParseError(g_span, str, desc));
     } else {
       errs.add(my_errs);
     }
@@ -781,7 +784,7 @@ public:
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &) const {
     return str.begin;
   }
-  AlwaysTrue(const char * p, const char * e) : Prod(p,e) {
+  AlwaysTrue(const SourceStr & s) : Prod(s) {
     props_obj.what = PP_OPTIONAL;
     props_obj.first_char.set();
     props_obj.first_char_high = 2;
@@ -810,10 +813,10 @@ public:
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     return prod.match_f(str, errs, env);
   }
-  Capture(const char * s, const char * e, const Prod * p)
-    : Prod(s,e), prod(p) {capture_type = ExplicitCapture;}
+  Capture(const SourceStr & s, const Prod * p)
+    : Prod(s), prod(p) {capture_type = ExplicitCapture;}
   Capture(const Prod * p)
-    : Prod(p->pos, p->end), prod(p) {capture_type = ExplicitCapture;}
+    : Prod(p->g_span), prod(p) {capture_type = ExplicitCapture;}
   const ProdProps & calc_props() {
     const ProdProps & r = prod.get_props();
     set_props(r);
@@ -843,8 +846,8 @@ public:
     res->add_part(parse);
     return r;
   }
-  ReparseInner(const char * s, const char * e, const Prod * p)
-    : Capture(s,e,p) {capture_type = ReparseCapture;}
+  ReparseInner(const SourceStr & s, const Prod * p)
+    : Capture(s,p) {capture_type = ReparseCapture;}
   ReparseInner(const ReparseInner & o, Prod * p = 0) : Capture(o, p) {}
   ReparseInner(const ReparseInner & o, Mapper m) : Capture(o, m) {}
   ReparseInner * clone(Prod * p) const {return new ReparseInner(*this, p);}
@@ -991,8 +994,8 @@ public:
   }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
-  NamedCaptureBase(const char * s, const char * e, const ProdWrap & p)
-    : Prod(s,e), prod(p)
+  NamedCaptureBase(const SourceStr & s, const ProdWrap & p)
+    : Prod(s), prod(p)
     {capture_type = ExplicitCapture;}
   NamedCaptureBase(const NamedCaptureBase & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)) {}
@@ -1026,8 +1029,8 @@ public:
   }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
-  NamedCapture(const char * s, const char * e, const ProdWrap & p, String n, bool caf = false)
-    : NamedCaptureBase(s,e,p), GatherParts(n, caf) {}
+  NamedCapture(const SourceStr & s, const ProdWrap & p, String n, bool caf = false)
+    : NamedCaptureBase(s,p), GatherParts(n, caf) {}
   NamedCapture(const NamedCapture & o, Prod * p = 0)
     : NamedCaptureBase(o, p), GatherParts(o) {}
   NamedCapture(const NamedCapture & o, Mapper m)
@@ -1060,8 +1063,8 @@ public:
     }
     return r;
   }
-  S_TId(const char * s, const char * e, const ProdWrap & p, String n)
-    : NamedCapture(s,e,p,n) {}
+  S_TId(const SourceStr & s, const ProdWrap & p, String n)
+    : NamedCapture(s,p,n) {}
   S_TId(const NamedCapture & o, Prod * p = 0)
     : NamedCapture(o,p) {}
   S_TId(const NamedCapture & o, Mapper m)
@@ -1094,8 +1097,8 @@ public:
   }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
-  PlaceHolderCapture(const char * s, const char * e, const ProdWrap & p)
-    : NamedCaptureBase(s,e,p) {}
+  PlaceHolderCapture(const SourceStr & s, const ProdWrap & p)
+    : NamedCaptureBase(s,p) {}
   PlaceHolderCapture(const PlaceHolderCapture & o, Prod * p = 0)
     : NamedCaptureBase(o, p) {}
   PlaceHolderCapture(const PlaceHolderCapture & o, Mapper m)
@@ -1124,8 +1127,8 @@ public:
   }
   // FIXME: Should take in Syntax or SourceStr rater than String so we
   // can keep track of where the name came from
-  GatherPartsProd(const char * s, const char * e, String n, bool caf = false)
-    : AlwaysTrue(s,e), GatherParts(n, caf)
+  GatherPartsProd(const SourceStr & s, String n, bool caf = false)
+    : AlwaysTrue(s), GatherParts(n, caf)
     {capture_type = ExplicitCapture;}
   GatherPartsProd(const GatherPartsProd & o, Prod * p = 0)
     : AlwaysTrue(o), GatherParts(o) {}
@@ -1161,8 +1164,8 @@ public:
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron & env) const {
     return prod.match_f(str, errs, env);
   }
-  ReparseOuter(const char * s, const char * e, const Prod * p, String n, String pa)
-    : Prod(s,e), prod(p), name(SYN(n)), parse_as(pa)
+  ReparseOuter(const SourceStr & s, const Prod * p, String n, String pa)
+    : Prod(s), prod(p), name(SYN(n)), parse_as(pa)
     {
       capture_type = ExplicitCapture;
       name = SYN(parse_common::unescape(n.begin(), n.end(), '"')); // FIXME: Add source info
@@ -1223,12 +1226,12 @@ public:
     } else {
       StringBuf buf;
       buf << "\"" << literal << "\"";
-      errs.add(new ParseError(pos, str, buf.freeze()));
+      errs.add(new ParseError(g_span, str, buf.freeze()));
       return FAIL;
     }
   }  
-  Literal(const char * s, const char * e, String l)
-    : Prod(s,e), literal(l) 
+  Literal(const SourceStr & s, String l)
+    : Prod(s), literal(l) 
     {
       unsigned char c = literal[0];
       if (c < 128)
@@ -1259,12 +1262,12 @@ public:
     if (!str.empty() && cs[*str]) {
       return str.begin + 1;
     } else {
-      errs.add(new ParseError(pos, str, "<charset>")); // FIXME 
+      errs.add(new ParseError(g_span, str, "<charset>")); // FIXME 
       return FAIL;
     }
   }
-  CharClass(const char * s, const char * e, const CharSet & cs0) 
-    : Prod(s,e), cs(cs0)
+  CharClass(const SourceStr & s, const CharSet & cs0) 
+    : Prod(s), cs(cs0)
     {
       for (unsigned i = 0; i < 128; ++i)
         if (cs[i]) props_obj.first_char.set(i, 1);
@@ -1296,10 +1299,10 @@ public:
   const char * match_f(SourceStr str, ParseErrors & errs, MatchEnviron &) const {
     if (!str.empty())
       return str.begin+1;
-    errs.push_back(new ParseError(pos, str, "<EOF>"));
+    errs.push_back(new ParseError(g_span, str, "<EOF>"));
     return FAIL;
   }
-  Any(const char * s, const char * e) : Prod(s,e) 
+  Any(const SourceStr & s) : Prod(s) 
     {
       props_obj.first_char.set();
       props_obj.first_char_high = true;
@@ -1351,8 +1354,8 @@ public:
     else 
       return FAIL;
   }
-  Repeat(const char * s, const char * e, const ProdWrap & p, bool o1, bool o2) 
-    : Prod(s,e), prod(p), optional(o1), once(o2), end_with_() 
+  Repeat(const SourceStr & s, const ProdWrap & p, bool o1, bool o2) 
+    : Prod(s), prod(p), optional(o1), once(o2), end_with_() 
     {capture_type = p.capture ? ExplicitCapture : NoCapture;}
   Repeat(const Repeat & o, Prod * p = 0) 
     : Prod(o), prod(o.prod.clone(p)), optional(o.optional), once(o.once) 
@@ -1407,8 +1410,8 @@ public:
     // FIXME: Correctly handle errors;
     return Predicate::match(str, NULL, env);
   }
-  Predicate(const char * s, const char * e, const Prod * p, bool inv, bool dme = false) 
-    : Prod(s,e), prod(p), invert(inv), dont_match_empty(dme) {}
+  Predicate(const SourceStr & s, const Prod * p, bool inv, bool dme = false) 
+    : Prod(s), prod(p), invert(inv), dont_match_empty(dme) {}
   Predicate(const Predicate & o, Prod * p = 0)
     : Prod(o), prod(o.prod.clone(p)), 
       invert(o.invert), dont_match_empty(o.dont_match_empty) {}
@@ -1439,7 +1442,7 @@ private:
 
 void Repeat::end_with(const Prod * p) {
   assert(!end_with_);
-  end_with_ = new Predicate(p->pos, p->end, p, false, true);
+  end_with_ = new Predicate(p->g_span, p, false, true);
 }
 
 static inline CaptureType get_capture_type(const Vector<ProdWrap> & p) 
@@ -1483,8 +1486,8 @@ public:
     }
     return str.begin;
   }
-  Seq(const char * s, const char * e, const Vector<ProdWrap> & p)
-    : Prod(s, e), prods(p) 
+  Seq(const SourceStr & s, const Vector<ProdWrap> & p)
+    : Prod(s), prods(p) 
     {capture_type = get_capture_type(prods);}
   const ProdProps & calc_props() {
     Vector<ProdWrap>::reverse_iterator 
@@ -1567,8 +1570,8 @@ public:
     }
     return FAIL;
   }
-  Choice(const char * s, const char * e, const Vector<ProdWrap> & p)
-    : Prod(s, e), prods(p), jump_table() 
+  Choice(const SourceStr & s, const Vector<ProdWrap> & p)
+    : Prod(s), prods(p), jump_table() 
     {capture_type = get_capture_type(prods);}
   Choice(const Choice & o, Prod * p = 0) : Prod(o), jump_table() {
     prods.reserve(o.prods.size());
@@ -1793,8 +1796,8 @@ public:
     }
 
   }
-  S_MId(const char * s, const char * e, const ProdWrap & p, String inp = String())
-    : Prod(s,e), in_named_prod(inp.empty() ? cur_named_prod : inp), prod(new NamedCapture(s, e, p, "mid")) {capture_type = ExplicitCapture;}
+  S_MId(const SourceStr & s, const ProdWrap & p, String inp = String())
+    : Prod(s), in_named_prod(inp.empty() ? cur_named_prod : inp), prod(new NamedCapture(s, p, "mid")) {capture_type = ExplicitCapture;}
   S_MId(const S_MId & o, Prod * p = 0)
     : Prod(o), in_named_prod(o.in_named_prod), prod(o.prod.clone(p)) {}
   S_MId(const S_MId & o, Mapper m)
@@ -1852,8 +1855,8 @@ public:
     nenv.antiquotes = &aql;
     prod.match_check(str, res.end, nenv);
   }
-  S_QuasiQuote(const char * s, const char * e, const ProdWrap & p)
-    : NamedCaptureBase(s,e, p), name(SYN("quasiquote")) {capture_type = ExplicitCapture;}
+  S_QuasiQuote(const SourceStr & s, const ProdWrap & p)
+    : NamedCaptureBase(s,p), name(SYN("quasiquote")) {capture_type = ExplicitCapture;}
   S_QuasiQuote(const S_QuasiQuote & o, Mapper m)
     : NamedCaptureBase(o, m), name(o.name) {}
   Prod * clone(Prod *) const {return new S_QuasiQuote(*this);}
@@ -1941,8 +1944,8 @@ public:
     nenv.antiquotes = NULL;
     return prod.match_f(str, errs, nenv);
   }
-  S_AntiQuote(const char * s, const char * e, const ProdWrap & p)
-    : Prod(s,e), prod(p.prod)
+  S_AntiQuote(const SourceStr & s, const ProdWrap & p)
+    : Prod(s), prod(p.prod)
     {
       assert(p.capture); 
       assert(prod->capture_type == ExplicitCapture); 
@@ -2156,7 +2159,7 @@ namespace ParsePeg {
       str.begin = i->to_match->match(str, NULL, dummy_env);
       if (str.empty()) {
         p->desc = i->desc;
-        p->prod = ProdWrap(i->if_matched->clone(new Capture(new Literal(p->pos, p->end, p->name))));
+        p->prod = ProdWrap(i->if_matched->clone(new Capture(new Literal(p->g_span, p->name))));
         return;
       }
     }
@@ -2188,14 +2191,14 @@ namespace ParsePeg {
         if (prods[0].prod->capture_type != NoCapture)
           return Res(str, prods[0].prod, DoCapture);
         else
-          return Res(str, new Capture(start, str, prods[0].prod));
+          return Res(str, new Capture(mk_src(start, str), prods[0].prod));
       case NeedReparseCapture:
-        return Res(str, new ReparseInner(start, str, prods[0].prod));
+        return Res(str, new ReparseInner(mk_src(start, str), prods[0].prod));
       }
     } else {
       switch (nc) {
       case DontNeedCapture:
-        return Res(str, new Choice(start, str, prods));
+        return Res(str, new Choice(mk_src(start, str), prods));
       case NeedCapture: 
         for (Vector<ProdWrap>::iterator 
                i = prods.begin(), e = prods.end(); i != e; ++i)
@@ -2204,9 +2207,9 @@ namespace ParsePeg {
             i->prod = new Capture(i->prod);
           i->capture = true;
         }
-        return Res(str, new Choice(start, str, prods));
+        return Res(str, new Choice(mk_src(start, str), prods));
       case NeedReparseCapture:
-        return Res(str, new ReparseInner(start, str, new Choice(start, end, prods)));
+        return Res(str, new ReparseInner(mk_src(start, str), new Choice(mk_src(start, end), prods)));
       }
     }
     abort(); // Should never happen, to make gcc happy.
@@ -2296,25 +2299,26 @@ namespace ParsePeg {
     }
     ProdWrap prod;
     if (prods.size() == 0)
-      prod = ProdWrap(new AlwaysTrue(start, str));
+      prod = ProdWrap(new AlwaysTrue(mk_src(start, str)));
     else if (prods.size() == 1)
       prod = prods[0];
     else
-      prod = ProdWrap(new Seq(start, str, prods));
+      prod = ProdWrap(new Seq(mk_src(start, str), prods));
     if (sp == SP_NAME_LATER)
-      return Res(new PlaceHolderCapture(start, str, prod));
+      return Res(new PlaceHolderCapture(mk_src(start, str), prod));
     else if (sp == SP_MID)
-      return Res(new S_MId(start, str, prod, String(special[1])));
+      return Res(new S_MId(mk_src(start, str), prod, String(special[1])));
     else if (sp == SP_REPARSE)
-      return Res(new ReparseOuter(start, str, prod.prod, name, special[2] ? String(special[2]) : String()));
+      return Res(new ReparseOuter(mk_src(start, str), 
+                                  prod.prod, name, special[2] ? String(special[2]) : String()));
     else if (sp == SP_TID) 
-      return Res(new S_TId(start, str, prod, name));
+      return Res(new S_TId(mk_src(start, str), prod, name));
     else if (sp == SP_QUASIQUOTE)
-      return Res(new S_QuasiQuote(start, str, prod));
+      return Res(new S_QuasiQuote(mk_src(start, str), prod));
     else if (sp == SP_ANTIQUOTE)
-      return Res(new S_AntiQuote(start, str, prod));
+      return Res(new S_AntiQuote(mk_src(start, str), prod));
     if (named_capture)
-      return Res(new NamedCapture(start, str, prod, name, capture_as_flag));
+      return Res(new NamedCapture(mk_src(start, str), prod, name, capture_as_flag));
     else
       return Res(str, prod);
   }
@@ -2332,7 +2336,7 @@ namespace ParsePeg {
       Vector<ProdWrap> prods;
       prods.push_back(r1);
       prods.push_back(r2);
-      return Res(new Seq(start, str, prods));
+      return Res(new Seq(mk_src(start, str), prods));
     } else {
       return r1;
     }
@@ -2351,19 +2355,19 @@ namespace ParsePeg {
       str = symbol('!', str, end);
       Res r = suffix(str, end, NormalContext);
       str = r.end;
-      return Res(new Predicate(start, str, r.prod, true));
+      return Res(new Predicate(mk_src(start, str), r.prod, true));
     } else if (*str == '&') {
       str = symbol('&', str, end);
       Res r = suffix(str, end, NormalContext);
       str = r.end;
-      return Res(new Predicate(start, str, r.prod, false));
+      return Res(new Predicate(mk_src(start, str), r.prod, false));
     } else if (*str == '=') {
       str = symbol('=', str, end);
       str = spacing(str, end);
       if (*str != '<') throw error (str, "'<' expected");
       SubStr name;
       str = quote('>', str, end, name);
-      return Res(new GatherPartsProd(start, str, String(name)));
+      return Res(new GatherPartsProd(mk_src(start, str), String(name)));
     } else {
       return suffix(str, end, context);
     }
@@ -2376,13 +2380,13 @@ namespace ParsePeg {
     str = r.end;
     if (*str == '?') {
       str = symbol('?', str, end);
-      return Res(new Repeat(start, str, r, true, true));
+      return Res(new Repeat(mk_src(start, str), r, true, true));
     } else if (*str == '*') { 
       str = symbol('*', str, end);
-      return Res(new Repeat(start, str, r, true, false));
+      return Res(new Repeat(mk_src(start, str), r, true, false));
     } else if (*str == '+') {
       str = symbol('+', str, end);
-      return Res(new Repeat(start, str, r, false, false));
+      return Res(new Repeat(mk_src(start, str), r, false, false));
     } else {
       return r;
     }
@@ -2417,7 +2421,7 @@ namespace ParsePeg {
     SubStr lit0;
     str = quote('\'', str, end, lit0);
     String lit = unescape(lit0);
-    return Res(new Literal(start, str, lit));
+    return Res(new Literal(mk_src(start, str), lit));
   }
   
   Res Parse::char_class(const char * str, const char * end) {
@@ -2467,7 +2471,7 @@ namespace ParsePeg {
       throw error(start, "Unterminated '['");
     ++str;
     str = spacing(str, end);
-    return Res(new CharClass(start, str, set1));
+    return Res(new CharClass(mk_src(start, str), set1));
   }
 
   Res Parse::token(const char * str, const char * end) {
@@ -2475,7 +2479,7 @@ namespace ParsePeg {
     SubStr name0;
     str = quote('"', str, end, name0);
     String name = unescape(name0);
-    TokenProd * p = new TokenProd(start, str, name);
+    TokenProd * p = new TokenProd(mk_src(start, str), name);
     token_syms.push_back(Sym<TokenProd>(start, p));
     return Res(str, p);
   }
@@ -2485,13 +2489,13 @@ namespace ParsePeg {
     String name;
     str = id(str, end, name);
     if (name == "_") {
-      return Res(new Any(start, str));
+      return Res(new Any(mk_src(start, str)));
     } else if (name == "__") {
-      return Res(new AlwaysTrue(start, str));
+      return Res(new AlwaysTrue(mk_src(start, str)));
     } else if (name == "_self") {
       // special symbol for "tokens"
       // FIXME: Check that we really can use this symbol here
-      return Res(new SelfSymProd(start, str, name));
+      return Res(new SelfSymProd(mk_src(start, str), name));
     } else if (name == "_cur") {
       return Res(str,existing);
     } else {
