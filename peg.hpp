@@ -13,6 +13,8 @@ namespace ast {
 
 PEG * parse_peg(const char * fn);
 
+PEG * extend_peg(const PEG * orig, SourceStr);
+
 struct Replacements;
 struct ParseAsQuasiQuote {
   bool answer;

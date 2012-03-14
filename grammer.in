@@ -40,6 +40,7 @@ STMT : "statement" =
     / <template> "template" {ID} ";"
     / <empty> ("using"/"friend") TOKEN+ ";"
     / "__raw" {SEXP} ";"
+    / <new_syntax> "new_syntax" {BRACE}
     / <noop>   ";"
     / <extern> "extern" {STRING_L} (:<abi> ({STRING}/":"{STRING_L}))? ({BRACEL} / {STMT})
     / <once> "__once" {ID} ({BRACEL} / {STMT})
@@ -50,8 +51,8 @@ STMT : "statement" =
 
 CUSTOM_STMT = !__;
 
-CUSTOM_STMT := _cur / <foreach> "foreach" "(" {ID} "in" {EXP} ")" {STMT} # added for foreach testcase
-            ;
+#CUSTOM_STMT := _cur / <foreach> "foreach" "(" {ID} "in" {EXP} ")" {STMT} # added for foreach testcase
+#            ;
 
 INIT_LIST =
   <init> ":" (<> {ID} {PARAN}) (<> "," {ID} {PARAN})*;
@@ -136,13 +137,6 @@ STRUCT_UNION = <%> {"struct"/"union"/"class"/".class"}
                    {<{...}> {BRACEL} }?;
 
 STRUCT_UNION_PARMS = (:<public> ":" "public" {ID})?;
-
-STRUCT_UNION_PARMS := _cur
-                     (:<fix_size> ":" "fix_size" "(" {EXP} ")" )? # used for test67
-                     (:<fix_vtable_size> ":" "fix_vtable_size" "(" {EXP} ")" )? # used for test101
-                     (:<vtable_slots> ":" "vtable_slots" "(" {EXP} ")" )?
-                     (:<abi_ver> ":" "abi_ver" "(" {EXP} ")" )?;
-
 
 ENUM = <enum> "enum" {ID/} 
               {<{,}> "{" ({ENUM_MEMBER} ",")* ({ENUM_MEMBER} ","?)? "}" }?;

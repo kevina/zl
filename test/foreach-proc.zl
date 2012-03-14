@@ -1,3 +1,7 @@
+new_syntax {
+  CUSTOM_STMT := _cur / <foreach> "foreach" "(" {ID} "in" {EXP} ")" {STMT};
+}
+
 Syntax * foreach (Syntax * syn, Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_f(0, syntax(VAR,WHAT,BODY), syn);

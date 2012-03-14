@@ -5,6 +5,10 @@ include_file "class-this_reg.zlh";
 //
 //
 
+new_syntax {
+  STRUCT_UNION_PARMS := _cur (:<abi_ver> ":" "abi_ver" "(" {EXP} ")" )?;
+}
+
 size_t zl_abi_version = 1;
 
 Syntax * parse_class_w_abi(Syntax * p, Environ * env) {

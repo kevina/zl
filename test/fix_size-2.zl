@@ -1,3 +1,9 @@
+new_syntax {
+  STRUCT_UNION_PARMS := _cur
+                       (:<fix_size> ":" "fix_size" "(" {EXP} ")" )?
+                       (:<fix_vtable_size> ":" "fix_vtable_size" "(" {EXP} ")" )?;
+}
+
 Syntax * parse_myclass(Syntax * p, Environ * env);
 make_syntax_macro class parse_myclass;
 

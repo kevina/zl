@@ -620,8 +620,8 @@ namespace ParsePeg {
 
   class Parse {
   public:
-    Parse(SourceFile * f, PEG * p) : file(f), peg(p) {}
-    SourceFile * file;
+    Parse(const SourceFile * f, PEG * p) : file(f), peg(p) {}
+    const SourceFile * file;
     PEG * peg;
 
     SourceStr mk_src(const char * b, const char * e) 
@@ -664,7 +664,7 @@ namespace ParsePeg {
 }
 
 struct PEG {
-  SourceFile * file;
+  const SourceFile * file;
   hash_map<String, NamedProd *> named_prods;
   Vector<ParsePeg::TokenRule>   token_rules;
   PEG() : file() {}
@@ -681,6 +681,19 @@ PEG * parse_peg(const char * fn) {
     parse.top(peg->file->begin(), peg->file->end());
   } catch (Error * err) {
     err->msg.span.source = &peg->file->base_block.base_info;
+    throw err;
+  }
+  return peg;
+}
+
+PEG * extend_peg(const PEG * orig, SourceStr str) {
+  PEG * peg = new PEG(*orig);
+  peg->file = str.file();
+  ParsePeg::Parse parse(peg->file, peg);
+  try {
+    parse.top(str.begin, str.end);
+  } catch (Error * err) {
+    err->msg.span.source = str.source;
     throw err;
   }
   return peg;
@@ -717,13 +730,13 @@ PEG::PEG(const PEG & o)
                                               i->if_matched->clone(Mapper(old_new)),
                                               i->desc));
 
-  for (hash_map<String, NamedProd *>::iterator 
-         i = named_prods.begin(), e = named_prods.end(); i != e; ++i) 
-    i->second->get_props();
+  // for (hash_map<String, NamedProd *>::iterator 
+  //        i = named_prods.begin(), e = named_prods.end(); i != e; ++i) 
+  //   i->second->get_props();
 
-  for (hash_map<String, NamedProd *>::iterator 
-         i = named_prods.begin(), e = named_prods.end(); i != e; ++i) 
-    i->second->finalize();
+  // for (hash_map<String, NamedProd *>::iterator 
+  //        i = named_prods.begin(), e = named_prods.end(); i != e; ++i) 
+  //   i->second->finalize();
 }
 
 void PEG::dump() const {

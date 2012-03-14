@@ -5072,6 +5072,18 @@ namespace ast {
   //
   //
 
+  Stmt * parse_new_syntax(const Syntax * p, Environ & env) {
+    assert_num_args(p, 1);
+    p = p->arg(0);
+    const ReparseSyntax * rp = p->as_reparse();
+    env.peg = extend_peg(env.peg, rp->inner().str);
+    return empty_stmt();
+  }  
+
+  //
+  //
+  //
+
   void add_ast_primitives(Environ & env) {
     env.add(SymbolKey("struct", SYNTAX_NS), new Primitive());
     env.add(SymbolKey("union", SYNTAX_NS), new Primitive());
@@ -5255,6 +5267,7 @@ namespace ast {
     if (what == "template") return parse_template(p, env);
     if (what == "empty") return empty_stmt();
     if (what == "link_once") {env.link_once = true; return empty_stmt();}
+    if (what == "new_syntax") return parse_new_syntax(p, env);
     return 0;
     } catch (Error * err) {
       StringBuf buf = err->extra;

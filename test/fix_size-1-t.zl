@@ -1,3 +1,7 @@
+new_syntax {
+  STRUCT_UNION_PARMS := _cur (:<fix_size> ":" "fix_size" "(" {EXP} ")" )?;
+}
+
 include_file "fix_size-1.zl";
 
 class X : fix_size(16) {
