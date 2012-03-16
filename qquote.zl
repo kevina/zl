@@ -26,7 +26,7 @@ Syntax * parse_match(Syntax * in, Environ * env) {
   Match * m = match_f(0, syntax [qq, with, :match_f match_f = match_f_], in, mark);
   Syntax * qq = m->var(syntax qq);
   Environ * lenv = temp_environ(env);
-  pre_parse(replace(raw_syntax(kill_fluid (` quasiquote syntax)),
+  pre_parse(replace(raw_syntax(kill_binding (` quasiquote syntax)),
                     NULL, mark), lenv);
   qq = partly_expand(qq, ExpPos, lenv);
   // FIXME: make sure with have a quasiquote

@@ -5246,7 +5246,7 @@ namespace ast {
     if (what == "make_macro")         return parse_macro(p, env);
     //if (what == "make_syntax_macro")  return parse_macro(p, env);
     if (what == "fluid_binding") return parse_fluid_binding(p, env);
-    if (what == "kill_fluid")    return parse_kill_fluid(p, env);
+    if (what == "kill_binding")    return parse_kill_binding(p, env);
     if (what == "module")        return parse_module(p, env);
     if (what == "import")        return parse_import(p, env);
     if (what == "bring_to_this_scope") return parse_bring_to_this_scope(p, env);
