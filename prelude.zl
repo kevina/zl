@@ -52,4 +52,3 @@ Syntax * parse_enum(Syntax * p, Environ * env) {
   return res;
 }
 
-

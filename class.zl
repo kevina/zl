@@ -553,12 +553,12 @@ public:
     SyntaxEnum * parms_enum = m->varl(syntax parms);
     unsigned i = 0;
     Syntax * parm;
+    bool now_optional = false;
     while ((parm = parms_enum->next())) {
       Match * m0 = match_parts_f(m, raw_syntax(type @ name :(default default)), parm);
       //printf("AND THE PARM IS %s w/ type %s\n", syntax_to_string(parm), syntax_to_string(m0->var(syntax type)));
       //printf("AND THE PARM IS %s\n", syntax_to_string(parm));
       Syntax * arg = m0 ? m0->var(syntax name) : NULL;
-      bool now_optional = false;
       if (!arg) {
         char sbuf[8];
         snprintf(sbuf, 8, "arg%d", i);
