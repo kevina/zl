@@ -23,7 +23,7 @@ Syntax * parse_quasiquote(Syntax * qq, Environ * env) {
 
 Syntax * parse_match(Syntax * in, Environ * env) {
   Mark * mark = new_mark(prelude_envss);
-  Match * m = match_f(0, syntax [qq, with, :match_f match_f = match_f_], in, mark);
+  Match * m = match_f(0, syntax [qq, with, :match_f match_f = match_f`internal], in, mark);
   Syntax * qq = m->var(syntax qq);
   Environ * lenv = temp_environ(env);
   pre_parse(replace(raw_syntax(kill_binding (` quasiquote syntax)),

@@ -16,8 +16,8 @@
   syntax_list_replace;
   syntax_enum_next;
   syntax_enum_clone;
-  match_parts_f_;
-  match_f_;
+  match_parts_f;
+  match_f;
   match_local;
   match_var;
   match_varl;

@@ -361,8 +361,8 @@ namespace macro_abi {
   typedef const ::Syntax Syntax;
   typedef Syntax UnmarkedSyntax;
   //struct SyntaxEnum;
-  Match * match_parts_f_(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
-  Match * match_f_(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+  Match * match_parts_f(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+  Match * match_f(Match * m, const UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
   Syntax * replace(const UnmarkedSyntax * p, Match * match, Mark * mark);
   Context * get_context(Syntax * p);
   Syntax * replace_context(Syntax * p, Context * context);
@@ -833,11 +833,11 @@ Match * match(Match * orig_m, const Syntax * pattern, const Syntax * with, unsig
 extern "C" 
 namespace macro_abi {
 
-  Match * match_parts_f_(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+  Match * match_parts_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
     return match(m, pattern, with, 0, mark);
   }
   
-  Match * match_f_(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
+  Match * match_f(Match * m, const Syntax * pattern, const Syntax * with, Mark * mark) {
     return match(m, pattern, with, 1, mark);
   }
   

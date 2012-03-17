@@ -150,10 +150,10 @@ user_type SyntaxEnum {
 }
 
 user_type Match;
-__ct_callback Match * match_parts_f_(Match * m, UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
-macro match_parts_f(m, pattern, with, mark = NULL) {match_parts_f_(m, pattern, with, mark);}
-__ct_callback Match * match_f_(Match *, UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
-macro match_f(m, pattern, with, mark = NULL) {match_f_(m, pattern, with, mark);}
+__ct_callback Match * match_parts_f`internal(Match * m, UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+macro match_parts_f(m, pattern, with, mark = NULL) {match_parts_f`internal(m, pattern, with, mark);}
+__ct_callback Match * match_f`internal(Match *, UnmarkedSyntax * pattern, Syntax * with, Mark * mark);
+macro match_f(m, pattern, with, mark = NULL) {match_f`internal(m, pattern, with, mark);}
 __ct_callback Match * match_local(Match *, ...);
 __ct_callback Syntax * match_var(Match *, UnmarkedSyntax *);
 __ct_callback SyntaxEnum * match_varl(Match *, UnmarkedSyntax *);
@@ -211,7 +211,7 @@ make_macro quasiquote`syntax parse_quasiquote;
 Syntax * parse_match(Syntax * in, Environ * env);
 make_macro match parse_match;
 __raw(macro match_parts (pattern with @rest) 
-      (call match (. pattern with :(match_f match_parts_f_) @rest)));
+      (call match (. pattern with :(match_f (` match_parts_f internal)) @rest)));
 
 //
 // make_syntax_macro
