@@ -123,7 +123,7 @@ namespace ast {
       if (flags & SymbolNode::ALIAS) printf(" ALIAS");
       if (flags & SymbolNode::IMPORTED) printf(" IMPORTED");
       if (flags & SymbolNode::DIFF_SCOPE) printf(" DIFF_SCOPE");
-      if (flags & SymbolNode::INTERNAL) printf(" INTERVAL");
+      if (flags & SymbolNode::INTERNAL) printf(" INTERNAL");
       printf("\n");
     }
   }
