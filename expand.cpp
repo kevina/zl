@@ -2108,11 +2108,11 @@ Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
   return empty_stmt();
 }
 
-Stmt * parse_kill_binding(const Syntax * p, Environ & env) {
+Stmt * parse_kill_fluid(const Syntax * p, Environ & env) {
   assert_num_args(p, 1);
-  SymbolKey name = expand_binding(p->arg(0), env);
-  Symbol * sym = env.symbols.lookup<Symbol>(name, p->arg(0)->str());
-  env.add(*sym->key, new NoSymbol());
+  SymbolKey sym = expand_binding(p->arg(0), env);
+  FluidBinding * b = env.symbols.lookup<FluidBinding>(sym, p->arg(0)->str());
+  env.add(SymbolKey(b->rebind, sym.ns), new NoSymbol());
   return empty_stmt();
 }
 

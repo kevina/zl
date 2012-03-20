@@ -206,8 +206,9 @@ __ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, co
 fluid_binding mark;
 fluid_binding repl;
 macro fluid repl() {NULL;}
+fluid_syntax quasiquote;
 Syntax * parse_quasiquote(Syntax * in, Environ * env);
-make_macro quasiquote`syntax parse_quasiquote;
+make_macro fluid quasiquote`syntax parse_quasiquote;
 Syntax * parse_match(Syntax * in, Environ * env);
 make_macro match parse_match;
 __raw(macro match_parts (pattern with @rest) 
