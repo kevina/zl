@@ -3,7 +3,7 @@ macro gen(m1, m2) : (S, init_s, use_s, foo) {
   struct S {
     int m1;
     int m2;
-    int priv;
+    int priv`hidden;
   };
   void init_s(struct S * s) {
     s->m1 = 0;

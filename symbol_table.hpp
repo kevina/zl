@@ -138,6 +138,7 @@ namespace ast {
   extern const InnerNS * const SPECIAL_NS;
   extern const InnerNS * const OPERATOR_NS;
   extern const InnerNS * const INTERNAL_NS;
+  extern const InnerNS * const HIDDEN_NS;
 
   struct SymbolKey : public SymbolName {
     const InnerNS * ns;

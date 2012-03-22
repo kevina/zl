@@ -1724,7 +1724,8 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   } else if (p->is_a("operator")) {
     return SymbolKey(*p->arg(0), ns ? ns : OPERATOR_NS);
   } else if (p->is_a("`")) {
-    const InnerNS * ns = lookup_inner_ns(p, env.symbols.front);
+    const InnerNS * ns_ = lookup_inner_ns(p, env.symbols.front);
+    if (ns != HIDDEN_NS) ns = ns_;
     return expand_binding(p->arg(0), ns, env);
   } else if (p->is_a("::")) {
     throw error(p, "Can not use outer namespaces in binding form");
@@ -1734,6 +1735,35 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
     return s->name;
   } else {
     throw error(p, "Unsupported Binding Form: %s\n", ~p->to_string());
+  }
+}
+
+SymbolKey expand_field_binding(const Syntax * p, Environ & env) {
+  // marks are stripped unless the name is tagged with the hidden
+  // namespace, in which case the hidden tag is removed and the marks
+  // are kept
+  if (Syntax * r = instantiate(p))
+    p = r;
+  if (p->simple()) {
+    return SymbolKey(p->what().name);
+  } else if (p->is_a("operator")) {
+    return SymbolKey(p->arg(0)->what().name, OPERATOR_NS);
+  } else if (p->is_a("`")) {
+    const InnerNS * ns = lookup_inner_ns(p, env.symbols.front);
+    if (ns == HIDDEN_NS && p->arg(0)->simple()) {
+      // keep marks
+      return SymbolKey(p->arg(0)->what());
+    } else if (p->arg(0)->simple()) {
+      return SymbolKey(p->arg(0)->what().name, ns);
+    }
+  } else if (p->is_a("::")) {
+    throw error(p, "Can not use outer namespaces in binding form");
+  } else if (p->is_a("tid")) {
+    return SymbolKey(flatten_template_id(p, env).name);
+  } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
+    return s->name;
+  } else {
+    throw error(p, "Unsupported Binding Form for Field: %s\n", ~p->to_string());
   }
 }
 

@@ -30,6 +30,7 @@ namespace ast {
   InnerNS::Tag SPECIAL_NS_OBJ;
   InnerNS::Tag OPERATOR_NS_OBJ;
   InnerNS::Tag INTERNAL_NS_OBJ;
+  InnerNS::Tag HIDDEN_NS_OBJ;
 
   const InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
   const InnerNS * const TAG_NS = &TAG_NS_OBJ;
@@ -41,6 +42,7 @@ namespace ast {
   const InnerNS * const SPECIAL_NS = &SPECIAL_NS_OBJ;
   const InnerNS * const OPERATOR_NS = &OPERATOR_NS_OBJ;
   const InnerNS * const INTERNAL_NS = &INTERNAL_NS_OBJ;
+  const InnerNS * const HIDDEN_NS = &HIDDEN_NS_OBJ;
 
   void add_inner_nss(Environ & env) {
     env.add_internal(SymbolKey("default", INNER_NS), &DEFAULT_NS_OBJ);
@@ -53,6 +55,7 @@ namespace ast {
     env.add_internal(SymbolKey("special", INNER_NS), &SPECIAL_NS_OBJ);
     env.add_internal(SymbolKey("operator", INNER_NS), &OPERATOR_NS_OBJ);
     env.add_internal(SymbolKey("internal", INNER_NS), &INTERNAL_NS_OBJ);
+    env.add_internal(SymbolKey("hidden", INNER_NS), &HIDDEN_NS_OBJ);
   }
 
   void marks_ignored(String name) {

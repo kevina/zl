@@ -86,6 +86,7 @@ ast::SymbolKey expand_binding(const Syntax * p, const ast::InnerNS * ns, Environ
 static inline ast::SymbolKey expand_binding(const Syntax * p, Environ & env) {
   return expand_binding(p, NULL, env);
 }
+ast::SymbolKey expand_field_binding(const Syntax * p, Environ & env);
 
 const Syntax * reparse_prod(String what, ReparseInfo & p, Environ * env = NULL,
                             bool match_complete_str = false, 

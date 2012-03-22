@@ -1795,7 +1795,7 @@ namespace ast {
   static BasicVar * parse_field_var(const Syntax * p, Environ & env) {
     assert_num_args(p,2);
     const Syntax * name_p = p->arg(0);
-    SymbolKey name = expand_binding(name_p, env);
+    SymbolKey name = expand_field_binding(name_p, env);
     const Type * type = parse_type(p->arg(1), env);
     OtherVar * var = new_other_var(name, type);
     var->name_p = name_p;
@@ -3362,14 +3362,13 @@ namespace ast {
     assert_num_args(p, 2, 3);
     if (p->num_args() == 2) {
       Module * m = dynamic_cast<Module *>(env.where);
-      m->add_prop(*p->arg(0), p->arg(1));
+      m->add_prop(expand_field_binding(p->arg(0), env), p->arg(1));
     } else {
       Symbol * sym = lookup_fancy_symbol<Symbol>(p->arg(0), NULL, env);
-      sym->add_prop(*p->arg(1), p->arg(2));
+      sym->add_prop(expand_field_binding(p->arg(1), env), p->arg(2));
     }
-    return empty_stmt();
+    return empty_stmt(); 
   }
-
   Stmt * parse_export(const Syntax * p, Environ & env) {
     //Module * m = dynamic_cast<Module *>(env.where);
     //m->exports.push_back(flatten(p));
@@ -4711,7 +4710,7 @@ namespace ast {
           const Syntax * q = p->arg(i);
           const Syntax * name_p = q->part(1);
           assert(name_p);
-          SymbolKey name = expand_binding(name_p, decl->env);
+          SymbolKey name = expand_field_binding(name_p, decl->env);
           const Type * type = parse_type(q->part(0), decl->env);
           OtherVar * v = new_other_var(name, type);
           v->name_p = name_p;
