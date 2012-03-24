@@ -229,12 +229,6 @@ public:
     m = match_f(m, syntax _assign, replace_context(syntax _assign, context));
     m = match_f(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
     m = match_f(m, syntax _init, replace_context(syntax _init, context));
-    m = match_f(m, syntax fields, replace_context(syntax fields, context));
-    m = match_f(m, syntax this_type, replace_context(syntax this_type, context));
-    m = match_f(m, syntax ptr, replace_context(syntax ptr, context));
-    m = match_f(m, syntax syntax_obj, replace_context(syntax syntax_obj, context));
-    m = match_f(m, syntax is_method, replace_context(syntax is_method, context));
-    m = match_f(m, syntax is_static, replace_context(syntax is_static, context));
     m = match_f(m, syntax memberdecl, replace_context(syntax memberdecl, context));
     
     init_special_funs();
