@@ -222,8 +222,6 @@ public:
     fields = new_syntax_list();
 
     m = match_f(m, syntax _parent, replace_context(syntax _parent, context));
-    m = match_f(m, syntax _VTable, replace_context(syntax _VTable, context));
-    m = match_f(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
     m = match_f(m, syntax _constructor, replace_context(syntax _constructor, context));
     m = match_f(m, syntax _destructor, replace_context(syntax _destructor, context));
     m = match_f(m, syntax _assign, replace_context(syntax _assign, context));
@@ -353,7 +351,8 @@ public:
                        {(*implicit_ptr_cast<name>(ths)).._vptr = other;}});
     }
     exports->append(``_vptr);
-    Syntax * assign = `{_set_vptr(&_vtable);};
+    Syntax * assign = `{this->_set_vptr(&_vtable);}; 
+    // ^^ FIXME: Once shared marks are working, this "this->" part can be removed.
     need_constructor = true;
     add_constructor_code(assign);
     need_copy_constructor = true;
