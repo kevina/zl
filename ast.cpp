@@ -3428,7 +3428,7 @@ namespace ast {
     const SymbolNode * cur = env.symbols.front;
     bool expose = false;
     for (; cur != env.symbols.back; cur = cur->next) {
-      if (cur->key == to_find_everything) {
+      if (cur->same_scope() && cur->key == to_find_everything) {
         expose = true;
         break;
       }
@@ -5156,7 +5156,9 @@ namespace ast {
                                  MACRO_EXPORT_NS);
     const SymbolNode * cur = env.symbols.front;
     for (; cur != env.symbols.back; cur = cur->next) {
-      if (cur->key == to_find_symbol || cur->key == to_find_context || cur->key == to_find_everything) 
+      if (cur->key == to_find_symbol 
+          || (cur->same_scope()
+              && (cur->key == to_find_context || cur->key == to_find_everything)))
         goto yep;
     }
     for (; cur != NULL; cur = cur->next) {

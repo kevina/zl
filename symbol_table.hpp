@@ -388,6 +388,7 @@ namespace ast {
     bool alias() const {return flags & ALIAS;}
     bool imported() const {return flags & IMPORTED;}
     bool diff_scope() const {return flags & DIFF_SCOPE;}
+    bool same_scope() const {return !diff_scope();}
     bool internal() const {return flags & INTERNAL;}
     bool should_skip() const {return flags & (IMPORTED | DIFF_SCOPE | INTERNAL);}
     void set_flags(unsigned f) {flags |= f;}
