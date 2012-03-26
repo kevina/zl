@@ -3423,16 +3423,20 @@ namespace ast {
   void import_module(const Module * m, Environ & env, const GatherMarks & gather, 
                      Filter & filter, bool same_scope) 
   {
+    SymbolKey to_find_everything(SymbolName("everything", NULL),
+                                 MACRO_EXPORT_NS);
+    const SymbolNode * cur = env.symbols.front;
+    bool expose = false;
+    for (; cur != env.symbols.back; cur = cur->next) {
+      if (cur->key == to_find_everything) {
+        expose = true;
+        break;
+      }
+    }
     SymbolList l;
     for (SymbolNode * cur = m->syms.front; cur != m->syms.back; cur = cur->next) {
       if (!filter(cur)) continue;
-      SymbolKey k = cur->key;
-      // now add marks back in reverse order
-      for (Vector<const Mark *>::const_reverse_iterator 
-             i = gather.marks.rbegin(), e = gather.marks.rend();
-           i != e; ++i)
-        k.marks = mark(k.marks, *i);
-      SymbolNode * res = l.push_back(cur->scope, k, cur->value);
+      SymbolNode * res = l.push_back(cur->scope, cur->key, cur->value);
       res->flags = cur->flags;
       if (same_scope) {
         res->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED);
@@ -3441,6 +3445,14 @@ namespace ast {
       } else {
         res->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED | SymbolNode::DIFF_SCOPE);
       }
+      // ...
+      if (expose)
+        res = l.push_back(*res);
+      // now add marks back in reverse order
+      for (Vector<const Mark *>::const_reverse_iterator 
+             i = gather.marks.rbegin(), e = gather.marks.rend();
+           i != e; ++i)
+        res->key.marks = mark(res->key.marks, *i);
     }
     //env.symbols.splice(l.first, l.last);
     //env.add(SymbolKey("", SPECIAL_NS), new Import(m));

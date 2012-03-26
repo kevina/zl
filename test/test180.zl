@@ -1,0 +1,20 @@
+class X {
+  int x;
+};
+
+macro Foo() : (Y) {
+
+  class Y : public X {
+    int bar() {return x + 20;}
+  };
+
+}
+
+
+Foo();
+
+int main() {
+  Y y;
+  y.x = 20;
+  y.bar();
+}
