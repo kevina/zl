@@ -547,6 +547,7 @@ namespace ast {
       const Symbol * prev0 = env.symbols.find_this_scope<Symbol>(k);
       const OverloadedSymbol * prev = dynamic_cast<const OverloadedSymbol *>(prev0);
       if (prev0 && !prev) {
+        abort();
         throw unknown_error(NO_LOC); // FIXME: If shadow_ok than we need to keep looking...
       }
       //if (prev)
@@ -562,7 +563,19 @@ namespace ast {
     }
   }
 
-  SymbolNode * Symbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
+  struct ShouldExport {
+    bool yes;
+    const Marks * export_to;
+    ShouldExport() : yes(false), export_to(NULL) {}
+    ShouldExport(const Marks * m) : yes(true), export_to(m) {}
+  };
+  ShouldExport should_export(const SymbolKey & k, Environ & env);
+
+  SymbolNode * Symbol::add_to_env(const SymbolKey & orig_k, Environ & env, bool shadow_ok) {
+    SymbolKey k = orig_k;
+    ShouldExport se = should_export(k, env);
+    if (se.yes)
+      k.marks = se.export_to;
     SymbolNode * overloaded = handle_overloaded_symbol(this, k, env, shadow_ok);
     SymbolNode * n = overloaded 
       ? overloaded 
@@ -577,6 +590,8 @@ namespace ast {
     } else {
       make_unique(env.symbols.front);
     }
+    if (se.yes)
+      env.add_alias(orig_k, this);
     return n;
   }
 
@@ -592,7 +607,11 @@ namespace ast {
 
   //static unsigned numm = 0;
 
-  SymbolNode * TopLevelSymbol::add_to_env(const SymbolKey & k, Environ & env, bool shadow_ok) {
+  SymbolNode * TopLevelSymbol::add_to_env(const SymbolKey & orig_k, Environ & env, bool shadow_ok) {
+    SymbolKey k = orig_k;
+    ShouldExport se = should_export(k, env);
+    if (se.yes)
+      k.marks = se.export_to;
     //assert(!env.symbols.exists_this_scope(k));
     // FIXME: Have more precise check
     //printf("%d ADDING: %s\n", numm++, ~k.to_string());
@@ -620,6 +639,8 @@ namespace ast {
     } else {
       finish_add_to_env(local, env);
     }
+    if (se.yes)
+      env.add_alias(orig_k, this);
     return local;
   }
 
@@ -5077,7 +5098,68 @@ namespace ast {
     const ReparseSyntax * rp = p->as_reparse();
     env.peg = extend_peg(env.peg, rp->inner().str);
     return empty_stmt();
-  }  
+  }
+  
+  //
+  //
+  //
+
+  struct ExportContext : public Symbol {
+    const Marks * export_to;
+  };
+
+  extern const InnerNS * const MACRO_EXPORT_NS;
+
+  Stmt * parse_macro_export(const Syntax * p, Environ & env) {
+    assert_num_args(p, 2, NPOS);
+    ExportContext * ec = new ExportContext;
+    ec->export_to = p->arg(0)->what().marks;
+    for (unsigned i = 1; i < p->num_args(); ++i) {
+      const Syntax * q = p->arg(i);
+      if (q->is_a("symbol")) {
+        assert_num_args(q, 1);
+        env.add_internal(SymbolKey(q->arg(0)->what(),
+                                   MACRO_EXPORT_NS), 
+                         ec);
+      } else if (q->is_a("context")) {
+        assert_num_args(q, 1);
+        env.add_internal(SymbolKey(SymbolName("context", q->arg(0)->what().marks), 
+                                   MACRO_EXPORT_NS), 
+                         ec);
+      } else if (q->eq("everything")) {
+        env.add_internal(SymbolKey(SymbolName("everything", NULL), MACRO_EXPORT_NS), 
+                         ec);
+      } else {
+        throw error(q, "expected one of: everything, context, or symbol");
+      }
+    }
+    return empty_stmt();
+  }
+  
+  ShouldExport should_export(const SymbolKey & orig, Environ & env) {
+    SymbolKey to_find_symbol(SymbolName(orig), MACRO_EXPORT_NS);
+    SymbolKey to_find_context(SymbolName("context", orig.marks),
+                              MACRO_EXPORT_NS);
+    SymbolKey to_find_everything(SymbolName("everything", NULL),
+                                 MACRO_EXPORT_NS);
+    const SymbolNode * cur = env.symbols.front;
+    for (; cur != env.symbols.back; cur = cur->next) {
+      if (cur->key == to_find_symbol || cur->key == to_find_context || cur->key == to_find_everything) 
+        goto yep;
+    }
+    for (; cur != NULL; cur = cur->next) {
+      if (cur->key == to_find_symbol)
+        goto yep;
+    }
+  nope:
+    return ShouldExport();
+  yep:
+    const ExportContext * ec = dynamic_cast<const ExportContext *>(cur->value);
+    assert(ec);
+    if (ec->export_to == orig.marks) goto nope;
+    printf("YEP SHOULD EXPORT %s\n", ~orig.to_string());
+    return ShouldExport(ec->export_to);
+  }
 
   //
   //
@@ -5267,6 +5349,7 @@ namespace ast {
     if (what == "empty") return empty_stmt();
     if (what == "link_once") {env.link_once = true; return empty_stmt();}
     if (what == "new_syntax") return parse_new_syntax(p, env);
+    if (what == "macro_export") return parse_macro_export(p, env);
     return 0;
     } catch (Error * err) {
       StringBuf buf = err->extra;

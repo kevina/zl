@@ -144,6 +144,9 @@ public:
 
     init();
 
+    builder->add(`(macro_export 
+                   $(replace_context(syntax foo, empty_context())) 
+                   everything));
     builder->add(`(add_prop ptr $(Syntax::stash_ptr(this))));
     builder->add(`(add_prop syntax_obj $p_));
     builder->add(`{make_macro memberdecl`syntax parse_memberdecl;});
@@ -218,19 +221,12 @@ public:
     exports  = new_syntax_list();
     fields = new_syntax_list();
 
-    m = match_f(m, syntax _Data, replace_context(syntax _Data, context));
     m = match_f(m, syntax _parent, replace_context(syntax _parent, context));
     m = match_f(m, syntax _VTable, replace_context(syntax _VTable, context));
-    m = match_f(m, syntax _vtable, replace_context(syntax _vtable, context));
-    m = match_f(m, syntax _vptr, replace_context(syntax _vptr, context));
     m = match_f(m, syntax _set_vptr, replace_context(syntax _set_vptr, context));
     m = match_f(m, syntax _constructor, replace_context(syntax _constructor, context));
     m = match_f(m, syntax _destructor, replace_context(syntax _destructor, context));
     m = match_f(m, syntax _assign, replace_context(syntax _assign, context));
-    m = match_f(m, syntax _vtable_init, replace_context(syntax _vtable_init, context));
-    m = match_f(m, syntax _init, replace_context(syntax _init, context));
-    m = match_f(m, syntax memberdecl, replace_context(syntax memberdecl, context));
-    
     init_special_funs();
   }
 
@@ -351,7 +347,7 @@ public:
       builder->add(`{macro _vptr (:this ths = this) 
                        {(_VTable *)(implicit_ptr_cast<parent_n>(ths)->_vptr);}});
     } else {
-      Syntax * v = `(var (mid _vptr) (.ptr (mid _VTable)));
+      Syntax * v = `(var _vptr (.ptr _VTable));
       parse_class_var(v, struct_p); // Note: beginning of structure but end of module
       builder->add(`{macro _set_vptr (:this ths = this, other) 
                        {(*implicit_ptr_cast<name>(ths)).._vptr = other;}});

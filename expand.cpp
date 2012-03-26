@@ -430,7 +430,7 @@ struct Macro : public MacroInfo, public Declaration, public Symbol {
     DEFAULT_PEG = env.peg;
     static unsigned c0 = 0;
     unsigned c = ++c0;
-    //printf("%d EXPAND: %s %s\n", c, ~s->sample_w_loc(), ~p->sample_w_loc());
+    printf("%d EXPAND: %s %s %s\n", c, ~s->what().to_string(), ~s->sample_w_loc(), ~p->sample_w_loc());
     try {
       MacroInfo whocares(this, s);
       Syntax * res = expand(p, env);
@@ -453,7 +453,7 @@ struct SimpleMacro : public Macro {
   const char * what() const {return "simple-macro";}
   //const SourceFile * entity;
   const Syntax * parms;
-  const Syntax * free;
+  const Syntax * exprt;
   const Syntax * repl;
   const SymbolNode * env;
   SimpleMacro * parse_self(const Syntax * p, Environ & e) {
@@ -466,9 +466,9 @@ struct SimpleMacro : public Macro {
     parms = flatten(p->arg(1));
     //printf("PARSING MAP %s\n%s\n", ~real_name.to_string(), ~p->to_string());
     //printf("MAP PARMS %s: %s\n", ~p->arg(0)->what().name, ~parms->to_string());
-    free = p->flag("free");
-    if (free)
-      free = free->arg(0);
+    exprt = p->flag("export");
+    if (exprt)
+      exprt = exprt->arg(0);
     const Syntax * typed_parms_syn = p->flag("typed-parms");
     if (typed_parms_syn) {
       //printf("TYPED PARMS = %s\n", ~typed_parms_syn->to_string());
@@ -491,8 +491,27 @@ struct SimpleMacro : public Macro {
     Match * m = match(NULL, parms, p, 1, mark);
     if (!m)
       throw error(p, "Wrong number of arguments or other mismatch in call to %s.", ~real_name.name);
-    if (free)
-      m = match(m, free, replace_context(free, get_context(p)), 0, mark);
+    const Syntax * macro_export = NULL;
+    if (exprt) {
+      SyntaxBuilder syn;
+      syn.add_part(SYN("macro_export"));
+      syn.add_part(p->part(0));
+      for (parts_iterator 
+             i = exprt->parts_begin(), e = exprt->parts_end(); i != e; ++i) 
+      {
+        Syntax * sym = *i;
+        sym = new_syntax(SymbolName(sym->what().name, 
+                                    ::mark(sym->what().marks, mark)), 
+                         (*i)->str_);
+        if ((*i)->eq("@")) {
+          syn.add_part(SYN(SYN("context"), sym));
+        } else {
+          syn.add_part(SYN(SYN("symbol"), sym));
+        }
+      }
+      macro_export = syn.build();
+      printf(">>%s\n", ~macro_export->to_string());
+    }
     Syntax * res = replace(repl, m, mark);
     //printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
     //printf("  %s\n", ~res->sample_w_loc());
@@ -504,7 +523,10 @@ struct SimpleMacro : public Macro {
     //}
     //printf("  macro_call = %s\n", ~macro_call->sample_w_loc());
     //macro_call->str().source->dump_info(COUT, "    ");
-    return res;
+    if (macro_export) 
+      return SYN(SYN("@"), macro_export, res);
+    else 
+      return res;
   }
   void compile(CompileWriter & f, Phase phase) const {
     f << indent << "(macro " << key << " ";
@@ -1762,9 +1784,8 @@ SymbolKey expand_field_binding(const Syntax * p, Environ & env) {
     return SymbolKey(flatten_template_id(p, env).name);
   } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
     return s->name;
-  } else {
-    throw error(p, "Unsupported Binding Form for Field: %s\n", ~p->to_string());
   }
+  throw error(p, "Unsupported Binding Form for Field: %s\n", ~p->to_string());
 }
 
 Stmt * parse_map(const Syntax * p, Environ & env) {

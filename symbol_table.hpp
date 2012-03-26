@@ -139,6 +139,7 @@ namespace ast {
   extern const InnerNS * const OPERATOR_NS;
   extern const InnerNS * const INTERNAL_NS;
   extern const InnerNS * const HIDDEN_NS;
+  extern const InnerNS * const MACRO_EXPORT_NS;
 
   struct SymbolKey : public SymbolName {
     const InnerNS * ns;
@@ -421,6 +422,10 @@ namespace ast {
     return !(x == y);
   }
 
+  void dump_symbol_node(const SymbolNode * c, bool verbose = false);
+  void dump_symbols(const SymbolNode * start, const SymbolNode * back, 
+                    const SymbolNode * stop);
+
   enum Strategy {ThisScope, NormalStrategy, StripMarks};
 
   struct NoOpGather {
@@ -539,7 +544,8 @@ namespace ast {
   {
     const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s1) {
-      //fprintf(stderr, "Unknown Identifier \"%s\"", ~k.name); abort();
+      printf("+++ Unknown Identifier \"%s\"\n", ~k.to_string());
+      dump_symbols(start, stop, NULL);
       //throw error(str, "Unknown Identifier \"%s\"", ~k.name);
       throw error(str, "Unknown Identifier \"%s\"", ~k.to_string());
     }

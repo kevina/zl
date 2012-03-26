@@ -1,14 +1,7 @@
 
 template vector;
 
-macro mk_vector (T,@_)
-  : (vector, data, 
-     begin, end, front, back, empty, size,
-     push_back, pop_back, reserve, resize, clear, erase, 
-     assign, append,
-     iterator, const_iterator, size_type,
-     operator [],
-     data_, end_, ensure_space) 
+macro mk_vector (T,@_) : (@)
 {
   __once vector<T>
   class vector<T> {

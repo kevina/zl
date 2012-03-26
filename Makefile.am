@@ -2,9 +2,9 @@ AUTOMAKE_OPTIONS = foreign
 
 #CXX=/opt/gcc-4.4-zl/bin/g++
 AM_CXXFLAGS = -Wall -Wno-sign-compare -Wno-unused
-AM_CXXFLAGS += -I/usr/include/gc
+#AM_CXXFLAGS += -I/usr/include/gc
 #AM_CXXFLAGS += -I/home/kevina/gc6.8/include 
-#AM_CXXFLAGS += -DNO_GC
+AM_CXXFLAGS += -DNO_GC
 
 bin_PROGRAMS=zl
 bin_SCRIPTS=zlc

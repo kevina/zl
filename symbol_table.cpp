@@ -31,6 +31,7 @@ namespace ast {
   InnerNS::Tag OPERATOR_NS_OBJ;
   InnerNS::Tag INTERNAL_NS_OBJ;
   InnerNS::Tag HIDDEN_NS_OBJ;
+  InnerNS::Tag MACRO_EXPORT_NS_OBJ;
 
   const InnerNS * const DEFAULT_NS = &DEFAULT_NS_OBJ;
   const InnerNS * const TAG_NS = &TAG_NS_OBJ;
@@ -43,6 +44,7 @@ namespace ast {
   const InnerNS * const OPERATOR_NS = &OPERATOR_NS_OBJ;
   const InnerNS * const INTERNAL_NS = &INTERNAL_NS_OBJ;
   const InnerNS * const HIDDEN_NS = &HIDDEN_NS_OBJ;
+  const InnerNS * const MACRO_EXPORT_NS = &MACRO_EXPORT_NS_OBJ;
 
   void add_inner_nss(Environ & env) {
     env.add_internal(SymbolKey("default", INNER_NS), &DEFAULT_NS_OBJ);
@@ -56,6 +58,7 @@ namespace ast {
     env.add_internal(SymbolKey("operator", INNER_NS), &OPERATOR_NS_OBJ);
     env.add_internal(SymbolKey("internal", INNER_NS), &INTERNAL_NS_OBJ);
     env.add_internal(SymbolKey("hidden", INNER_NS), &HIDDEN_NS_OBJ);
+    env.add_internal(SymbolKey("macro_export", MACRO_EXPORT_NS), &MACRO_EXPORT_NS_OBJ);
   }
 
   void marks_ignored(String name) {
@@ -101,34 +104,44 @@ namespace ast {
     //  assign_uniq_num<TopLevelSymbol>(self, stop);
   }
 
-  void SymbolTableBase::dump() const {
-    printf("=== BEGIN SYMBOL TABLE ===\n");
-    //printf("%p %p <> %p %p\n", front, back, &front, ip.front);
-    for (SymbolNode * c = front; c; c = c->next) {
-      if (c == back)
-        printf("--- end current scope ---\n");
-      printf("  %s %p %s %s\n", ~c->key.to_string(), 
-             c->value,
-             c->value ? ~c->value->name() : "", 
-             c->value ? ~c->value->uniq_name() : "");
-    }
-    printf("^^^ END SYMBOL TABLE ^^^\n");
-  }
-
-  void SymbolTableBase::dump_this_scope() const {
-    for (SymbolNode * c = front; c != back; c = c->next) {
-      printf("  %s %p %s %s", ~c->key.to_string(), 
-             c->value,
-             c->value ? ~c->value->name() : "", 
-             c->value ? ~c->value->uniq_name() : "");
+  void dump_symbol_node(const SymbolNode * c, bool verbose) {
+    printf("  %s %p %s %s", ~c->key.to_string(), 
+           c->value,
+           c->value ? ~c->value->name() : "", 
+           c->value ? ~c->value->uniq_name() : "");
+    if (verbose) {
       unsigned flags = c->flags;
       if (flags == 0) printf(" NO_FLAGS");
       if (flags & SymbolNode::ALIAS) printf(" ALIAS");
       if (flags & SymbolNode::IMPORTED) printf(" IMPORTED");
       if (flags & SymbolNode::DIFF_SCOPE) printf(" DIFF_SCOPE");
       if (flags & SymbolNode::INTERNAL) printf(" INTERNAL");
-      printf("\n");
     }
+    printf("\n");
+  }
+
+  void dump_symbols(const SymbolNode * start, const SymbolNode * back, 
+                    const SymbolNode * stop) 
+  {
+    printf("=== BEGIN SYMBOL TABLE ===\n");
+    bool verbose = true;
+    //printf("%p %p <> %p %p\n", front, back, &front, ip.front);
+    for (const SymbolNode * c = start; c != stop; c = c->next) {
+      if (c == back) {
+        printf("--- end current scope ---\n");
+        verbose = false;
+      }
+      dump_symbol_node(c, verbose);
+    }
+    printf("^^^ END SYMBOL TABLE ^^^\n");
+  }
+
+  void SymbolTableBase::dump() const {
+    dump_symbols(front, back, NULL);
+  }
+
+  void SymbolTableBase::dump_this_scope() const {
+    dump_symbols(front, back, back);
   }
 
   void Props::add_prop(SymbolName n, const Syntax * s) {
