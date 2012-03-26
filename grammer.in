@@ -68,7 +68,7 @@ MACRO =
           (:<typed-parms> ":" "typed_parms" "(" ((<.> (<<mid TOKENS>> {MID})) / {TOKENS}) ")")?
           (:<id> ":" "id")?
           (:<export> ":" "(" {ID_LIST} ")" /) {BRACE}
-  / <smacro> "smacro" {ID} "(" {MATCH_LIST} ")" (:<free> ":" "(" {ID_LIST} ")" /) {BRACE} ;
+  / <smacro> "smacro" {ID} "(" {MATCH_LIST} ")" (:<export> ":" "(" {ID_LIST} ")" /) {BRACE} ;
 
 MAKE_MACRO  =
     <%> ({"make_macro"/"make_syntax_macro"}) {ID} {ID}? {:<> ':'{"w_snapshot"}}? ";";
@@ -84,8 +84,10 @@ IMPORT =
 
 FANCY_ID = "operator" {{'[]'} SPACING / {SYM}} / {ID};
 
+FANCY_ID_PLUS = <top-level> "*" / {FANCY_ID};
+
 ID_LIST =
-  <> ({FANCY_ID} ("," {FANCY_ID})*)?;
+  <> ({FANCY_ID_PLUS} ("," {FANCY_ID_PLUS})*)?;
 
 #MATCH_LIST =
 #  <> ({MATCH} ",")* {MATCH}?;

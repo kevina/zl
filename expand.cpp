@@ -503,7 +503,7 @@ struct SimpleMacro : public Macro {
         sym = new_syntax(SymbolName(sym->what().name, 
                                     ::mark(sym->what().marks, mark)), 
                          (*i)->str_);
-        if ((*i)->eq("@")) {
+        if ((*i)->what().name == "top-level") {
           syn.add_part(SYN(SYN("context"), sym));
         } else {
           syn.add_part(SYN(SYN("symbol"), sym));

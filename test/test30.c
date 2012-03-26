@@ -1,5 +1,5 @@
 
-macro gen(m1, m2) : (@) {
+macro gen(m1, m2) : (*) {
   struct S {
     int m1;
     int m2;
