@@ -1269,7 +1269,7 @@ namespace syntax_ns {
   static inline Leaf * new_syntax(const Syntax * o, const ast::Mark * m, const SourceInfo * s)
   {
     assert(o->simple());
-    return new_syntax(ast::mark(o->what(), m), SourceStr(s, o->str_.begin, o->str_.end));
+    return new_syntax(ast::add_mark(o->what(), m), SourceStr(s, o->str_.begin, o->str_.end));
   }
 
 

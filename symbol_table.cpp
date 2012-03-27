@@ -153,7 +153,7 @@ namespace ast {
       if (n == cur->name) return cur->value;
     }
     if (n.marks) {
-      n.marks = n.marks->prev;
+      n.marks = n.marks->pop();
       return get_prop(n);
     } else {
       return NULL;

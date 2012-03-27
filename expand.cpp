@@ -501,7 +501,7 @@ struct SimpleMacro : public Macro {
       {
         Syntax * sym = *i;
         sym = new_syntax(SymbolName(sym->what().name, 
-                                    ::mark(sym->what().marks, mark)), 
+                                    add_mark(sym->what().marks, mark)), 
                          (*i)->str_);
         if ((*i)->what().name == "top-level") {
           syn.add_part(SYN(SYN("context"), sym));
@@ -638,7 +638,7 @@ namespace macro_abi {
       if (lhs->what() == rhs->what()) return true;
       SymbolName n = lhs->what();
       while (n.marks) {
-        n.marks = n.marks->prev;
+        n.marks = n.marks->pop();
         if (n == rhs->what()) return true;
       }
       return false;
@@ -2154,7 +2154,7 @@ struct FluidBindingDecl : public Declaration, public FluidBinding {
 Stmt * parse_fluid_binding(const Syntax * p, Environ & env) {
   assert_num_args(p, 1);
   SymbolKey n = expand_binding(p->arg(0), DEFAULT_NS, env);
-  FluidBindingDecl * b = new FluidBindingDecl(mark(n, new Mark(NULL)));
+  FluidBindingDecl * b = new FluidBindingDecl(add_mark(n, new Mark(NULL)));
   env.add(n, b);
   return empty_stmt();
 }

@@ -3452,7 +3452,7 @@ namespace ast {
       for (Vector<const Mark *>::const_reverse_iterator 
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
-        res->key.marks = mark(res->key.marks, *i);
+        res->key.marks = add_mark(res->key.marks, *i);
     }
     //env.symbols.splice(l.first, l.last);
     //env.add(SymbolKey("", SPECIAL_NS), new Import(m));
@@ -3507,7 +3507,7 @@ namespace ast {
       for (Vector<const Mark *>::reverse_iterator 
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
-        k.marks = mark(k.marks, *i);
+        k.marks = add_mark(k.marks, *i);
       res.add_part(SYN(k)); // FIXME not quite right
     }
     return res.build();

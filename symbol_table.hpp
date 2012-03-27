@@ -31,10 +31,14 @@ namespace ast {
   struct SymbolTable;
 
   struct Marks : public gc {
+  private:
     const Mark * mark;
     const Marks * prev;
+  public:
     Marks(const Mark * m, const Marks * p) 
       : mark(m), prev(p) {}
+    const Mark * back() const {return mark;}
+    const Marks * pop() const {return prev;}
     void to_string(OStream & o, SyntaxGather * g) const;
   };
 
@@ -56,7 +60,7 @@ namespace ast {
     void to_string(OStream & o, SyntaxGather * g) const;
   };
   
-  static inline const Marks * mark(const Marks * ms, const Mark * m) {
+  static inline const Marks * add_mark(const Marks * ms, const Mark * m) {
     for (Mark::Cache::iterator i = m->cache.begin(), e = m->cache.end(); i != e; ++i) 
       if (i->first == ms) return i->second;
     Marks * nms = new Marks(m, ms);
@@ -65,27 +69,27 @@ namespace ast {
   }
 
   template <typename T>
-  static inline T mark(const T & orig, const Mark * m) {
+  static inline T add_mark(const T & orig, const Mark * m) {
     T tmp = orig;
-    tmp.marks = mark(tmp.marks, m);
+    tmp.marks = add_mark(tmp.marks, m);
     return tmp;
   }
 
-  static inline const Marks * merge_marks(const Marks * a, const Marks * b) {
-    Vector<const Mark *> to_add;
-    for (; b; b = b->prev) 
-      to_add.push_back(b->mark);
-    for (Vector<const Mark *>::iterator i = to_add.begin(), e = to_add.end(); i != e; ++i)
-      a = mark(a, *i);
-    return a;
-  }
+  // static inline const Marks * merge_marks(const Marks * a, const Marks * b) {
+  //   Vector<const Mark *> to_add;
+  //   for (; b; b = b->prev) 
+  //     to_add.push_back(b->mark);
+  //   for (Vector<const Mark *>::iterator i = to_add.begin(), e = to_add.end(); i != e; ++i)
+  //     a = mark(a, *i);
+  //   return a;
+  // }
 
-  template <typename T>
-  static inline T merge_marks(const T & orig, const Marks * ms) {
-    T tmp = orig;
-    tmp.marks = merge_marks(tmp.marks, ms);
-    return tmp;
-  }
+  // template <typename T>
+  // static inline T merge_marks(const T & orig, const Marks * ms) {
+  //   T tmp = orig;
+  //   tmp.marks = merge_marks(tmp.marks, ms);
+  //   return tmp;
+  // }
 
   void marks_ignored(String name);
 
@@ -473,15 +477,15 @@ namespace ast {
     //printf("^^^ %d\n", cur == stop);
     if (cur == stop) {
       if (strategy == NormalStrategy && k.marks) {
-        cur = k.marks->mark->env;
-        gather.stripped_mark(k.marks->mark); 
-        k.marks = k.marks->prev;
+        cur = k.marks->back()->env;
+        gather.stripped_mark(k.marks->back()); 
+        k.marks = k.marks->pop();
         stop = NULL; // FIXME: Is this right, how do we handle the
                      // case when stop is not null.
         return find_symbol_p1(k, cur, stop, strategy, gather, cmp);
       } else if (strategy == StripMarks && k.marks) {
-        gather.stripped_mark(k.marks->mark); 
-        k.marks = k.marks->prev;
+        gather.stripped_mark(k.marks->back()); 
+        k.marks = k.marks->pop();
         return find_symbol_p1(k, start, stop, strategy, gather, cmp);
       } else {
         return NULL;
