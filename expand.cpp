@@ -430,7 +430,7 @@ struct Macro : public MacroInfo, public Declaration, public Symbol {
     DEFAULT_PEG = env.peg;
     static unsigned c0 = 0;
     unsigned c = ++c0;
-    printf("%d EXPAND: %s %s %s\n", c, ~s->what().to_string(), ~s->sample_w_loc(), ~p->sample_w_loc());
+    //printf("%d EXPAND: %s %s %s\n", c, ~s->what().to_string(), ~s->sample_w_loc(), ~p->sample_w_loc());
     try {
       MacroInfo whocares(this, s);
       Syntax * res = expand(p, env);

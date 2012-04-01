@@ -674,7 +674,7 @@ struct PEG {
 
 PEG * parse_peg(const char * fn) {
   PEG * peg = new PEG;
-  printf("THE PEG=%p\n", peg);
+  //printf("THE PEG=%p\n", peg);
   peg->file = new_source_file(fn);
   ParsePeg::Parse parse(peg->file, peg);
   try {

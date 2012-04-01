@@ -549,8 +549,8 @@ namespace ast {
   {
     const SymbolNode * s1 = find_symbol_p3<T>(k, start, stop, strategy, gather, cmp);
     if (!s1) {
-      printf("+++ Unknown Identifier \"%s\"\n", ~k.to_string());
-      dump_symbols(start, stop, NULL);
+      //printf("+++ Unknown Identifier \"%s\"\n", ~k.to_string());
+      //dump_symbols(start, stop, NULL);
       //throw error(str, "Unknown Identifier \"%s\"", ~k.name);
       throw error(str, "Unknown Identifier \"%s\"", ~k.to_string());
     }

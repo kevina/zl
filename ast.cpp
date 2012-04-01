@@ -5171,7 +5171,7 @@ namespace ast {
     const ExportContext * ec = dynamic_cast<const ExportContext *>(cur->value);
     assert(ec);
     if (ec->export_to == orig.marks) goto nope;
-    printf("YEP SHOULD EXPORT %s\n", ~orig.to_string());
+    //printf("YEP SHOULD EXPORT %s\n", ~orig.to_string());
     return ShouldExport(ec->export_to);
   }
 
