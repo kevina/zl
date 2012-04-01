@@ -12,6 +12,26 @@ Syntax * parse_make_syntax_macro(Syntax * p, Environ * env) {
     return replace(raw_syntax(make_macro (` name syntax) name @rest), m, mark);
 }
 
+Syntax * parse_proc_macro(Syntax * in, Environ *) {
+  Mark * mark = new_mark(prelude_envss);
+  Match * m = match_parts_f(0, raw_syntax(what name match_list body), in);
+  const char * what = syntax_to_string(m->var(syntax what));
+  if (strcmp(what, "proc_macro") == 0)
+    m = match_f(m, syntax ns, replace(syntax default, m, mark));
+  else if (strcmp(what, "proc_smacro") == 0)
+    m = match_f(m, syntax ns, replace(syntax syntax, m, mark));
+  else
+    return error(m->var(syntax what), "Internal Error: Unknown proc macro type.");
+  return replace(syntax {
+      Syntax * name`internal(Syntax * in, const Environ * fluid environ) {
+        Mark * fluid mark = new_mark();
+        match(:shadow, :bind, match_list, in);
+        body;
+      }
+      make_macro name`ns name`internal;
+    }, m, mark);
+}
+
 Syntax * partly_expand_class(Syntax * p, Mark * mark, Environ * env) {
   Match * m = match_parts_f(0, raw_syntax (what name @ body @rest), p);
   Syntax * body = m->var(syntax body);

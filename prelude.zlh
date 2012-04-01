@@ -69,6 +69,10 @@ __raw(.struct .dummy (char whocares));
 // Basic Macro API support
 //
 
+fluid_binding mark;
+fluid_binding repl;
+fluid_binding environ;
+
 typedef struct EnvironSnapshot EnvironSnapshot;
 
 typedef struct Mark Mark;
@@ -191,20 +195,20 @@ __ct_callback void dump_syntax(UnmarkedSyntax *);
 __ct_callback Environ * temp_environ(const Environ *);
 __ct_callback Environ * new_scope(const Environ *, Syntax * where);
 
-__ct_callback size_t ct_value(Syntax *, const Environ *);
+__ct_callback size_t ct_value`internal(Syntax *, const Environ *);
+macro ct_value(syn, e = environ) {ct_value`internal(syn,e)}
 
 __ct_callback Syntax * error(Syntax *, const char *, ...);
 
 __ct_callback Syntax * get_symbol_prop(UnmarkedSyntax * sym, UnmarkedSyntax * prop, const Environ * env);
 
-__ct_callback int symbol_exists(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
+__ct_callback int symbol_exists`internal(UnmarkedSyntax * sym, Syntax * where, Mark *, const Environ *);
+macro symbol_exists(sym,where,m = mark, e = environ) {symbol_exists`internal(sym,where,m,e)}
 
 //
 // Macro API with quasiquote support
 //
 
-fluid_binding mark;
-fluid_binding repl;
 macro fluid repl() {NULL;}
 fluid_syntax quasiquote;
 Syntax * parse_quasiquote(Syntax * in, Environ * env);
@@ -213,6 +217,9 @@ Syntax * parse_match(Syntax * in, Environ * env);
 make_macro match parse_match;
 __raw(macro match_parts (pattern with @rest) 
       (call match (. pattern with :(match_f (` match_parts_f internal)) @rest)));
+Syntax * parse_proc_macro(Syntax *, Environ *);
+make_macro proc_macro`syntax parse_proc_macro;
+make_macro proc_smacro`syntax parse_proc_macro;
 
 //
 // make_syntax_macro

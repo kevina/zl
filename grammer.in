@@ -64,11 +64,15 @@ CASE_LABEL =
 CASE_EXP = <exp> (!":" {TOKEN})+;
 
 MACRO =
-  <macro> "macro" {FANCY_ID} "(" {MATCH_LIST} ")" 
-          (:<typed-parms> ":" "typed_parms" "(" ((<.> (<<mid TOKENS>> {MID})) / {TOKENS}) ")")?
-          (:<id> ":" "id")?
-          (:<export> ":" "(" {ID_LIST} ")" /) {BRACE}
-  / <smacro> "smacro" {ID} "(" {MATCH_LIST} ")" (:<export> ":" "(" {ID_LIST} ")" /) {BRACE} ;
+  <macro> "macro" {FANCY_ID} "(" {MATCH_LIST} ")" {MACRO_REST}
+  / <smacro> "smacro" {ID} "(" {MATCH_LIST} ")" {MACRO_REST}
+  / <proc_macro> "proc" "macro" {FANCY_ID} "(" (<<quasiquote>> {MATCH_LIST}) ")" {MACRO_REST}
+  / <proc_smacro> "proc" "smacro" {ID} "(" (<<quasiquote>> {MATCH_LIST}) ")" {MACRO_REST};
+
+MACRO_REST =
+    (:<typed-parms> ":" "typed_parms" "(" ((<.> (<<mid TOKENS>> {MID})) / {TOKENS}) ")")?
+    (:<id> ":" "id")?
+    (:<export> ":" "(" {ID_LIST} ")" /) {BRACE};
 
 MAKE_MACRO  =
     <%> ({"make_macro"/"make_syntax_macro"}) {ID} {ID}? {:<> ':'{"w_snapshot"}}? ";";
