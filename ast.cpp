@@ -563,14 +563,6 @@ namespace ast {
     }
   }
 
-  struct ShouldExport {
-    bool yes;
-    const Marks * export_to;
-    ShouldExport() : yes(false), export_to(NULL) {}
-    ShouldExport(const Marks * m) : yes(true), export_to(m) {}
-  };
-  ShouldExport should_export(const SymbolKey & k, Environ & env);
-
   SymbolNode * Symbol::add_to_env(const SymbolKey & orig_k, Environ & env, bool shadow_ok) {
     SymbolKey k = orig_k;
     ShouldExport se = should_export(k, env);
@@ -3420,19 +3412,11 @@ namespace ast {
   };
 
   template <typename Filter>
-  void import_module(const Module * m, Environ & env, const GatherMarks & gather, 
+  void import_module(const Module * m, const Marks * import_context,
+                     Environ & env, const GatherMarks & gather, 
                      Filter & filter, bool same_scope) 
   {
-    SymbolKey to_find_everything(SymbolName("everything", NULL),
-                                 MACRO_EXPORT_NS);
-    const SymbolNode * cur = env.symbols.front;
-    bool expose = false;
-    for (; cur != env.symbols.back; cur = cur->next) {
-      if (cur->same_scope() && cur->key == to_find_everything) {
-        expose = true;
-        break;
-      }
-    }
+    ShouldExport se = should_export(import_context, env);
     SymbolList l;
     for (SymbolNode * cur = m->syms.front; cur != m->syms.back; cur = cur->next) {
       if (!filter(cur)) continue;
@@ -3446,7 +3430,7 @@ namespace ast {
         res->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED | SymbolNode::DIFF_SCOPE);
       }
       // ...
-      if (expose)
+      if (se.yes) // FIXME: Be More Careful
         res = l.push_back(*res);
       // now add marks back in reverse order
       for (Vector<const Mark *>::const_reverse_iterator 
@@ -3469,10 +3453,11 @@ namespace ast {
     return empty_stmt();
   }
 
-  void import_module(const Module * m, Environ & env, const GatherMarks & gather, bool same_scope = false) 
+  void import_module(const Module * m, const Marks * import_context,
+                     Environ & env, const GatherMarks & gather, bool same_scope = false) 
   {
     AlwaysTrueFilter filter;
-    import_module(m, env, gather, filter, same_scope);
+    import_module(m, import_context, env, gather, filter, same_scope);
   }
 
 
@@ -3485,11 +3470,11 @@ namespace ast {
                                              NormalStrategy, gather);
     if (p->num_args() == 1) {
       //printf("IMPORTING EVERTHING FROM %s\n", ~m->name());
-      import_module(m, env, gather, same_scope);
+      import_module(m, p->part(0)->what().marks, env, gather, same_scope);
     } else {
       //printf("IMPORTING SOMETHINGS FROM %s (same_scope = %d)\n", ~m->name(), same_scope);
       OnlyThisFilter filter(*p->arg(1));
-      import_module(m, env, gather, filter, same_scope);
+      import_module(m, p->part(0)->what().marks, env, gather, filter, same_scope);
     }
     return empty_stmt();
   }
@@ -3856,7 +3841,7 @@ namespace ast {
                                              NormalStrategy, gather);
     //const Syntax * d = p->arg(1);
     Environ env = env0.new_scope();
-    import_module(m, env, gather, true);
+    import_module(m, NULL, env, gather, true); // FIXME: should I pass in a context, if so what?
     p = partly_expand(p, TopLevel, env);
     if (p->is_a("memberdecl"))
       p = p->arg(1);
@@ -5133,41 +5118,57 @@ namespace ast {
         env.add_internal(SymbolKey(q->arg(0)->what(),
                                    MACRO_EXPORT_NS), 
                          ec);
-      } else if (q->is_a("context")) {
+      } else if (q->is_a("tl_this_mark")) {
         assert_num_args(q, 1);
-        env.add_internal(SymbolKey(SymbolName("context", q->arg(0)->what().marks), 
+        env.add_internal(SymbolKey(SymbolName("", top_mark_only(q->arg(0)->what().marks)), 
                                    MACRO_EXPORT_NS), 
                          ec);
-      } else if (q->eq("everything")) {
-        env.add_internal(SymbolKey(SymbolName("everything", NULL), MACRO_EXPORT_NS), 
-                         ec);
       } else {
-        throw error(q, "expected one of: everything, context, or symbol");
+        throw error(q, "expected one of: this_mark, or symbol");
       }
     }
     return empty_stmt();
   }
-  
+
+  const Marks * merge_marks(const Marks * orig, 
+                            const Marks * to_prune,
+                            const Marks * to_add)
+  {
+    // FIXME: Implement me, after I rework how marks are managed
+    return to_add;
+  }
+
+  const Marks * fix_up_marks(const Marks * orig,
+                       const Mark * fixup) 
+  {
+    return merge_marks(orig->pop(), fixup->also_allow, fixup->export_to);
+  }
+
   ShouldExport should_export(const SymbolKey & orig, Environ & env) {
+    if (!orig.marks) 
+      return ShouldExport();
+    const Mark * m = orig.marks->back();
+    if (env.scope <= TOPLEVEL && m->export_tl) {
+      return ShouldExport(fix_up_marks(orig.marks, m));
+    }
     SymbolKey to_find_symbol(SymbolName(orig), MACRO_EXPORT_NS);
-    SymbolKey to_find_context(SymbolName("context", orig.marks),
-                              MACRO_EXPORT_NS);
-    SymbolKey to_find_everything(SymbolName("everything", NULL),
-                                 MACRO_EXPORT_NS);
+    SymbolKey to_find_tl_this_mark(SymbolName("", top_mark_only(orig.marks)),
+                                   MACRO_EXPORT_NS);
     const SymbolNode * cur = env.symbols.front;
     for (; cur != env.symbols.back; cur = cur->next) {
-      if (cur->key == to_find_symbol 
-          || (cur->same_scope()
-              && (cur->key == to_find_context || cur->key == to_find_everything)))
-        goto yep;
+      if (to_find_symbol.name.defined() && cur->key == to_find_symbol)
+        goto symbol_export;
+      if (cur->same_scope() && cur->key == to_find_tl_this_mark)
+        return ShouldExport(fix_up_marks(orig.marks, m));
     }
-    for (; cur != NULL; cur = cur->next) {
-      if (cur->key == to_find_symbol)
-        goto yep;
-    }
+    if (to_find_symbol.name.defined())
+      for (; cur != NULL; cur = cur->next) {
+        if (cur->key == to_find_symbol)
+          goto symbol_export;
+      }
   nope:
     return ShouldExport();
-  yep:
+  symbol_export:
     const ExportContext * ec = dynamic_cast<const ExportContext *>(cur->value);
     assert(ec);
     if (ec->export_to == orig.marks) goto nope;

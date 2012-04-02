@@ -128,7 +128,7 @@ public:
 
     class_s = p_;
     env = e_;
-    mark_ = m_ ? m_ : new_mark(prelude_envss);
+    mark_ = m_ ? m_ : new_mark_f(prelude_envss, true, NULL, NULL);
     
     init_match();
     
@@ -144,9 +144,6 @@ public:
 
     init();
 
-    builder->add(`(macro_export 
-                   $(replace_context(syntax foo, empty_context())) 
-                   everything));
     builder->add(`(add_prop ptr $(Syntax::stash_ptr(this))));
     builder->add(`(add_prop syntax_obj $p_));
     builder->add(`{make_macro memberdecl`syntax parse_memberdecl;});
@@ -190,7 +187,7 @@ public:
     m = match_f(0, raw_syntax (name @ body :(public parent_n) :(vtable_class (reparse vtable_class class))), class_s, mark);
     name = m->var(syntax name);
     if (strcmp(syntax_to_string(name), "") == 0) {
-      name = replace(syntax anon, m, mark);
+      name = replace(syntax anon, m, new_empty_mark());
       m = match_f(m, syntax name, name);
     }
     body = m->var(syntax body);

@@ -74,11 +74,15 @@ fluid_binding repl;
 fluid_binding environ;
 
 typedef struct EnvironSnapshot EnvironSnapshot;
+typedef struct Context Context;
 
 typedef struct Mark Mark;
-__ct_callback Mark * new_mark_f(EnvironSnapshot *);
-macro new_mark(es = NULL) {new_mark_f(es ? (EnvironSnapshot *)es : (EnvironSnapshot *)environ_snapshot());}
-macro new_empty_mark() {new_mark_f(0);}
+__ct_callback Mark * new_mark_f(EnvironSnapshot *, bool export_tl, 
+                                Context * export_to, Context * also_allow);
+macro new_mark(es = NULL) {
+  new_mark_f(es ? (EnvironSnapshot *)es : (EnvironSnapshot *)environ_snapshot(), false, NULL, NULL);
+}
+macro new_empty_mark() {new_mark_f(0, false, NULL, NULL);}
 
 struct UnmarkedSyntax;
 user_type UnmarkedSyntax {
@@ -173,7 +177,6 @@ __ct_callback Syntax * make_mid(Syntax *);
 
 __ct_callback Syntax * replace(UnmarkedSyntax *, Match *, Mark *);
 
-typedef struct Context Context;
 __ct_callback Context * empty_context();
 __ct_callback Context * get_context(Syntax *);
 __ct_callback Syntax * replace_context(UnmarkedSyntax *, Context *);

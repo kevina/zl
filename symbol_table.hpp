@@ -42,18 +42,24 @@ namespace ast {
     void to_string(OStream & o, SyntaxGather * g) const;
   };
 
-  struct Mark {
-    static unsigned last_id; 
+  struct Mark : public gc {
+    static unsigned last_id;
     unsigned id;
     const SymbolNode * env;
-    typedef std::pair<const Marks *, const Marks *> CacheNode;
+    bool export_tl;
+    const Marks * export_to;
+    const Marks * also_allow;
     // Cache is a mapping
     // from: the mark set we are adding this mark to
     // to:   the new mark set with the mark added
+    typedef std::pair<const Marks *, const Marks *> CacheNode;
     typedef Vector<CacheNode> Cache;
     mutable Cache cache;
     Marks self;
-    Mark(const SymbolNode * e) : id(last_id++), env(e), self(this, NULL) {
+    Mark(const SymbolNode * e, bool d = false, 
+         const Marks * t = NULL, const Marks * a = NULL) 
+      : id(last_id++), env(e), export_tl(d), export_to(t), also_allow(a), 
+        self(this, NULL) {
       cache.reserve(1);
       cache.push_back(CacheNode(NULL, &self));
     }
@@ -73,6 +79,11 @@ namespace ast {
     T tmp = orig;
     tmp.marks = add_mark(tmp.marks, m);
     return tmp;
+  }
+
+  static inline const Marks * top_mark_only(const Marks * ms) {
+    if (!ms) return NULL;
+    else return &ms->back()->self;
   }
 
   // static inline const Marks * merge_marks(const Marks * a, const Marks * b) {

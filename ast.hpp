@@ -1192,6 +1192,17 @@ namespace ast {
 
   void init_ct_var(const char * n, void * * ptr, Environ & env);
 
+  struct ShouldExport {
+    bool yes;
+    const Marks * export_to;
+    ShouldExport() : yes(false), export_to(NULL) {}
+    ShouldExport(const Marks * m) : yes(true), export_to(m) {}
+  };
+
+  ShouldExport should_export(const SymbolKey & k, Environ & env);
+  static inline ShouldExport should_export(const Marks * context, Environ & env) {
+    return should_export(SymbolName(String(),context), env);
+  }
 }
 
 #endif

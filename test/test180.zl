@@ -2,7 +2,7 @@ class X {
   int x;
 };
 
-macro Foo() : (Y) {
+macro Foo() : (*) {
 
   class Y : public X {
     int bar() {return x + 20;}

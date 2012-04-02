@@ -425,7 +425,7 @@ struct Macro : public MacroInfo, public Declaration, public Symbol {
       macro_ci = orig_ci;
     }
   };
-  virtual const Syntax * expand(const Syntax *, Environ & env) const = 0;
+  virtual const Syntax * expand_p2(const Syntax * s, const Syntax * p, Environ & env) const = 0;
   const Syntax * expand(const Syntax * s, const Syntax * p, Environ & env) const {
     DEFAULT_PEG = env.peg;
     static unsigned c0 = 0;
@@ -433,7 +433,7 @@ struct Macro : public MacroInfo, public Declaration, public Symbol {
     //printf("%d EXPAND: %s %s %s\n", c, ~s->what().to_string(), ~s->sample_w_loc(), ~p->sample_w_loc());
     try {
       MacroInfo whocares(this, s);
-      Syntax * res = expand(p, env);
+      Syntax * res = expand_p2(s, p, env);
       return res;
     } catch (Error * err) {
       StringBuf buf = err->extra;
@@ -481,20 +481,18 @@ struct SimpleMacro : public Macro {
     repl = p->arg(2)->map_source(*new MapSource_QuotedSyntax(p->arg(2)->str()));
     return this;
   }
-  const Syntax * expand(const Syntax * p, Environ &) const {
+  const Syntax * expand_p2(const Syntax * s, const Syntax * p, Environ &) const {
     //if (syn)
     //  printf("EXPANDING MAP %s\n", ~syn->to_string());
     //printf("EXPANDING PARMS %s\n", ~p->to_string());
     using namespace macro_abi;
     using macro_abi::Syntax;
-    Mark * mark = new Mark(env);
-    Match * m = match(NULL, parms, p, 1, mark);
-    if (!m)
-      throw error(p, "Wrong number of arguments or other mismatch in call to %s.", ~real_name.name);
     const Syntax * macro_export = NULL;
+    Mark * mark = new Mark(env);
     if (exprt) {
+      const Marks * export_to = (p ? s->part(0) : s->arg(0))->what().marks;
       SyntaxBuilder syn;
-      syn.add_part(SYN("macro_export"));
+      syn.add_part(SYN(SymbolName("macro_export", export_to)));
       syn.add_part(p->part(0));
       for (parts_iterator 
              i = exprt->parts_begin(), e = exprt->parts_end(); i != e; ++i) 
@@ -503,15 +501,21 @@ struct SimpleMacro : public Macro {
         sym = new_syntax(SymbolName(sym->what().name, 
                                     add_mark(sym->what().marks, mark)), 
                          (*i)->str_);
-        if ((*i)->what().name == "top-level") {
-          syn.add_part(SYN(SYN("context"), sym));
+        if (sym->what().name == "top-level") {
+          mark->export_tl = true;
+          mark->export_to = export_to;
+          mark->also_allow = (*i)->what().marks;
+          syn.add_part(SYN(SYN("tl_this_mark"), sym));
         } else {
           syn.add_part(SYN(SYN("symbol"), sym));
         }
       }
       macro_export = syn.build();
-      printf(">>%s\n", ~macro_export->to_string());
+      //printf(">>%s\n", ~macro_export->to_string());
     }
+    Match * m = match(NULL, parms, p, 1, mark);
+    if (!m)
+      throw error(p, "Wrong number of arguments or other mismatch in call to %s.", ~real_name.name);
     Syntax * res = replace(repl, m, mark);
     //printf("EXPANDING MAP %s RES: %s\n", ~name, ~res->to_string());
     //printf("  %s\n", ~res->sample_w_loc());
@@ -555,7 +559,7 @@ struct ProcMacro : public Macro {
     def = fun->syn;
     return this;
   }
-  const Syntax * expand(const Syntax * p, Environ & env) const {
+  const Syntax * expand_p2(const Syntax * s, const Syntax * p, Environ & env) const {
     if (!fun->ct_ptr) {
       Deps deps;
       deps.push_back(fun);
@@ -612,8 +616,8 @@ struct SimpleSyntaxEnum : public SyntaxEnum {
 extern "C" 
 namespace macro_abi {
 
-  Mark * new_mark_f(SymbolNode * e) {
-    return new Mark(e);
+  Mark * new_mark_f(SymbolNode * e, bool export_tl, Context * export_to, Context * also_allow) {
+    return new Mark(e, export_tl, export_to, also_allow);
   }
 
   int syntax_simple(Syntax * s) {
@@ -1760,28 +1764,33 @@ SymbolKey expand_binding(const Syntax * p, const InnerNS * ns, Environ & env) {
   }
 }
 
+static inline SymbolName fix_up_marks(const SymbolName & n, Environ & env) {
+  ShouldExport se = should_export(n, env);
+  if (se.yes) 
+    return SymbolName(n.name, se.export_to);
+  else
+    return n;
+}
+
 SymbolKey expand_field_binding(const Syntax * p, Environ & env) {
-  // marks are stripped unless the name is tagged with the hidden
-  // namespace, in which case the hidden tag is removed and the marks
-  // are kept
   if (Syntax * r = instantiate(p))
     p = r;
   if (p->simple()) {
-    return SymbolKey(p->what().name);
+    return SymbolKey(fix_up_marks(p->what(), env));
   } else if (p->is_a("operator")) {
-    return SymbolKey(p->arg(0)->what().name, OPERATOR_NS);
+    return SymbolKey(fix_up_marks(p->arg(0)->what(), env), OPERATOR_NS);
   } else if (p->is_a("`")) {
     const InnerNS * ns = lookup_inner_ns(p, env.symbols.front);
     if (ns == HIDDEN_NS && p->arg(0)->simple()) {
       // keep marks
       return SymbolKey(p->arg(0)->what());
     } else if (p->arg(0)->simple()) {
-      return SymbolKey(p->arg(0)->what().name, ns);
+      return SymbolKey(fix_up_marks(p->arg(0)->what(), env), ns);
     }
   } else if (p->is_a("::")) {
     throw error(p, "Can not use outer namespaces in binding form");
   } else if (p->is_a("tid")) {
-    return SymbolKey(flatten_template_id(p, env).name);
+    return SymbolKey(fix_up_marks(flatten_template_id(p, env), env));
   } else if (const SymbolKeyEntity * s = p->entity<SymbolKeyEntity>()) {
     return s->name;
   }
