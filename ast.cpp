@@ -5103,26 +5103,29 @@ namespace ast {
 
   struct ExportContext : public Symbol {
     const Marks * export_to;
+    explicit ExportContext(const Marks * et = NULL) : export_to(et) {}
   };
 
   extern const InnerNS * const MACRO_EXPORT_NS;
 
   Stmt * parse_macro_export(const Syntax * p, Environ & env) {
     assert_num_args(p, 2, NPOS);
-    ExportContext * ec = new ExportContext;
-    ec->export_to = p->arg(0)->what().marks;
+    const Marks * export_to = p->arg(0)->what().marks;
     for (unsigned i = 1; i < p->num_args(); ++i) {
       const Syntax * q = p->arg(i);
       if (q->is_a("symbol")) {
         assert_num_args(q, 1);
         env.add_internal(SymbolKey(q->arg(0)->what(),
                                    MACRO_EXPORT_NS), 
-                         ec);
+                         new ExportContext(export_to));
       } else if (q->is_a("tl_this_mark")) {
         assert_num_args(q, 1);
-        env.add_internal(SymbolKey(SymbolName("", top_mark_only(q->arg(0)->what().marks)), 
+        const Marks * m = top_mark_only(q->arg(0)->what().marks);
+        if (!m || !m->back()->export_tl)
+          throw error(q, "Must be marked symbol with export_tl set.");
+        env.add_internal(SymbolKey(SymbolName("", m), 
                                    MACRO_EXPORT_NS), 
-                         ec);
+                         new ExportContext);
       } else {
         throw error(q, "expected one of: this_mark, or symbol");
       }
