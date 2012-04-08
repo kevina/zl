@@ -68,14 +68,26 @@ namespace ast {
 
   unsigned Mark::last_id = 0;
 
-  void Marks::to_string(OStream & o, SyntaxGather * g) const {
-    Vector<const Mark *> mks;
-    for (const Marks * cur = this; cur; cur = cur->prev) {
-      mks.push_back(cur->mark);
+  const Marks * add_mark(const Marks * ms, const Mark * m) {
+    for (Mark::Cache::iterator i = m->cache.begin(), e = m->cache.end(); i != e; ++i) 
+      if (i->first == ms) return i->second;
+    unsigned num_marks = ms ? ms->num_marks + 1 : 1;
+    Marks * nms = (Marks *)GC_MALLOC(sizeof(Marks) + sizeof(void *)*num_marks);
+    nms->num_marks = num_marks;
+    nms->prev = ms;
+    unsigned i = 0;
+    if (ms) {
+      for (;i != ms->num_marks; ++i)
+        nms->marks[i] = ms->marks[i];
     }
-    while (!mks.empty()) {
-      const Mark * m = mks.back();
-      mks.pop_back();
+    nms->marks[i] = m;
+    m->cache.push_back(Mark::CacheNode(ms, nms));
+    return nms;
+  }
+
+  void Marks::to_string(OStream & o, SyntaxGather * g) const {
+    for (unsigned i = 0; i != num_marks; ++i) {
+      const Mark * m = marks[i];
       if (g) {
         o.printf("'%u", g->mark_map.insert(m));
       } else {

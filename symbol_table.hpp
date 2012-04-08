@@ -30,22 +30,24 @@ namespace ast {
   struct SymbolNode;
   struct SymbolTable;
 
-  struct Marks : public gc {
-  private:
-    const Mark * mark;
+  struct Marks {
+    unsigned num_marks;
+    unsigned num_tags;
+    const Marks * normalized;
     const Marks * prev;
-  public:
-    Marks(const Mark * m, const Marks * p) 
-      : mark(m), prev(p) {}
-    const Mark * back() const {return mark;}
+    const Mark * marks[];
+    const Mark * back() const {return marks[num_marks-1];}
     const Marks * pop() const {return prev;}
     void to_string(OStream & o, SyntaxGather * g) const;
   };
+  
+  const Marks * add_mark(const Marks * ms, const Mark * m);
 
   struct Mark : public gc {
     static unsigned last_id;
     unsigned id;
     const SymbolNode * env;
+    const Mark * base_mark;
     bool export_tl;
     const Marks * export_to;
     const Marks * also_allow;
@@ -55,24 +57,12 @@ namespace ast {
     typedef std::pair<const Marks *, const Marks *> CacheNode;
     typedef Vector<CacheNode> Cache;
     mutable Cache cache;
-    Marks self;
     Mark(const SymbolNode * e, bool d = false, 
          const Marks * t = NULL, const Marks * a = NULL) 
-      : id(last_id++), env(e), export_tl(d), export_to(t), also_allow(a), 
-        self(this, NULL) {
-      cache.reserve(1);
-      cache.push_back(CacheNode(NULL, &self));
-    }
+      : id(last_id++), env(e), base_mark(this), export_tl(d), export_to(t), also_allow(a) 
+      {add_mark(NULL, this);}
     void to_string(OStream & o, SyntaxGather * g) const;
   };
-  
-  static inline const Marks * add_mark(const Marks * ms, const Mark * m) {
-    for (Mark::Cache::iterator i = m->cache.begin(), e = m->cache.end(); i != e; ++i) 
-      if (i->first == ms) return i->second;
-    Marks * nms = new Marks(m, ms);
-    m->cache.push_back(Mark::CacheNode(ms, nms));
-    return nms;
-  }
 
   template <typename T>
   static inline T add_mark(const T & orig, const Mark * m) {
@@ -83,7 +73,7 @@ namespace ast {
 
   static inline const Marks * top_mark_only(const Marks * ms) {
     if (!ms) return NULL;
-    else return &ms->back()->self;
+    else return ms->back()->cache[0].second;
   }
 
   // static inline const Marks * merge_marks(const Marks * a, const Marks * b) {
