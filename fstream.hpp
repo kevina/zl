@@ -70,7 +70,8 @@
     bool seek(long int offset, int whence = SEEK_SET) {
       return fseek(file_, offset, whence) == 0;
     }
-    
+ 
+    using OStream::operator <<;
 
     // The << >> operators are designed to work about they same
     // as they would with A C++ stream.
