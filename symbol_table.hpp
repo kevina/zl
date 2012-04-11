@@ -30,67 +30,75 @@ namespace ast {
   struct SymbolNode;
   struct SymbolTable;
 
+  struct NMarks;
   struct Marks {
     unsigned num_marks;
     unsigned num_tags;
-    const Marks * normalized;
+    const NMarks * normalized;
     const Marks * prev;
     const Mark * marks[];
     const Mark * back() const {return marks[num_marks-1];}
     const Marks * pop() const {return prev;}
     void to_string(OStream & o, SyntaxGather * g) const;
+    typedef const Mark * const * iterator;
+    iterator begin() const {return &marks[0];}
+    iterator end()   const {return begin() + num_marks;}
   };
-  
-  const Marks * add_mark(const Marks * ms, const Mark * m);
 
+  // To force a seperate type for normalized marks
+  // Yeah a bit evil, if this was in ZL I could just use a user type
+  struct NMarks : public Marks {};
+
+  struct BaseMark;
   struct Mark : public gc {
     static unsigned last_id;
     unsigned id;
     const SymbolNode * env;
-    const Mark * base_mark;
+    const BaseMark * base_mark;
     bool export_tl;
-    const Marks * export_to;
-    const Marks * also_allow;
+    const NMarks * export_to;
+    const NMarks * also_allow;
     // Cache is a mapping
     // from: the mark set we are adding this mark to
     // to:   the new mark set with the mark added
     typedef std::pair<const Marks *, const Marks *> CacheNode;
     typedef Vector<CacheNode> Cache;
     mutable Cache cache;
+    mutable Cache fixup_cache;
     Mark(const SymbolNode * e, bool d = false, 
-         const Marks * t = NULL, const Marks * a = NULL) 
-      : id(last_id++), env(e), base_mark(this), export_tl(d), export_to(t), also_allow(a) 
-      {add_mark(NULL, this);}
-    void to_string(OStream & o, SyntaxGather * g) const;
+         const NMarks * t = NULL, const NMarks * a = NULL);
+    void dump(OStream & o) const;
   };
 
-  template <typename T>
-  static inline T add_mark(const T & orig, const Mark * m) {
-    T tmp = orig;
-    tmp.marks = add_mark(tmp.marks, m);
-    return tmp;
+  struct BaseMark : public Mark {};
+
+  const Marks * add_mark(const Marks * ms, const Mark * m);
+  const NMarks * add_mark_normalized(const Marks * ms, const Mark * m, 
+                                     const Marks * nms = NULL);
+
+  static inline const NMarks * normalize(const Marks * m) {return m ? m->normalized : NULL;}
+  
+  static inline bool have_mark(const Mark * mark, const Marks * ms) {
+    if (!ms) return false;
+    for (Marks::iterator i = ms->begin(), e = ms->end(); i != e; ++i)
+      if (*i == mark) return true;
+    return false;
   }
+
+  inline Mark::Mark(const SymbolNode * e, bool d,
+                    const NMarks * t, const NMarks * a) 
+    : id(last_id++), env(e), 
+      base_mark(static_cast<const BaseMark *>(this)), 
+      export_tl(d), export_to(t), also_allow(a) 
+  {add_mark(NULL, this);}
 
   static inline const Marks * top_mark_only(const Marks * ms) {
     if (!ms) return NULL;
     else return ms->back()->cache[0].second;
   }
 
-  // static inline const Marks * merge_marks(const Marks * a, const Marks * b) {
-  //   Vector<const Mark *> to_add;
-  //   for (; b; b = b->prev) 
-  //     to_add.push_back(b->mark);
-  //   for (Vector<const Mark *>::iterator i = to_add.begin(), e = to_add.end(); i != e; ++i)
-  //     a = mark(a, *i);
-  //   return a;
-  // }
-
-  // template <typename T>
-  // static inline T merge_marks(const T & orig, const Marks * ms) {
-  //   T tmp = orig;
-  //   tmp.marks = merge_marks(tmp.marks, ms);
-  //   return tmp;
-  // }
+  const Marks * fix_up_marks(const Marks * orig,
+                             const Mark * fixup); 
 
   void marks_ignored(String name);
 
@@ -122,6 +130,12 @@ namespace ast {
     const char * operator ~() const {assert_no_marks(); return ~name;}
     const char * c_str() const {assert_no_marks(); return name.c_str();}
   };
+
+  static inline SymbolName add_mark(const SymbolName & orig, const Mark * m) {
+    SymbolName tmp = orig;
+    tmp.marks = add_mark(tmp.marks, m);
+    return tmp;
+  }
 
   //static inline OStream & operator<<(OStream & o, const SymbolName & n) {
   //  n.to_string(o);

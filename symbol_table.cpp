@@ -69,8 +69,12 @@ namespace ast {
   unsigned Mark::last_id = 0;
 
   const Marks * add_mark(const Marks * ms, const Mark * m) {
+
+    // check if cached
     for (Mark::Cache::iterator i = m->cache.begin(), e = m->cache.end(); i != e; ++i) 
       if (i->first == ms) return i->second;
+
+    // create new mark
     unsigned num_marks = ms ? ms->num_marks + 1 : 1;
     Marks * nms = (Marks *)GC_MALLOC(sizeof(Marks) + sizeof(void *)*num_marks);
     nms->num_marks = num_marks;
@@ -81,7 +85,83 @@ namespace ast {
         nms->marks[i] = ms->marks[i];
     }
     nms->marks[i] = m;
+    nms->normalized = add_mark_normalized(ms, m, nms);
+
+    // return result
     m->cache.push_back(Mark::CacheNode(ms, nms));
+    return nms;
+  }
+
+  const NMarks * add_mark_normalized(const Marks * ms, const Mark * m, 
+                                     const Marks * nms /* new mark, not normalized */) 
+  {
+    // create normalized mark
+    const Marks * n0 = ms ? ms->normalized : NULL;
+    unsigned base_id = m->base_mark->id;
+    const Marks * normalized = NULL;
+    if (n0 && !(n0->back()->id < base_id)) {
+      fprintf(stderr, "OUT OF ORDER!\n");
+      // out of order, rebuild mark with new mark in correct location
+      unsigned i = 0;
+      for (;i < n0->num_marks && n0->marks[i]->id < base_id; ++i) 
+        normalized = add_mark(normalized,  n0->marks[i]);
+      assert(i != n0->num_marks);
+      if (n0->marks[i] != m->base_mark)
+        normalized = add_mark(normalized, m->base_mark);
+      for (; i < n0->num_marks; ++i)
+        normalized = add_mark(normalized,  n0->marks[i]);
+    } else if (!nms || m != m->base_mark) {
+      // in order but need new mark
+      normalized = add_mark(n0, m->base_mark);
+    } else {
+      normalized = nms;
+    }
+    return static_cast<const NMarks *>(normalized);
+  }
+
+  const Marks * merge_marks(const NMarks * orig, 
+                            const NMarks * to_prune,
+                            const NMarks * to_add)
+  {
+    Marks::iterator o = NULL, oe = NULL;
+    if (orig) o = orig->begin(), oe = orig->end();
+    Marks::iterator p = NULL, pe = NULL;
+    if (to_prune) p = to_prune->begin(), pe = to_prune->end();
+    Marks::iterator a = NULL, ae = NULL;
+    if (to_add) a = to_add->begin(), ae = to_add->end();
+    const Marks * nms = 0;
+    for (;;) {
+      // advance o past any marks in p
+      while (o != oe && p != pe && *o == *p)
+        ++o, ++p;
+      if (o == oe && a == ae) break;
+      const Mark * m;
+      if      (a == ae)              m = *o++;
+      else if (o == oe)              m = *a++;
+      else if ((*o)->id == (*a)->id) {++o; ++a; continue;}
+      else if ((*o)->id < (*a)->id)  m = *o++;
+      else                           m = *a++;
+      nms = add_mark(nms, m);
+    }
+    if (nms)
+      assert(nms == nms->normalized);
+    return nms;
+  }
+
+  const Marks * fix_up_marks(const Marks * orig,
+                             const Mark * fixup) 
+  {
+    if (!orig->pop()) return fixup->export_to;
+
+    fprintf(stderr, "NON SIMPLE CASE\n");
+    for (Mark::Cache::iterator 
+           i = fixup->fixup_cache.begin(), e = fixup->fixup_cache.end(); i != e; ++i) 
+      if (i->first == orig) return i->second;
+    
+    const Marks * nms = merge_marks(normalize(orig->pop()), fixup->also_allow, fixup->export_to);
+
+    fixup->fixup_cache.push_back(Mark::CacheNode(orig, nms));
+    
     return nms;
   }
 
@@ -93,6 +173,17 @@ namespace ast {
       } else {
         o.printf("'%u", m->id);
       }
+    }
+  }
+
+  void Mark::dump(OStream & o) const {
+    o << id;
+    if (base_mark != this) o << "(" << base_mark->id << ")";
+    if (export_tl) {
+      o << "[export_tl";
+      if (export_to) {o << "=>";  export_to->to_string(o, NULL);}
+      if (also_allow) {o << "-";  also_allow->to_string(o, NULL);}
+      o << "]";
     }
   }
 

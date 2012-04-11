@@ -3412,11 +3412,10 @@ namespace ast {
   };
 
   template <typename Filter>
-  void import_module(const Module * m, const Marks * import_context,
+  void import_module(const Module * m, const Marks *,
                      Environ & env, const GatherMarks & gather, 
                      Filter & filter, bool same_scope) 
   {
-    ShouldExport se = should_export(import_context, env);
     SymbolList l;
     for (SymbolNode * cur = m->syms.front; cur != m->syms.back; cur = cur->next) {
       if (!filter(cur)) continue;
@@ -3429,17 +3428,20 @@ namespace ast {
       } else {
         res->set_flags(SymbolNode::ALIAS | SymbolNode::IMPORTED | SymbolNode::DIFF_SCOPE);
       }
-      // ...
-      if (se.yes) // FIXME: Be More Careful
-        res = l.push_back(*res);
-      // now add marks back in reverse order
+      
       for (Vector<const Mark *>::const_reverse_iterator 
              i = gather.marks.rbegin(), e = gather.marks.rend();
            i != e; ++i)
-        res->key.marks = add_mark(res->key.marks, *i);
+        res->key.marks = add_mark_normalized(res->key.marks, *i);
+      
+      // FIXME: Need to be more precice and careful, lots of cornor
+      // cases, for now cover the common cases only
+      const Mark * se = should_export_basic(res->key.marks, env);
+      if (se) {
+        res = l.push_back(*res);
+        res->key.marks = fix_up_marks(res->key.marks, se);
+      }
     }
-    //env.symbols.splice(l.first, l.last);
-    //env.add(SymbolKey("", SPECIAL_NS), new Import(m));
     env.symbols.import_ip.splice(l.first, l.last);
     SymbolNode * n = env.symbols.import_ip.add(env.where, SymbolKey("", SPECIAL_NS), 
                                                new Import(m));
@@ -3469,7 +3471,7 @@ namespace ast {
     const Module * m = lookup_symbol<Module>(id, OUTER_NS, env.symbols.front, NULL, 
                                              NormalStrategy, gather);
     if (p->num_args() == 1) {
-      //printf("IMPORTING EVERTHING FROM %s\n", ~m->name());
+      //fprintf(stderr, "IMPORTING EVERTHING FROM %s\n", ~id->to_string());
       import_module(m, p->part(0)->what().marks, env, gather, same_scope);
     } else {
       //printf("IMPORTING SOMETHINGS FROM %s (same_scope = %d)\n", ~m->name(), same_scope);
@@ -5133,18 +5135,21 @@ namespace ast {
     return empty_stmt();
   }
 
-  const Marks * merge_marks(const Marks * orig, 
-                            const Marks * to_prune,
-                            const Marks * to_add)
-  {
-    // FIXME: Implement me, after I rework how marks are managed
-    return to_add;
-  }
-
-  const Marks * fix_up_marks(const Marks * orig,
-                       const Mark * fixup) 
-  {
-    return merge_marks(orig->pop(), fixup->also_allow, fixup->export_to);
+  const Mark * should_export_basic(const Marks * marks, Environ & env) {
+    if (!marks) 
+      return NULL;
+    const Mark * m = marks->back();
+    if (env.scope <= TOPLEVEL && m->export_tl) {
+      return m;
+    }
+    SymbolKey to_find_tl_this_mark(SymbolName("", add_mark(NULL, m)),
+                                   MACRO_EXPORT_NS);
+    const SymbolNode * cur = env.symbols.front;
+    for (; cur != env.symbols.back; cur = cur->next) {
+      if (cur->same_scope() && cur->key == to_find_tl_this_mark)
+        return m;
+    }
+    return NULL;
   }
 
   ShouldExport should_export(const SymbolKey & orig, Environ & env) {

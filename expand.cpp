@@ -503,8 +503,8 @@ struct SimpleMacro : public Macro {
                          (*i)->str_);
         if (sym->what().name == "top-level") {
           mark->export_tl = true;
-          mark->export_to = export_to;
-          mark->also_allow = (*i)->what().marks;
+          mark->export_to = normalize(export_to);
+          mark->also_allow = normalize((*i)->what().marks);
           syn.add_part(SYN(SYN("tl_this_mark"), sym));
         } else {
           syn.add_part(SYN(SYN("symbol"), sym));
@@ -617,7 +617,9 @@ extern "C"
 namespace macro_abi {
 
   Mark * new_mark_f(SymbolNode * e, bool export_tl, Context * export_to, Context * also_allow) {
-    return new Mark(e, export_tl, export_to, also_allow);
+    Mark * m = new Mark(e, export_tl, normalize(export_to), normalize(also_allow));
+    //if (m->id == 51) abort();
+    return m;
   }
 
   int syntax_simple(Syntax * s) {

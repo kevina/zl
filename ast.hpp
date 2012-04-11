@@ -1203,6 +1203,8 @@ namespace ast {
   static inline ShouldExport should_export(const Marks * context, Environ & env) {
     return should_export(SymbolName(String(),context), env);
   }
+  const Mark * should_export_basic(const Marks * marks, Environ & env);
+
 }
 
 #endif
