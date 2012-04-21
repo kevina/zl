@@ -6,8 +6,8 @@ AM_CXXFLAGS = -Wall -Wno-sign-compare -Wno-unused
 #AM_CXXFLAGS += -I/home/kevina/gc6.8/include 
 AM_CXXFLAGS += -DNO_GC
 
-bin_PROGRAMS=zl
-bin_SCRIPTS=zlc
+noinst_PROGRAMS=zl
+noinst_SCRIPTS=zlc
 zl_SOURCES=ast.cpp expand.cpp charset.cpp main.cpp parse.cpp		\
   parse_op.cpp peg.cpp util.cpp string_buf.cpp fstream.cpp type.cpp	\
   parse_decl.cpp symbol_table.cpp iostream.cpp ct_value.cpp syntax.cpp
@@ -62,3 +62,11 @@ zlc: $(top_builddir)/config.status $(srcdir)/zlc.in
 
 libc++.o: zl prelude-fct.so libc++.cpp c++-include/*
 	./zlc -c -g -save-temps libc++.cpp > libc++.log
+
+fake-install:
+	$(install_sh) -d $(bindir)
+	ln -f -s $(abs_srcdir)/zlc $(bindir)/zlc
+
+fake-uninstall:
+	-rm $(bindir)/zlc
+
