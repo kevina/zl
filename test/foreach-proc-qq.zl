@@ -4,10 +4,8 @@ new_syntax {
 
 proc smacro foreach (VAR, WHAT, BODY) {
   Syntax * what = ``WHAT;
-  if (!symbol_exists(``begin, what) ||
-      !symbol_exists(``end, what))
-    return error(what,
-                 "Container lacks begin or end method.");
+  if (!symbol_exists(``begin, what) || !symbol_exists(``end, what))
+    return error(what, "Container lacks begin or end method.");
   return `{
     typeof(WHAT) & what = WHAT;
     typeof(what.begin()) i=what.begin(), e=what.end();
