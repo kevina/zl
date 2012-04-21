@@ -1,0 +1,20 @@
+
+fluid_label redo;
+
+macro redo() {goto redo;}
+
+smacro for (INIT, TEST, INC, BODY) {
+  for (INIT; TEST; INC) {
+    fluid redo:
+    BODY;
+  }
+}
+
+int main() {
+  for (int i = 0; i < 10; ++i) {
+    ++i;
+    printf("%d\n", i);
+    if (i % 3 == 0)
+      redo;
+  }
+}
