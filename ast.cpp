@@ -2303,7 +2303,7 @@ namespace ast {
       if (!t) throw error(p->arg(0), "Expected struct or union type"); 
       if (!t->defined) throw error(p->arg(1), "Invalid use of incomplete type");
       const Syntax * id = expand_id(p->arg(1));
-      sym = t->env.symbols.find<VarSymbol>(id, DEFAULT_NS, StripMarks);
+      sym = find_symbol<VarSymbol>(id, DEFAULT_NS, t->env.symbols.front, t->env.symbols.back, StripMarks);
       if (!sym)
         throw error(p->arg(1), "\"%s\" is not a member of \"%s\"", 
                     ~id->to_string(), ~t->to_string());
