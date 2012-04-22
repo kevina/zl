@@ -56,11 +56,11 @@ public:
 
 .class ParseClass {
 public:
-  Mark * mark_; // needed due to fluid bug
-  Mark * fluid mark;
+  Mark * mark_;
+  macro fluid mark() {mark_}
 
   Match * m;
-  Match * fluid repl;
+  macro fluid repl() {m}
 
   Syntax * class_s;
   Environ * env;
@@ -128,8 +128,7 @@ public:
 
     class_s = p_;
     env = e_;
-    mark = m_ ? m_ : new_mark(prelude_envss);
-    mark_ = mark;
+    mark_ = m_ ? m_ : new_mark(prelude_envss);
     
     init_match();
     
@@ -191,7 +190,6 @@ public:
       name = replace(syntax anon, m, mark);
       m = match_f(m, syntax name, name);
     }
-    repl = m;
     body = m->var(syntax body);
   }
 
@@ -238,7 +236,6 @@ public:
     m = match_f(m, syntax is_method, replace_context(syntax is_method, context));
     m = match_f(m, syntax is_static, replace_context(syntax is_static, context));
     m = match_f(m, syntax memberdecl, replace_context(syntax memberdecl, context));
-    repl = m;
     
     init_special_funs();
   }
@@ -524,7 +521,7 @@ public:
     } else if (name->eq(raw_syntax (operator =))) {
       //printf("ASSIGN\n");
       // just change the name, nothing special needs to be done
-      repl = match_f(repl, syntax n, ``_assign);
+      m = match_f(m, syntax n, ``_assign);
     } else if (!name->simple() && name->part(0)->eq(syntax ~) 
                && expand_id(name->part(1), lenv)->eq(class_name)) {
       //printf("DESTRUCTOR\n");
