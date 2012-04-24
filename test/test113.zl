@@ -5,7 +5,7 @@ class X {
   int z;
 };
 
-Syntax * make_cmp(Syntax * syn, Environ * env) {
+Syntax * make_cmp(Syntax * syn, const Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_f(0, syntax (type, @_), syn);
   Syntax * res = get_symbol_prop(partly_expand(m->var(syntax type), NoPos, env), 

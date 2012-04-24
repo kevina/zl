@@ -1,5 +1,5 @@
 
-Syntax * test(Syntax * in, Environ * env) {
+Syntax * test(Syntax * in) {
   Mark * fluid mark = new_mark;
   Syntax *a, *b;
   match(`[$a,$b], in);
@@ -12,7 +12,7 @@ Syntax * test(Syntax * in, Environ * env) {
 
 make_macro test;
 
-Syntax * test2(Syntax * in, Environ * env) {
+Syntax * test2(Syntax * in) {
   Mark * fluid mark = new_mark;
   match(`[$name,$val], in, :bind);
   return `{int $name() {return $val;}};
@@ -22,7 +22,7 @@ make_macro test2;
 
 test2(myfun,34);
 
-Syntax * test3(Syntax * in, Environ * env) {
+Syntax * test3(Syntax * in) {
   Mark * fluid mark = new_mark;
   match_parts(`[_,name,val], in, :shadow);
   return `{int name() {return val;}};

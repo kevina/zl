@@ -2,7 +2,7 @@ extern "C" double fabs(double x);
 
 double r = 1.61803399;
 
-Syntax * make_golden(Syntax * syn, Environ * env) { 
+Syntax * make_golden(Syntax * syn) { 
   Mark * mark = new_mark(); 
   Match * m = match_f(0, syntax (D,A,B,FIX), syn); 
   UnmarkedSyntax * r = syntax { 

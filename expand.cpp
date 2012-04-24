@@ -544,8 +544,15 @@ struct SimpleMacro : public Macro {
 
 struct ProcMacro : public Macro {
   const char * what() const {return "proc-macro";}
+  enum FunArgs {Parms, CallParms, ParmsEnv, CallParmsEnv} fun_args;
   const Fun * fun;
-  typedef const Syntax * (*MacroCall)(const Syntax *, Environ * env);
+  static const Type * syntax_type;
+  static const Type * environ_type;
+  static const Type * environ_type_nc;
+  typedef const Syntax * (*MacroCallP)(const Syntax *);
+  typedef const Syntax * (*MacroCallCP)(const Syntax *, const Syntax *);
+  typedef const Syntax * (*MacroCallPE)(const Syntax *, const Environ * env);
+  typedef const Syntax * (*MacroCallCPE)(const Syntax *, const Syntax *, const Environ * env);
   ProcMacro * parse_self(const Syntax * p, Environ & e) {
     //printf("PARSING MACRO %s\n", ~p->arg(0)->name);
     //p->print();
@@ -556,6 +563,50 @@ struct ProcMacro : public Macro {
     fun = lookup_overloaded_symbol<Fun>
       (NULL, p->num_args() == 1 ? p->arg(0) : p->arg(1), &e);
     fun->is_macro = true;
+    if (!syntax_type)
+      syntax_type = e.types.inst(".ptr", e.types.inst("Syntax"))->root;
+    if (!environ_type)
+      environ_type = e.types.inst(".ptr", 
+                                  e.types.inst(".qualified",
+                                               TypeParm(e.types.inst("Environ")),
+                                               TypeParm(QualifiedType::CONST)))->root;
+    if (!environ_type_nc)
+      environ_type_nc = e.types.inst(".ptr", e.types.inst("Environ"))->root;
+    if (fun->parms->num_parms() == 0)
+      throw error(p, "Invalid function prototype for macro transformer: "
+                  "expected at least one argument");
+    if (fun->parms->parms[0].type->unqualified != syntax_type)
+      throw error(p, "Invalid function prototype for macro transformer: "
+                  "expected \"Syntax *\" as first argument");
+    unsigned env_pos = 1;
+    if (fun->parms->num_parms() > 1 && fun->parms->parms[1].type->unqualified == syntax_type)
+      env_pos = 2;
+    if (fun->parms->num_parms() > env_pos + 1)
+      throw error(p, "Invalid function prototype for macro transformer: "
+                  "too many parameters");
+    if (fun->parms->num_parms() == env_pos + 1) {
+      if (fun->parms->parms[env_pos].type->unqualified == environ_type) {
+        // all good
+      } else if (fun->parms->parms[env_pos].type->unqualified == environ_type_nc) {
+        // allow for now
+      } else {
+        fprintf(stderr, "?? %s or %s got %s\n", 
+                ~generic_print_inst->to_string(*environ_type),
+                ~generic_print_inst->to_string(*environ_type_nc),
+                ~generic_print_inst->to_string(*fun->parms->parms[env_pos].type->unqualified));
+        throw error(p, "Invalid function prototype for macro transformer: "
+                    "expected \"const Environ *\" as last argument");
+      }
+      if (env_pos == 1)
+        fun_args = ParmsEnv;
+      else
+        fun_args = CallParmsEnv;
+    } else {
+      if (env_pos == 1)
+        fun_args = Parms;
+      else
+        fun_args = CallParms;
+    }
     def = fun->syn;
     return this;
   }
@@ -566,16 +617,25 @@ struct ProcMacro : public Macro {
       compile_for_ct(deps, env);
       assert(fun->ct_ptr);
     }
-    const Syntax * res = ((MacroCall)fun->ct_ptr)(p, &env);
-    //printf("MACRO EXP RES\n");
-    //res->print();
-    //printf("\n");
-    return res;
+    switch (fun_args) {
+    case Parms: 
+      return ((MacroCallP)fun->ct_ptr)(p);
+    case CallParms: 
+      return ((MacroCallCP)fun->ct_ptr)(s, p);
+    case ParmsEnv: 
+      return ((MacroCallPE)fun->ct_ptr)(p, &env);
+    case CallParmsEnv: 
+      return ((MacroCallCPE)fun->ct_ptr)(s, p, &env);
+    }
   }
   void compile(CompileWriter & f, Phase phase) const {
     f << indent << "(make_macro " << key << " " << fun->uniq_name() << ")\n";
   }
 };
+
+const Type * ProcMacro::syntax_type = NULL;
+const Type * ProcMacro::environ_type = NULL;
+const Type * ProcMacro::environ_type_nc = NULL;
 
 const Syntax * expand_macro(const Syntax * p, const ast::Symbol * sym, 
                             const Vector<ast::Exp *> & parms, Environ & env) 

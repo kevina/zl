@@ -1,7 +1,7 @@
 
 make_inner_ns myns;
 
-Syntax * add_namespace(Syntax * syn, Environ * env) {
+Syntax * add_namespace(Syntax * syn, const Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_f(0, syntax(ns, @rest), syn);
   SyntaxEnum * i = partly_expand_list(m->varl(syntax rest), StmtDeclPos, env);

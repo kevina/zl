@@ -4,7 +4,7 @@ user_type M {
   add_prop foo (12);
 }
 
-Syntax * get_prop(Syntax * syn, Environ * env) {
+Syntax * get_prop(Syntax * syn, const Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_f(0, syntax (where, what), syn);
   m = match_f(m, syntax (where), partly_expand(m->var(syntax where), ExpPos, env));

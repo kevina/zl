@@ -11,7 +11,7 @@ class Y {
   char a[10];
 };
 
-Syntax * f(Syntax * p, Environ * env) {
+Syntax * f(Syntax * p, const Environ * env) {
   Mark * mark = new_mark();
   size_t v1 = ct_value(replace(syntax (offsetof(struct X, y)), NULL, mark), env);
   size_t v2 = ct_value(replace(syntax (offsetof(struct X, a)), NULL, mark), env);

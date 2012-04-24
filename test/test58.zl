@@ -1,5 +1,5 @@
 
-Syntax * foo(Syntax * syn, Environ * env) {
+Syntax * foo(Syntax * syn, const Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_f(0, syntax (t), syn);
   Syntax * s = replace(syntax{sizeof(t);}, m, mark);

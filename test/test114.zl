@@ -1,6 +1,6 @@
 // this exmaple doesn't currently work
 
-Syntax * w_get_set(Syntax * syn, Environ * env) {
+Syntax * w_get_set(Syntax * syn, const Environ * env) {
   Mark * mark = new_mark();
   Match * m = match_args(0, syntax (type, var), syn);
   Context * context = empty_context();
