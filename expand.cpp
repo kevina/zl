@@ -449,6 +449,34 @@ struct Macro : public MacroInfo, public Declaration, public Symbol {
 
 MapSource_ExpansionOf * Macro::macro_ci = NULL;
 
+extern "C"
+const Syntax * zli_handle_macro_export(const Syntax * exprt, Mark * mark,
+                                       const Syntax * p, const Syntax * s)
+{
+  const Marks * export_to = (p ? s->part(0) : s->arg(0))->what().marks;
+  SyntaxBuilder syn;
+  syn.add_part(SYN(SymbolName("macro_export", export_to)));
+  syn.add_part(p->part(0));
+  for (parts_iterator 
+         i = exprt->parts_begin(), e = exprt->parts_end(); i != e; ++i) 
+  {
+    Syntax * sym = *i;
+    sym = new_syntax(SymbolName(sym->what().name, 
+                                add_mark(sym->what().marks, mark)), 
+                     (*i)->str_);
+    if (sym->what().name == "top-level") {
+      mark->export_tl = true;
+      mark->export_to = normalize(export_to);
+      mark->also_allow = normalize((*i)->what().marks);
+      syn.add_part(SYN(SYN("tl_this_mark"), sym));
+    } else {
+      syn.add_part(SYN(SYN("symbol"), sym));
+    }
+  }
+  return syn.build();
+  //printf(">>%s\n", ~macro_export->to_string());
+}
+
 struct SimpleMacro : public Macro {
   const char * what() const {return "simple-macro";}
   //const SourceFile * entity;
@@ -489,30 +517,8 @@ struct SimpleMacro : public Macro {
     using macro_abi::Syntax;
     const Syntax * macro_export = NULL;
     Mark * mark = new Mark(env);
-    if (exprt) {
-      const Marks * export_to = (p ? s->part(0) : s->arg(0))->what().marks;
-      SyntaxBuilder syn;
-      syn.add_part(SYN(SymbolName("macro_export", export_to)));
-      syn.add_part(p->part(0));
-      for (parts_iterator 
-             i = exprt->parts_begin(), e = exprt->parts_end(); i != e; ++i) 
-      {
-        Syntax * sym = *i;
-        sym = new_syntax(SymbolName(sym->what().name, 
-                                    add_mark(sym->what().marks, mark)), 
-                         (*i)->str_);
-        if (sym->what().name == "top-level") {
-          mark->export_tl = true;
-          mark->export_to = normalize(export_to);
-          mark->also_allow = normalize((*i)->what().marks);
-          syn.add_part(SYN(SYN("tl_this_mark"), sym));
-        } else {
-          syn.add_part(SYN(SYN("symbol"), sym));
-        }
-      }
-      macro_export = syn.build();
-      //printf(">>%s\n", ~macro_export->to_string());
-    }
+    if (exprt) 
+      macro_export = zli_handle_macro_export(exprt, mark, s, p);
     Match * m = match(NULL, parms, p, 1, mark);
     if (!m)
       throw error(p, "Wrong number of arguments or other mismatch in call to %s.", ~real_name.name);

@@ -154,7 +154,7 @@ TYPEOF = <.typeof> "typeof" "(" {EXP} ")";
 SYNTAX = 
     <syntax> "syntax" {SYNTAX_P}?
   / <syntax> "raw_syntax" {SEXP_R}
-  / <syntax> "syntax_d" (<<mid ->> {MID});
+  / <syntax_d> "syntax_d" (<<mid ->> {MID});
 
 SYNTAX_P =
    {SYNTAX_ID} / {BRACE} / {PARAN} / {BRACK};

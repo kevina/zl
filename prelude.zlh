@@ -212,6 +212,9 @@ macro symbol_exists(sym,where,m = mark, e = environ) {symbol_exists`internal(sym
 // Macro API with quasiquote support
 //
 
+// used by expansion of proc_macro, do not use directly
+__ct_callback Syntax * zli_handle_macro_export(Syntax * exprt, Mark * mark,
+                                               Syntax * p, Syntax * s);
 macro fluid repl() {NULL;}
 fluid_syntax quasiquote;
 Syntax * parse_quasiquote(Syntax * in, Environ * env);
@@ -220,7 +223,7 @@ Syntax * parse_match(Syntax * in, Environ * env);
 make_macro match parse_match;
 __raw(macro match_parts (pattern with @rest) 
       (call match (. pattern with :(match_f (` match_parts_f internal)) @rest)));
-Syntax * parse_proc_macro(Syntax *, Environ *);
+Syntax * parse_proc_macro(Syntax *);
 make_macro proc_macro`syntax parse_proc_macro;
 make_macro proc_smacro`syntax parse_proc_macro;
 

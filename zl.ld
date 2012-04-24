@@ -89,4 +89,5 @@
   environ_get_abi_info;
   match_aq_var;
   replace_w_antiquotes;
+  zli_handle_macro_export;
 };

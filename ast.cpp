@@ -4914,11 +4914,12 @@ namespace ast {
   //
 
   struct SyntaxC : public ExpLeaf {
-    SyntaxC() {}
+    SyntaxC(bool d = false) : direct(d) {}
     const char * what() const {return "syntax";}
     static Vector<const Syntax *> keep_me;
     const Syntax * syn_p;
     unsigned syn_num;
+    bool direct;
     SyntaxC * parse_self(const Syntax * p, Environ & env);
     void compile_prep(CompileEnviron & env);
     void compile(CompileWriter & f);
@@ -4938,7 +4939,9 @@ namespace ast {
     syn_p = parse_syntax_c(p);
     syn_num = (unsigned)-1;
     *env.for_ct = true;
-    type = env.types.inst(".ptr", env.types.inst("UnmarkedSyntax"));
+    type = env.types.inst(".ptr", direct 
+                          ? env.types.inst("Syntax")
+                          : env.types.inst("UnmarkedSyntax"));
     type = env.types.ct_const(type);
     return this;
   }
@@ -4952,9 +4955,9 @@ namespace ast {
     if (f.for_macro_sep_c) {
       f.printf("(member (deref (plus _syntaxes %d)) syn)", syn_num);
     } else if (f.for_compile_time()) 
-      f.printf("(cast (.ptr (struct UnmarkedSyntax)) %p)", syn_p); 
+      f.printf("(cast (.ptr (struct %s)) %p)", direct ? "Syntax" : "UnmarkedSyntax", syn_p); 
     else
-      f.printf("(cast (.ptr (struct UnmarkedSyntax)) 0)");
+      f.printf("(cast (.ptr (struct %s)) 0)", direct ? "Syntax" : "UnmarkedSyntax");
   }
 
   Vector<const Syntax *> SyntaxC::keep_me;
@@ -5468,6 +5471,7 @@ namespace ast {
     if (what == "noop")    return (new NoOp)->parse_self(p, env);
     //if (what == "empty")   return (new Empty)->parse_self(p, env);
     if (what == "syntax")           return (new SyntaxC)->parse_self(p, env);
+    if (what == "syntax_d")         return (new SyntaxC(true))->parse_self(p, env);
     if (what == "environ_snapshot") return (new EnvironSnapshot)->parse_self(p, env);
     if (what == "__builtin_va_start") 
       return (new GccBuiltIn("__builtin_va_start", 2, VOID_T))->parse_self(p, env);
