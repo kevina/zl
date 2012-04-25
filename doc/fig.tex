@@ -1,0 +1,167 @@
+%\renewcommand{\arraystretch}{1.0}
+{
+\small
+\setlength{\fboxsep}{0pt}
+\cornersize*{10pt}
+
+\newenvironment{rawtext}[1]
+  {\begin{tabular}{|l|}\hline\begin{minipage}{#1}}
+  {\end{minipage}\\\hline\end{tabular}}
+\newenvironment{syntax}[1]
+  {\begin{tabular}{|l|}\hline\begin{minipage}{#1}}
+  {\end{minipage}\\\hline\end{tabular}}
+\newenvironment{flow}
+  {\begin{tabular}{c}
+   \\[-8pt]}
+  {\\[-8pt] \\
+   \end{tabular}}
+\newenvironment{compiled}[1]{%
+\begin{Sbox}
+\begin{tabular}{#1}
+}{%
+\end{tabular}
+\end{Sbox} 
+\ovalbox{\TheSbox \hspace*{-2.5pt}}
+}
+
+\DefineVerbatimEnvironment
+  {figcode}{Verbatim}{fontsize=\small,baselinestretch=1.0,samepage=true}
+
+\newcommand{\thrule}{\rule{0pt}{9.5pt}}
+
+\newcommand{\transf}[1]{\rule[-3pt]{0pt}{12pt}$\downarrow$#1$\downarrow$}
+
+\newcommand{\Ol}{4.8in}
+\newcommand{\Il}{4.3in}
+\newcommand{\IIl}{3.5in}
+\newcommand{\IIIl}{3in}
+
+%\setlength{\fboxsep}{0pt}
+
+%\newcommand{\Ol}{3in}
+%\newcommand{\Il}{2.75in}
+%\newcommand{\IIl}{2.5in}
+%\newcommand{\IIIl}{2.25in}
+
+\begin{flow}
+  \begin{rawtext}{\Ol}
+  \begin{figcode}
+inline int f() {int x = 10; return x;}
+int main() {return f();}
+  \end{figcode}
+  \end{rawtext}
+  \\
+  \transf{PARSE}
+  \\
+  \begin{syntax}{\Ol}
+  \begin{figcode}
+(@ (stmt inline int f ("()" "") ("{}" "int x = 10; return x;")
+   (stmt int main ("()" "") ("{}" "return f();")))
+  \end{figcode}
+  \end{syntax}
+  \\
+  \transf{EXPAND \& COMPILE}
+  \\
+  \begin{compiled}{l}
+  \thrule \textit{TOP-LEVEL ENVIRONMENT}\\
+  \hline
+    \begin{flow}
+      \begin{syntax}{\Il}
+      \begin{figcode}
+(stmt inline int f ...)
+      \end{figcode}
+      \end{syntax}
+      \\
+      \transf{EXPAND}
+      \\
+      \begin{syntax}{\Il}
+      \begin{figcode}
+(fun f "()" int :inline ("{}" "int x = 10; return x;"})
+      \end{figcode}
+      \end{syntax}
+      \\
+      \transf{COMPILE}
+      \\
+      \begin{compiled}{l|l}
+        \multicolumn{2}{l}{\thrule FUN} \\
+        \hline
+        inline & \textit{true} \\
+        \hline
+        id & f \\
+        \hline
+        type & int \\
+        \hline
+        body & \begin{flow}
+          \begin{syntax}{\IIl}
+          \begin{figcode}
+("{}" "int x = 10; return x;")
+          \end{figcode}
+          \end{syntax}
+          \\
+          \transf{EXPAND \& REPARSE}
+          \\
+          \begin{syntax}{\IIl}
+          \begin{figcode}
+(block (stmt int x = 10)
+       (return (exp x)))
+          \end{figcode}
+          \end{syntax}
+          \\
+          \transf{COMPILE}
+          \\
+          \begin{compiled}{l}
+            \thrule BLOCK\\
+            \hline
+            \begin{flow}
+              \begin{syntax}{\IIIl}
+              \begin{figcode}
+(stmt int x = 10))
+              \end{figcode}
+              \end{syntax}
+              \\
+              \transf{EXPAND}
+              \\
+              \begin{syntax}{\IIIl}
+              \begin{figcode}
+(var x (int) (exp 10))
+              \end{figcode}
+              \end{syntax}
+              \\
+              \transf{COMPILE}
+              \\
+              \begin{compiled}{l}
+                \thrule VAR \\
+                \hline
+                ... \\
+              \end{compiled}
+            \end{flow} \\
+            \hline
+            \begin{flow}
+              \begin{syntax}{\IIIl}
+              \begin{figcode}
+(return (exp x))
+              \end{figcode}
+              \end{syntax}
+              \\
+              \transf{...}
+            \end{flow} \\
+          \end{compiled}
+        \end{flow}\\
+      \end{compiled}
+    \end{flow}
+    \\
+    \hline
+    \begin{flow}
+      \begin{syntax}{\Il}
+      \begin{figcode}
+(stmt int main ...)
+      \end{figcode}
+      \end{syntax}
+      \\
+      \transf{...}
+    \end{flow}
+    \\
+  \end{compiled}
+  \\
+\end{flow}
+}

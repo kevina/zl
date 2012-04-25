@@ -1,0 +1,164 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[12pt]{report}
+
+\usepackage{pslatex}
+\usepackage[T1]{fontenc}
+\usepackage[latin1]{inputenc}
+\usepackage{geometry}
+\geometry{letterpaper,pdftex,
+          top=1.25in,
+          footskip=0.75in,
+          bottom=1.25in,
+          left=1.25in,
+          right=1.25in}
+\usepackage{setspace}
+\usepackage{verbatim}
+\usepackage{mdwlist}
+\usepackage{multirow}
+
+\usepackage{graphicx}
+
+\IfFileExists{url.sty}{\usepackage{url}}
+                      {\newcommand{\url}{\texttt}}
+
+\usepackage{hyperref}
+\hypersetup{%
+    pdfborder = {0 0 0}
+}
+
+\usepackage[labelfont=bf]{caption}
+
+%\makeatletter
+%\usepackage{babel}
+%\makeatother
+
+\usepackage{fixltx2e}
+%%\usepackage{flafter}
+
+\usepackage{fancybox}
+\usepackage{fancyvrb}
+\VerbatimFootnotes
+% 1.5 = par indent, 2.5 = block quote indent
+\newenvironment{code}
+  {\Verbatim[xleftmargin=0.8em,fontsize=\small,baselinestretch=1.0,samepage=true]}
+%  {\endVerbatim}
+  {\endVerbatim\vspace{-2.6pt plus -0.87pt minus -0.87pt}}
+%  {\endVerbatim\vspace{-2.5pt plus -0.83pt minus -0.83pt}}
+\DefineVerbatimEnvironment
+  {code*}{Verbatim}{fontsize=\small,baselinestretch=1.0,samepage=true}
+\newenvironment{codef}
+  {\Verbatim[fontsize=\small,baselinestretch=1.0]}
+  {\endVerbatim\vspace{-\medskipamount}}
+\newenvironment{codefnum}
+ {\Verbatim[fontsize=\small,baselinestretch=1.0,numbers=left,numbersep=6pt]}
+ {\endVerbatim\vspace{-\smallskipamount}}
+\CustomVerbatimCommand{\sverb}{Verb}{fontsize=\small}
+%\usepackage{listings}
+%\lstset{basicstyle=\ttfamily\small,language={}}
+
+\newcommand{\ID}{{\tt\it ID}}
+\newcommand{\VALUE}{{\tt\it VALUE}}
+\newcommand{\FLAG}{{\tt\it FLAG}}
+
+\newcommand{\FIXME}[1]{[\textbf{FIXME}: \textit{#1}]}
+\newcommand{\FIXMEQ}[1]{[\textbf{FIXME?}: \textit{#1}]}
+\newcommand{\HELP}[1]{[\textbf{HELP}: \textit{#1}]}
+\newcommand{\FIXMEf}[1]{\footnote{\textbf{FIXME}: #1}}
+\newcommand{\FIXMEQf}[1]{\footnote{\textbf{FIXME?}: #1}}
+\newcommand{\NOTE}[1]{[\textbf{NOTE}: \textit{#1}]}
+%newcommand{\fixme}[1]{[\textbf{FIXME}: \textit{#1}]}
+%newcommand{\fixmeq}[1]{[\textbf{FIXME?}: \textit{#1}]}
+%newcommand{\fixmef}[1]{\footnote{\textbf{FIXME}: #1}}
+%newcommand{\fixmeqf}[1]{\footnote{\textbf{FIXME?}: #1}}
+\newcommand{\fixme}[1]{}
+\newcommand{\fixmeq}[1]{}
+\newcommand{\fixmef}[1]{}
+\newcommand{\fixmeqf}[1]{}
+%\newcommand{\NOTE}[1]{}
+\newcommand{\mynote}[1]{}
+%\newcommand{\comment}[1]{}
+
+\newcommand{\snip}[1]{\texttt{#1}}
+\DefineShortVerb{\|}
+
+\newenvironment{apil}
+  {\begin{list}{}{\leftmargin=0em\itemsep=\medskipamount\topsep=-\parskip}}
+  {\end{list}}
+\newenvironment{apill}
+  {\begin{list}{}{\leftmargin=1em\itemsep=-\parsep\topsep=-\parskip}}
+  {\end{list}}
+\newcommand{\kw}[1]{\textbf{#1}}
+
+\newenvironment{table-changes}
+  {\begin{table}[h]}
+  {\end{table}}
+
+\sloppy
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\hypersetup{
+  pdftitle={ZL},
+  pdfauthor={Kevin Atkinson}}
+
+\begin{document}
+
+\pagenumbering{roman}
+
+
+\begin{titlepage}
+\begin{center}
+\vspace*{\fill}
+{\huge ZL\\[0.5em]}
+{\large \it (\href{http://zl-lang.org}{zl-lang.org})}\\[\fill]
+{\large Kevin Atkinson}\\[\fill]
+{\Large \textsc{Draft}\\[0.5em]}
+{\large \today}\\[\fill]
+Copyright \copyright\ Kevin Atkinson\ 2011--2012\\
+All Rights Reserved
+\end{center}
+\end{titlepage}
+
+\pagebreak
+\setcounter{page}{2}
+
+\begingroup
+\onehalfspacing
+
+%% Used to check spacing around code blcoks
+%\noindent
+%XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+%\begin{code}
+%XXXXXXXXXXXXXXXXXXXXXXXXX
+%\end{code}
+%XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+%\chapter*{Abstract}
+%\input{abstract}
+
+\chapter*{Acknowledgment}
+\input{acknowledge}
+
+\endgroup
+
+\tableofcontents
+%\listoffigures
+%\listoftables
+
+\pagebreak
+\setcounter{page}{1}
+\pagenumbering{arabic}
+
+\begingroup
+\onehalfspacing
+
+\include{body}
+
+\endgroup
+
+\bibliographystyle{plain}
+\bibliography{zl}
+
+\end{document}
+
