@@ -538,7 +538,7 @@ Figure \ref{fig} demonstrates ZL's parsing and expansion process.
 \begin{figure}
 \begin{center}
 \UndefineShortVerb{\|}
-\input{fig.tex}
+\thefig
 \DefineShortVerb{\|}
 \end{center}
 \caption{How ZL compiles a simple program.  The body of \texttt{f} is
@@ -1635,11 +1635,11 @@ in the expansion of |plus_10(x)| in |main|:
 In particular, a second mark is added to |x'0|, making it |x'0'1|.
 This symbol then resolves to the |x| local to the macro |plus_10|.  In
 addition, |x'1| resolves to the global |x| constant\footnote{In pattern
-based macros there is an implicit call to |new_mark| at the point
-where the macro was defined; hence, the |'1| mark captures the
-environment where |mk_plus_10| (expanded from |mk_plus_n|) 
+based macros there is an implicit call to \texttt{new\_mark} at the point
+where the macro was defined; hence, the \texttt{'1} mark captures the
+environment where \texttt{mk\_plus\_10} (expanded from \texttt{mk\_plus\_n}) 
 is defined, which includes the global
-constant |x|.} and the unmarked |x| resolves to the |x| local to
+constant \texttt{x}.} and the unmarked |x| resolves to the |x| local to
 |main|.  Thus, hygiene is maintained in spite of three different |x|'s
 in the expansion.
 
