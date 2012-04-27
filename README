@@ -31,7 +31,7 @@ make sure you enable the zls language:
 The latest version of zls is also available in github at
 https://github.com/kevina/zl-gcc.  Just checkout master and follow the
 instructions above, but skip the patching part as the git
-repo. included the full source.
+repository includes the full source.
 
 ZL Build instructions:
 
@@ -41,7 +41,7 @@ ZL Build instructions:
   # use "make fake-install" to install a link to to zlc so you can
   # easily compile zl programs
 
-To test ZL, make sure "zls" in your path
+To test ZL, make sure "zls" in your path and then:
   make -C test test
 
 To create executable use the "zlc" perl script, which acts as a

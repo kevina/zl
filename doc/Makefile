@@ -1,8 +1,6 @@
 
 all: zl.pdf
 
-SOURCE=
-
 .DELETE_ON_ERROR: zl.pdf
 zl.pdf: zl.tex zl.bib body.tex acknowledge.tex copyright.tex fig.tex
 	-rm *.aux
@@ -25,7 +23,3 @@ clean:
           *.toc *.lof *.lot *.pdf *.ps
 	rm -f *.out
 	rm -f *.4ct *.4tc fig.png *.html *.lg *.xref *.idv *.css
-
-
-
-

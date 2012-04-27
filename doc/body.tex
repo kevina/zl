@@ -264,7 +264,7 @@ however, the |symbol_exists| and |error| function requires a syntax
 object.  Hence, \verb/``WHAT/ is used to extract the syntax object
 associated with the pattern variable and store it in a local variable.
 
-\paragraph{Antiquotes}
+\paragraph{Antiquotes.}
 
 Rather than using pattern variables, it is possible to use antiquotes
 to store the result of the match in local variables by prefixing the
@@ -353,7 +353,7 @@ special syntax to make the template instance to behave as expected,
 and the second is to bend normal hygiene rules so that |vector| and the
 members of the class are visible outside the macro.
 
-\paragraph{Special Template Syntax}
+\paragraph{Special Template Syntax.}
 
 Template classes have special syntax that ZL needs to know to
 recognize; which is done using the |template| form (which is used
@@ -364,7 +364,7 @@ duplicate symbols should be merged when linking.  Other than that, the
 body of the |mk_vector| is the same as it would be for a template
 class in ZL.
 
-\paragraph{Bending Hygiene}
+\paragraph{Bending Hygiene.}
 \label{macro-export-intro}
 
 Normal hygiene rules will normally prevent the |mk_vector| macro from
@@ -661,8 +661,9 @@ new_syntax {
 }
 \end{code}
 by adding a new prioritized choice to the special |CUSTOM_STMT|
-production.  The other common way to add new syntax is to add a new
-sequence item; for example,
+production in which the special |_cur| production refers to the
+previous version of the |CUSTOM_STMT|.  The other common way to add
+new syntax is to add a new sequence item; for example,
 \begin{code}
 new_syntax {
   STRUCT_UNION_PARMS := _cur (:<fix_size> ":" "fix_size" "(" {EXP} ")" )?;
