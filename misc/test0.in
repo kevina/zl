@@ -1,9 +1,0 @@
-(block 
-  (var x) 
-  (assign (id x) (const 20))
-  (loop 
-    (block
-      (assign (id x) (+ (id x) (const 2)))
-      (print (id x)))))
-
-

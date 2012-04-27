@@ -1,8 +1,0 @@
-TOP = <ops> {GROUP}+
-
-GROUP = { "none" / "left" / "right" / "list" }
-        (<oplist> {OP}+)
-
-OP = { "exp" / "prefix" / "postfix" / "bin" }
-     {ID}
-     {TOKEN / {ID} {TOKEN}}

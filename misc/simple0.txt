@@ -1,9 +1,0 @@
-{
-  var i;
-  i = 0;
-  loop {
-    if (i == 10) break;
-    print i;
-    i = i + 1;
-  }
-}

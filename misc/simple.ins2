@@ -1,6 +1,0 @@
-map while(TEST, BODY) 
-  = loop {
-      if (!TEST) break;
-      BODY;
-    };
-

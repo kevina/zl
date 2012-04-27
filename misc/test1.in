@@ -1,9 +1,0 @@
-(block 
-  (var x) 
-  (assign (id x) (const 20))
-  (if (eq (id x) (const 20))
-      (print (const 1))
-      (print (const 2))))
-
-
-

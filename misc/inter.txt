@@ -1,9 +1,0 @@
-(function ((int x) (int y) (int z)) 
-          int
-          (block ((int a) (int b) (int c)) 
-            (init a 10)
-            (assign a (+ b c))
-            (init c 20)))
-
-
-
