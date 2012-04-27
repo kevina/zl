@@ -4,7 +4,7 @@ all: zl.pdf
 SOURCE=
 
 .DELETE_ON_ERROR: zl.pdf
-zl.pdf: zl.tex zl.bib body.tex acknowledge.tex fig.tex
+zl.pdf: zl.tex zl.bib body.tex acknowledge.tex copyright.tex fig.tex
 	-rm *.aux
 	pdflatex -file-line-error -halt-on-error zl.tex
 	bibtex zl
@@ -24,7 +24,7 @@ clean:
 	rm -f *.aux *.bbl *.idx *.ind \
           *.toc *.lof *.lot *.pdf *.ps
 	rm -f *.out
-	rm -f *.4tc fig.png *.html *.lg *.xref *.idv *.css
+	rm -f *.4ct *.4tc fig.png *.html *.lg *.xref *.idv *.css
 
 
 

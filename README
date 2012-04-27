@@ -6,8 +6,10 @@ can be found at http://www.hpl.hp.com/personal/Hans_Boehm/gc/.  It is
 also available Ubuntu under the package names libgc1c2 and libgc-dev.
 
 Also, in order to produce executable code, ZL requires a modified
-version of gcc.  So far gcc-4.4.0 has only been tested so its best to
-stick with that version.  Download gcc 4.4.0 from
+version of gcc.  If this is a release than a patch file should have
+been provided.  Most of the development has been done using gcc-4.4.0
+however later versions of gcc-4.4.* should work provided that the
+patch file applies cleanly.  Download gcc 4.4.0 from
 ftp://gcc.gnu.org/pub/gcc/releases/gcc-4.4.0 (gcc-core is all that is
 required) and apply the patch gcc-4.4.0-zl.patch.  When configuring
 make sure you enable the zls language:
@@ -26,6 +28,11 @@ make sure you enable the zls language:
   make install
   sudo ln -s /opt/gcc-4.4-zl/bin/gcc /usr/local/bin/zls
 
+The latest version of zls is also available in github at
+https://github.com/kevina/zl-gcc.  Just checkout master and follow the
+instructions above, but skip the patching part as the git
+repo. included the full source.
+
 ZL Build instructions:
 
   ./configure
@@ -39,3 +46,22 @@ To test ZL, make sure "zls" in your path
 
 To create executable use the "zlc" perl script, which acts as a
 drop-in replacement for cc/gcc and c++/g++.
+
+
+Copyright (C) Kevin Atkinson 2012
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation; either
+version 2.1 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public
+License along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301 USA or see http://www.gnu.org/licenses/lgpl-2.1.html.
+
