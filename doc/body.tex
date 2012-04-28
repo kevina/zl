@@ -672,9 +672,9 @@ new_syntax {
 adds extra syntax to the |class| form (used in the example in Section
 \ref{fix_size}).
 
-The |new_syntax| form works by creating a new parser which is then
-used for any text that has not been parsed yet in the current scope.
-This is not precisely defined yet, but for the most part it will work as
+The |new_syntax| form works by creating a new parser, which is then
+used for any text, within the current scope, that has not yet been parsed.
+This has not precisely defined yet, but for the most part it will work as
 expected.  A consequence of this rule is that redefining fundamental
 aspects of the grammar (such as strings, comments, deliminators) is
 unlikely to work.
@@ -1789,10 +1789,9 @@ The full version of the |new_mark_f| function is:
 Mark * new_mark_f(EnvironSnapshot *, bool export_tl, 
                   Context * export_to, Context * also_allow);
 \end{code}
-If |export_tl| is true, than all symbols that contain the newly
-created mark are exported to |export_to| and any top-level like
-namespace, which includes structure fields and module symbols.  The
-marked symbol may also contain any of the marks in |also_allow|.
+If |export_tl| is true, than all symbols top-level like symbols that
+contain the newly created mark are exported to |export_to|, this
+includes structure fields and module symbols.
 
 If a macro is expanded inside a function than any symbols created in
 the outermost scope of the expansion are not exported as the environment
@@ -1802,7 +1801,7 @@ the |macro_export| primitive which is used as follows:
 \begin{code}
 __raw(macro_export NAME tl_this_mark)
 \end{code}
-which will export export all symbols in the same scope where the
+This form will export all symbols in the same scope where the
 directive was used.  Unlike with the |symbol| directive, any symbols
 in an inner scope, are not exported.  For example, given
 \begin{code}
@@ -1820,6 +1819,21 @@ For simplicity of the implementation only marks created with
 in addition the context of |NAME| is ignored and the context of
 |export_to| (when creating the mark) is used instead.
 
+Putting it all together, the macro |foo()| could be written as:
+\begin{code}
+Syntax * foo(Syntax * call, Syntax * parms) {
+  Match * repl = match_f(NULL, syntax [NAME], call);
+  Mark * mark = new_mark_f(environ_snapshot(), true, 
+                           get_context(repl->var(syntax NAME)), NULL);
+  return replace(syntax {
+    __raw(macro_export NAME tl_this_mark);
+    /* body */
+  }, repl, mark);
+}
+\end{code}
+The |also_allow| allow paramter is most useful in the context of macro
+expanding to other macros and is thus not used here.
+
 \paragraph{Implementation.}
 
 The exporting of symbols is handled by creating an alias to the
@@ -1832,9 +1846,9 @@ When a new symbol is introduced by importing a module the additional
 marks are first applied as outlined in Section \ref{module-import}.
 Then, after the marks are applied, the new symbol is considered for
 exporting using the same criteria as if the symbol is defined normally
-except that the |tl_this_mark| directive is never used.  The
-|tl_this_mark| directive is not used because it is unclear how the
-directive should be handled as symbols imported from a module are
+except that the |tl_this_mark| directive is never used.  This
+directive is not used because it is unclear how it
+should be handled as symbols imported from a module are
 normally not considered to be in the same scope.
 
 \subsection{Fluid Binding}
