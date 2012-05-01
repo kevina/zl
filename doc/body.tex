@@ -523,8 +523,18 @@ the context in which they appear in the expansion.  Similarly, ZL
 cannot directly parse the body of a macro declaration, as it does not
 know the context in which the macro will ultimately be used.
 
+\pagebreak
+
 More precisely, the ZL parsing process involves three intertwined
-phases.  In the first phase \textit{raw text}, such as |(x+2)|, is
+phases as shown in Figure \ref{parsing-overview-fig}. 
+\begin{figure}
+\begin{center}
+\theoverviewfig
+\end{center}
+\caption{Overview of ZL's parsing process.}
+\label{parsing-overview-fig}
+\end{figure}
+In the first phase \textit{raw text}, such as |(x+2)|, is 
 parsed.  Raw text is converted into an intermediate form known as a
 \textit{syntax object}, which can still have raw-text components.  
 (Throughout this paper we show syntax objects as
@@ -534,7 +544,7 @@ syntax objects by expanding macros until a fixed point is reached.  In
 the third phase, the fully expanded syntax object is compiled into an
 \textit{AST}.
 
-Figure \ref{fig} demonstrates ZL's parsing and expansion process.  
+Figure \ref{fig} details ZL's parsing and expansion process.  
 \begin{figure}
 \begin{center}
 \UndefineShortVerb{\|}
