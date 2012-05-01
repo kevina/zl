@@ -551,8 +551,9 @@ Figure \ref{fig} details ZL's parsing and expansion process.
 \thefig
 \DefineShortVerb{\|}
 \end{center}
-\caption{How ZL compiles a simple program.  The body of \texttt{f} is
-  reparsed and expanded as it is being compiled.}
+\caption[How ZL compiles a simple program.]%
+  {How ZL compiles a simple program.  The body of \texttt{f} is
+   reparsed and expanded as it is being compiled.}
 \label{fig}
 \end{figure}
 The top box contains a simple program as raw text, which is first parsed.
@@ -1331,7 +1332,8 @@ Syntax * parse_myclass(Syntax * p, Environ * env) {
 }
 make_syntax_macro class parse_myclass;
 \end{codefnum}
-\caption{Macro to fix the size of a class.  All \texttt{...} in
+\caption[Macro to fix the size of a class.]%
+  {Macro to fix the size of a class.  All \texttt{...} in
   this figure are literal.}
 \label{fix_size-fig}
 \end{figure}
