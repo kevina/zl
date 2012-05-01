@@ -1,3 +1,7 @@
+ZL is a C compatible and C++ like programming language that focuses on
+extensiblilty and giving the programmer control over how high-level
+constructs (such as classes) are implemented.
+
 ZL is being developed on Ubuntu 10.04, but it should work with any
 Linux system.  Other Unix-like systems may work.
 
