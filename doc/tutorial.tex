@@ -1,0 +1,440 @@
+\chapter{ZL Tutorial}
+\label{zl-tutorial}
+
+This chapter will give you an overview of ZL with a focus on ZL
+extensibility features.
+
+\section{Hello World}
+
+ZL basic syntax is the same as it is in C or C++ therefor a simple
+Hello World program is nothing but:
+
+\begin{code}
+int main() {
+  printf("Hello World!")
+}
+\end{code}
+
+To compile, save this file to |hello.zl| and then use zlc:
+\begin{code}
+zlc hello.zl
+\end{code}
+which should create an excitable |a.out| which you can run.
+
+Note that there is no |#include| line in the source file.  The ZL
+prelude includes some of the more common functions from the C standard
+library and ZL source files are not run through the C preprocessor
+by default.
+
+The driver script |zlc| is meant to act as a drop drop in replacement
+for GCC.  For example,
+\begin{code}
+zlc main.zl file1.cpp file2.zlp -o main
+\end{code}
+compiles the pure ZL source file |main.zl|, the C++ source file
+|file1.cpp|, and the ZL source file |file2.zlp| into an executable
+|main|.  Each file is compiled slightly differently based on the
+extension as ZL has different modes for C, C++, and ZL source files.
+In addition C, C++, and ZL source files with the |.zlp| extension are
+run through the C preprocessor to handle includes and other
+token-level macros that the higher-level ZL macro processor can not
+handle.  As already mentioned, pure ZL files with |.zl| extension are
+not preprocessed.
+
+\section{Macro Introduction: A Perl Like Or}
+\label{pattern-macros}
+
+C's or operator returns a boolean value.  Sometimes it would be more
+convenient if it returns the first true value like Perl does.  For
+example if we wanted to use the first non-NULL pointer we could use:
+\begin{code}
+some_call(or(p1,p2))
+\end{code}
+where |p1| and |p2| are pointers.  Defining |or| as a function (or even
+a function template) will not work because the |or| macro should not
+evaluate the second argument if the first one evaluates to a true
+value.
+
+Fortunately, ZL makes it very easy to define simple macros such as this
+using the |macro| form:
+\label{or}
+\begin{code}
+macro or(x, y) { ({typeof(x) t = x; t ? t : y;}); }
+\end{code}
+(In ZL, as in GCC, the |({...})| is a statement expression whose value
+is the result of the last expression, and |typeof(x)| gets the type of
+a variable.)  Like Scheme macros~\cite{syn-abst}, ZL macros
+are hygienic, which means that they respect lexical scope.  For
+example, the |t| used in |or(0.0, t)| and the |t| introduced by the
+|or| macro remain separate, even though they have the same symbol
+name.
+
+\paragraph{Syntax Macros.}
+
+It is even possible to locally redefine the behavior of the built-in
+\verb/||/ operator so that we could instead just use \verb/p1 || p2/.
+All that is required to archive this transformation is to change the
+|macro| to |smacro|:
+\begin{code}
+smacro or(x, y) { ({typeof(x) t = x; t ? t : y;}); }
+\end{code}
+The |smacro| form defines a \textit{syntax macro} which operates on
+syntax, as oppose to the |macro| form which defines a \textit{function-call
+  macro} in which calls to it take the shape of a function call.
+
+The syntax version of the |or| macro works because ZL performs most of
+its operations using interment S-expression like language.  For
+example \verb/p1 || p2/ is parsed as |(or p1 p2)|, before being
+converted into an AST (details of which are given in Chapter
+\ref{parsing})
+
+\paragraph{Keyword Parameters.}
+
+The |or| macro above has too \textit{positional} parameters.  Macros
+can also have \textit{keyword} parameters and \textit{default values}.
+For example:
+\begin{code}
+macro sort(list, :compar = strcmp) {...}
+\end{code}
+defines the macro |sort|, which takes the keyword argument |compar|,
+with a default value of |strcmp|.  A call to sort will look something
+like {\tt|sort(list,| |:compar = mycmp)|}.
+
+\section{Classes and Templates}
+\label{template-intro}
+
+ZL also supports a limited subset of C++ which includes classes and
+very basic template support.  Classes are defined if the usual way.  ZL
+recognizes the template syntax, but templates are defined using a
+macro and must be explicitly instantiated by calling the macro.  For
+example, to use a |vector| of type |int|:
+
+\begin{code}
+mk_vector(int)
+
+int main() {
+  vector<int> con;
+}
+\end{code}
+
+We will revisit the |mk_vector| macro in Section \ref{mk_vector}.
+
+\section{Extending The Grammar: Foreach}
+\label{foreach}
+
+One very common operation is to iterate through the elements of a
+container.  It is such a common operation that support for it was
+incorporated latest version of the C++ standard via special version of
+the |for| loop.  ZL doesn't support this version, but we can very
+easily define a similar construct.  Instead of extending the syntax of
+|for| we will define a new syntax form: |foreach|.  The usage of the
+form is straightforward; for example, the following code prints all the
+elements of a vector:
+\begin{code}
+int main() {
+  vector<int> con;
+  ...
+  foreach (elm in con) {
+    printf("%d\n");
+  }
+}
+\end{code}
+
+The first thing we need to do to support the new |foreach| form is to
+define some new syntax.  ZL provides basic support for new syntax by
+extending the PEG using the |new_syntax| form.  We add support the new
+loop form by rewriting the |CUSTOM_STMT| production as follows:
+\begin{code}
+new_syntax {
+  CUSTOM_STMT := _cur / <foreach> "foreach" "(" {ID} "in" {EXP} ")" {STMT};
+}
+\end{code}
+The special |_cur| production refers to the previous version of the
+|CUSTOM_STMT| and anything between |{}| becomes a subpart of the
+syntax object that is named between the |<>|. 
+With the new syntax defined the definition of the macro is fairly
+straightforward:
+
+\begin{code}
+smacro foreach (VAR, WHAT, BODY) {
+  typeof(WHAT) & what = WHAT;
+  typeof(what.begin()) i=what.begin(), e=what.end();
+  for (; i != e; ++i) {
+    typeof(*i) & VAR = *i;
+    BODY;
+  }
+}
+\end{code}
+
+Chapter \ref{parsing} gives more details on the PEG and how to
+extend it.
+
+\section{Procedural Macros}
+\label{foreach-proc}
+
+All the macros shows so far are simple \textit{pattern-based} macros.
+Sometimes we need to do more than simply rearrange syntax.  For
+example, in the |foreach| macro of the previous section, if the
+container lacks a |begin| or |end| method ZL will return a cryptic
+error message which will refer to the expanded output, rather than the
+user input; it would be far better to give a straightforward error
+message which refers to the user input.  For these more complex tasks
+ZL provides support for procedural macros which can take action base on
+their input.
+
+A procedural macro is a function which maps one syntax object to
+another.  ZL provides special syntax support for defending these
+functions.  They look a lot like pattern-based macros expect that the
+keyword |proc| proceeds the macro and the body of the macro is ZL code
+rather than the expanded output.  Syntax is created using special
+quasiquote syntax.  For example, the following macro defines a
+version of the |foreach| which returns an error message if the
+container lacks the proper methods:
+\begin{code}
+proc smacro foreach (VAR, WHAT, BODY) {
+  Syntax * what = ``WHAT;
+  if (!symbol_exists(``begin, what) || !symbol_exists(``end, what))
+    return error(what, "Container lacks begin or end method.");
+  return `{
+    typeof(WHAT) & what = WHAT;
+    typeof(what.begin()) i=what.begin(), e=what.end();
+    for (;i != e; ++i) {typeof(*i) & VAR = *i; BODY;}
+  };
+}
+\end{code}
+
+The |symbol_exists| and |error| are API functions which are callbacks
+into the compiler.  The \verb/``/ and \verb/`{/ are quasiquotes; the
+first forms quotes an identifier; the second form quotes arbitrary
+syntax.  Pattern variables can only be used inside quasiquotes;
+however, the |symbol_exists| and |error| function requires a syntax
+object.  Hence, \verb/``WHAT/ is used to extract the syntax object
+associated with the pattern variable and store it in a local variable.
+
+\paragraph{Antiquotes.}
+
+Rather than using pattern variables, it is possible to use antiquotes
+to store the result of the match in local variables by prefixing the
+variable with a \verb/$/.  For example, here is a version of foreach
+that uses antiquotes instead:
+\begin{code}
+proc smacro foreach ($var, $what, $body) {
+  if (!symbol_exists(``begin, what) || !symbol_exists(``end, what))
+    return error(what, "Container lacks begin or end method.");
+  return `{
+    typeof($what) & what = $what;
+    typeof(what.begin()) i=what.begin(), e=what.end();
+    for (;i != e; ++i) {typeof(*i) & $var = *i; $body;}
+  };
+}
+\end{code}
+
+When an antiquote is used when matching syntax the results of the
+match are stored in a local variable hence \verb/$body/ gets stored in
+the local variable |body|, which is then used for by the
+|symbol_exist| and |error| function.  When an antiquote is used inside
+quasiquotes than it is replaced with the value of the expression; in
+most cases this is a local variable.
+
+\paragraph{Additional Info.}
+
+Shown here is only a small taste of what procedural macros can do.  ZL
+procedural macros are very powerful and in many ways, act more as
+an extension to the compiler than a simple macro that transforms text
+from one form to another.  Chapter \ref{proc-macros} gives additional
+information on procedural macros, which includes a lower level and
+more powerful API.
+
+\section{Templates and Bending Hygiene}
+\label{mk_vector}
+
+As already mentioned in Section \ref{template-intro}, ZL does not have builtin
+template support.  Instead a macro can be used to create instances of
+a template.  Figure \ref{vector-impl} shows the macro and supporting
+code to create for the |vector| template class.
+\begin{figure}
+\begin{codef}
+template vector;
+
+macro mk_vector (T,@_) :(*)
+{
+  __once vector<T>
+  class vector<T> {
+  private:
+    T * data_;
+    T * end_;
+    T * storage_end_;
+  public:
+    typedef T * iterator;
+    typedef const T * const_iterator;
+    typedef size_t size_type;
+
+    iterator begin() const {return data_;}
+    iterator end()   const {return end_;}
+    bool empty() const {return data_ == end_;}
+    size_t size() const {return end_ - data_;}
+    size_t max_size() const {return (size_t)-1;}
+    size_t capacity() const {return storage_end_ - data_;}
+    T & front() const {return *data_;}
+    T & back() const {return *(end_-1);}
+    T & operator[](size_t n) const {return data_[n];}
+    vector<T>() : data_(NULL), end_(NULL), storage_end_(NULL) {}
+    vector<T>(size_t n) : ... {resize(n);}
+    vector<T>(const vector<T> & other) : ... {...}
+    void push_back(const T & el) {...}
+    void pop_back() {...}
+    void assign(const T * d, unsigned sz) {...}
+    void resize(size_t sz) {...}
+    void erase(T * pos) {...}
+    ~vector<T>() {...}
+    ...
+  };
+}
+\end{codef}
+\caption{ZL implementation of vector template class}
+\label{vector-impl}
+\end{figure}
+
+There are two things to note about this macro, the first is some
+special syntax to make the template instance to behave as expected,
+and the second is to bend normal hygiene rules so that |vector| and the
+members of the class are visible outside the macro.
+
+\paragraph{Special Template Syntax.}
+
+Template classes have special syntax that ZL needs to know to
+recognize; which is done using the |template| form (which is used
+differently than it is in C++).  In addition templates have special
+linkage rules so that there are not multiple instances of the same
+template in the executable, hence |__once| is used to declare that
+duplicate symbols should be merged when linking.  Other than that, the
+body of the |mk_vector| is the same as it would be for a template
+class in ZL.
+
+\paragraph{Bending Hygiene.}
+\label{macro-export-intro}
+
+Normal hygiene rules will normally prevent the |mk_vector| macro from
+working as expected as all symbols created will only be visible to the
+macro itself.  To fix this ZL macros supports special syntax,
+the~|:(*)|, which will \textit{export} top-level symbols from the
+macro (which includes the members of the vector class).  Details of
+exactly what is exported and how are given in Section
+\ref{macro-export}.
+
+It is also possible to export specific symbols by specifying the symbol
+name instead of~|*|, again see Section \ref{macro-export} for the details.
+
+\section{Bending Hygiene Part 2: Fancy Loops}
+\label{fluid-intro}
+
+In the previous section we needed to make the macro introduced symbols
+visible outside the context of the macro.  Sometimes it is necessary
+to make symbols visible to the parameters of the macros.  For this
+case, ZL provides a different mechanism, the \textit{fluid binding}.
+For example, if we wanted to create a version of the for loop which
+also supports a Perl style redo we might try
+\begin{code}
+macro redo() {goto redo;}
+
+smacro for (INIT, TEST, INC, BODY) {
+  for (INIT; TEST; INC) {
+    redo():
+    BODY;
+  }
+}
+\end{code}
+(where the |for| used in the macro will refer to the builtin |for| and
+not the macro itself and |redo:| is a label for the goto in the |redo|
+macro).  A simple usage of the macro could be:
+
+\begin{code}
+int main() {
+  for (int i = 0; i < 10; ++i) {
+    ++i;
+    printf("%d\n", i);
+    if (i % 3 == 0)
+      redo();
+  }
+}
+\end{code}
+
+Unfortunately this will not work.  The problem is the |redo| label
+introduced in the |for| macro is private to that macro.  Exporting the
+label will not help, as the label used in the |redo| macro is still
+lexically scoped.  The export syntax only has meaning to new binding
+forms not existing ones, hence that form can't be used.  ZL does provide a
+way to make both |redo| labels totally unhygienic (see Section
+\ref{replace_context}), but that solution will not compose well \cite{syn-parm}.
+
+What is really needed is something akin to dynamic scoping in the
+hygiene system.  That is, for the |redo| label to be scoped based on
+where it is used when expanded, rather than where it is written in the
+macro definition.  This can be done by marking the |redo| symbol as
+|fluid| using |fluid_label| at the top level and then using |fluid|
+when defining the symbol in local scope.  For example, the following
+will allow the above to compile:
+
+\begin{code}
+fluid_label redo;
+
+macro redo() {goto redo;}
+
+smacro for (INIT, TEST, INC, BODY) {
+  for (INIT; TEST; INC) {
+    fluid redo:
+    BODY;
+  }
+}
+\end{code}
+
+The general form to declare fluid binding is |fluid_binding|, the
+details of which are described in Section \ref{fluid}
+
+\section{User Types}
+\label{user-types-intro}
+
+ZL does not have a built-in notion of classes, rather the type system
+has what is known as a \textit{user type} of which classes are built
+from using macros.  A user type has two parts: a type, generally a
+|struct|, to hold the data for the class instance, and a collection of
+symbols for manipulating the data.
+
+The collection of symbols is a \textit{module}.  For example,
+\begin{code}
+module M { int x;
+           int foo(); }
+\end{code}
+defines a module with two symbols.  Module symbols are used by either
+importing them into the current namespace, or by using the
+special syntax |M::x|, which accesses the |x| variable in the above
+module.
+
+A user type is created by using the |user_type| primitive, which
+serves as the module associated with the user type.  A type for the
+instance data is specified using |associate_type|.
+
+As an example, the class\footnote{For simplicity, we leave off access
+  control declarations and assume all members are public in this
+  work when the distinction is unimportant.}
+\begin{code}
+class C { int i; 
+          int f(int j) {return i + j;} };
+\end{code}
+roughly expands to:
+\begin{code}
+user_type C {
+  struct Data {int i;};
+  associate_type struct Data;
+  macro i (:this ths = this) {...}
+  macro f(j, :this ths = this) {f`internal(this, j);}
+  int f`internal(...) {...}
+}
+\end{code}
+which creates a user type |C| to represent a class |C|; the structural
+type |Data| is used for the underlying storage.  The macro |i|
+implements the |i| field, while the |f| macro implements the |f|
+method by calling the function |f`internal| with |ths| as the first
+parameter.  Additional details of how classes are implemented are
+given in Chapter \ref{class-user-type}.
+

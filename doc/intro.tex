@@ -1,0 +1,50 @@
+\chapter{Introduction}
+\label{intro}
+
+C is a simple language that gives the user considerable control
+over how source code maps to machine code.  For example, structures are
+guaranteed to be laid out in a particular way, dynamic memory is not
+allocated unless it is asked for, all function calls are explicit, and
+the only functions created are the ones that are explicitly defined.
+For this reason, most low-level system code is written in C.  Nevertheless
+programmers want to use high-level language constructs for various
+reasons, and such use generally relinquishes low-level control.
+For example, C++ does not guarantee a particular layout of objects.
+This lack of control can cause a number of problems, including
+compatibility problems between different releases of software and
+between different compilers.
+
+A programmer can regain control over higher-level language feature
+implementation through an extensible compiler.  To provide such
+extensibility, macros for C are an ideal choice.  Macros for C let a
+programmer build higher-level constructs from a small core, rather
+than forcing a programmer to accept a built-in
+implementation. Moreover, since macros elevate language extensions to
+the level of a library, individual advanced language features are only
+active when loaded.
+
+A simple macro system, such as the C preprocessor, is not adequate for
+this purpose, nor is any macro system that acts simply as a
+preprocessor.  Rather, the macro system must be an integral part of
+the language that can do more than rearrange syntax.  In addition, the
+C base language must be extended to support the necessary primitives
+for implementing higher-level features.  ZL, a new C-compatible and
+C++-like systems programming language in development, addresses both
+of these needs.
+
+This document presents ZL.  Chapter \ref{zl-tutorial} gives an into of
+ZL features in the form of a tutorial.  The other chapters give a
+detail overview of ZL features.  The appendices give information on
+some of ZL's implementation.
+
+The document is a work in progress.  Proofreading of this document is
+greatly appreciated.  The easiest thing is to just edit the source
+(please, no reformatting!) and submit a pull request with
+your corrections.
+
+%% ZL Goals:
+
+%% \begin{itemize}
+%% \item Customizable
+%% \item Control
+%% \end{itemize}

@@ -1,0 +1,82 @@
+\chapter{Implementation Status and Performance}
+\label{status}
+
+The current ZL prototype supports most of C and an
+important subset of C++.  For C, the only major feature not supported
+is bitfields, mainly because the need has not arisen.  C++ is a rather
+complicated language, and fully implementing it correctly is beyond
+the scope of our research.  We aim to implement enough of C++ to
+demonstrate our approach; in particular, we support single
+inheritance, but currently do not support multiple inheritance,
+exceptions, or templates.
+
+As ZL is at present only a prototype compiler, the overall compile
+time (in version 0.3) when compared to compiling with GCC 4.4
+is 2 to 3 times slower.  However, ZL is designed to have little to no
+impact on the resulting code.  ZL's macro system imposes no run-time
+overhead.
+
+The ZL compiler transforms higher level ZL into a low-level
+S-expression-like language that can best be described as C with
+Scheme syntax.  Syntactically, the output is very similar to fully
+expanded ZL as shown in Figure \ref{fig}.
+The transformed code is then passed to a modified version
+of GCC 4.4. When pure C is passed in we are very careful to avoid any
+transformations that might affect performance.  The class macro
+currently implements a C++ ABI that is comparable to a traditional
+ABI, and hence should have no impact on performance.
+
+\section{C Support}
+
+To demonstrate that ZL can support C programs, two well-known programs
+were compiled with ZL: bzip2 and gzip.  Bzip2 was compiled without
+modifications, but gzip required some minor modification because it was
+an older C program and used some C syntax that is not a subset of C++:
+K\&R-style function declarations were transformed into the newer ANSI C
+style, and one instance of |new| as a variable was renamed to |new_|.
+
+Overall, compile times were 2 to 3 times slower with ZL in comparison
+to compiling with GCC 4.4.  However, both programs compiled correctly,
+produced correct results, and had similar run times to the
+GCC-compiled versions.
+
+\section{C++ Support}
+\label{c++-support}
+
+To evaluate ZL's suitability to compile C++ programs, we chose to
+compile randprog~\cite{randprog}, which is a small C++ program that
+generates random C programs.  Randprog uses inheritance and other
+important C++ features, such as overloading and nondefault
+constructors.  In addition, it uses a few C++ features that ZL does not
+yet support, so we changed randprog in small ways to compensate.  These
+changes include reworking the command-line argument parsing, which
+used of a library that requires many modern C++ features; explicit
+instantiation of |vector| instances; changing uses of the |for_each|
+template function into normal |for| loops; and reworking some functions
+to avoid returning complex objects.
+
+Randprog was verified to produce correct results by fixing the seed
+and comparing the generated program with a version of randprog
+compiled with GCC for several different seeds.  It was also
+instrumented with Valgrind and found free of memory errors.
+
+Overall compile time was around 2.5 times slower with ZL when compared to
+GCC 4.4.  A direct run-time performance comparison is of limited
+usefulness, since ZL does not use the same C++ library as GCC, but the
+runtime performance of the ZL-compiled version of randprog was up to
+twice as fast as the GCC-compiled version.
+
+\section{Debugging Support}
+\label{debugging-support}
+
+In error messages, ZL provides a full backtrace of what was expanded
+from where in the case of a compile time error involving macros.
+
+ZL provides very basic source level debugging support.  ZL makes an
+effort to keep track of line numbers and passes this information onto
+the debugger to provide for meaningful backtrace.  
+% FIXME: Explain how this is done in the face of complicated macro 
+% transformations.
+In addition, variable names are also available, but in most cases the
+name has been mangled.  For most cases this means 
+adding a \verb/$/ and a number to the name.

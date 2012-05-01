@@ -2,7 +2,8 @@
 all: zl.pdf
 
 .DELETE_ON_ERROR: zl.pdf
-zl.pdf: zl.tex zl.bib body.tex acknowledge.tex copyright.tex fig.tex\
+zl.pdf: zl.tex zl.bib acknowledge.tex copyright.tex fig.tex\
+  intro.tex tutorial.tex ref.tex impl-status.tex impl-details.tex\
   parsing-overview.pdf
 	-rm *.aux
 	pdflatex -file-line-error -halt-on-error zl.tex

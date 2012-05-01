@@ -1,0 +1,358 @@
+\chapter{ZL Implementation Details}
+\label{impl}
+
+This chapter gives the implementation details of the interesting parts
+of ZL.
+
+\section{Fluid Binding Implementation}
+
+The |fluid_binding| form (see Section \ref{fluid}) bends hygiene by
+allowing a variable to take its meaning from the use site 
+rather than from the macro's definition site.
+It changes the scope of a marked variable from lexical to \textit{fluid}
+and is used together with the |fluid| keyword, which temporarily binds a
+new symbol to the fluid variable for the current scope.
+
+The |fluid_binding| form inserts a \textit{fluid-binding}
+symbol into the environment that serves as an instruction to perform
+the lookup again.  The symbol consists of the instruction and a unique
+symbol name to perform the second lookup on; the name is constructed
+by taking the symbol name and applying a fresh mark to it (with an
+empty environment).  For example, ``\verb|fluid_binding this|''
+inserts the mapping \verb|this => fluid(this'0)| into the environment,
+where the fluid-binding symbol is represented as
+|fluid(SYMBOL'MARK)|.  The ``\verb|fluid VAR|'' form then replaces
+the variable |VAR| with the unique symbol name associated with the
+fluid binding.  This has the effect of rebinding the |fluid_binding|
+variable to the current symbol for the current scope.  For example,
+``\verb|X * fluid this|'' becomes ``\verb|X * this'0|'' and
+|this'0| gets temporarily bound to the local symbol \verb|$this0|.
+Finally, whenever a symbol resolves to something that is a fluid
+binding the symbol will be resolved again, this time using the unique
+symbol name in the fluid binding.  For example, |this| will first
+resolve to |fluid(this'0)|, which then resolves to \verb|$this0|.
+
+To see why this method works, consider the parsing of |f`internal| from
+the expansion of class |C| given in Section \ref{user-types-intro}:
+\begin{code}
+fluid_binding this;
+...
+user_type C {
+  ...
+  macro i(:this ths = this) {(*(C *)ths)..i;}
+  macro f(j, :this ths = this) {f`internal(ths, j);}
+  int f`internal(C * fluid this, int j) {return i + j;}
+}
+\end{code}
+
+The |fluid_binding| form (given in the prelude) is first parsed and the
+mapping ``\verb|this => fluid(this'0)|'' is added to the environment
+where |'0| is an empty mark.  The macros |i| and |f| in the user type
+|C| are also parsed and we now have:
+\begin{code}
+user_type C {
+  [f => ..., i => ..., this => fluid(this'0)]
+  int f`internal(C * fluid this, int j) {return i + j;}
+}
+\end{code}
+Now |f`internal| is parsed.  Since the first parameter has the |fluid|
+keyword the symbol |this| is looked up in the environment and
+|fluid this| becomes |this'0| giving:%
+\begin{code}
+int f`internal(C * this'0, int j) {...}
+\end{code}
+The parameters are now parsed and added to the environment and the body of
+|f`internal| is expanded:
+\begin{code}
+int f`internal(C * $this0, int $j0) {
+  [j => $j0, this'0 => $this0, f => ..., i => ..., this => fluid(this'0)]
+  return (*(C *)this'1)..i + j;
+}
+'1 => [..., this => fluid(this'0)]
+\end{code}
+
+The body of |f`internal| is now parsed.  The variable |this'1| (from
+the expansion of |i|) first resolves to the fluid symbol
+|fluid(this'0)|, which temporarily becomes |this'0| and then resolves to
+\verb|$this0|.  The rest of |f`internal| is also parsed giving:
+\begin{code}
+int f`internal(C * $this0, int $j0) {
+  return (*(C *)$this0)..i + $j0;
+}
+\end{code}
+
+Hence, the |this| variable in the macro |i| gets resolved to to the
+|this| parameter in |f`internal| as intended.
+
+\section{The Reparser}
+\label{reparser}
+
+Supporting Scheme-style macros with C-like syntax turns out to be a
+hard problem for two reasons.  The primary reason, as mentioned in
+Section \ref{parsing}, is that ZL does not initially know how to
+parse any part of the syntax involved with macros.  The other and less
+obvious reason is that when given a syntax form such as
+``\verb|syntax (x * y)|'', ZL does not know if |x| and |y| are normal
+variables or pattern variables until the substitution is performed.
+If they are normal variables, then it will be parsed as |(exp x * y)|,
+but if they are pattern variables, it will be parsed as {\tt {(exp
+    (mid~x) * (mid~y))}} where |mid| (macro identifier) is just
+another name for a pattern variable.  ZL solves the former problem by
+delaying parsing as much as possible, which works nicely with ZL's
+hygiene system by reducing the complexity of macro explanation from
+quadratic to linear.  ZL solves the latter problem by installing
+special hooks into its Packrat parser.
+
+\subsection{The Idea}
+\label{reparser-idea}
+
+As already established, the |syntax ()| and |syntax {}| forms create
+syntax objects with raw text that cannot be parsed until ZL knows
+where the syntax object will ultimately be used.  Thus |replace| is unable to
+perform any replacements.  Instead, |replace| annotates the
+syntax object with with a set of instructions to apply later that
+includes two bits of information: (1) the mark to apply, and (2) the
+substitutions to apply.
+
+For example, given the code:
+\begin{code}
+int x;
+Syntax * plus_x(Syntax * syn, Environ * env) {
+  Match * m = match_f(0, syntax (y), syn);
+  return replace(syntax (x + y), m, new_mark());
+}
+make_macro plus_x;
+\end{code}
+the call |plus_x(z)| results in 
+{\tt |("()"| |"x + y"){'0;| |y => (parm "z")}|} 
+where the |{}| represents the annotation and |parm| is
+a built-in macro (see Section \ref{built-in}) to indicate the need to reparse.
+The first part of the annotation is the mark and the second is the
+substitution to apply.  Thus the substitution is delayed until ZL
+knows where the call to |plus_x| will be used.
+
+Eventually, the annotated syntax object will need to be parsed, which
+requires two steps. First the raw text needs to be parsed using the
+Packrat parser. Second the instructions in the annotations need to be
+applied.
+
+Parsing the raw text creates a problem since ZL does not know which
+identifiers are pattern variables.  Solving this problem involves a
+special hook into the Packrat parser, which is the purpose of the
+special |<<mid>>| operator shown in the grammar (Figure
+\ref{grammar}).  The relevant bits of the grammar (with some extra
+required productions) are these:
+\begin{code}
+EXP = <exp> {TOKEN}+;
+TOKEN_ = <<mid PARM>> {MID} / {ID} / ...
+MID = {[@$\a_][\a_\d]*} SPACING;
+PARM = {STMT} EOF / {TOKEN} EOF / {EXP} EOF;
+\end{code}
+The |<<mid>>| operator is a special operator that matches only if the
+identifier being parsed is in the substitution list.  When a |MID| matches, and the
+pattern variable is of the type that needs to be reparsed (i.e., matched
+with a |syntax| form), the parser adds a note as to how to reparse the
+macro parameter.  This is either the production where it matches or
+the production as given in the |<<mid>>| instruction.  For
+example, when parsing
+\begin{code}
+("()" "x + y"){'0; y => (parm "z")}
+\end{code}
+as an expression, the parser is
+able to recognize |x| as an identifier and |y| as a
+|mid|.  During the parsing of |x| the |MID| production
+is tried but it is rejected because |x| is not a pattern
+variable, yet when |y| is tried, it matches the |MID| production
+since |y| is a pattern variable.  Thus the result of the parse is:
+\begin{code}
+(exp x + (mid y PARM)){'0; y => (parm "z")}
+\end{code}
+
+After the raw text is parsed, the instructions in the annotation are
+applied to the subparts; if the syntax object represents raw text
+then the instructions are simply pushed down rather than being
+directly applied.  In the above example this process will result in:
+\begin{code}
+(exp'0 x'0 +'0 z)
+\end{code}
+That is, marks are applied and |(mid y PARM)| becomes |z|.  During the
+substitution, the string |z| is reparsed using the |PARM| production
+noted in the second argument of |mid|.  Hence, the string |z| becomes
+the identifier |z|.
+
+The results of the reparse are then expanded and parsed as before.
+Marks are used as described in Section \ref{hygiene}, but with the
+additional rule that if no marks are left and a symbol is still not
+found then it is assumed to be associated with a primitive form.  For
+example, |exp'0| is assumed to represent the built in |exp| macro,
+since |exp| is not in the current environment.  Since the result is an
+|exp|, it will be expanded again to become
+\begin{code}
+(plus x'0 z)
+\end{code}
+which will then be converted into an AST.
+
+\subsection{Additional Examples}
+
+In the previous example, the result of the reparse is a
+fully parsed string, but this is not always the case.  For example, if
+the macro |plus_x| were instead |plus_2x|, and the call |plus_2x(z)|
+expanded to:
+\begin{code}
+("()" "2*x + y"){'0; y => (parm "z")}
+\end{code}
+the result will first parse to:
+\begin{code}
+(exp ("()" "2*x") + y){'0; y => (parm "z")}
+\end{code}
+with |"2*x"| left unparsed.  Applying the annotations will then result
+in:
+\begin{code}
+(exp'0 ("()" "2*x"){'0; y => (parm "z")} + z)
+\end{code}
+That is, since the |"()"| syntax objects represents raw text, the
+instructions are pushed down on that object rather than being directly
+applied.
+
+Also, in the same example, the macro parameter was just an identifier
+and the special |PARM| production is not needed, as it would be
+correctly parsed as a |TOKEN|.  However, this is not always the case.
+For example, if the call to |plus_x| were instead \verb/plus_x(z + 2)/ the
+string ``\verb/z + 2/'' would need to be parsed as a |PARM| since it is not
+a token.
+
+\section{Parser Details}
+\label{parser-details}
+
+To allow for easily adding lexical extensions, ZL uses a Packrat
+parser with the grammar specified as an extended PEG (see
+\ref{parser}).  When considering what parsing technology to use we
+also considered GLR (Generalized Left-to-right Rightmost derivation)
+parsing.  GLR parsing differs from Packrat parsing in that the grammar
+is specified as a CFG (Context Free Grammar).  Unlike specialized
+LR(k) or LL(k) parsers, a GLR parser accepts any CFG and conflicts are
+handled by creating multiple parse trees in the hope that the conflict
+will latter be resolved.  Unfortunately, there is no way to know if
+the conflict will ultimately be resolved, as determining if a CFG is
+unambiguous is an undecidable problem.  The worst case performance of
+a GLR parser is $O(n^3)$, but for most grammars the performance in
+practice can be made near linear.  In contrast and because a PEG is a
+specification of how to parse the text, Packrat parsing is always
+unambiguous; however, the parse may not always be what was intended.
+In addition, Packrat parsing is guaranteed linear
+(although with a large constant factor) due to memorization.
+Packrat parsing also avoids
+the need for a separate lexer pass as it naturally works well with raw
+characters (since the PEG language is very close to the language of
+regular expressions used by traditional lexers).  For all these
+reasons, and others, we chose Packrat parsing over GLR parsing.
+
+We also chose to use Packrat parsing because the memorization can also
+be used to avoid quadratic parsing times with ZL's frequent reparsing
+of strings.  For example, when parsing |(x*(y+z))| as
+\verb|("()" "x*(y+z)")|, the |PAREN| production is used on |(y+z)|,
+since ZL must recognize the grouping.  When \verb|("()" "x*(y+z)")| is
+expanded, the same |PAREN| production is used.  Therefore, if the
+memorization table for the |PAREN| production is kept after the initial
+parse, there will be no need to reparse |(y+z)|.
+
+\subsection{Performance Improvements}
+
+For ease of implementation, and unlike other Packrat parser such as
+Rats!~\cite{peg-grimm}, ZL's PEG is directly interpreted.  (In other
+words, ZL's parser is not a parser generator.)  The initial
+implementation of the parser was a major bottleneck.  However, after
+making several key improvements we were able to improve the
+performance and memory usage of ZL by over an order of magnitude as
+shown in Table \ref{benchmark}.  The table shows numbers from a simple
+benchmark that consisted of compiling several nontrivial programs.
+These programs consisted of compiling ZL's prelude as well as several
+non-trivial test cases (from the examples in the first authors
+dissertation \cite{abi-diss}). The tests were
+run on an AMD Athlon(tm) 64 3000+ Processor with 1 GiB total RAM, and
+ZL was compiled with GCC 4.4 with basic optimization enabled.
+
+\begin{table}
+\UndefineShortVerb{\|}
+\begin{center}
+\begin{tabular}{|l||l|l||l|}
+\hline
+What & Before & After & Improvement \\
+\hline
+\hline
+Avg. Run Time & 1.90 sec. & 0.156 sec. & 12.2 times \\
+\hline
+Avg. Max Heap Usage & 57.61 MiB & 4.22 MiB & 13.7 times \\
+\hline
+\end{tabular}
+\end{center}
+\DefineShortVerb{\|}
+\caption{Improvements in run time and memory usage due to parser optimizations.}
+\label{benchmark}
+\end{table}
+
+Most of the improvements are from using better data structures.
+However, there were several improvements worth noting.  A summary of
+these improvements is shown in Table~\ref{benchmark0}.
+
+\begin{table}
+\UndefineShortVerb{\|}
+\begin{center}
+\begin{tabular}{|l|l|l|}
+\hline
+Improvement & Run Time Reduction & Heap Usage Reduction \\
+\hline
+\hline
+Don't Keep Error State & 2.15 times & 2.13 times \\
+\hline
+Keep State Between Reparses & 1.21 times & 1.14 times \\
+\hline
+Mark Transient Productions & 1.04 times & 1.68 times \\
+\hline
+\end{tabular}
+\end{center}
+\DefineShortVerb{\|}
+\caption{Effects of individual optimizations in run time and memory
+  usage.}
+\label{benchmark0}
+\end{table}
+
+The first improvement involved how errors are handled.  Using the
+techniques outlined in Bryan Ford's Master's thesis~\cite{peg-thesis},
+ZL makes a basic attempt to find the most probable reason that
+caused the parse to fail.  This, unfortunately, involved keeping a lot
+of state around, which would normally not be needed.  Hence, a big
+improvement was made by simply not keeping this state around during
+normal parsing.  If the parse failed, the text would be reparsed in a
+separate mode in order to find the error.  This improvement led to
+a reduction in run-time and memory usage by a factor of around
+2.1.
+
+Another improvement worth noting was keeping the state around when
+reparsing strings to avoid quadratic parsing times.  Unfortunately,
+not all productions can be kept between reparses, because sometimes the
+result of the parse involves a possible macro identifier (productions
+with the special |<<mid>>| instruction) and hence the results of the
+parse could change.  For example, in Figure \ref{grammar} (page
+\pageref{grammar}) |TOP|, |STMT|, |EXP|, |BLOCK|, |TOKEN_|, |TOKEN|,
+|ID| could not be kept since they all involved a possible macro
+identifier.  As a result of this and other factors this improvement
+did not have nearly as much of an effect as we had hoped, as it only
+lead to around a 1.2 times improvement in run-time and 1.1 times
+reduction in memory usage.
+
+Finally, we implemented the ability to mark certain productions as
+transient (i.e., used only once) as was done in Rats!~\cite{peg-grimm}
+to disable memoization on the production.  Unlike with Rats!,
+however, transient productions in ZL cannot be determined statically
+since some productions, while appearing only once in the grammar, are
+in fact used more than once when reparsing.  Thus, we also implemented
+a special profile-like mode in ZL that will output data that can be
+used automatically to discover transient productions and create a hint
+file which can then be used by ZL.  In the sample grammar shown in
+Figure~\ref{grammar}, |TOP|, |STMT|, |EXP| are all transient.  In
+addition, |BLOCK|, |TOKEN|, |RAW_TOKEN|, and |SPACING| where also
+marked as transient since they are low-cost.  This optimization led
+to a small improvement (1.04 times) in run time and a larger (1.7
+times) reduction in memory usage.
+
