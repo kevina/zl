@@ -1,0 +1,41 @@
+\chapter{Roadmap}
+\label{roadmap}
+
+The last chapter gave an idea of where ZL is now, this chapter will
+give an idea of where I see ZL heading.
+
+\section*{High Level Goals}
+
+\begin{itemize}
+
+\item
+
+In addition to supporting C and C++ syntax, support ZL specific
+syntax.  The ZL specific syntax will be like C but provide more sane
+syntax for declaration for example:
+\begin{code}
+var x : int = 20;
+fun f (x : int, y : int) : int {...}
+\end{code}
+Also when in ZL mode all code will be put into a module by default so
+that functions (and likely types) don't need to be declared before
+they are used.
+
+\item
+
+Extend User Types be able to support algebraic data type, which
+includes support for pattern matching |case|s.  There is a lot of
+overlap between classes and algebraic data types and I intend to
+unify the two concepts.
+
+\item
+
+Once algebraic data types are implemented, work on rewriting the ZL
+compiler in ZL itself.  The ZL compiler uses a lot of advanced C++
+features that won't be implemented it ZL yet; however, it is my hope
+that with the combination of advanced macros and algebraic data types
+I will be able to find alternative---and maybe even better---means of
+archiving the same goal.
+
+\end{itemize}
+
