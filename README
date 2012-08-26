@@ -39,6 +39,9 @@ repository includes the full source.
 
 ZL Build instructions:
 
+  # When checking out from git for the first time:
+  # ./autogen
+
   ./configure
   make
   # no need to install, in fact the install target is empty
