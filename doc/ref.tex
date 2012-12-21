@@ -1296,9 +1296,10 @@ After expansion the |macro_export| line would become:
 \begin{code}
 __raw(macro_export' bar (symbol' x') (symbol' y')) 
 \end{code}
-where marks are applied to |x| and |y| and |foo| gets the context of
-the call site, which for most cases is the empty context (i.e., no
-marks).
+where marks are applied to |x| and |y| and |bar| gets the context of
+the call site (which for most cases is the empty context, i.e., no
+marks).  The symbols |x'| and |y'| (with the marks) then get exported
+to the context of |bar|, which in this case is the empty context.
 
 \paragraph{Exporting Top-Level Symbols.} 
 
@@ -1311,7 +1312,7 @@ The full version of the |new_mark_f| function is:
 Mark * new_mark_f(EnvironSnapshot *, bool export_tl, 
                   Context * export_to, Context * also_allow);
 \end{code}
-If |export_tl| is true, than all symbols top-level like symbols that
+If |export_tl| is true, than all top-level like symbols that
 contain the newly created mark are exported to |export_to|, this
 includes structure fields and module symbols.
 
@@ -1336,7 +1337,7 @@ int x;
 \end{code}
 the symbol |x| will be exported, but |y| will not.
 
-For simplicity of the implementation only marks created with
+For simplicity of the implementation, only marks created with
 |export_tl| set to true can be used with the |tl_this_mark| directive,
 in addition the context of |NAME| is ignored and the context of
 |export_to| (when creating the mark) is used instead.
