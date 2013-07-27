@@ -20,6 +20,8 @@ namespace syntax_ns {
   const Leaf SYN_DOT(".");
   const Leaf SYN_ATB("@{}");
   const Leaf SYN_ID("id");
+
+  const Syntax * const NO_MATCH = SYN(SYN("@")); // used by expand.cpp
 }
 
 void SyntaxBase::dump_type_info() {

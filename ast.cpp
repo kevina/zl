@@ -331,7 +331,7 @@ namespace ast {
   static EmptyStmt EMPTY_STMT_OBJ;
   Stmt * const EMPTY_STMT = &EMPTY_STMT_OBJ;
 
-  static const Syntax * ID = new_syntax("id");
+  static const Syntax * ID = &syntax_ns::SYN_ID;
   static const Syntax * expand_id(const Syntax * p);
 
   //

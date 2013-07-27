@@ -1142,6 +1142,8 @@ namespace syntax_ns {
   extern const Leaf SYN_ATB;
   extern const Leaf SYN_ID;
 
+  extern const Syntax * const NO_MATCH;
+
   static inline const Leaf * new_leaf(const char * n) {
 
     const Leaf * r = NULL;

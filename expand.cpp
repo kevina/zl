@@ -134,7 +134,7 @@
 //
 //
 
-static const Syntax * const NO_MATCH = SYN(SYN("@"));
+using syntax_ns::NO_MATCH;
 
 //
 //
@@ -1364,7 +1364,7 @@ void read_macro(const Syntax * p, Environ & env) {
   parse_top_level(p, env);
 }
 
-const Syntax * ID = SYN("id");
+const Syntax * ID = &syntax_ns::SYN_ID;
 const Syntax * ESTMT = SYN("estmt");
 const Syntax * NUM = SYN("n");
 
